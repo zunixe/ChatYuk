@@ -183,6 +183,21 @@ class StoryTrayItem {
       hasVideo: hasVideo ?? this.hasVideo,
     );
   }
+
+  /// Serialisasi untuk cache disk (offline tetap tampil) — kunci SAMA dengan
+  /// `fromMap` server supaya bisa dibaca bolak-balik tanpa konversi.
+  Map<String, dynamic> toMap() => {
+    'author_id': authorId,
+    'author_name': authorName,
+    'avatar': avatar,
+    'is_registered': isRegistered,
+    'slide_count': slideCount,
+    'thumb_path': thumbPath,
+    'has_unseen': hasUnseen,
+    'own': own,
+    'muted': muted,
+    'has_video': hasVideo,
+  };
 }
 
 /// Baris daftar penonton satu slide.

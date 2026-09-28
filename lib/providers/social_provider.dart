@@ -63,7 +63,7 @@ class SocialProvider extends ChangeNotifier {
           state.event == AuthChangeEvent.initialSession) {
         _subscribe();
       }
-    });
+    }, onError: (e) => dlog('[SocialProvider] auth stream error: $e'));
   }
 
   /// Muat set sosial dari disk cache (instant, sebelum network refresh).
@@ -127,7 +127,9 @@ class SocialProvider extends ChangeNotifier {
           table: 'friend_requests',
           callback: (payload) => _refreshSelfSets(),
         )
-        .subscribe();
+        .subscribe((status, err) {
+          if (err != null) dlog('[SocialProvider] realtime error: $err');
+        });
     _rtChannel = channel;
   }
 

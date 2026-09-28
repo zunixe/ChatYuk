@@ -79,7 +79,8 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
         table: 'profiles',
         callback: _onProfileChange,
       )
-      ..subscribe((status, _) {
+      ..subscribe((status, err) {
+        if (err != null) debugPrint('[ADMIN] usermap realtime error: $err');
         if (!mounted) return;
         setState(() {
           _live = status == RealtimeSubscribeStatus.subscribed;

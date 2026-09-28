@@ -19,7 +19,15 @@ import 'rooms_explore/widgets/room_explore_card.dart';
 /// [externalQuery]: filter nama + isi dari ikon cari AppBar (pola Pesan).
 class RoomsExploreScreen extends StatefulWidget {
   final String? externalQuery;
-  const RoomsExploreScreen({super.key, this.externalQuery});
+
+  /// Kategori yang dipilih saat layar pertama dibuka (mis. 'general' saat
+  /// dibuka dari kapsul Global Room di halaman Online). null = default.
+  final String? initialCategory;
+  const RoomsExploreScreen({
+    super.key,
+    this.externalQuery,
+    this.initialCategory,
+  });
 
   @override
   State<RoomsExploreScreen> createState() => _RoomsExploreScreenState();
@@ -30,7 +38,12 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
   void initState() {
     super.initState();
     Future.microtask(() {
-      if (mounted) context.read<RoomProvider>().fetchExplore();
+      if (!mounted) return;
+      final rp = context.read<RoomProvider>();
+      if (widget.initialCategory != null) {
+        rp.setExploreCategory(widget.initialCategory!);
+      }
+      rp.fetchExplore();
     });
   }
 

@@ -516,7 +516,9 @@ mixin ChatServicePrivateChatListMx on ChatBase {
         }
       },
     );
-    msgChannel.subscribe();
+    msgChannel.subscribe((status, err) {
+      if (err != null) dlog('[Chat] chatlist msg realtime error: $err');
+    });
 
     reload();
 

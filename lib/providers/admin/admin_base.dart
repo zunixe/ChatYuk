@@ -19,6 +19,11 @@ abstract class AdminBase extends ChangeNotifier {
       : _service = service ?? AdminService(),
         _injectedSb = sb;
 
+  /// Client untuk channel realtime monitor (dipakai layar chat + polling
+  /// call). Produksi = `Supabase.instance.client`; test menyuntik mock
+  /// supaya tidak ada socket/timer sungguhan.
+  SupabaseClient get realtimeClient => _sb;
+
   bool _disposed = false;
 
   // ── Notifikasi admin (device baru / call video aktif) ──

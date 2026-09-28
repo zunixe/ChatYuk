@@ -36,7 +36,9 @@ void main() {
     views = StreamController<String>.broadcast();
     when(() => service.watchStories()).thenAnswer((_) => stories.stream);
     when(() => service.watchStoryViews()).thenAnswer((_) => views.stream);
-    when(() => service.fetchTray()).thenAnswer((_) async => [_tray('u1')]);
+    when(
+      () => service.fetchTrayRaw(),
+    ).thenAnswer((_) async => [_tray('u1').toMap()]);
     provider = StoryProvider(service: service);
   });
 
@@ -59,19 +61,50 @@ void main() {
 
     test('gagal fetch → error terisi, tray lama dipertahankan', () async {
       await provider.refresh();
-      when(() => service.fetchTray()).thenThrow(Exception('down'));
+      when(() => service.fetchTrayRaw()).thenAnswer((_) async => null);
       await provider.refresh();
-      expect(provider.error, isNotNull);
+      // Offline (null) → TIDAK menimpa tray lama (perilaku seperti list
+      // online yang tetap tampil offline). Error tidak di-set karena
+      // fetchTrayRaw menelan exception (return null).
       expect(provider.tray.map((t) => t.authorId).toList(), ['u1']);
     });
 
     test('hasOwnStory + ownItem', () async {
-      when(() => service.fetchTray()).thenAnswer(
-        (_) async => [_tray('u1'), _tray('me', own: true, slides: 2)],
+      when(() => service.fetchTrayRaw()).thenAnswer(
+        (_) async => [
+          _tray('u1').toMap(),
+          _tray('me', own: true, slides: 2).toMap(),
+        ],
       );
       await provider.refresh();
       expect(provider.hasOwnStory, isTrue);
       expect(provider.ownItem?.authorId, 'me');
+    });
+
+    test('OFFLINE (fetchTrayRaw null) → tray LAMA tetap tampil', () async {
+      // Muat sukses dulu.
+      await provider.refresh();
+      expect(provider.tray, isNotEmpty);
+      // Offline: server tak terjangkau → null (bukan []) → JANGAN hapus tray.
+      when(() => service.fetchTrayRaw()).thenAnswer((_) async => null);
+      await provider.refresh(silent: true);
+      expect(
+        provider.tray.map((t) => t.authorId).toList(),
+        ['u1'],
+        reason: 'tray tidak boleh hilang saat offline',
+      );
+    });
+
+    test('server benar-benar kosong ([]) → tray ditimpa kosong', () async {
+      await provider.refresh();
+      expect(provider.tray, isNotEmpty);
+      when(() => service.fetchTrayRaw()).thenAnswer((_) async => []);
+      await provider.refresh(silent: true);
+      expect(
+        provider.tray,
+        isEmpty,
+        reason: 'server menyatakan kosong → tray dikosongkan',
+      );
     });
   });
 
@@ -109,11 +142,11 @@ void main() {
   group('realtime debounce', () {
     test('event stream memicu refresh senyap (500ms)', () async {
       await provider.refresh();
-      verify(() => service.fetchTray()).called(1);
+      verify(() => service.fetchTrayRaw()).called(1);
       clearInteractions(service);
       stories.add('ping');
       await Future.delayed(const Duration(milliseconds: 1200));
-      verify(() => service.fetchTray()).called(1);
+      verify(() => service.fetchTrayRaw()).called(1);
       expect(provider.loading, isFalse);
     });
   });
@@ -183,8 +216,8 @@ void main() {
     });
 
     test('markSeen → ring mati + service dipanggil', () async {
-      when(() => service.fetchTray()).thenAnswer(
-        (_) async => [_tray('a')],
+      when(() => service.fetchTrayRaw()).thenAnswer(
+        (_) async => [_tray('a').toMap()],
       );
       when(() => service.markSeen(any())).thenAnswer((_) async {});
       await provider.refresh();
@@ -247,7 +280,7 @@ void main() {
       'thumbFor: hasil masuk RAM provider, panggilan kedua tidak unduh',
       () async {
         var calls = 0;
-        when(() => service.fetchTray()).thenAnswer((_) async => []);
+        when(() => service.fetchTrayRaw()).thenAnswer((_) async => []);
         await provider.refresh();
         // thumbFor tanpa network & tanpa disk → null, tapi tidak boleh throw
         // dan tidak boleh menyimpan nilai kosong ke RAM.

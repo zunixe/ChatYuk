@@ -232,7 +232,9 @@ class PrivateRoomService {
         controller.add(row);
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[PrivateRoom] signal realtime error: $err');
+    });
     controller.onCancel = () => _sb.removeChannel(channel);
     return controller.stream;
   }

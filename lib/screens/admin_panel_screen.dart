@@ -102,7 +102,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     unawaited(
       admin.armNotifications().then((_) => _startNotifyPolling()),
     );
-    _notifSub = admin.notifications.listen((msg) => _showAdminNotification(msg));
+    _notifSub = admin.notifications.listen(
+      (msg) => _showAdminNotification(msg),
+      onError: (e) => dlog('[ADMIN] notif stream error: $e'),
+    );
     // Polling dijarangkan ke 60 detik (dulu 30s) — server meng-cache
     // admin_stats 5 menit, jadi poll = O(1) di DB. Realtime call & device
     // sudah instan lewat subscription, statistik tidak perlu sedemikian

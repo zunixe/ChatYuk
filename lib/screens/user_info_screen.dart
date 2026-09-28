@@ -67,6 +67,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   @override
   void initState() {
     super.initState();
+    // Seed SINKRON dari cache RAM/disk: foto yang sudah tampil di daftar/
+    // header chat ATAU tersimpan di disk (cold start) langsung terlihat pada
+    // frame pertama — tanpa fase inisial → foto (anti-kedip).
+    _avatarB64 =
+        context.read<AuthProvider>().cachedAvatarSyncDeep(widget.userId) ?? '';
     _load();
     _loadPhotos();
     _loadSocial();
@@ -389,6 +394,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         .listen((status) {
           if (!mounted) return;
           setState(() => _status = status);
+        }, onError: (e) {
+          // OFFLINE: stream status error → jangan tak tertangkap.
+          debugPrint('[NAV] status stream error user-info: $e');
         });
   }
 
@@ -417,7 +425,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       _loadError = _profile == null;
     });
     _subscribeStatus(p);
-    // Avatar menyusul — tidak menahan tampilnya profil.
+    // Avatar menyusul — tidak menahan tampilnya profil. Selalu resolve:
+    // getByPath memakai cache (RAM/disk/uid) sehingga instan bila sudah ada,
+    // dan menjadwalkan refresh server di background kalau perlu.
     final path = _profile?.avatar ?? '';
     if (path.isNotEmpty && path != _avatarPath) {
       _avatarRetried = false;

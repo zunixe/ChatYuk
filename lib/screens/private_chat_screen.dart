@@ -880,6 +880,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         }
       }
       if (changed && mounted) setState(() {});
+    }, onError: (e) {
+      // OFFLINE: stream pesan bisa error (realtime putus). TANPA onError,
+      // error tak tertangkap ini merusak frame/dispatcher → back mati.
+      debugPrint('[NAV] msgs stream error private-chat: $e');
     });
 
     // Subscription non-kritis ditunda ke post-frame supaya frame pertama
@@ -914,6 +918,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         // Persist untuk cold start berikutnya.
         if (merged != null) _persistRead(merged);
       }
+    }, onError: (e) {
+      // OFFLINE: chat-info stream error → jangan biarkan tak tertangkap.
+      debugPrint('[NAV] chatInfo stream error private-chat: $e');
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -931,11 +938,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           .listen((m) {
         if (mounted) setState(() => reactions = m);
         context.read<MessageReactionProvider>().saveCachedReactions(widget.chatId, m);
+      }, onError: (e) {
+        debugPrint('[NAV] reactions stream error: $e');
       });
       _starredSub = context.read<MessageReactionProvider>()
           .watchStarred(widget.chatId)
           .listen((m) {
         if (mounted) setState(() => starredIds = m);
+      }, onError: (e) {
+        debugPrint('[NAV] starred stream error: $e');
       });
       // Subscribe status realtime lawan bicara
       // Kalau diblokir, tampilkan offline langsung tanpa fetch DB
@@ -1201,6 +1212,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
               setState(() => _otherLastSeen = t);
             });
           }
+        }, onError: (e) {
+          // OFFLINE: stream status realtime error → jangan tak tertangkap.
+          debugPrint('[NAV] status stream error private-chat: $e');
         });
   }
 
@@ -1285,6 +1299,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
               _showRecording = false;
             });
           });
+        }, onError: (e) {
+          // OFFLINE: stream typing error → jangan tak tertangkap.
+          debugPrint('[NAV] typing stream error private-chat: $e');
         });
   }
 
@@ -2604,7 +2621,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     final registeredCaller =
         (profile?.isRegistered ?? false) && !auth.dummySessionActive;
     if (!registeredCaller && !auth.callAnonEnabled) {
-      showAnonPromptDialog(context);
+      final ls = context.read<LocaleProvider>().s;
+      showAnonPromptDialog(
+        context,
+        title: ls.promptCompleteEmailCallTitle,
+        message: ls.promptCompleteEmailCallMsg,
+        icon: Icons.call_outlined,
+      );
       return;
     }
     try {

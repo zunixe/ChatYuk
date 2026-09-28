@@ -674,6 +674,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     // horizontal sedang disembunyikan — simpan snapshot di _lastRoomUsers.
     _usersSub = _usersStream.listen((users) {
       if (users.isNotEmpty) _lastRoomUsers = users;
+    }, onError: (e) {
+      // OFFLINE: stream user room (.stream() mentah) bisa error — tanpa
+      // onError, error tak tertangkap merusak frame/dispatcher (back mati).
+      debugPrint('[NAV] room users stream error: $e');
     });
     if (isPrivateRoom) {
       unawaited(_initPrivate());
@@ -695,11 +699,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           .listen((m) {
         if (mounted) setState(() => reactions = m);
         context.read<MessageReactionProvider>().saveCachedReactions(widget.room.id, m);
+      }, onError: (e) {
+        // OFFLINE: reactions (.stream() mentah) error → jangan tak tertangkap.
+        debugPrint('[NAV] room reactions stream error: $e');
       });
       _starredSub = context.read<MessageReactionProvider>()
           .watchStarred(widget.room.id)
           .listen((m) {
         if (mounted) setState(() => starredIds = m);
+      }, onError: (e) {
+        debugPrint('[NAV] room starred stream error: $e');
       });
     });
     // Antrean offline: koneksi pulih → kirim otomatis; muat sisa antrean
@@ -813,7 +822,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           _syncBroadcastSession();
         },
       );
-      ch.subscribe();
+      ch.subscribe((status, err) {
+        if (err != null) debugPrint('[ROOM] live realtime error: $err');
+      });
       _roomLiveChannel = ch;
     } catch (_) {}
   }

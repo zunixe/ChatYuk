@@ -86,7 +86,10 @@ class RoomBroadcastSession extends ChangeNotifier {
     await localRenderer.initialize();
     await remoteRenderer.initialize();
 
-    _signalSub = _prv.onSignal(roomId).listen(_onSignal);
+    _signalSub = _prv.onSignal(roomId).listen(
+      _onSignal,
+      onError: (e) => dlog('[RoomBroadcast] signal stream error: $e'),
+    );
     await _fastForwardSignals();
     // Polling cadangan (pola call 1:1) — realtime insert bisa terlewat,
     // tanpa polling handshake bisa mati diam-diam. 6 dtk & hanya saat
@@ -174,7 +177,9 @@ class RoomBroadcastSession extends ChangeNotifier {
               });
             },
           )
-          .subscribe();
+          .subscribe((status, err) {
+            if (err != null) dlog('[RoomBroadcast] realtime error: $err');
+          });
       // All-together: broadcaster juga butuh lihat broadcaster lain
       await Future.delayed(const Duration(milliseconds: 400));
       await requestStream();

@@ -53,6 +53,22 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
   @override
   void initState() {
     super.initState();
+    // Fast-path SINKRON: kalau base64 sudah ada di RAM (mis. dibuka dari
+    // daftar chat lalu masuk profil), tampilkan pada frame pertama tanpa
+    // menunggu compute/get async — anti-kedip.
+    final ram = AvatarB64Service.instance.cachedSync(widget.uid);
+    if (ram != null) {
+      final cached = _bytesCache[ram];
+      if (cached != null) {
+        _bytes = cached;
+      } else {
+        final decoded = _decodeAvatarB64(ram);
+        if (decoded != null) {
+          if (_bytesCache.length < 60) _bytesCache[ram] = decoded;
+          _bytes = decoded;
+        }
+      }
+    }
     _load();
   }
 

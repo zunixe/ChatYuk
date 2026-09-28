@@ -148,7 +148,9 @@ class CallService {
         controller.add(row);
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[CallService] incoming realtime error: $err');
+    });
     controller.onCancel = () => _sb.removeChannel(channel);
     return controller.stream;
   }
@@ -185,7 +187,9 @@ class CallService {
           controller.add(payload.newRecord['status'] as String? ?? '');
         },
       );
-      channel.subscribe();
+      channel.subscribe((status, err) {
+        if (err != null) dlog('[CallService] status realtime error: $err');
+      });
     }
     return controller.stream;
   }
@@ -234,7 +238,9 @@ class CallService {
           _emitSignal(payload.newRecord, controller);
         },
       );
-      channel.subscribe();
+      channel.subscribe((status, err) {
+        if (err != null) dlog('[CallService] signal realtime error: $err');
+      });
       _signalChannels[callId] = channel;
     }
     return controller.stream;
@@ -433,7 +439,10 @@ class CallSession extends ChangeNotifier {
     // (headset tidak terputus saat masuk call). Best-effort.
     await _initAudioRoute();
 
-    _signalSub = _service.onSignal(callId).listen(_onSignal);
+    _signalSub = _service.onSignal(callId).listen(
+      _onSignal,
+      onError: (e) => dlog('[CallService] signal stream error: $e'),
+    );
 
     // Status call: caller lihat declined/busy, callee lihat canceled.
     _statusSub = _service.onCallStatus(callId).listen((status) {
@@ -458,7 +467,7 @@ class CallSession extends ChangeNotifier {
             _createOffer();
           }
       }
-    });
+    }, onError: (e) => dlog('[CallService] status stream error: $e'));
 
     await PerfProbe.timed('call.setupMedia', _setupMediaAndPeer);
 

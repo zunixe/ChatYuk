@@ -18,6 +18,7 @@ import '../providers/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
+import '../providers/room_provider.dart';
 import '../widgets/search_dropdown.dart';
 import '../widgets/skeleton_card.dart';
 import '../core/cache/media_disk_cache.dart';
@@ -28,6 +29,8 @@ import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
+import 'room_chat_screen.dart';
+import 'lobby_screen.dart';
 import 'story_composer_screen.dart';
 import 'story_camera_capture_screen.dart';
 import 'story_camera_picker_screen.dart';
@@ -36,6 +39,7 @@ import '../providers/story_provider.dart';
 import '../providers/call_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../widgets/app_gesture.dart';
+import '../widgets/anon_prompt_dialog.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
@@ -446,6 +450,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               }
             }
             setState(() => _unreadMap = map);
+          }, onError: (e) {
+            // OFFLINE: stream chat-list error → jangan tak tertangkap.
+            debugPrint('[NAV] unread stream error online: $e');
           });
     }
   }
@@ -1295,7 +1302,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     final myRegistered = context.select<AuthProvider, bool>(
       (a) => a.profile?.isRegistered ?? false,
     );
-    final anonymous = context.select<AuthProvider, bool>((a) => a.isAnonymous);
     super.build(context);
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
@@ -1467,21 +1473,35 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     ),
                   ),
                 ),
-                if (!anonymous)
-                  Tooltip(
-                    message: s.nearbyTitle,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => Navigator.push(
+                // Orang Sekitar tampil untuk SEMUA user (termasuk anon).
+                // Anon yang menekan ikon ini dapat popup "lengkapi email" —
+                // form yang sama dengan aksi posting di timeline (modular),
+                // tapi teksnya khusus konteks Orang Sekitar.
+                Tooltip(
+                  message: s.nearbyTitle,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      if (!myRegistered) {
+                        showAnonPromptDialog(
+                          context,
+                          title: s.promptCompleteEmailNearbyTitle,
+                          message: s.promptCompleteEmailNearbyMsg,
+                          icon: Icons.explore_outlined,
+                        );
+                        return;
+                      }
+                      Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const NearbyScreen()),
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 3),
-                        child: Icon(Icons.explore_outlined),
-                      ),
+                      );
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 3),
+                      child: Icon(Icons.explore_outlined),
                     ),
                   ),
+                ),
               ],
             ),
           ),
@@ -1708,8 +1728,290 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               );
             },
           ),
+          // Kapsul samping "Global Room" — supaya user yang sedang melihat
+          // daftar online TAHU ada room & bisa langsung masuk (kategori
+          // General). Meluncur dari tepi kanan; ditaruh menempel BAWAH
+          // (di atas nav bar) supaya tidak menutupi list online.
+          // PENTING: dibungkus Positioned.fill AGAR dapat constraints penuh
+          // (widget mengembalikan Stack + Positioned sendiri). Bila dipasang
+          // langsung sebagai anak Stack non-positioned, constraints longgar →
+          // kapsul tidak ter-layout / tak tampil.
+          Positioned.fill(
+            child: _OnlineRoomPill(onTap: () => _openGeneralRoom(context)),
+          ),
         ],
       ),
+    );
+  }
+
+  /// Buka Global Room kategori General dari halaman Online.
+  /// Selalu mengarah ke TAB GLOBAL ROOM (bukan timeline): kalau ada room
+  /// general langsung dibuka; kalau belum, buka halaman Global Room dengan
+  /// kategori General terpilih.
+  Future<void> _openGeneralRoom(BuildContext context) async {
+    final rp = context.read<RoomProvider>();
+    final rooms = rp.exploreRooms.where((r) => r.category == 'general');
+    if (rooms.isNotEmpty) {
+      final room = rooms.first;
+      unawaited(rp.markRoomRead(room.id));
+      if (!context.mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
+      );
+      return;
+    }
+    // Belum ada room general termuat/tersedia → buka HALAMAN Global Room
+    // dengan kategori General terpilih (bukan pindah tab timeline).
+    rp.setExploreCategory('general');
+    if (!context.mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LobbyScreen(initialCategory: 'general'),
+      ),
+    );
+  }
+}
+
+/// Kapsul KOMPAK "Global Room" di halaman Online.
+///
+/// Perilaku animasi:
+///  - Saat halaman Online dibuka → kapsul SLIDE MASUK dari kanan (dari tidak
+///    ada → ada), lalu DIAM menempel di tepi (sisi rata di tepi, membulat ke
+///    dalam). Tidak ada gerakan mengganggu setelahnya.
+///  - Saat DIKETUK → kapsul SLIDE KELUAR ke kanan dengan halus, baru pindah
+///    halaman (aksi dipanggil setelah animasi keluar selesai).
+///  - Satu-satunya gerakan saat diam: chevron ">" yang bergerak halus
+///    (geser kanan-kiri) sebagai isyarat bisa diketuk.
+/// Membaca sendiri jumlah online kategori General dari [RoomProvider].
+class _OnlineRoomPill extends StatefulWidget {
+  /// Aksi saat kapsul diketuk. `Future` supaya kapsul bisa menunggu sampai
+  /// halaman yang dibuka DITUTUP, lalu reset animasi (bisa diklik ulang).
+  final Future<void> Function() onTap;
+  const _OnlineRoomPill({required this.onTap});
+
+  @override
+  State<_OnlineRoomPill> createState() => _OnlineRoomPillState();
+}
+
+class _OnlineRoomPillState extends State<_OnlineRoomPill>
+    with TickerProviderStateMixin {
+  /// Posisi horizontal kapsul: 0 = menempel tepi, 1 = seluruhnya di luar.
+  late final AnimationController _slide;
+
+  /// Denyut chevron (isyarat "bisa diketuk") — hanya panah yang bergerak.
+  late final AnimationController _chev;
+
+  bool _leaving = false;
+
+  // Kapsul kecil: tinggi 40, teks ringkas.
+  static const double _h = 40;
+
+  @override
+  void initState() {
+    super.initState();
+    // PENTING: mulai dari 1.0 (MENEMPEL) agar kapsul PASTI tampil, apa pun
+    // kondisi TickerMode (halaman Online dibuild di dalam IndexedStack +
+    // TickerMode; bila ticker ter-pause, animasi tak jalan → kapsul
+    // nyangkut offscreen kalau mulai dari 0).
+    _slide = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+      value: 1.0,
+    );
+    // Chevron geser halus bolak-balik saat kapsul diam.
+    _chev = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+  }
+
+  bool _tickerWasOn = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // TickerMode: di app, tab dibungkus `TickerMode(enabled: tab == i)`.
+    // Saat tab Online TIDAK aktif, ticker di-pause → animasi tidak jalan.
+    // Kita pantau perubahan TickerMode lewat notifier agar tahu saat tab
+    // Online DIBUKA kembali (tanpa perlu rebuild/restart app).
+    final notifier = TickerMode.getNotifier(context);
+    if (!identical(_tickerNotifier, notifier)) {
+      _tickerNotifier?.removeListener(_onTickerChanged);
+      _tickerNotifier = notifier;
+      _tickerNotifier?.addListener(_onTickerChanged);
+    }
+    _onTickerChanged();
+  }
+
+  ValueListenable<bool>? _tickerNotifier;
+
+  void _onTickerChanged() {
+    final on = _tickerNotifier?.value ?? true;
+    if (!mounted) return;
+    if (on && !_tickerWasOn) {
+      // Tab Online baru DIBUKA (ticker ON) → animasi masuk SEKALI.
+      // Langsung set 0 (di luar kanan) TANPA menunggu frame — kalau tidak,
+      // ada 1 frame tampil menempel dulu → terlihat BLINK sebelum meluncur.
+      // `forward()` langsung dipanggil karena ticker sudah aktif di cabang
+      // ini (animasi pasti jalan, tidak nyangkut).
+      _slide.value = 0;
+      _slide.forward();
+    }
+    // Catatan: saat tab DITINGGALKAN (ticker OFF) `_slide` sengaja TIDAK
+    // disentuh. Ia sudah bernilai 1 (menempel) setelah animasi masuk selesai,
+    // jadi aman saat di-pause; saat tab dibuka lagi kita reset ke 0 di atas.
+    _tickerWasOn = on;
+  }
+
+  @override
+  void dispose() {
+    _tickerNotifier?.removeListener(_onTickerChanged);
+    _slide.dispose();
+    _chev.dispose();
+    super.dispose();
+  }
+
+  /// Tap: slide keluar ke kanan dengan halus, buka aksi, lalu saat kembali
+  /// (route ditutup / tab kembali aktif) reset ke posisi menempel agar BISA
+  /// diklik ulang. Tanpa reset ini, `_leaving` tetap true & `_slide` tetap 0
+  /// (di luar kanan) → klik berikutnya tidak berefek.
+  Future<void> _handleTap() async {
+    if (_leaving) return;
+    _leaving = true;
+    try {
+      await _slide.reverse(); // 1 → 0 = keluar ke kanan.
+    } catch (_) {}
+    if (!mounted) return;
+    await widget.onTap();
+    if (!mounted) return;
+    // Kembali → mainkan animasi masuk lagi (0 → 1) + siap diklik ulang.
+    _leaving = false;
+    _slide.value = 0;
+    _slide.forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    // Online kategori General (ringkas, satu angka).
+    final rp = context.watch<RoomProvider>();
+    final online = rp.exploreRooms
+        .where((r) => r.category == 'general')
+        .fold<int>(0, (a, r) => a + r.onlineCount);
+
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final radius = _h / 2;
+    // Lebar kapsul ± 150px → travel lebih besar supaya benar-benar di luar.
+    const travel = 170.0;
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([_slide, _chev]),
+      builder: (context, _) {
+        // `_slide.value`: 0 = seluruhnya di LUAR kanan, 1 = MENEMPEL tepi.
+        // `out`: 1 = di luar, 0 = menempel (dipakai untuk `right`).
+        final out = reduceMotion
+            ? 0.0
+            : (1 - Curves.easeOutCubic.transform(_slide.value.clamp(0.0, 1.0)));
+        // Opacity: 0 saat di luar, 1 saat menempel (berbanding terbalik out).
+        final opacity = (1 - out).clamp(0.0, 1.0);
+
+        // Chevron: geser 0→3px halus (hanya ini yang bergerak saat diam).
+        final chevDx = reduceMotion ? 0.0 : (_chev.value * 3.0);
+
+        return Stack(
+          children: [
+            Positioned(
+              // out=0 → right 0 (menempel). out=1 → right -travel (di luar).
+              right: -travel * out,
+              // Menempel lebih ke bawah (nav bar ±52) — 8px di atasnya.
+              bottom: 60 + bottomInset,
+              child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _handleTap,
+                  child: Opacity(
+                    opacity: opacity,
+                    child: Container(
+                      height: _h,
+                      padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppTheme.primaryDark,
+                            AppTheme.primary,
+                            AppTheme.accent,
+                          ],
+                        ),
+                        // Kiri membulat penuh; kanan rata (menempel tepi).
+                        borderRadius: BorderRadius.horizontal(
+                          left: Radius.circular(radius),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primary.withValues(alpha: 0.28),
+                            blurRadius: 12,
+                            offset: const Offset(-2, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 26,
+                            height: 26,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Text(
+                              '💬',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          Text(
+                            s.titleRooms,
+                            style: AppText.label.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          if (online > 0) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              '$online',
+                              style: AppText.micro.copyWith(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 2),
+                          // Chevron bergerak halus (satu-satunya gerak saat
+                          // kapsul diam).
+                          Transform.translate(
+                            offset: Offset(chevDx, 0),
+                            child: const Icon(
+                              Icons.chevron_right_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+        );
+      },
     );
   }
 }

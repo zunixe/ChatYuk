@@ -183,7 +183,9 @@ class TimelineService {
         handle(payload.eventType.name, row);
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[Timeline] realtime error: $err');
+    });
     controller.onCancel = () {
       _sb.removeChannel(channel);
     };

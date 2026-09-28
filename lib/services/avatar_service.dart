@@ -36,11 +36,43 @@ class AvatarB64Service {
 
   final Map<String, String> _cache = {};
   final Map<String, String> _pathCache = {};
+  // Peta path avatar (versioned, mis. `avatars/<uid>_1729.jpg`) → uid, supaya
+  // RAM cache uid & path berbagi entri yang sama (lihat _uidFromAvatarPath).
+  final Map<String, String> _pathToUid = {};
+  // Versi path terakhir untuk tiap uid. Path avatar versioned per upload (
+  // `avatars/<uid>_<millis>.jpg`), jadi path BERUBAH saat user ganti foto.
+  // Kalau path yang diminta berbeda dari yang terakhir dimuat → anggap
+  // cache-miss (foto lama tidak boleh disajikan), lalu perbarui.
+  final Map<String, String> _uidPath = {};
   // Job in-flight per-uid: caller kedua MENUNGGU hasil yang sama, bukan
   // dapat '' instan (dulu `if (_inflight.contains(uid)) return ''` bikin
   // avatar kedip-hilang saat dua widget minta uid yang sama bersamaan).
   final Map<String, Future<String>> _uidJobs = {};
   final Set<String> _bgRefreshed = {};
+  // Dedupe background-refresh per path (avatar halaman profil) — sama pola
+  // dengan _bgRefreshed untuk uid.
+  final Set<String> _bgPathRefreshed = {};
+
+  /// Ambil uid dari path avatar storage. Avatar disimpan dengan dua bentuk:
+  /// versi lama `avatars/<uid>.jpg` dan versi baru
+  /// `avatars/<uid>_<millis>.jpg`. uid sendiri tidak mengandung '_' (UUID).
+  /// Kembalikan '' bila path bukan avatar path.
+  ///
+  /// Dipakai untuk menyatukan key cache: foto yang sudah dibuka lewat daftar
+  /// chat / header chat (by uid) langsung terpakai di halaman profil (by path)
+  /// — dulu keduanya pakai key disk BERBEDA (`avatars/<uid>.jpg` vs
+  /// `avatars/<uid>_<millis>.jpg`) sehingga profil "kedip" (fetch ulang)
+  /// walau fotonya sudah ada di lokal.
+  @visibleForTesting
+  static String uidFromAvatarPath(String path) {
+    if (!path.startsWith('avatars/')) return '';
+    var name = path.substring('avatars/'.length);
+    final dot = name.lastIndexOf('.');
+    if (dot > 0) name = name.substring(0, dot);
+    final underscore = name.indexOf('_');
+    if (underscore >= 0) name = name.substring(0, underscore);
+    return name;
+  }
   // In-flight dedup: caller kedua MENUNGGU hasil yang sama, bukan return
   // '' instan — dulu penyebab race "inisial → foto" saat halaman profil
   // mem-fetch avatar yang sama dari 2 titik sekaligus.
@@ -50,6 +82,54 @@ class AvatarB64Service {
   /// Kembalikan base64 avatar user ('' jika tidak ada / gagal).
   /// Urutan: RAM → DISK (instan, anti-kedip) → network. Disk ditulis
   /// saat upload (setForUid) maupun setelah fetch network berhasil.
+  ///
+  /// Peek SINKRON dari cache RAM SAJA (tanpa disk/network) — murah, aman
+  /// dipanggil untuk banyak avatar dalam daftar. Kembalikan null bila belum
+  /// ada di RAM.
+  String? cachedSync(String uid) {
+    if (uid.isEmpty) return null;
+    final v = _cache[uid];
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  /// Peek SINKRON RAM lalu DISK (tanpa network) — dipakai halaman profil
+  /// tunggal supaya cold start tetap instan (pola sama tray story).
+  /// Lebih mahal (baca file) → jangan dipakai di dalam list panjang.
+  String? cachedSyncIncludeDisk(String uid) {
+    final ram = cachedSync(uid);
+    if (ram != null) return ram;
+    if (uid.isEmpty || !MediaDiskCache.instance.isReady) return null;
+    final disk = MediaDiskCache.instance.readSync('avatars/$uid.jpg');
+    if (disk != null && disk.isNotEmpty) {
+      final b64 = base64Encode(disk);
+      if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
+      _cache[uid] = b64;
+      return b64;
+    }
+    return null;
+  }
+
+  /// Peek SINKRON untuk path avatar. path versioned memakai peta _pathToUid
+  /// agar tetap kena cache uid yang sama. RAM dulu, lalu disk.
+  String? cachedByPathSync(String path) {
+    if (path.isEmpty) return null;
+    final direct = _pathCache[path];
+    if (direct != null && direct.isNotEmpty) return direct;
+    final uid = uidFromAvatarPath(path);
+    if (uid.isEmpty) return null;
+    final v = _cache[uid];
+    if (v != null && v.isNotEmpty) return v;
+    if (!MediaDiskCache.instance.isReady) return null;
+    final disk = MediaDiskCache.instance.readSync(path);
+    if (disk != null && disk.isNotEmpty) {
+      final b64 = base64Encode(disk);
+      if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
+      _cache[uid] = b64;
+      return b64;
+    }
+    return null;
+  }
+
   Future<String> get(String uid) async {
     if (uid.isEmpty) return '';
     final cached = _cache[uid];
@@ -131,6 +211,20 @@ class AvatarB64Service {
     }
   }
 
+  /// Fetch ulang avatar by path di background (fire-and-forget) — update
+  /// RAM+disk (uid & path) tanpa menahan UI. Dipakai saat foto disajikan
+  /// instan dari cache uid tapi versi server mungkin sudah berganti.
+  Future<void> _refreshPathInBackground(String path, String uid) async {
+    if (_pathJobs.containsKey(path)) return;
+    final future = _downloadPath(path, uid: uid, forceNetwork: true);
+    _pathJobs[path] = future;
+    try {
+      await future;
+    } finally {
+      _pathJobs.remove(path);
+    }
+  }
+
   /// Clear cache untuk uid tertentu (dipanggil saat avatar di-update)
   /// agar fetch berikutnya dapat avatar yang baru.
   void clearForUid(String uid) {
@@ -138,12 +232,23 @@ class AvatarB64Service {
     _pathCache.remove('avatars/$uid.jpg');
     _uidJobs.remove(uid);
     _pathJobs.remove('avatars/$uid.jpg');
+    _uidPath.remove(uid);
+    // Buang juga entri path versioned milik uid ini supaya foto lama tidak
+    // tersaji lagi lewat getByPath.
+    _pathToUid.removeWhere((p, u) => u == uid);
+    _pathCache.removeWhere((p, _) => uidFromAvatarPath(p) == uid);
+    _pathJobs.removeWhere((p, _) => uidFromAvatarPath(p) == uid);
   }
 
   /// Clear cache untuk path tertentu (avatar path berubah / dihapus)
   void clearForPath(String path) {
     _pathCache.remove(path);
     _pathJobs.remove(path);
+    final uid = _pathToUid.remove(path) ?? uidFromAvatarPath(path);
+    if (uid.isNotEmpty) {
+      _cache.remove(uid);
+      if (_uidPath[uid] == path) _uidPath.remove(uid);
+    }
   }
 
   /// Batch prefetch avatar untuk banyak uid sekaligus (1 query `in` ganti
@@ -220,6 +325,15 @@ class AvatarB64Service {
           Uint8List.fromList(base64Decode(base64)),
         );
       } catch (_) {}
+      // Avatar → isi juga cache uid supaya pemanggil by-uid (daftar chat)
+      // dapat foto yang sama tanpa fetch ulang.
+      final uid = uidFromAvatarPath(path);
+      if (uid.isNotEmpty) {
+        if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
+        _cache[uid] = base64;
+        _pathToUid[path] = uid;
+        _uidPath[uid] = path;
+      }
     }
   }
 
@@ -246,22 +360,70 @@ class AvatarB64Service {
     return b64;
   }
 
+  /// Unduh dari network SAJA (lewati disk read) — dipakai background refresh
+  /// agar selalu ambil versi server terbaru, lalu tulis ke disk.
+  Future<String> _downloadNetwork(String path) async {
+    final b64 = await StoragePhotoService.instance.download(path) ?? '';
+    if (b64.isNotEmpty) {
+      try {
+        await MediaDiskCache.instance.write(
+          path,
+          Uint8List.fromList(base64Decode(b64)),
+        );
+      } catch (_) {}
+    }
+    return b64;
+  }
+
   /// Ambil avatar langsung dari path storage (tanpa query profil) —
   /// dipakai timeline yang sudah membawa authorAvatar di payload.
   Future<String> getByPath(String path) async {
     if (path.isEmpty) return '';
+    // Avatar → satukan dengan cache uid: kalau foto sudah pernah dimuat lewat
+    // uid (daftar chat / header chat), pakai langsung TANPA fetch ulang.
+    // Ini yang menghilangkan "kedip" di halaman profil.
+    final uid = uidFromAvatarPath(path);
+    if (uid.isNotEmpty) {
+      // Hanya pakai cache uid kalau VERSI path-nya sama. Path versioned
+      // berubah saat user ganti foto → jangan sajikan foto lama.
+      final knownPath = _uidPath[uid];
+      final sameVersion = knownPath == null || knownPath == path;
+      if (sameVersion) {
+        final byUid = _cache[uid];
+        if (byUid != null) {
+          _pathCache[path] = byUid;
+          _uidPath[uid] = path;
+          // Refresh background untuk versi terbaru (perubahan dari device
+          // lain) tanpa menahan UI — sama seperti jalur get(uid) disk.
+          if (_bgPathRefreshed.add(path)) {
+            if (_bgPathRefreshed.length > _maxCache) {
+              _bgPathRefreshed.remove(_bgPathRefreshed.first);
+            }
+            unawaited(_refreshPathInBackground(path, uid));
+          }
+          return byUid;
+        }
+      } else {
+        // Versi berubah: buang cache lama (RAM + disk canonical) agar tidak
+        // tertukar pada pemakaian by-uid berikutnya.
+        clearForUid(uid);
+      }
+    }
     final cached = _pathCache[path];
     if (cached != null) return cached;
     final job = _pathJobs[path];
     if (job != null) return job;
-    final future = _downloadPath(path);
+    final future = _downloadPath(path, uid: uid);
     _pathJobs[path] = future;
     return future;
   }
 
-  Future<String> _downloadPath(String path) async {
+  Future<String> _downloadPath(String path,
+      {String uid = '', bool forceNetwork = false}) async {
     try {
-      final b64 = await _downloadWithDisk(path);
+      final b64 = forceNetwork
+          ? await _downloadNetwork(path)
+          : await _downloadWithDisk(path);
       // HANYA cache hasil yang BERISI. Kegagalan ('' karena jaringan putus
       // sesaat / media-cache belum siap) TIDAK boleh dihafal permanen —
       // dulu `_pathCache[path] = ''` di catch membuat avatar "hilang" sampai
@@ -271,6 +433,27 @@ class AvatarB64Service {
           _pathCache.remove(_pathCache.keys.first);
         }
         _pathCache[path] = b64;
+        // Simpan juga di cache uid + disk key `avatars/<uid>.jpg` supaya
+        // pemanggil berikutnya (mis. get(uid) dari daftar chat) instan.
+        if (uid.isNotEmpty) {
+          if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
+          _cache[uid] = b64;
+          _pathToUid[path] = uid;
+          _uidPath[uid] = path;
+          final canonical = 'avatars/$uid.jpg';
+          if (path != canonical) {
+            if (_pathCache.length >= _maxCache) {
+              _pathCache.remove(_pathCache.keys.first);
+            }
+            _pathCache[canonical] = b64;
+            try {
+              await MediaDiskCache.instance.write(
+                canonical,
+                Uint8List.fromList(base64Decode(b64)),
+              );
+            } catch (_) {}
+          }
+        }
       }
       return b64;
     } catch (_) {

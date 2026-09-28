@@ -119,7 +119,13 @@ mixin ChatSendMixin<T extends StatefulWidget>
     // Soft gate anon: fitur anon OFF → tawarkan daftar, jangan kirim.
     if (context.read<AuthProvider>().anonBlocked) {
       if (!mounted) return;
-      showAnonPromptDialog(context);
+      final ls = context.read<LocaleProvider>().s;
+      showAnonPromptDialog(
+        context,
+        title: ls.promptCompleteEmailChatTitle,
+        message: ls.promptCompleteEmailChatMsg,
+        icon: Icons.chat_bubble_outline,
+      );
       return;
     }
 

@@ -325,7 +325,9 @@ mixin ChatServicePrivateMx on ChatBase {
   RealtimeChannel _privateBroadcastChannel(String chatId) {
     final ch = _privateBroadcastChannels.putIfAbsent(chatId, () {
       final c = _sb.channel('private_$chatId');
-      c.subscribe();
+      c.subscribe((status, err) {
+        if (err != null) dlog('[Chat] private realtime error: $err');
+      });
       return c;
     });
     _privateBroadcastRefs[chatId] = (_privateBroadcastRefs[chatId] ?? 0) + 1;

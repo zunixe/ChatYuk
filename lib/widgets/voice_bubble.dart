@@ -55,13 +55,31 @@ class _VoiceBubbleState extends State<VoiceBubble> {
   void initState() {
     super.initState();
     _dur = Duration(milliseconds: widget.durationMs);
-    _posSub = _player.onPositionChanged.listen((p) => setState(() => _pos = p));
-    _durSub = _player.onDurationChanged.listen((d) => setState(() => _dur = d));
-    _completeSub = _player.onPlayerComplete.listen((_) => setState(() { _playing = false; _pos = Duration.zero; }));
+    // onError di semua stream player: stream plugin (just_audio) bisa error
+    // (mis. file rusak/offline) — tanpa ini error tak tertangkap merusak
+    // frame/dispatcher (back mati). Cukup log; UI dibiarkan apa adanya.
+    _posSub = _player.onPositionChanged.listen(
+      (p) => setState(() => _pos = p),
+      onError: (e) => debugPrint('[VOICE] position stream error: $e'),
+    );
+    _durSub = _player.onDurationChanged.listen(
+      (d) => setState(() => _dur = d),
+      onError: (e) => debugPrint('[VOICE] duration stream error: $e'),
+    );
+    _completeSub = _player.onPlayerComplete.listen(
+      (_) => setState(() {
+        _playing = false;
+        _pos = Duration.zero;
+      }),
+      onError: (e) => debugPrint('[VOICE] complete stream error: $e'),
+    );
     // Bubble lain mulai play → pause diri (satu suara saja di app).
-    _otherSub = _VoicePlayerManager.instance.started.listen((p) {
-      if (p != _player && _playing) setState(() => _playing = false);
-    });
+    _otherSub = _VoicePlayerManager.instance.started.listen(
+      (p) {
+        if (p != _player && _playing) setState(() => _playing = false);
+      },
+      onError: (e) => debugPrint('[VOICE] manager stream error: $e'),
+    );
   }
 
   @override

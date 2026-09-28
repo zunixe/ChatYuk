@@ -182,7 +182,9 @@ mixin AuthServiceProfileMx on AuthBase {
         }
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[Auth] profile realtime error: $err');
+    });
 
     controller.onCancel = () {
       _sb.removeChannel(channel);

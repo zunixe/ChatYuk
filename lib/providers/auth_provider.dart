@@ -248,6 +248,8 @@ class AuthProvider extends ChangeNotifier {
       // menangani via ChatProvider.reset() di ProfileScreen.
       _onSignedOut?.call();
       if (!_disposed) notifyListeners();
+    }, onError: (e) {
+      dlog('[AUTH] authState stream error: $e');
     });
   }
 
@@ -891,6 +893,17 @@ class AuthProvider extends ChangeNotifier {
   /// [getOtherProfile] supaya lambatnya/gagalnya avatar tidak menahan
   /// tampilnya profil.
   Future<String> getAvatarByPath(String path) => _auth.getAvatarByPath(path);
+
+  /// Peek SINKRON avatar dari cache RAM (tanpa network) — dipakai UI supaya
+  /// foto yang sudah dimuat di daftar/header chat langsung tampil pada frame
+  /// pertama halaman profil (anti-kedip). Null bila belum ada di RAM.
+  String? cachedAvatarSync(String uid) =>
+      AvatarB64Service.instance.cachedSync(uid);
+
+  /// Peek SINKRON RAM lalu disk — untuk halaman profil tunggal supaya cold
+  /// start tetap instan (anti-kedip) tanpa menunggu network.
+  String? cachedAvatarSyncDeep(String uid) =>
+      AvatarB64Service.instance.cachedSyncIncludeDisk(uid);
 
   /// Sign up dengan email — membuat akun Supabase baru (butuh verifikasi
   /// email). Return true bila session sudah aktif (auto-confirm), false bila
@@ -1580,6 +1593,8 @@ class AuthProvider extends ChangeNotifier {
     _profileSub = _auth.onMyProfileUpdates().listen((rec) {
       if (_disposed) return;
       _applyProfileUpdate(rec.model, presentKeys: rec.keys);
+    }, onError: (e) {
+      dlog('[AUTH] profile stream error: $e');
     });
   }
 

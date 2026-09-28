@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
+import '../utils.dart';
+
 /// Status koneksi global — dipakai banner offline di atas semua layar.
 ///
 /// connectivity_plus hanya melaporkan interface (wifi/mobile/none):
@@ -21,7 +23,7 @@ class ConnectivityProvider extends ChangeNotifier {
     _recheck();
     _sub = Connectivity().onConnectivityChanged.listen((results) {
       _apply(results);
-    });
+    }, onError: (e) => dlog('[Connectivity] stream error: $e'));
     // Pengaman "stuck offline": cek awal bisa menangkap `none` sesaat
     // (handover WiFi/seluler) lalu tak ada event perubahan lagi → banner
     // offline nyangkut selamanya padahal internet ada. Revalidasi berkala

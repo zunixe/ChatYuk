@@ -269,7 +269,10 @@ class RoomVoiceSession extends ChangeNotifier {
     try {
       await WakelockPlus.enable();
     } catch (_) {}
-    _signalSub = _onSignalStream().listen(_onSignal);
+    _signalSub = _onSignalStream().listen(
+      _onSignal,
+      onError: (e) => dlog('[RoomVoice] signal stream error: $e'),
+    );
     await _fastForwardSignals();
     // Polling cadangan (pola broadcast): realtime bisa terlewat.
     _syncTimer = Timer.periodic(const Duration(seconds: 8), (_) {
@@ -290,7 +293,9 @@ class RoomVoiceSession extends ChangeNotifier {
           ),
           callback: (_) => unawaited(_refreshSpeakers()),
         )
-        .subscribe();
+        .subscribe((status, err) {
+          if (err != null) dlog('[RoomVoice] speakers realtime error: $err');
+        });
     _speakersPollTimer =
         Timer.periodic(const Duration(seconds: 20), (_) {
       if (_closed) return;
@@ -571,7 +576,9 @@ class RoomVoiceSession extends ChangeNotifier {
         controller.add(row);
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[RoomVoice] signal realtime error: $err');
+    });
     _signalChannel = channel;
     controller.onCancel = () {
       try {

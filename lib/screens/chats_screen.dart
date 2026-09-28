@@ -34,21 +34,11 @@ class _ChatsScreenState extends State<ChatsScreen>
   void _onTabChanged() {
     // Search berlaku di SEMUA tab (Pesan/Grup/Room) — query dibawa pindah
     // tab, tidak di-reset (pola lama yang reset saat keluar Pesan dihapus).
-    // Tab Grup khusus terdaftar (tap maupun swipe) — anon dikembalikan
-    // ke tab sebelumnya + dialog ajakan daftar (pola timeline _onNavTap).
-    // Sesi dummy (admin jadi anon) diizinkan — bukan anon sungguhan.
-    if (_tab.index == 1 && mounted) {
-      final auth = context.read<AuthProvider>();
-      final allowed = (auth.profile?.isRegistered ?? false) ||
-          auth.dummySessionActive;
-      if (!allowed) {
-        showAnonPromptDialog(context);
-        final prev = _tab.previousIndex == 1 ? 0 : _tab.previousIndex;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _tab.index == 1) _tab.index = prev;
-        });
-      }
-    }
+    //
+    // CATATAN: user ANON kini BOLEH membuka tab Pesan, Grup, maupun Global
+    // Room (keputusan produk). Gate popup "lengkapi email" di sini DIHAPUS —
+    // anon hanya dibatasi pada aksi tertentu (chat baru/call/room join),
+    // bukan sekadar melihat tab.
   }
 
   void _onTabAnimated() {
