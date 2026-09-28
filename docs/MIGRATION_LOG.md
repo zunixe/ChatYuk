@@ -1574,3 +1574,22 @@ prioritas lebih rendah.
 - **Catatan:** file `20260927120000_index_dedup_and_fix.sql` (sesi lebih awal)
   di-rename â†’ `20260927125000_index_dedup_and_fix.sql` karena bentrok timestamp
   dengan `20260927120000_admin_chat_messages_media.sql` (file paralel).
+
+## 2026-09-28 — 20260928110000_drop_profiles_public_view.sql (APPLY)
+
+- **Sumber:** temuan Security Advisor Supabase — *"View public.profiles_public
+  is defined with the SECURITY DEFINER property"*.
+- **Akar masalah:** view milik `postgres` (SECURITY DEFINER = hak OWNER,
+  menembus RLS `profiles`), di-GRANT SELECT/INSERT/UPDATE/DELETE/TRUNCATE ke
+  `anon` + `authenticated`. Siapa pun bisa `select * from profiles_public` ?
+  bocor `avatar`/`last_seen`/`status` SEMUA user (membatalkan hardening yang
+  mencabut SELECT profiles.avatar).
+- **Isi:** `drop view if exists public.profiles_public;` — view LEGACY, 0
+  referensi di kode (lib/ & supabase/), 0 dependen (view/fungsi lain).
+- **Verifikasi live:** `count(*) profiles_public = 0`; kolom sensitif `profiles`
+  (`avatar/last_seen/fcm_token/status`) tetap TANPA SELECT untuk anon/auth
+  (hardening utuh).
+- **Rollback:** buat ulang dengan `with (security_invoker = true)` agar ikut
+  RLS pemanggil (lihat header migrasi).
+- **Catatan:** audit lengkap 467 temuan advisor ? `docs/SECURITY_AUDIT.md`
+  (profiles_public selesai; berikutnya anon SECURITY DEFINER & search_path).
