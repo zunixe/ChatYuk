@@ -1,0 +1,34 @@
+-- ============================================================
+-- Security: DROP view public.profiles_public (SECURITY DEFINER, tanpa RLS)
+--
+-- SAFE: view ini TIDAK dipakai kode app (0 referensi di lib/ & supabase/),
+--       tidak ada view/fungsi lain yang bergantung padanya (0 dependent).
+--       DROP VIEW tidak menghapus data (hanya definisi view).
+--
+-- TEMUAN security advisor Supabase:
+--   "View public.profiles_public is defined with the SECURITY DEFINER property"
+--   → view milik `postgres` dieksekusi dengan hak OWNER (menembus RLS
+--     `profiles`), dan di-GRANT SELECT/INSERT/UPDATE/DELETE/TRUNCATE ke
+--     `anon` + `authenticated`.
+--   Efek: siapa pun (termasuk anon) bisa `select * from profiles_public`
+--   MELEWATI RLS → menarik `avatar`, `last_seen`, `status` SEMUA user.
+--   Ini persis membatalkan hardening yang sudah mencabut SELECT `profiles.avatar`
+--   dari publik (insiden 2026-09-22). Kode app sekarang baca profil publik
+--   lewat RPC ber-privacy `profile_public()` / `avatar_for`, bukan view ini.
+--
+-- Ini view LEGACY (sisa sebelum RPC ber-privacy dibuat). DROP = menutup bocor.
+--
+-- ROLLBACK (kalau ternyata masih dibutuhkan): buat ulang dengan
+-- security_invoker agar mengikuti RLS pemanggil:
+--   create view public.profiles_public with (security_invoker = true) as
+--     select id, nickname, gender, age, country, city, status, avatar, last_seen
+--     from public.profiles;
+-- ============================================================
+
+drop view if exists public.profiles_public;
+
+-- Verifikasi (jalankan setelah apply):
+--   select count(*) from pg_class c
+--     join pg_namespace n on n.oid = c.relnamespace
+--    where n.nspname = 'public' and c.relname = 'profiles_public';
+--   → 0
