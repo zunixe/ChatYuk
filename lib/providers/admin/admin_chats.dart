@@ -334,6 +334,53 @@ mixin AdminChatsMx on AdminBase {
     }
   }
 
+  /// Baca SINKRON cache memori pesan satu chat (tanpa await). Dipakai layar
+  /// monitor agar frame pertama langsung terisi setelah prefetch tap.
+  List<Map<String, dynamic>> peekChatMessages(String chatId) =>
+      _chatMsgMem[chatId] ?? const [];
+
+  final Set<String> _chatMsgPrefetching = {};
+
+  /// Panaskan cache pesan monitor saat kartu di-tap (sebelum layar mount).
+  /// Inilah yang membuat buka chat instan seperti private chat — sebelumnya
+  /// tap hanya `preloadMessages` (cache stream `private_<chatId>`), padahal
+  /// monitor membaca `_chatMsgMem`/disk `admin_chatmsg_<chatId>` → selalu
+  /// RPC server saat buka pertama.
+  /// Dedupe in-flight per chatId; tidak menyentuh `_chatMessages` (chat yang
+  /// sedang tampil) — hanya mengisi map per-chat.
+  void prefetchChatMessages(String chatId) {
+    if (chatId.isEmpty) return;
+    if ((_chatMsgMem[chatId]?.isNotEmpty ?? false)) return;
+    if (!_chatMsgPrefetching.add(chatId)) return;
+    unawaited(() async {
+      try {
+        final disk = await MessageCache.instance.loadRawList(
+          AdminBase.adminChatMsgKey(chatId),
+        );
+        if (disk.isNotEmpty) {
+          _chatMsgMemPut(chatId, disk);
+          return;
+        }
+        final fresh = await _service.getChatMessages(
+          chatId,
+          limit: messagePageSize,
+          offset: 0,
+        );
+        if (fresh.isNotEmpty) {
+          _chatMsgMemPut(chatId, fresh);
+          MessageCache.instance.saveRawList(
+            AdminBase.adminChatMsgKey(chatId),
+            fresh,
+          );
+        }
+      } catch (e) {
+        dlog('[ADMIN] prefetchChatMessages $chatId error: $e');
+      } finally {
+        _chatMsgPrefetching.remove(chatId);
+      }
+    }());
+  }
+
   Future<bool> fetchChatMessages(String chatId, {bool force = false}) async {
     // JANGAN kosongkan list dulu — biar pesan lama tetap tampil selama fetch
     // (anti-blink: dulu _chatMessages=[] → layar kosong → isi ulang, ikut

@@ -1370,3 +1370,40 @@ masuk: kartu daftar monitor + kartu chat di lembar detail user.
 **Aturan (JANGAN dibalik):** setiap `Navigator.push` ke `AdminChatViewScreen`
 WAJIB lewat guard ini + `.then((_) => releaseChatPush(id))`. Test:
 `test/admin_chat_back_button_test.dart` (back pop + 4 kasus guard).
+
+---
+
+## 19. Monitor chat — buka instan + sisi bubble tak pernah flip (2026-09-28)
+
+**Keluhan 1:** klik chat di monitor admin lama tampil pesannya, tidak secepat
+private chat.
+
+**Akar:** kartu tap hanya memanaskan cache STREAM user
+(`MessageCache.preloadMessages('private_<chatId>')`) — padahal monitor
+membaca provider `_chatMsgMem` / disk `admin_chatmsg_<chatId>`. Jadi cache
+yang dipanaskan tak terpakai; buka layar selalu menunggu SQLite → server.
+
+**Rumus (instan):** provider `prefetchChatMessages(chatId)` dipanggil saat tap
+— baca disk `admin_chatmsg_<id>` (lalu server hanya bila disk kosong) ke
+`_chatMsgMem`. Layar `_fetch()` membaca `admin.peekChatMessages()` SINKRON di
+langkah 0 sehingga frame pertama langsung terisi. Dedupe in-flight per chatId.
+
+**Keluhan 2 (belum ter-resolve sebelumnya):** pesan kadang pindah ke sebelah
+kanan SEMUA.
+
+**Akar:** `isMe = senderId != _leftUid`. `_leftUid` dulu diambil dari
+`participantOrder.first`, yang di list dibangun dari urutan key
+`participant_names` (JSONB). Urutan key JSONB berubah saat nickname
+di-rename / beda antara snapshot cache & fetch baru → `order.first` flip →
+semua bubble lawan jadi "kanan".
+
+**Rumus (anti-flip):** `computeMonitorLeftUid` kini memakai **chatId
+`uid1_uid2` sebagai jangkar utama** (uid SORTED → abadi), baru participantOrder
+cadangan. List + lembar detail user memakai `stableChatParticipantOrder` untuk
+membangun urutan judul/avatar dari chatId juga, jadi label, avatar header, dan
+sisi bubble selalu konsisten.
+
+**Aturan (JANGAN dibalik):** jangan kembalikan participantOrder sebagai
+prioritas `computeMonitorLeftUid`, dan jangan bangun `orderUids` dari urutan
+key map. Test: `test/admin_chat_leftuid_test.dart` (urutan chatId menang +
+`stableChatParticipantOrder`).

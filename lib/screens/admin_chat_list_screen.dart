@@ -4,9 +4,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
-import '../core/cache/message_cache.dart';
 import '../widgets/admin_error_view.dart';
-import '../widgets/private_chat_message.dart';
 import '../models/active_call_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
@@ -823,23 +821,25 @@ class _AdminChatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
     final participants = (chat['participants'] as List<dynamic>?) ?? const [];
-    final nameList = names.values
-        .where((e) => e != null && '$e'.isNotEmpty)
-        .toList();
+    final chatId = '${chat['chat_id'] ?? ''}';
+    // Urutan uid DETERMINISTIK dari chatId (uid sorted, abadi) — bukan
+    // urutan key `participant_names` (JSONB) yang ikut berubah saat nama
+    // di-rename / beda antara snapshot cache & fetch baru. Inilah yang dulu
+    // membuat judul "A & B" menukar urutan DAN semua bubble lawan pindah
+    // ke kanan saat urutan flip.
+    final orderUids = stableChatParticipantOrder(
+      chatId: chatId,
+      participants: participants.map((p) => '$p').toList(),
+    );
+    final nameList = [
+      for (final u in orderUids)
+        if (names[u] != null && '${names[u]}'.isNotEmpty) '${names[u]}',
+    ];
     final label = nameList.isNotEmpty
         ? nameList.join(' & ')
         : participants.length == 1
         ? '${participants.length} ${s.adminUserSingular}'
         : '${participants.length} ${s.adminUsersPlural}';
-    // Urutan uid SAMA dengan urutan nama di judul (kiri → kanan).
-    final orderUids = names.entries
-        .where((e) => e.value != null && '${e.value}'.isNotEmpty)
-        .map((e) => '${e.key}')
-        .toList();
-    for (final p in participants) {
-      final u = '$p';
-      if (!orderUids.contains(u)) orderUids.add(u);
-    }
     final lastMsg = (chat['last_message'] as String? ?? '').trim();
     final count = chat['message_count'] ?? 0;
     final tsRaw = chat['last_message_at'];
@@ -872,8 +872,12 @@ class _AdminChatCard extends StatelessWidget {
             final id = chat['chat_id'] as String? ?? '';
             // Tap 2× cepat menumpuk 2 route identik → 1× back terlihat mati.
             if (!tryClaimChatPush(id)) return;
-            // Panaskan cache pesan selagi animasi transisi jalan.
-            unawaited(MessageCache.instance.preloadMessages(cacheKeyFor(id)));
+            // Panaskan cache pesan MONITOR (provider `_chatMsgMem` + disk
+            // `admin_chatmsg_<id>`) selagi animasi transisi jalan — layar
+            // membaca ini lebih dulu → frame pertama langsung terisi.
+            // (Dulu `preloadMessages` = cache stream user, bukan yang dipakai
+            // monitor → tetap RPC server saat buka.)
+            context.read<AdminProvider>().prefetchChatMessages(id);
             Navigator.push(
               context,
               MaterialPageRoute(
