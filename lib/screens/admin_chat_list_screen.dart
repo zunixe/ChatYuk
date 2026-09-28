@@ -13,6 +13,9 @@ import '../utils.dart';
 import 'admin_chat_view_screen.dart';
 import '../providers/theme_provider.dart';
 import '../core/ui/scroll_pagination.dart';
+import '../core/nav_guard.dart';
+import '../widgets/profile_avatar.dart';
+import 'user_info_screen.dart';
 
 /// Admin: daftar semua percakapan user (monitoring).
 class AdminChatListScreen extends StatefulWidget {
@@ -861,6 +864,87 @@ class _AdminChatCard extends StatelessWidget {
     this.onLongPressMenu,
   });
 
+  /// Buka profil user (sama seperti dari private chat: tap avatar header).
+  /// Dipakai avatar peserta di kartu monitor.
+  void _openUserProfile(BuildContext context, String uid, String name) {
+    if (uid.isEmpty) return;
+    final navKey = navKeyUser(uid);
+    if (!tryClaimNav(navKey)) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserInfoScreen(userId: uid, fallbackName: name),
+      ),
+    ).then((_) => releaseNav(navKey));
+  }
+
+  /// Dua avatar peserta (kiri = nama pertama di judul) berdampingan sedikit
+  /// tumpang-tindih. Tiap avatar BISA DIKETUK → buka profil user tsb.
+  /// Bila tak ada uid (data aneh) → fallback ikon forum seperti dulu.
+  Widget _avatarPair(
+    BuildContext context,
+    List<String> uids,
+    Map<dynamic, dynamic> names,
+  ) {
+    final shown = uids.take(2).toList();
+    if (shown.isEmpty) {
+      return SizedBox(
+        width: 44,
+        height: 44,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.forum_outlined,
+            color: AppTheme.primary,
+            size: 22,
+          ),
+        ),
+      );
+    }
+    const size = 40.0;
+    const overlap = 10.0;
+    final width = shown.length == 1 ? size : size * 2 - overlap;
+    return SizedBox(
+      width: width,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < shown.length; i++)
+            Positioned(
+              left: i * (size - overlap),
+              // Avatar kanan digambar di atas → sisi tumpang terlihat rapi.
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openUserProfile(
+                  context,
+                  shown[i],
+                  '${names[shown[i]] ?? ''}',
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.bgCard, width: 2),
+                  ),
+                  child: ProfileAvatar(
+                    uid: shown[i],
+                    name: '${names[shown[i]] ?? ''}',
+                    size: size,
+                    borderRadius: 0,
+                    bgColor: AppTheme.avatarBg,
+                    textColor: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
@@ -944,21 +1028,10 @@ class _AdminChatCard extends StatelessWidget {
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(
-                          alpha: activeCall != null ? 0.18 : 0.12,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.forum_outlined,
-                        color: AppTheme.primary,
-                        size: 22,
-                      ),
-                    ),
+                    // Avatar peserta (menggantikan ikon forum) — tiap avatar
+                    // bisa diketuk untuk melihat profil user, sama seperti
+                    // dari private chat.
+                    _avatarPair(context, orderUids, names),
                     if (activeCall != null)
                       Positioned(
                         right: -4,
