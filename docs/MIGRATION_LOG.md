@@ -1617,3 +1617,26 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
   `auth_leaked_password_protection` **1 ? 0**.
 - Verifikasi: `flutter analyze`-0 (tak ada perubahan Dart); advisor re-scan;
   `has_function_privilege`/`proconfig` dicek langsung. Detail: `docs/SECURITY_AUDIT.md`.
+
+## 2026-09-28 — 20260928140000_revoke_authenticated_internal_legacy.sql (APPLY)
+
+- **Tujuan:** lanjut audit advisor — cabut EXECUTE 38 fungsi internal/legacy
+  dari `authenticated` (+PUBLIC+anon). Temuan `authenticated_security_definer_
+  function_executable` **221 ? 183**. Total advisor **326 ? 288**.
+- **Isi:** REVOKE untuk `admin_*` legacy (register_dummy/renew_dummy_token/
+  list_dummies/dummy_uids/…), `ai_*` tick/cleanup/claim, `ledger_*`,
+  `call_push`, `friend_request_inbox/outbox`, `presence_idle_tick`,
+  `room_voice_sweep`, `purge_inactive_accounts`, `send_reengage_notifications`,
+  `social_push`, `yukcoin_total`, dll. + GRANT balik ke `service_role`.
+- **Bukti aman:** semua pemanggil internal fungsi ini **SECURITY DEFINER**
+  (diverifikasi: `ledger_spend_dual` ? boost_post/send_gift/unlock_photo/
+  create_private_room/extend_private_room; `ledger_spend_paid` ? send_coins/
+  subscribe_creator/ledger_spend_dual; `yukcoin_total` ? spend_yukcoin) ?
+  definer jalan sebagai owner, rantai TIDAK putus.
+- **Tidak direvoke:** 10 helper lintas-fungsi/policy (`is_admin_request`,
+  `fn_room_role`, `_anon_*`, `_privacy_are_friends`, `storage_object_owner_ok`,
+  `chat_photos_guard`, `user_fcm_tokens`, `privacy_can_view`, `privacy_friends`)
+  & semua RPC klien (diverifikasi `has_function_privilege` tetap true).
+- **`extension_in_public` SENGAJA DIBIARKAN** (cube/earthdistance ? fitur
+  "Orang Sekitar"; pg_net ? notif; pindah schema = risiko tinggi, manfaat 1 lint).
+  Alasan lengkap: `docs/SECURITY_AUDIT.md` §6.
