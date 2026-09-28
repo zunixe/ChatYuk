@@ -1,5 +1,25 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-29 — Monitor chat realtime (policy SELECT admin)
+
+**Keluhan (user):** pesan baru di monitor chat admin telat 5-10 detik.
+**Akar:** policy SELECT `private_messages` live hanya untuk peserta chat →
+Supabase Realtime (tunduk RLS) tidak mengirim event ke sesi admin → layar
+hanya mengandalkan poll 5 dtk. Tabel sudah di publication realtime.
+**Migrasi:** `20260929010000_admin_monitor_realtime_select.sql` — policy BARU
+`private_messages_admin_select` FOR SELECT USING (`is_admin_request()`);
+read-only, hanya admin; user biasa tetap policy peserta; admin sudah baca
+semua via RPC (`admin_get_chat_messages_page`) jadi tidak ada akses baru
+secara substansi. Bukan fungsi FROZEN → snapshot tidak perlu.
+**Apply:** Management API + catat `schema_migrations`.
+**Verifikasi live:** policy ada (`pg_policies`), USING = `is_admin_request()`;
+`smoke_anon_register.sh` OK; pgTAP `contract` 11/11, `delete_message` 4/4,
+`regression` 5/5 hijau. `schema_sync` 44/45 — 1 gagal
+(`nearby_users() gate share_location`) tidak terkait perubahan ini
+(pre-existing, jalur nearby).
+**Klien:** tanpa perubahan — `_subscribeRealtime` sudah benar, event kini
+mengalir; pesan baru tampil instan, poll 5 dtk tinggal fallback.
+
 ## 2026-09-26 — Video di private chat + video "sekali lihat"
 
 **Kebutuhan (user):** "di private chat di bawah icon tambah, selain foto bisa

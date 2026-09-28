@@ -333,7 +333,7 @@ ke user asli). Dikunci: `supabase/tests/schema_sync_test.sql`.
 | `app_settings.ai_global_enabled` | AI reply, admin toggle |
 | `ai_internal_config.callback_secret` | ai_reply_post, semua AI |
 | `profiles.points` | poin, gift, chat bonus, leaderboard, admin |
-| `private_messages.*` | chat, notif, AI enqueue, admin monitor |
+| `private_messages.*` | chat, notif, AI enqueue, admin monitor — **policy `private_messages_admin_select`** (2026-09-29): admin boleh SELECT (syarat realtime monitor); user biasa tetap policy peserta; admin sudah baca semua via RPC |
 | `messages.mentions`, `private_messages.mentions` | highlight mention + push terarah mention (room/grup); `@all` hanya grup/private room (owner/admin), mati di global room. **Notif mention (room) via OUTBOX:** trigger `notify_mention_room` menulis `public.outbox`; dikirim oleh edge `outbox-worker` + cron `chatyuk-outbox-worker` (*/1m). Kalau worker/cron mati → notif mention tidak terkirim (pesan tetap aman). Lihat `20260927140000` & `20260927150000`. |
 | `private_chats.last_read_at` (map uid→ts) | centang-2 di chat, unread badge, mark_chat_read, admin monitor |
 | Registrasi: 12 kolom `profiles` wajib tulis | `id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen` harus tetap `INSERT`+`UPDATE` untuk `authenticated` — pola tulis **split-write** (`upsert ignoreDuplicates` + `PATCH`), JANGAN `merge-duplicates` (butuh SELECT → 42501 bila kolom di-revoke). Insiden: `docs/INCIDENT_ANON_REGISTER_42501.md`. Dikunci: `supabase/tests/auth_write_path_test.sql` + `scripts/smoke_anon_register.sh` |

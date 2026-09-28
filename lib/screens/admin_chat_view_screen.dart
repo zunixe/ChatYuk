@@ -832,24 +832,53 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
-  /// Avatar peserta ke-[i] di header monitor (kiri=0, kanan=1). Tap =
-  /// perbesar foto. Tidak ada peserta → SizedBox kosong.
-  Widget _headerAvatar(int i) {
-    final order = widget.participantOrder;
-    if (i >= order.length) return const SizedBox.shrink();
-    final uid = order[i];
-    if (uid.isEmpty) return const SizedBox.shrink();
-    final name = widget.participantNames[uid] ?? '';
-    return GestureDetector(
-      onTap: () => _zoomAvatar(uid, name),
-      child: ProfileAvatar(
-        uid: uid,
-        name: name,
-        size: 34,
-        borderRadius: 0,
-        borderColor: i == 0 ? AppTheme.male : AppTheme.accent,
-        bgColor: AppTheme.avatarBg,
-        textColor: AppTheme.textPrimary,
+  /// Dua avatar peserta DITUMPANG-TINDIH (bukan satu di kiri & satu di kanan)
+  /// — gaya sama dengan kartu di daftar monitor agar header rapi. Tap salah
+  /// satu avatar tetap memperbesar fotonya.
+  Widget _headerAvatarPair() {
+    final uids = widget.participantOrder
+        .where((u) => u.isNotEmpty)
+        .take(2)
+        .toList();
+    if (uids.isEmpty) return const SizedBox.shrink();
+    const size = 34.0;
+    const overlap = 12.0;
+    Widget avatarOf(String uid, int i) {
+      final name = widget.participantNames[uid] ?? '';
+      return Container(
+        // Ring warna header supaya tumpang-tindih terlihat rapi.
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: AppTheme.headerGradient.colors.first,
+            width: 2,
+          ),
+        ),
+        child: GestureDetector(
+          onTap: () => _zoomAvatar(uid, name),
+          child: ProfileAvatar(
+            uid: uid,
+            name: name,
+            size: size,
+            borderRadius: 0,
+            borderColor: i == 0 ? AppTheme.male : AppTheme.accent,
+            bgColor: AppTheme.avatarBg,
+            textColor: AppTheme.textPrimary,
+          ),
+        ),
+      );
+    }
+
+    if (uids.length == 1) return avatarOf(uids[0], 0);
+    return SizedBox(
+      width: size * 2 - overlap,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < 2; i++)
+            Positioned(left: i * (size - overlap), child: avatarOf(uids[i], i)),
+        ],
       ),
     );
   }
@@ -941,12 +970,12 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         ),
         title: Center(
           child: Row(
-            // Seluruh grup (avatar–padding–nama–padding–avatar) di tengah.
+            // Grup (avatar tumpang-tindih + nama) di tengah — gaya sama
+            // dengan kartu di daftar monitor.
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Avatar peserta pertama (kiri) = nama pertama.
-              _headerAvatar(0),
-              const SizedBox(width: 8),
+              _headerAvatarPair(),
+              const SizedBox(width: 10),
               Flexible(
                 child: Text(
                   widget.chatLabel,
@@ -956,9 +985,6 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                   maxLines: 1,
                 ),
               ),
-              const SizedBox(width: 8),
-              // Avatar peserta kedua (kanan) = nama kedua.
-              _headerAvatar(1),
             ],
           ),
         ),
