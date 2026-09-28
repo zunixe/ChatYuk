@@ -60,7 +60,6 @@ dependencies:
   # EKSPERIMEN branch experiment/agp9: 9.1.0 → 12.2.1 (compileSdk 33 → 36;
   # AGP 9 menolak AAR metadata plugin yang compileSdk-nya < 34).
   image_cropper: ^12.2.1
-  flutter_image_compress: ^2.5.1
   flutter_local_notifications: ^22.2.0
   flutter_foreground_task: ^8.0.0
   shared_preferences: ^2.5.5

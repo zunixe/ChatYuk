@@ -15,15 +15,14 @@
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@color/launch_bg</item>
     </style>
-    <!-- uCrop (image_cropper): opt-out edge-to-edge — toolbar atas & tombol
-         bawah cropper tertutup system bar di Android 15 (SDK 35) karena
-         layout uCrop tidak handle insets. -->
+    <!-- uCrop (image_cropper 12.x / UCrop 2.2.11): library SUDAH
+         edge-to-edge mandiri (EdgeToEdge.enable + inset listener toolbar
+         atas & kontrol bawah, terverifikasi di bytecode). SENGAJA tanpa
+         windowOptOutEdgeToEdgeEnforcement / statusBarColor /
+         navigationBarColor — opt-out & API warna DITOLAK Play di
+         Android 15+. Ikon status bar diatur dari Dart (statusBarLight). -->
     <style name="UcropTheme" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
-        <item name="android:fitsSystemWindows">true</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
-        <item name="android:statusBarColor">@color/ucrop_status_bar</item>
-        <item name="android:navigationBarColor">@color/ucrop_nav_bar</item>
     </style>
 </resources>

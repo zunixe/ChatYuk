@@ -7,6 +7,7 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/social_provider.dart';
 import '../utils.dart';
+import '../widgets/phone_edit_dialog.dart';
 import 'link_email_screen.dart';
 import 'settings/widgets/settings_menu_tile.dart';
 
@@ -446,85 +447,28 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
-  /// Dialog input nomor HP + validasi (6–20 digit, '+' opsional).
+  /// Dialog input nomor HP sedunia: pilihan kode negara (+62, +60, …)
+  /// + nomor lokal. Hasil disimpan E.164 (mis. +62812…).
   Future<void> _editPhone(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final ctrl = TextEditingController(text: auth.profile?.phone ?? '');
-    String? errorText;
-    var saving = false;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          backgroundColor: AppTheme.bgCard,
-          title: Text(s.labelPhone, style: AppText.title),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                s.descPhone,
-                style: AppText.bodySmall.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ctrl,
-                autofocus: true,
-                keyboardType: TextInputType.phone,
-                style: AppText.body.copyWith(color: AppTheme.textPrimary),
-                decoration: InputDecoration(
-                  hintText: s.hintPhoneInput,
-                  errorText: errorText,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: saving ? null : () => Navigator.pop(ctx, false),
-              child: Text(s.btnCancel),
-            ),
-            FilledButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      final normalized = normalizePhone(ctrl.text);
-                      // Kosong = boleh (menghapus nomor). Kalau diisi, wajib valid.
-                      if (ctrl.text.trim().isNotEmpty &&
-                          (normalized.length < 7 ||
-                              normalized.replaceAll('+', '').length < 6)) {
-                        setDlg(() => errorText = s.errPhoneInvalid);
-                        return;
-                      }
-                      setDlg(() {
-                        saving = true;
-                        errorText = null;
-                      });
-                      try {
-                        await context
-                            .read<AuthProvider>()
-                            .updateProfile(phone: ctrl.text);
-                        if (ctx.mounted) Navigator.pop(ctx, true);
-                      } catch (e) {
-                        setDlg(() {
-                          saving = false;
-                          errorText = s.errGeneric;
-                        });
-                      }
-                    },
-              child: Text(s.btnSave),
-            ),
-          ],
-        ),
-      ),
+    final full = await showPhoneEditDialog(
+      context,
+      s,
+      currentPhone: auth.profile?.phone ?? '',
+      countryName: auth.profile?.country,
     );
-    if (ok == true && mounted) {
+    if (full == null || !mounted) return;
+    try {
+      await context.read<AuthProvider>().updateProfile(phone: full);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.msgPhoneSaved)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.errGeneric)),
       );
     }
   }

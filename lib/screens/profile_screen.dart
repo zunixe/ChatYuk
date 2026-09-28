@@ -430,6 +430,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundColor: Colors.black,
             activeControlsWidgetColor: AppTheme.primary,
             lockAspectRatio: true,
+            // Edge-to-edge Android 15+: ikon status bar ikut terang/gelap
+            // toolbar (jangan isi warna bar — API deprecated, ditolak Play).
+            statusBarLight: !AppTheme.isDark,
           ),
           IOSUiSettings(title: s.avatarCamera, aspectRatioLockEnabled: true),
         ],

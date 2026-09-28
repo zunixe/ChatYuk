@@ -1440,13 +1440,29 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Paralel: Supabase + Firebase + kunci Keystore/SQLite (independen) —
   // prewarmDb di sini (bukan setelah init) supaya antrean Keystore tidak
   // menunggu auth selesai. Hemat 0.5-2s di Xiaomi cold start.
+  //
+  // Setiap anggota DIBATASI timeout: satu init yang menggantung (Keystore /
+  // SQLite / Firebase) tidak boleh menahan first-frame selamanya → gejala
+  // "stuck di logo". Yang timeout dilewati + dicatat ke logcat ([BOOT]).
+  Future<void> guard(String name, Future<void> Function() fn, int secs) async {
+    debugPrint('[BOOT] start $name');
+    try {
+      await fn().timeout(Duration(seconds: secs));
+      debugPrint('[BOOT] done $name');
+    } on TimeoutException {
+      debugPrint('[BOOT] TIMEOUT $name (${secs}s) — dilewati, app tetap jalan');
+    } catch (e) {
+      debugPrint('[BOOT] error $name: $e');
+    }
+  }
+
   await Future.wait([
-    SupabaseConfig.init(),
-    MessageCache.instance.prewarmDb(),
+    guard('supabase', SupabaseConfig.init, 20),
+    guard('msgdb', MessageCache.instance.prewarmDb, 15),
     // Index disk media siap sebelum frame pertama — readSync avatar
     // (Online/Chat/Timeline) langsung hit, tanpa prewarm race.
-    MediaDiskCache.instance.prewarm(),
-    Future(() async {
+    guard('mediadisk', MediaDiskCache.instance.prewarm, 15),
+    guard('firebase', () async {
       try {
         // Flavor dev (Supabase local): Firebase dev belum dikonfigurasi —
         // skip init supaya build & runtime jalan tanpa google-services.json.
@@ -1472,8 +1488,9 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
       } catch (e) {
         dlog('[FIREBASE] init error: $e');
       }
-    }),
+    }, 25),
   ]);
+  debugPrint('[BOOT] all init done — lanjut runApp');
   // Swap dummy ⇄ admin: hapus notifikasi akun lama yang masih tampil.
   AdminGate.onDummySwap = () async {
     try {
@@ -1510,22 +1527,25 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   if (_firebaseReady) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
-  // Channel + permission cepat (tanpa getToken 5s) — getToken lazy setelah runApp
-  await _initNotificationsFast();
-  await warmChatBackground();
-  await AppTheme.init();
+  // Channel + permission cepat (tanpa getToken 5s) — getToken lazy setelah runApp.
+  // DIBATASI timeout: ketiganya menyentuh plugin/jaringan (notifications,
+  // asset decode, GoogleFonts.pendingFonts) — satu yang menggantung menahan
+  // first-frame selamanya → "stuck di logo".
+  await guard('notifications', _initNotificationsFast, 15);
+  await guard('chatbg', warmChatBackground, 10);
+  await guard('theme', AppTheme.init, 15);
   // Jaring aman edge-to-edge Android 15: pastikan mode default (edgeToEdge)
   // selalu aktif di start. Bila proses di-kill saat Story composer terbuka
   // (mode manual menyembunyikan nav bar), state bisa tertinggal untuk frame
   // berikutnya — reset di sini supaya inset benar sejak awal.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  // Kunci portrait dua lapis (manifest sudah portrait — ini lapisan Dart,
-  // menutup edge-case hot-restart / perangkat yang mengabaikan manifest).
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
+  // Kunci portrait DILEPAS (2026): Android 16 mengabaikan pembatasan
+  // orientasi di layar besar (tablet/foldable) + Play menolak
+  // screenOrientation — app mendukung rotasi penuh. Jangan kembalikan
+  // setPreferredOrientations tanpa QA landscape (kamera, call, story).
   // Probe frame (no-op bila PERF_PROBE off) — ukur build/raster per frame.
   PerfProbe.hookFrameTimings();
+  debugPrint('[BOOT] runApp');
   runApp(const ChatYukApp());
   // Token FCM lambat (5s) - lazy setelah UI tampil, tidak block TTI
   unawaited(_initFcmTokenLazy());

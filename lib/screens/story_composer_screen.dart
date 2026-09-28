@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import '../utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -425,11 +424,13 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   @override
   void initState() {
     super.initState();
-    // Nav bar Android opaque hitam selama composer aktif — tanpa ini
-    // area bawah (menu android) transparan/translusen karena edge-to-edge.
+    // Android 15: setStatusBarColor/setNavigationBarColor DEPRECATED
+    // (Play menolak). Jangan isi systemNavigationBarColor — Scaffold hitam
+    // + edge-to-edge transparan memberi visual yang sama tanpa API lama.
+    // Hanya ikon terang + matikan scrim kontras bawaan sistem.
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      systemNavigationBarColor: Colors.black,
       systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarContrastEnforced: false,
     ));
     // Nav bar DISEMBUNYIKAN selama composer aktif — tumit jempol sering
     // nyenggol tombol back 3-button saat ngetik → keyboard ketutup sendiri
@@ -522,10 +523,11 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
 
   @override
   void dispose() {
-    // Kembalikan nav bar default (transparan) saat keluar composer.
+    // Kembalikan nav bar default saat keluar composer (tanpa warna —
+    // API warna deprecated di Android 15, lihat initState).
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      systemNavigationBarColor: Colors.transparent,
       systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarContrastEnforced: false,
     ));
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _videoCtrl?.dispose();
