@@ -17,12 +17,14 @@ import '../providers/auth_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/nav_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/room_provider.dart';
 import '../widgets/search_dropdown.dart';
 import '../widgets/skeleton_card.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../core/nav_guard.dart';
+import '../core/ui/online_pill_mode.dart';
 import '../models/story_model.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
@@ -1763,16 +1765,19 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               );
             },
           ),
-          // Kapsul samping "Global Room" — supaya user yang sedang melihat
-          // daftar online TAHU ada room & bisa langsung masuk (kategori
-          // General). Meluncur dari tepi kanan; ditaruh menempel BAWAH
-          // (di atas nav bar) supaya tidak menutupi list online.
+          // Kapsul samping yang BERGANTIAN TIAP JAM: mode Timeline (klik →
+          // pindah ke tab Timeline) ⇄ mode Global Room (klik → buka room
+          // kategori General). Meluncur dari tepi kanan; menempel BAWAH (di
+          // atas nav bar) supaya tidak menutupi list online.
           // PENTING: dibungkus Positioned.fill AGAR dapat constraints penuh
           // (widget mengembalikan Stack + Positioned sendiri). Bila dipasang
           // langsung sebagai anak Stack non-positioned, constraints longgar →
           // kapsul tidak ter-layout / tak tampil.
           Positioned.fill(
-            child: _OnlineRoomPill(onTap: () => _openGeneralRoom(context)),
+            child: _OnlinePill(
+              onOpenRoom: () => _openGeneralRoom(context),
+              onOpenTimeline: () => context.read<NavProvider>().goTo(2),
+            ),
           ),
         ],
       ),
@@ -1811,28 +1816,38 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   }
 }
 
-/// Kapsul KOMPAK "Global Room" di halaman Online.
+/// Kapsul KOMPAK di halaman Online — BERGANTIAN TIAP JAM antara dua mode:
+///  - mode **Timeline** (jam genap): label "Timeline", klik → pindah tab.
+///  - mode **Global Room** (jam ganjil): label "Global Room" + jumlah online,
+///    klik → buka room kategori General (perilaku lama).
 ///
 /// Perilaku animasi:
 ///  - Saat halaman Online dibuka → kapsul SLIDE MASUK dari kanan (dari tidak
 ///    ada → ada), lalu DIAM menempel di tepi (sisi rata di tepi, membulat ke
 ///    dalam). Tidak ada gerakan mengganggu setelahnya.
-///  - Saat DIKETUK → kapsul SLIDE KELUAR ke kanan dengan halus, baru pindah
-///    halaman (aksi dipanggil setelah animasi keluar selesai).
+///  - Saat DIKETUK → kapsul SLIDE KELUAR ke kanan dengan halus, baru aksi
+///    dipanggil (pindah tab / buka room).
 ///  - Satu-satunya gerakan saat diam: chevron ">" yang bergerak halus
 ///    (geser kanan-kiri) sebagai isyarat bisa diketuk.
 /// Membaca sendiri jumlah online kategori General dari [RoomProvider].
-class _OnlineRoomPill extends StatefulWidget {
-  /// Aksi saat kapsul diketuk. `Future` supaya kapsul bisa menunggu sampai
-  /// halaman yang dibuka DITUTUP, lalu reset animasi (bisa diklik ulang).
-  final Future<void> Function() onTap;
-  const _OnlineRoomPill({required this.onTap});
+class _OnlinePill extends StatefulWidget {
+  /// Aksi saat kapsul mode Global Room diketuk. `Future` supaya kapsul bisa
+  /// menunggu sampai halaman yang dibuka DITUTUP, lalu reset animasi.
+  final Future<void> Function() onOpenRoom;
+
+  /// Aksi saat kapsul mode Timeline diketuk — pindah ke tab Timeline.
+  final VoidCallback onOpenTimeline;
+
+  const _OnlinePill({
+    required this.onOpenRoom,
+    required this.onOpenTimeline,
+  });
 
   @override
-  State<_OnlineRoomPill> createState() => _OnlineRoomPillState();
+  State<_OnlinePill> createState() => _OnlinePillState();
 }
 
-class _OnlineRoomPillState extends State<_OnlineRoomPill>
+class _OnlinePillState extends State<_OnlinePill>
     with TickerProviderStateMixin {
   /// Posisi horizontal kapsul: 0 = menempel tepi, 1 = seluruhnya di luar.
   late final AnimationController _slide;
@@ -1842,12 +1857,20 @@ class _OnlineRoomPillState extends State<_OnlineRoomPill>
 
   bool _leaving = false;
 
+  /// Mode kapsul saat ini (Timeline ⇄ Global Room), berganti tiap jam.
+  OnlinePillMode _mode = OnlinePillMode.timeline;
+
+  /// Timer pergantian jam — dibangun ulang tiap kali jam berganti.
+  Timer? _hourTimer;
+
   // Kapsul kecil: tinggi 40, teks ringkas.
   static const double _h = 40;
 
   @override
   void initState() {
     super.initState();
+    _mode = onlinePillModeFor(DateTime.now());
+    _scheduleHourFlip();
     // PENTING: mulai dari 1.0 (MENEMPEL) agar kapsul PASTI tampil, apa pun
     // kondisi TickerMode (halaman Online dibuild di dalam IndexedStack +
     // TickerMode; bila ticker ter-pause, animasi tak jalan → kapsul
@@ -1862,6 +1885,17 @@ class _OnlineRoomPillState extends State<_OnlineRoomPill>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
+  }
+
+  /// Jadwalkan pembaruan mode TEPAT saat jam berganti (bukan polling tiap
+  /// detik) supaya kapsul bergantian tiap 1 jam tanpa boros.
+  void _scheduleHourFlip() {
+    _hourTimer?.cancel();
+    _hourTimer = Timer(untilNextHour(DateTime.now()), () {
+      if (!mounted) return;
+      setState(() => _mode = onlinePillModeFor(DateTime.now()));
+      _scheduleHourFlip();
+    });
   }
 
   bool _tickerWasOn = false;
@@ -1905,15 +1939,17 @@ class _OnlineRoomPillState extends State<_OnlineRoomPill>
   @override
   void dispose() {
     _tickerNotifier?.removeListener(_onTickerChanged);
+    _hourTimer?.cancel();
     _slide.dispose();
     _chev.dispose();
     super.dispose();
   }
 
-  /// Tap: slide keluar ke kanan dengan halus, buka aksi, lalu saat kembali
-  /// (route ditutup / tab kembali aktif) reset ke posisi menempel agar BISA
-  /// diklik ulang. Tanpa reset ini, `_leaving` tetap true & `_slide` tetap 0
-  /// (di luar kanan) → klik berikutnya tidak berefek.
+  /// Tap: slide keluar ke kanan dengan halus, jalankan aksi sesuai MODE saat
+  /// ini (Timeline → pindah tab; Global Room → buka room), lalu saat kembali
+  /// reset ke posisi menempel agar BISA diklik ulang. Tanpa reset ini,
+  /// `_leaving` tetap true & `_slide` tetap 0 (di luar kanan) → klik
+  /// berikutnya tidak berefek.
   Future<void> _handleTap() async {
     if (_leaving) return;
     _leaving = true;
@@ -1921,7 +1957,11 @@ class _OnlineRoomPillState extends State<_OnlineRoomPill>
       await _slide.reverse(); // 1 → 0 = keluar ke kanan.
     } catch (_) {}
     if (!mounted) return;
-    await widget.onTap();
+    if (_mode == OnlinePillMode.timeline) {
+      widget.onOpenTimeline();
+    } else {
+      await widget.onOpenRoom();
+    }
     if (!mounted) return;
     // Kembali → mainkan animasi masuk lagi (0 → 1) + siap diklik ulang.
     _leaving = false;
@@ -1933,11 +1973,15 @@ class _OnlineRoomPillState extends State<_OnlineRoomPill>
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    // Online kategori General (ringkas, satu angka).
+    final isTimeline = _mode == OnlinePillMode.timeline;
+    // Mode Global Room menampilkan jumlah online kategori General (ringkas).
     final rp = context.watch<RoomProvider>();
     final online = rp.exploreRooms
         .where((r) => r.category == 'general')
         .fold<int>(0, (a, r) => a + r.onlineCount);
+    final label = isTimeline ? s.titleTimeline : s.titleRooms;
+    final glyph = isTimeline ? '📰' : '💬';
+    final showCount = !isTimeline && online > 0;
 
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final radius = _h / 2;
@@ -2006,20 +2050,20 @@ class _OnlineRoomPillState extends State<_OnlineRoomPill>
                               color: Colors.white.withValues(alpha: 0.18),
                               shape: BoxShape.circle,
                             ),
-                            child: const Text(
-                              '💬',
-                              style: TextStyle(fontSize: 13),
+                            child: Text(
+                              glyph,
+                              style: TextStyle(fontSize: AppGlyph.xs),
                             ),
                           ),
                           const SizedBox(width: 7),
                           Text(
-                            s.titleRooms,
+                            label,
                             style: AppText.label.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          if (online > 0) ...[
+                          if (showCount) ...[
                             const SizedBox(width: 6),
                             Text(
                               '$online',
