@@ -17,7 +17,7 @@
 | Provider | `lib/providers/online_users_provider.dart`, `auth_provider.dart` |
 | Service | `lib/services/chat_service.dart` (`effectiveStatusOf`, `getUserStatus`), `rt_resilient.dart` |
 | SQL inti | `ai_presence_tick()`, `presence_idle_tick` cron, `get_online_users()` |
-| Cron | `chatyuk-ai-presence` (*/5m), `chatyuk-presence-idle` (*/1m) |
+| Cron | `chatyuk-ai-presence` (*/5m, menit 2-59/5), `chatyuk-housekeeping` (*/1m — presence idle + voice + room cleanup sekaligus) |
 | Kolom kritis | `profiles.status`, `profiles.last_seen`, `dummy_accounts.ai_always_online`, `ai_active_hours`, `ai_wake_until`, `ai_offline_until` |
 | Test | `test/presence_test.dart`, `test/online_users_provider_test.dart`, `test/online_visibility_test.dart`, `supabase/tests/presence_test.sql` |
 
@@ -43,7 +43,7 @@
 | UI | `lib/screens/private_chat_screen.dart`, `lib/widgets/private_chat_message.dart` |
 | Edge | `supabase/functions/ai-reply/index.ts` (+ `_shared/ai-helpers.ts`), `ai-daily-life/index.ts` |
 | SQL inti | `ai_reply_enqueue()`, `ai_reply_post()`, `ai_reply_claim_recovery()`, `admin_set_dummy_ai()`, `admin_ai_settings()`, `admin_register_dummy()` |
-| Cron | `ai-proactive-10m`, `chatyuk-ai-claim-recovery` (*/5m), `chatyuk-ai-missed-recovery` (*/3m), `chatyuk-ai-daily-life` (22:00) |
+| Cron | `ai-proactive-10m`, `chatyuk-ai-claim-recovery` (*/5m, menit 3-59/5), `chatyuk-ai-missed-recovery` (*/3m) — `chatyuk-ai-daily-life` (22:00) DIMATIKAN 2026-09-28 (belum dipakai) |
 | Kolom kritis | `dummy_accounts.ai_enabled`, `ai_hold_active`, `ai_no_rate_limit`, `ai_always_reply`, `ai_no_sleep`, `ai_mood`, `ai_persona` (jsonb: `profession`, `appearance`), `app_settings.ai_global_enabled`, `ai_internal_config.callback_secret` |
 | Test | `supabase/functions/_shared/ai-helpers.test.ts` (32 Deno), `supabase/tests/ai_test.sql` |
 
@@ -247,7 +247,7 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 |---|---|
 | UI | `room_chat_screen.dart` (tombol mic AppBar + `VoiceStageStrip`), `room_chat/widgets/voice_stage_strip.dart` |
 | Service | `lib/services/room_voice_service.dart` (mesh audio, pola `room_broadcast_service.dart`) |
-| SQL inti | `room_voice_signals` (signaling), `room_voice_speakers` (stage+heartbeat), RPC `room_voice_join/heartbeat/leave/mute/sweep`, cron `sweep_room_voice` (*/1m) |
+| SQL inti | `room_voice_signals` (signaling), `room_voice_speakers` (stage+heartbeat), RPC `room_voice_join/heartbeat/leave/mute/sweep`, sweep ikut cron `chatyuk-housekeeping` (*/1m) |
 | Test | `test/room_voice_session_test.dart` (state awal; handshake butuh 2 HP) |
 
 **Invariant:**

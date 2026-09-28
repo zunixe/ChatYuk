@@ -1407,3 +1407,107 @@ sisi bubble selalu konsisten.
 prioritas `computeMonitorLeftUid`, dan jangan bangun `orderUids` dari urutan
 key map. Test: `test/admin_chat_leftuid_test.dart` (urutan chatId menang +
 `stableChatParticipantOrder`).
+
+**Keluhan 3 (2026-09-28):** di monitor, chat tisubasah & novikoh tampil
+"pesannya ke kanan semua" DAN "ada pesan orang kecampur ke situ".
+
+**Akar:** `AdminProvider` menyimpan pesan di SATU buffer global
+(`_chatMessages`) + satu flag `_chatMessagesHasMore`. Setiap
+`AdminChatViewScreen` membaca `admin.chatMessages` (buffer bersama) di
+`_applyMessages()` + `_poll`/`_onScroll`. Saat DUA layar monitor hidup
+(mis. buka dari list lalu dari lembar detail user), layar atas menulis buffer
+→ layar bawah (5 dtk poll) meng-apply pesan CHAT LAIN: pengirimnya bukan
+`_leftUid` → semua bubble pindah ke kanan; pesan orang lain ikut tampil.
+SQLite/KV sendiri SUDAH per-chat (`admin_chatmsg_<id>` + `messages.chat_key`)
+— jadi bukan masalah penyimpanan, tapi buffer memori provider.
+
+**Rumus (per-chat):** hapus `_chatMessages`/`_chatCurrentFor` global. Semua
+operasi memakai map per-chat `_chatMsgMem` (sumber tunggal): tambah
+`chatMessagesFor(chatId)` + `chatMessagesHasMoreFor(chatId)`; `fetchChatMessages`
+/`fetchMoreChatMessages`/`refreshChatMessages` membaca-menulis per chatId.
+`_applyRawMessages` di layar kini **MERGE by id** (union urut timestamp), bukan
+replace — poll 15 pesan tak lagi memangkas riwayat hasil scroll.
+
+**Aturan (JANGAN dibalik):** jangan tambahkan kembali buffer pesan bersama di
+provider; layar WAJIB pakai `chatMessagesFor(chatId)`. Test:
+`test/admin_provider_di_test.dart` grup "pesan monitor per-chat".
+
+---
+
+## 20. Stabilitas pg_cron — konsolidasi job per-menit (2026-09-28)
+
+**Keluhan:** monitor admin / app "muter-muter" & sering gagal load; log
+`[RT-RESILIENT] ... Too many database timeouts`, RPC `get_online_users`
+timeout 6s, warmup 8s, timeline 10s.
+
+**Akar (terukur live):** bukan bug UI. Instance **Micro**
+(`max_worker_processes = 6`) dipakai bersama autovacuum (3), realtime
+(2 walsender), pg_net, pg_cron launcher. Ada **5 job `* * * * *` terpisah**
++ 4 job `*/5` yang menabrak di menit kelipatan 5. Tiap job pg_cron butuh
+1 worker → kehabisan → `job startup timeout`.
+
+Bukti: `cron.job_run_details` 414/8956 run gagal (4.6%) dalam 24 jam; menit
+:15 pernah **11 job gagal serentak**. p50 durasi 0.03s (instan) tapi max
+**418s** — pola global stall, bukan job individu lambat.
+
+**Rumus:**
+
+> **Jumlah job pg_cron per-menit harus < sisa worker setelah autovacuum +
+> realtime. Gabungkan housekeeping sejenis jadi SATU job wrapper, dan sebar
+> job berkala ke menit berbeda.**
+
+Perubahan (migration `20260928200000_stagger_cron_schedules.sql`):
+1. `housekeeping_tick()` — wrapper memanggil `presence_idle_tick()`,
+   `room_voice_sweep()`, + 2 DELETE cleanup room berurutan.
+2. Job `chatyuk-housekeeping` (`* * * * *`) menggantikan 4 job per-menit.
+3. `chatyuk-outbox-worker` → `*/2`; job `*/5` disebar (`1-59/5` dst).
+4. `chatyuk-call-sweep` tidak diubah (dikunci `call_test.sql`).
+
+**Hasil:** maks 5 job/menit (dulu 10–11), **0 gagal**.
+
+**Aturan (JANGAN dibalik):**
+- **JANGAN** menambah job `* * * * *` baru tanpa menggabung ke
+  `housekeeping_tick()`. Instance Micro hanya punya 6 worker.
+- **JANGAN** pakai format 6-field (detik) di `cron.schedule` — pg_cron
+  instance ini tidak mendukung; job berhenti tanpa error.
+- `chatyuk-call-sweep` WAJIB tetap `*/5 * * * *` (kontrak `call_test.sql`).
+- Migrasi/ubah jadwal cron: jalankan `scripts/run_sql_tests.sh`
+  (`ai_test`, `call_test`, `outbox_notif_test`) — minus jadwalnya bikin FAIL.
+
+---
+
+## 21. Admin watch call — audio tak lagi putus-nyambung (2026-09-28)
+
+**Keluhan:** saat admin memantau (monitor chat) sebuah call, suara "sempat ada,
+sempat hilang, muncul lagi" — terutama di voice call.
+
+**Akar (terbukti dari `call_signals`):** koneksi watch dibangun ULANG terus.
+Untuk satu call audio 9 detik: **5 `watch_request` + 3 `watch_offer` +
+3 `watch_answer` + 12 `watch_candidate`**. Tiap rebuild menutup pc lama →
+audio peserta putus sesaat.
+
+Penyebabnya 2:
+1. `CallSession._handleWatchRequest` (`call_service.dart`) — throttle 8 dtk
+   hanya mencegah, tapi setelah ≥8 dtk pc lama **ditutup & dibuat ulang**,
+   walau pc itu masih sehat.
+2. `WatchSession` (`admin_call_watch_service.dart`) — timer `watch_request`
+   3 dtk tidak berhenti saat peserta sudah terhubung; `p.connected` di-set
+   benar tapi `_requestAll` tetap menembak & memicu rebuild.
+
+**Rumus (kebijakan di `lib/core/call/watch_policy.dart`, terkunci test):**
+
+> **Peserta: kalau pc watch untuk watcher itu MASIH SEHAT, JANGAN
+> tutup-buat-ulang — cukup kirim `watch_state`. Admin: berhenti minta
+> `watch_request` begitu tersambung, dan tahan saat sedang handshake.**
+
+- `decideWatchReply()` → `sendState` bila pc sehat, `rebuildOffer` hanya bila
+  pc belum ada / failed / closed / **basi (>20 dtk belum connect)**.
+- `shouldRequestWatch()` → tidak minta bila `connected` atau `negotiating`
+  (offer masuk < 8 dtk).
+- `_watchPcCreatedAt` + `_watchPcStale` (20 dtk) mencegah deadlock bila offer
+  hilang & ICE nyangkut di `connecting` (tetap boleh rebuild sekali).
+
+**Aturan (JANGAN dibalik):**
+- Jangan kembalikan "tutup pc tiap watch_request" — itu penyebab audio putus.
+- `watch_state` bukan pengganti negosiasi: hanya dipakai saat pc sudah ada.
+- Test: `test/watch_policy_test.dart`.

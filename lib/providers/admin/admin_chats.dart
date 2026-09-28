@@ -9,7 +9,6 @@ mixin AdminChatsMx on AdminBase {
   static const int messagePageSize = 40;
 
   List<Map<String, dynamic>> _chats = [];
-  List<Map<String, dynamic>> _chatMessages = [];
   List<String> _adminUids = [];
   bool _chatsLoading = false;
   bool _chatsHasMore = true;
@@ -18,10 +17,16 @@ mixin AdminChatsMx on AdminBase {
   AdminErrKind? _chatsError;
 
   List<Map<String, dynamic>> get chats => _chats;
-  List<Map<String, dynamic>> get chatMessages => _chatMessages;
+  /// DEPRECATED: buffer pesan bersama sudah dihapus (penyebab "pesan kecampur
+  /// antar-chat"). Gunakan [chatMessagesFor] dengan chatId eksplisit.
+  List<Map<String, dynamic>> get chatMessages => const [];
   List<String> get adminUids => _adminUids;
   bool get chatsLoading => _chatsLoading;
   bool get chatsHasMore => _chatsHasMore;
+  /// True HANYA saat halaman berikutnya sedang dimuat — dipakai UI untuk
+  /// spinner footer (jangan pakai `chatsHasMore`: itu "masih ada halaman",
+  /// bukan "sedang memuat" → spinner muter terus saat idle).
+  bool get chatsFetchingMore => _chatsFetchingMore;
   AdminErrKind? get chatsError => _chatsError;
 
   Future<void> fetchChats() async {
@@ -40,7 +45,11 @@ mixin AdminChatsMx on AdminBase {
       } catch (_) {}
     }
     try {
-      final res = await _service.listChats(limit: chatPageSize, offset: 0);
+      // Pertahankan kedalaman yang SUDAH dimuat (mis. kategori yang chat-nya
+      // di halaman >1). Dulu selalu minta page-0 (50) → refresh memangkas
+      // daftar → kategori "kosong" lagi → pindai ulang = blink berulang.
+      final want = _chats.length > chatPageSize ? _chats.length : chatPageSize;
+      final res = await _service.listChats(limit: want, offset: 0);
       final fresh = List<Map<String, dynamic>>.from(res['items'] ?? const []);
       // Jangan timpa data baik dengan hasil kosong (bisa karena server
       // mengembalikan kosong sesaat) — kecuali memang belum ada data.
@@ -70,6 +79,7 @@ mixin AdminChatsMx on AdminBase {
   Future<bool> fetchMoreChats() async {
     if (_chatsFetchingMore || !_chatsHasMore || _chatsLoading) return false;
     _chatsFetchingMore = true;
+    if (!_disposed) notifyListeners(); // footer spinner muncul saat mulai
     var ok = false;
     try {
       final res = await _service.listChats(
@@ -95,6 +105,63 @@ mixin AdminChatsMx on AdminBase {
     _chatsFetchingMore = false;
     if (!_disposed) notifyListeners();
     return ok;
+  }
+
+  /// Pastikan SEMUA [wantedChatIds] ada di `chats` — SATU RPC besar dulu
+  /// (limit [bulkLimit]), baru paginasi kecil bila masih kurang.
+  ///
+  /// Alasan: filter kategori butuh chat yang bisa ada di rank ratusan; dulu
+  /// memuat 50-an per panggilan → 8–12 round-trip berturut = footer spinner
+  /// "muter" lama. Satu panggilan besar jauh lebih cepat (server sort ~60ms
+  /// untuk berapa pun limit-nya — biaya ada di sort, bukan jumlah baris).
+  Future<void> ensureChatsContain(
+    Set<String> wantedChatIds, {
+    int bulkLimit = 400,
+  }) async {
+    if (wantedChatIds.isEmpty) return;
+    bool allPresent() {
+      final have = _chats.map((c) => '${c['chat_id']}').toSet();
+      for (final id in wantedChatIds) {
+        if (!have.contains(id)) return false;
+      }
+      return true;
+    }
+
+    if (allPresent()) return;
+
+    // Satu RPC besar (bila daftar sekarang masih lebih kecil dari bulkLimit).
+    if (_chats.length < bulkLimit && !_chatsFetchingMore && !_chatsLoading) {
+      _chatsFetchingMore = true;
+      if (!_disposed) notifyListeners();
+      try {
+        final res = await _service.listChats(limit: bulkLimit, offset: 0);
+        final fresh = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+        if (fresh.length >= _chats.length) {
+          _chats = fresh;
+          _chatsTotal = (res['total'] as num?)?.toInt() ?? _chatsTotal;
+          _chatsHasMore = _chats.length < _chatsTotal;
+          _adminUids = (res['admin_uids'] as List<dynamic>? ?? const [])
+              .map((e) => '$e')
+              .toList();
+        }
+      } catch (e) {
+        dlog('[ADMIN] ensureChatsContain bulk error: $e');
+      }
+      _chatsFetchingMore = false;
+      if (!_disposed) notifyListeners();
+    }
+
+    if (allPresent()) return;
+    // Sisa (di luar bulkLimit) → paginasi kecil sampai ketemu / habis.
+    var pages = 0;
+    while (pages < 12) {
+      if (allPresent()) break;
+      if (!_chatsHasMore || _chatsFetchingMore || _chatsLoading) break;
+      final before = _chats.length;
+      final ok = await fetchMoreChats();
+      pages++;
+      if (!ok || _chats.length == before) break;
+    }
   }
 
   /// Refresh daftar chat tanpa loading spinner (untuk polling berkala).
@@ -316,9 +383,16 @@ mixin AdminChatsMx on AdminBase {
     }
   }
 
-  bool _chatMessagesHasMore = true;
   bool _chatMessagesFetchingMore = false;
-  bool get chatMessagesHasMore => _chatMessagesHasMore;
+
+  /// hasMore PER-CHAT. Dulu satu flag global: saat dua layar monitor hidup
+  /// (mis. buka dari list lalu dari lembar detail user), pagination layar atas
+  /// mengubah status layar bawah → halaman salah / tak pernah berhenti.
+  final Map<String, bool> _chatMsgHasMore = {};
+  bool chatMessagesHasMoreFor(String chatId) => _chatMsgHasMore[chatId] ?? true;
+
+  /// Kompat lama (dipakai test/legacy): hasMore default true.
+  bool get chatMessagesHasMore => true;
 
   /// Mem-cache per-chat (buka-tutup-buka instan): provider sebelumnya hanya
   /// menyimpan SATU chat terakhir (`_chatMessages`), sehingga pindah chat
@@ -359,6 +433,9 @@ mixin AdminChatsMx on AdminBase {
         );
         if (disk.isNotEmpty) {
           _chatMsgMemPut(chatId, disk);
+          // Set hasMore agar footer spinner tidak "muter" saat layar membaca
+          // cache ini (dulu tak di-set → default true → spinner selamanya).
+          _chatMsgHasMore[chatId] = disk.length >= messagePageSize;
           return;
         }
         final fresh = await _service.getChatMessages(
@@ -368,6 +445,7 @@ mixin AdminChatsMx on AdminBase {
         );
         if (fresh.isNotEmpty) {
           _chatMsgMemPut(chatId, fresh);
+          _chatMsgHasMore[chatId] = fresh.length >= messagePageSize;
           MessageCache.instance.saveRawList(
             AdminBase.adminChatMsgKey(chatId),
             fresh,
@@ -381,41 +459,41 @@ mixin AdminChatsMx on AdminBase {
     }());
   }
 
+  /// Pesan satu chat dari sumber per-chat (`_chatMsgMem` → `_chatMessages`
+  /// untuk kompat; WAJIB memakai ini bila ada >1 layar monitor).
+  List<Map<String, dynamic>> chatMessagesFor(String chatId) =>
+      _chatMsgMem[chatId] ?? const [];
+
   Future<bool> fetchChatMessages(String chatId, {bool force = false}) async {
-    // JANGAN kosongkan list dulu — biar pesan lama tetap tampil selama fetch
-    // (anti-blink: dulu _chatMessages=[] → layar kosong → isi ulang, ikut
-    // terulang tiap poll 5s).
-    _chatMessagesHasMore = true;
-    // Chat berbeda → muat cache chat itu dulu: memori sesi ini, lalu disk
-    // (tahan offline). Memori per-chat supaya A→B→A tidak baca disk ulang.
-    final sameChat = _chatMsgCacheFor == chatId;
-    if (!sameChat) {
-      _chatMsgCacheFor = chatId;
-      _chatMessages = const [];
-      final memHit = _chatMsgMem[chatId];
-      if (memHit != null && memHit.isNotEmpty) {
-        _chatMessages = List<Map<String, dynamic>>.from(memHit);
-        _chatMsgMemPut(chatId, memHit); // segarkan urutan LRU
-        if (!_disposed) notifyListeners();
-      } else {
-        try {
-          final cached = await MessageCache.instance.loadRawList(
-            AdminBase.adminChatMsgKey(chatId),
-          );
-          if (cached.isNotEmpty && _chatMsgCacheFor == chatId) {
-            _chatMessages = cached;
-            _chatMsgMemPut(chatId, cached);
-            if (!_disposed) notifyListeners();
-          }
-        } catch (_) {}
-      }
+    // PENTING (insiden "pesan kecampur & semua ke kanan"): dulu state pesan
+    // SATU buffer global (`_chatMessages`). Saat dua layar monitor hidup
+    // (buka dari list lalu dari lembar detail user), layar bawah membaca
+    // buffer yang ditulis layar atas → pesan chat lain muncul di layar ini
+    // dan sender-nya tak cocok `_leftUid` → SEMUA bubble pindah ke kanan.
+    // Sekarang SEMUA operasi memakai map per-chat `_chatMsgMem` (sumber
+    // tunggal); tidak ada lagi buffer bersama.
+    final memHit = _chatMsgMem[chatId];
+    final hasLocal = memHit != null && memHit.isNotEmpty;
+    if (!hasLocal) {
+      // Belum ada di memori → coba disk (tahan offline), per-chat.
+      try {
+        final cached = await MessageCache.instance.loadRawList(
+          AdminBase.adminChatMsgKey(chatId),
+        );
+        if (cached.isNotEmpty) _chatMsgMemPut(chatId, cached);
+      } catch (_) {}
     }
-    // PERSISTEN: kalau chat ini SUDAH punya pesan dari cache (memori sesi
-    // ini ATAU disk dari sesi sebelumnya) dan bukan dipaksa, JANGAN load
-    // ulang ke server. Pesan lama tetap dari cache; yang BARU datang lewat
-    // poll/realtime (refreshChatMessages hanya menyisipkan id yang belum ada).
-    // [force] = true dipakai tombol refresh manual / pull-to-refresh.
-    if (!force && _chatMessages.isNotEmpty) {
+    final local = _chatMsgMem[chatId];
+    // PERSISTEN: sudah ada dari cache & tidak dipaksa → jangan RPC. Pesan
+    // baru datang lewat poll/realtime (refreshChatMessages).
+    if (!force && local != null && local.isNotEmpty) {
+      // WAJIB set hasMore juga di jalur cache — dulu return lebih awal tanpa
+      // men-set → default `true` → footer spinner layar MUTER SELAMANYA saat
+      // chat dibuka dari cache (kasus paling umum). Cache < 1 halaman =
+      // memang sudah habis (tak ada lagi di server untuk dimuat lebih lama).
+      if (!_chatMsgHasMore.containsKey(chatId)) {
+        _chatMsgHasMore[chatId] = local.length >= messagePageSize;
+      }
       if (!_disposed) notifyListeners();
       return true;
     }
@@ -426,11 +504,13 @@ mixin AdminChatsMx on AdminBase {
         offset: 0,
       );
       if (fresh.isNotEmpty) {
-        _chatMessages = fresh;
         _chatMsgMemPut(chatId, fresh);
-        MessageCache.instance.saveRawList(AdminBase.adminChatMsgKey(chatId), fresh);
+        MessageCache.instance.saveRawList(
+          AdminBase.adminChatMsgKey(chatId),
+          fresh,
+        );
       }
-      _chatMessagesHasMore = fresh.length >= messagePageSize;
+      _chatMsgHasMore[chatId] = fresh.length >= messagePageSize;
       return true;
     } catch (e) {
       // Data lama (memori/disk) dipertahankan — layar tetap ada isinya.
@@ -441,23 +521,30 @@ mixin AdminChatsMx on AdminBase {
     }
   }
 
-  /// Chat yang sedang ditampilkan di monitor (untuk tahu kapan cache disk
-  /// perlu dimuat ulang saat pindah chat).
-  String? _chatMsgCacheFor;
-
-  /// Muat pesan lebih lama (pagination, dipanggil saat scroll ke atas).
+  /// Muat pesan lebih lama (pagination) untuk [chatId]. Per-chat: memakai
+  /// panjang list chat ITU, bukan buffer bersama.
   Future<void> fetchMoreChatMessages(String chatId) async {
-    if (_chatMessagesFetchingMore || !_chatMessagesHasMore) return;
+    if (_chatMessagesFetchingMore) return;
+    if (!chatMessagesHasMoreFor(chatId)) return;
     _chatMessagesFetchingMore = true;
     try {
+      final current = _chatMsgMem[chatId] ?? const <Map<String, dynamic>>[];
       final older = await _service.getChatMessages(
         chatId,
         limit: messagePageSize,
-        offset: _chatMessages.length,
+        offset: current.length,
       );
-      _chatMessages = [..._chatMessages, ...older];
-      _chatMsgMemPut(chatId, _chatMessages);
-      _chatMessagesHasMore = older.length >= messagePageSize;
+      if (older.isNotEmpty) {
+        // Guard: hanya bila chat ini masih ada di map (tidak di-evict LRU).
+        final base = _chatMsgMem[chatId] ?? current;
+        final merged = [...base, ...older];
+        _chatMsgMemPut(chatId, merged);
+        MessageCache.instance.saveRawList(
+          AdminBase.adminChatMsgKey(chatId),
+          merged,
+        );
+      }
+      _chatMsgHasMore[chatId] = older.length >= messagePageSize;
     } catch (e) {
       dlog('[ADMIN] fetchMoreChatMessages error: $e');
     }
@@ -465,11 +552,9 @@ mixin AdminChatsMx on AdminBase {
     if (!_disposed) notifyListeners();
   }
 
-  /// Refresh pesan terbaru tanpa reset pagination — merge dengan yang sudah
-  /// dimuat supaya scroll history tidak hilang saat ada pesan baru masuk.
-  /// [limit] kecil untuk poll berkala (hanya butuh yang baru); halaman penuh
-  /// hanya untuk refresh manual. Diam (tanpa notify) bila tak ada pesan baru
-  /// supaya daftar di belakang layar tidak rebuild tiap poll.
+  /// Refresh pesan terbaru chat [chatId] tanpa reset pagination — merge
+  /// dengan yang sudah dimuat supaya scroll history tidak hilang. Semua
+  /// berbasis map per-chat; hasil basi (chat ini keluar dari map) diabaikan.
   Future<void> refreshChatMessages(String chatId, {int? limit}) async {
     try {
       final latest = await _service.getChatMessages(
@@ -477,10 +562,21 @@ mixin AdminChatsMx on AdminBase {
         limit: limit ?? messagePageSize,
         offset: 0,
       );
-      // Abaikan hasil basi (race saat pindah chat cepat).
-      if (_chatMsgCacheFor != chatId) return;
-      final knownIds = _chatMessages.map((m) => '${m['id']}').toSet();
-      final merged = List<Map<String, dynamic>>.from(_chatMessages);
+      final current = _chatMsgMem[chatId];
+      // Chat belum pernah di-prefetch/fetch di sesi ini → jadikan baseline.
+      if (current == null) {
+        if (latest.isNotEmpty) {
+          _chatMsgMemPut(chatId, latest);
+          MessageCache.instance.saveRawList(
+            AdminBase.adminChatMsgKey(chatId),
+            latest,
+          );
+          if (!_disposed) notifyListeners();
+        }
+        return;
+      }
+      final knownIds = current.map((m) => '${m['id']}').toSet();
+      final merged = List<Map<String, dynamic>>.from(current);
       var added = 0;
       // Pesan baru (belum ada) ditambahkan di depan (terbaru duluan).
       for (final m in latest) {
@@ -490,8 +586,11 @@ mixin AdminChatsMx on AdminBase {
         }
       }
       if (added == 0) return;
-      _chatMessages = merged;
       _chatMsgMemPut(chatId, merged);
+      MessageCache.instance.saveRawList(
+        AdminBase.adminChatMsgKey(chatId),
+        merged,
+      );
       if (!_disposed) notifyListeners();
     } catch (e) {
       dlog('[ADMIN] refreshChatMessages error: $e');

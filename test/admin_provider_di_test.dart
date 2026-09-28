@@ -433,6 +433,78 @@ void main() {
     });
   });
 
+  group('pesan monitor per-chat (anti "pesan kecampur")', () {
+    // ChatId UNIK per test: MessageCache singleton menyimpan snapshot
+    // `admin_chatmsg_<id>` di memori antar-test; id unik menghindari bleed
+    // tanpa perlu menginisialisasi binding/SQLite.
+    Map<String, dynamic> msg(String id, String sender, String text) => {
+          'id': id,
+          'chat_id': 'ignored',
+          'sender_id': sender,
+          'sender_name': sender,
+          'sender_gender': 'other',
+          'text': text,
+          'type': 'text',
+          'created_at': '2026-09-28T12:00:00Z',
+        };
+
+    test('fetch chat A tidak bocor ke chat B', () async {
+      when(() => service.getChatMessages(any(),
+              limit: any(named: 'limit'), offset: any(named: 'offset')))
+          .thenAnswer((inv) async => inv.positionalArguments[0] == 'cA1'
+              ? [msg('1', 'ua', 'dari A')]
+              : [msg('2', 'ub', 'dari B')]);
+
+      await provider.fetchChatMessages('cA1');
+      await provider.fetchChatMessages('cB1');
+
+      expect(provider.chatMessagesFor('cA1').single['text'], 'dari A');
+      expect(provider.chatMessagesFor('cB1').single['text'], 'dari B');
+      // Buffer bersama sudah dihapus → tidak ada lagi sumber kecampur.
+      expect(provider.chatMessages, isEmpty);
+    });
+
+    test('refresh chat B tidak menyentuh riwayat chat A', () async {
+      when(() => service.getChatMessages(any(),
+              limit: any(named: 'limit'), offset: any(named: 'offset')))
+          .thenAnswer((inv) async => inv.positionalArguments[0] == 'cA2'
+              ? [msg('1', 'ua', 'asli A')]
+              : [msg('9', 'ub', 'baru B')]);
+
+      await provider.fetchChatMessages('cA2');
+      await provider.fetchChatMessages('cB2');
+      // refresh B (poll) → A harus TETAP 'asli A', bukan 'baru B'.
+      await provider.refreshChatMessages('cB2', limit: 15);
+
+      expect(provider.chatMessagesFor('cA2').single['text'], 'asli A');
+      expect(
+        provider.chatMessagesFor('cB2').map((m) => m['id']),
+        containsAll(['9']),
+      );
+    });
+
+    test('hasMore terpisah per chat', () async {
+      // default true bila belum pernah dihitung.
+      expect(provider.chatMessagesHasMoreFor('cA3'), isTrue);
+      expect(provider.chatMessagesHasMoreFor('cZ3'), isTrue);
+    });
+
+    test('refetch A setelah B tetap berisi pesan A (tidak ketimpa)', () async {
+      when(() => service.getChatMessages(any(),
+              limit: any(named: 'limit'), offset: any(named: 'offset')))
+          .thenAnswer((inv) async => inv.positionalArguments[0] == 'cA4'
+              ? [msg('1', 'ua', 'A1')]
+              : [msg('2', 'ub', 'B1')]);
+
+      await provider.fetchChatMessages('cA4');
+      await provider.fetchChatMessages('cB4');
+      await provider.fetchChatMessages('cA4', force: true);
+
+      expect(provider.chatMessagesFor('cA4').single['text'], 'A1');
+      expect(provider.chatMessagesFor('cB4').single['text'], 'B1');
+    });
+  });
+
   group('breakdown tabel', () {
     test('fetchTableSizes mengisi tableSizes + loading mati', () async {
       when(() => service.getTableSizes()).thenAnswer(

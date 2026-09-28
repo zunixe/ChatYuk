@@ -61,10 +61,85 @@ adb TIDAK BISA di MIUI wireless. Satu-satunya cara pasti:
 - **XSpace (user 999) aktif** di HP. Kalau bingung, cek foreground:
   `dumpsys activity activities | grep mFocusedApp` (harus `u0 com.chatyuk.chatyuk`).
 
-## Resep debug APK (debuggable + login tetap jalan + tanpa uninstall)
+## Resep APK DIAGNOSTIK — pakai build `--profile` (TERBAIK, dipakai harian)
+
+**Kesepakatan kerja: pasang APK profil ke HP untuk kerja harian supaya kalau
+ada error/bug langsung kelihatan log-nya. APK rilis baru dipakai kalau sudah
+bagus (untuk APKPure/Play).**
+
+Kenapa `--profile`, bukan `--debug` atau `--release`:
+
+| Build | Google Sign-In | `dlog` muncul di logcat? | Berguna untuk diagnosa |
+|---|---|---|---|
+| `--debug` | ❌ gagal `12500` (debug key) | ✅ | tidak — tidak bisa login |
+| `--release` (obfuscate) | ✅ | ❌ `kDebugMode=false` → di-strip | tidak — log hilang |
+| **`--profile`** | ✅ (di-sign keystore RILIS) | ✅ `kProfileMode=true` | **ya** |
+
+Rahasia: `android/app/build.gradle.kts` sudah menyetel buildType `profile`
+memakai `signingConfigs.release`. Jadi APK profil **ditandatangani keystore
+rilis** (SHA-256 `84e9...` = SHA-1 `8ccc42e3...`) → Sign-In jalan, tapi
+`kProfileMode` membuat `dlog()` tetap aktif → semua `[PHOTO-DBG]`, `[AVATAR]`,
+`[CACHE-TIME]`, `[NAV]`, `[CALL-START]`, dll. muncul di logcat.
+
+### Build + push (copy-paste)
+
+```bash
+cd /Users/zunixe/Documents/ChatYuk
+rm -rf build/app/outputs build/app/intermediates build/app/tmp .dart_tool/flutter_build
+
+KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+  flutter build apk --profile --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
+
+APK=build/app/outputs/flutter-apk/app-apkpureprod-profile.apk
+cp "$APK" ~/Downloads/chatyuk_profile.apk
+```
+
+- **JANGAN** pakai `--obfuscate` di build profil: obfuscation justru bikin
+  stack trace susah dibaca. Profil tanpa obfuscate = nama class asli utuh.
+- Output: `app-apkpureprod-profile.apk` (~200MB).
+- Signature sama dengan rilis → bisa menimpa install rilis **tanpa uninstall**
+  (sesi login aman).
+
+### Verifikasi signature (WAJIB sebelum pasang)
+
+```bash
+APKSIGNER=$(find "$HOME/Library/Android/sdk/build-tools" -name apksigner | sort | tail -1)
+"$APKSIGNER" verify --print-certs "$APK" | grep SHA-1
+# harus: 8ccc42e3fe9337216ce4250e2bfccb22941e50a2 (keystore rilis v2)
+```
+
+Kalau SHA-1 bukan itu → build salah (mungkin ter-sign debug key) → jangan pasang.
+
+### Baca log setelah pasang
+
+```bash
+export PATH="$PATH:$HOME/Library/Android/sdk/platform-tools"
+D=192.168.18.240:PORT          # ganti sesuai `adb devices`
+
+adb -s $D logcat -c                                  # bersihkan dulu
+# ... reproduksi bug di HP (buka chat, kirim, buka profil, dst) ...
+adb -s $D logcat -d -v time | grep -E "PHOTO-DBG|AVATAR|NAV|CALL-START|CACHE-TIME|POINTS|prefetch|flutter" | tail -80
+```
+
+- User **swipe-kill** app dari Recents dulu kalau UI tidak berubah (proses basi
+  MIUI — lihat bagian atas dokumen ini).
+- Install manual dari File Manager → `Download/chatyuk_profile.apk` (MIUI
+  menolak `adb install`).
+
+### Alur kerja harian yang disepakati
+
+1. Kerja/perbaikan fitur → build **profil** → pasang ke HP → cek log + perilaku.
+2. Kalau sudah bagus & tidak ada error → baru build **rilis** (obfuscate) untuk
+   APKPure/Play, dengan gate `./scripts/check_release_apk.sh`.
+
+Alasan: build profil punya log lengkap untuk diagnosa, tapi tetap bisa login
+(keystore rilis), jadi tidak ada lagi siklus "kenapa errornya?" tanpa petunjuk.
+
+## Resep debug APK lama (alternatif: debug + re-sign manual)
 
 Debug key bikin login Google gagal (12500) dan beda signature (harus uninstall).
-Solusi: build debug, lalu **re-sign dengan keystore release**:
+Alternatif kalau `--profile` tidak cocok: build debug, lalu **re-sign dengan
+keystore release**:
 
 ```bash
 flutter build apk --debug --flavor apkpure --dart-define=APP_FLAVOR=apkpure
@@ -79,6 +154,7 @@ adb install -r /tmp/dbg_release.apk   # signature sama → tanpa uninstall, sesi
 ```
 
 Verifikasi terinstall = build debug: `dumpsys package ... | grep DEBUGGABLE`.
+
 
 ## Teknik verifikasi kode jalan (bukan dari screenshot)
 

@@ -178,6 +178,20 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
       dlog('[AVATAR] $_uid8 EMPTY keep-old=${_provider != null}');
       return;
     }
+    // Sumber non-kosong dan BARU (atau provider hilang) → buang bytes +
+    // provider lama milik uid ini. Maps per-uid di bawah memakai `??=` /
+    // `putIfAbsent` yang tidak pernah menimpa — tanpa ini foto lama tersaji
+    // selamanya: user ganti avatar tidak muncul di list online HP lain
+    // sampai restart app (State kartu dipertahankan antar-reorder, jadi
+    // inilah satu-satunya jalur update foto).
+    final staleProvider = _avatarImageByUid.remove(widget.uid);
+    _avatarBytesByUid.remove(widget.uid);
+    _provider = null;
+    if (staleProvider != null) {
+      try {
+        PaintingBinding.instance.imageCache.evict(staleProvider);
+      } catch (_) {}
+    }
     // PATH storage → baca bytes dari MEDIA DISK CACHE (instan, tanpa
     // network) → foto langsung tampil bahkan di mount pertama.
     if (src.startsWith('avatars/')) {
@@ -221,6 +235,12 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
             dlog(
               '[AVATAR] $_uid8 DECODE-FAIL(async) keep-old=${_provider != null}',
             );
+            return;
+          }
+          // Foto sudah berganti saat decode berjalan → buang hasil basi
+          // (jangan timpa foto baru dengan foto lama).
+          if (_avatarLastSrcByUid[widget.uid] != src) {
+            dlog('[AVATAR] $_uid8 STALE-DECODE dropped');
             return;
           }
           _avatarCache.putIfAbsent(src, () => decoded);

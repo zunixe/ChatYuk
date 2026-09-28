@@ -99,9 +99,14 @@ concurrent realtime — hasil test (300 OK) kemungkinan karena toleransi burst;
 - [ ] **Region**: server di Tokyo, user di Indonesia. Kalau mayoritas user
       Indonesia, pertimbangkan region Singapore (latensi ~430ms → ~50ms akan
       memangkas mayoritas waktu RPC — 85% waktu sekarang adalah jaringan).
-- [ ] **Cron tiap menit** (`chatyuk-presence-idle`, `cleanup-room-signals`,
-      `cleanup-stale-broadcasters`): evaluasi apakah perlu tiap menit atau
-      cukup 5 menit.
+- [x] **Cron tiap menit** (2026-09-28): DIKONSOLIDASI. Dulu 5 job `* * * * *`
+      terpisah (`chatyuk-presence-idle`, `cleanup-room-signals`,
+      `cleanup-stale-broadcasters`, `sweep_room_voice`, `chatyuk-outbox-worker`)
+      + 4 job `*/5` yang menabrak → instance Micro (`max_worker_processes=6`)
+      kehabisan worker → 4.6% run gagal "job startup timeout". Sekarang
+      4 housekeeping digabung jadi 1 job `chatyuk-housekeeping`
+      (`housekeeping_tick()`), `outbox-worker` → `*/2`, job `*/5` disebar
+      menitnya. Hasil: maks 5 job/menit, 0 gagal (lihat PERFORMANCE.md §20).
 
 ### P3 — Ketahanan & observabilitas
 - [ ] **Guard koneksi DB**: app tidak tahu saat koneksi >50. Tambahkan

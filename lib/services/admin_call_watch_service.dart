@@ -7,6 +7,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../config/call_config.dart';
+import '../core/call/watch_policy.dart';
 import '../models/active_call_model.dart';
 import 'call_service.dart';
 
@@ -86,9 +87,19 @@ class WatchSession extends ChangeNotifier {
   void _requestAll() {
     if (_stopped) return;
     var allConnected = true;
+    final now = DateTime.now();
     for (final p in participants) {
       if (p.connected) continue;
       allConnected = false;
+      // Sedang handshake (offer baru masuk < 8 dtk) → tahan dulu. Peserta
+      // juga mengabaikan request <8 dtk, dan spam request memicu rebuild pc
+      // (audio putus). Lihat `watch_policy.dart`.
+      final negotiating = p.pc != null &&
+          p.lastOfferAt != null &&
+          now.difference(p.lastOfferAt!) < const Duration(seconds: 8);
+      if (!shouldRequestWatch(connected: p.connected, negotiating: negotiating)) {
+        continue;
+      }
       _service.sendSignal(call.id, 'watch_request', payload: {'from': myUid});
     }
     // Hemat sinyal: berhenti minta saat semua sudah connected.
@@ -125,6 +136,7 @@ class WatchSession extends ChangeNotifier {
       if (cand.uid == from) p = cand;
     }
     if (p == null) return;
+    p.lastOfferAt = DateTime.now();
     try {
       final old = p.pc;
       if (old != null) {
@@ -157,12 +169,26 @@ class WatchSession extends ChangeNotifier {
         p.connected =
             state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
         dlog('[ADMIN-WATCH] ${p.name} state=$state');
-        // Peserta putus lagi → hidupkan ulang permintaan watch.
-        if (!p.connected && _requestTimer == null) {
-          _requestTimer = Timer.periodic(
-            const Duration(seconds: 3),
-            (_) => _requestAll(),
-          );
+        // Satu pihak sudah tersambung → matikan timer permintaan supaya
+        // peserta TIDAK rebuild pc (audio tidak putus-nyambung). Peserta
+        // yang belum konek tetap diminta oleh _requestAll iterasi lain.
+        if (p.connected && _requestTimer != null) {
+          final anyPending = participants.any((q) => !q.connected);
+          if (!anyPending) {
+            _requestTimer?.cancel();
+            _requestTimer = null;
+          }
+        }
+        // Peserta putus lagi (failed/closed, bukan sekadar disconnected) →
+        // hidupkan ulang permintaan watch.
+        if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+            state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+          if (_requestTimer == null) {
+            _requestTimer = Timer.periodic(
+              const Duration(seconds: 3),
+              (_) => _requestAll(),
+            );
+          }
         }
         notifyListeners();
       };
@@ -371,6 +397,9 @@ class WatchParticipant {
   bool micOn = true;
   bool cameraOn = true;
   bool hasVideoTrack = false;
+  /// Waktu `watch_offer` terakhir diterima dari peserta ini — dipakai untuk
+  /// menahan `watch_request` selama handshake (cegah rebuild pc → audio
+  /// putus-nyambung).
+  DateTime? lastOfferAt;
 
-  WatchParticipant({required this.uid, required this.name});
-}
+  WatchParticipant({required this.uid, required this.name});}

@@ -26,6 +26,7 @@ import 'providers/nav_provider.dart';
 import 'providers/update_provider.dart';
 import 'screens/incoming_call_screen.dart';
 import 'screens/call_screen.dart';
+import 'screens/friend_requests_screen.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/env.dart';
@@ -1109,6 +1110,15 @@ void _openFromData(Map<String, dynamic> data) {
         ctx.read<NavProvider>().goTo(2);
       } catch (_) {}
     }
+    return;
+  }
+  // Permintaan pertemanan (tap notif) → layar daftar permintaan
+  // (terima/tolak). Tanpa ini jatuh ke PrivateChatScreen kosong.
+  if (data['type'] == 'friend_request') {
+    nav.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const FriendRequestsScreen()),
+      (route) => route.isFirst,
+    );
     return;
   }
   // Panggilan aktif (tap notifikasi ongoing / buka app) → LAYAR call.

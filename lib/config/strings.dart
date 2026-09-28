@@ -832,6 +832,8 @@ class S {
       : 'Only registered accounts can make calls.';
   String get msgCallInProgress =>
       isId ? 'Kamu sedang dalam panggilan lain.' : 'You are in another call.';
+  String get errCallNetwork =>
+      isId ? 'Tidak ada koneksi — periksa internet lalu coba lagi' : 'No connection — check internet and retry';
   String get callBannerTap =>
       isId ? 'Ketuk untuk kembali ke panggilan' : 'Tap to return to call';
 
@@ -1708,6 +1710,7 @@ class S {
       isId ? 'Permintaan Teman' : 'Friend Requests';
   String get friendRequestEmpty =>
       isId ? 'Belum ada permintaan teman' : 'No friend requests yet';
+  String get friendRequestInbox => isId ? 'Masuk' : 'Incoming';
   String get friendRequestSent =>
       isId ? 'Permintaan teman terkirim' : 'Friend request sent';
   String get friendRequestAccepted =>

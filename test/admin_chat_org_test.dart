@@ -99,4 +99,90 @@ void main() {
     await provider.renameChatCategory('Kerja', 'Kantor');
     expect(provider.activeChatCategory, 'Kantor');
   });
+
+  group('sync server antar HP admin', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('kategori dari server (HP lain) muncul di HP ini', () async {
+      final svc = MockAdminService();
+      when(() => svc.getChatOrg()).thenAnswer((_) async => {
+            'pinned_chat_ids': const ['c9'],
+            'category_list': const ['Huha'],
+            'category_map': const {'c9': 'Huha'},
+          });
+      when(() => svc.setChatOrg(
+            pinned: any(named: 'pinned'),
+            categories: any(named: 'categories'),
+            map: any(named: 'map'),
+          )).thenAnswer((_) async => true);
+
+      final p = AdminProvider(service: svc);
+      addTearDown(p.dispose);
+      await p.loadChatOrg();
+
+      expect(p.chatCategories, contains('Huha'));
+      expect(p.chatCategoryOf('c9'), 'Huha');
+      expect(p.isChatPinned('c9'), isTrue);
+    });
+
+    test('buat kategori → didorong ke server (orgSet dipanggil)', () async {
+      final svc = MockAdminService();
+      when(() => svc.getChatOrg())
+          .thenAnswer((_) async => {'category_list': const <String>[]});
+      when(() => svc.setChatOrg(
+            pinned: any(named: 'pinned'),
+            categories: any(named: 'categories'),
+            map: any(named: 'map'),
+          )).thenAnswer((_) async => true);
+
+      final p = AdminProvider(service: svc);
+      addTearDown(p.dispose);
+      await p.loadChatOrg();
+      await p.addChatCategory('Baru');
+
+      verify(() => svc.setChatOrg(
+            pinned: any(named: 'pinned'),
+            categories: any(named: 'categories'),
+            map: any(named: 'map'),
+          )).called(greaterThanOrEqualTo(1));
+    });
+
+    test('server kosong + lokal ada → SEED ke atas, tidak dihapus', () async {
+      // Lokal sudah punya 'Huha' (dibuat sebelum fitur sync).
+      SharedPreferences.setMockInitialValues({});
+      final seed = AdminProvider(service: MockAdminService());
+      addTearDown(seed.dispose);
+      await seed.loadChatOrg();
+      await seed.addChatCategory('Huha');
+
+      // HP lain buka: server masih kosong → jangan timpa; dorong ke atas.
+      final svc2 = MockAdminService();
+      when(() => svc2.getChatOrg()).thenAnswer((_) async => {
+            'pinned_chat_ids': const <String>[],
+            'category_list': const <String>[],
+            'category_map': const <String, dynamic>{},
+          });
+      List<String>? pushedCats;
+      when(() => svc2.setChatOrg(
+            pinned: any(named: 'pinned'),
+            categories: any(named: 'categories'),
+            map: any(named: 'map'),
+          )).thenAnswer((inv) async {
+        pushedCats =
+            (inv.namedArguments[#categories] as List?)?.cast<String>();
+        return true;
+      });
+
+      final p2 = AdminProvider(service: svc2);
+      addTearDown(p2.dispose);
+      // p2 baca prefs yang SAMA (mock prefs) → lokal punya Huha.
+      await p2.loadChatOrg();
+
+      expect(p2.chatCategories, contains('Huha'), reason: 'lokal tidak dihapus');
+      // Server kosong + lokal ada → seed terkirim.
+      expect(pushedCats, contains('Huha'));
+    });
+  });
 }

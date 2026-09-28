@@ -1139,8 +1139,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       }
     }
     _prevCallPhase = sess?.phase ?? _prevCallPhase;
-    if (sess?.remoteUid != widget.otherUid) return;
-    if (mounted) setState(() {});
+    // Overlay hidup/mati bergantung pada `activeSession` — termasuk saat sesi
+    // di-NULL-kan (clearSession setelah tombol end). Dulu `sess == null` lolos
+    // ke `return` (null != otherUid) TANPA setState → overlay TIDAK hilang
+    // sampai ada rebuild lain ("end call lama matinya", terutama di MIUI).
+    if (sess == null || sess.remoteUid == widget.otherUid) {
+      if (mounted) setState(() {});
+    }
   }
 
   bool get _showCallOverlay {
@@ -2679,8 +2684,31 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         );
       }
       // Mode chat: overlay muncul otomatis dari provider.activeSession.
-    } catch (_) {
-      showChatSnackVia(messenger, ctx, s.errGeneric);
+    } catch (e) {
+      // Jangan telan error mentah-mentah: tulis ke logcat (dlog di-strip di
+      // release) + petakan ke pesan yang menjelaskan penyebab (RLS/jaringan).
+      debugPrint('[CALL-START] _startCall gagal ($callType): $e');
+      final low = e.toString().toLowerCase();
+      final denied = low.contains('policy') ||
+          low.contains('permission denied') ||
+          low.contains('unauthorized') ||
+          low.contains('401') ||
+          low.contains('403') ||
+          low.contains('jwt');
+      final offline = low.contains('socketexception') ||
+          low.contains('failed host lookup') ||
+          low.contains('network is unreachable') ||
+          low.contains('connection refused') ||
+          low.contains('timeout');
+      showChatSnackVia(
+        messenger,
+        ctx,
+        denied
+            ? s.msgCallRegisterOnly
+            : offline
+                ? s.errCallNetwork
+                : s.errGeneric,
+      );
     }
   }
 

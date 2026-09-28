@@ -420,28 +420,40 @@ flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpur
   --obfuscate --split-debug-info=build/app/symbols
 ```
 
-### Build diagnosis TANPA obfuscation (WAJIB saat cari crash)
+### Build diagnosis — PAKAI `--profile` (WAJIB saat cari bug/crash)
 
-Saat debug/nelusuri crash di HP, **JANGAN pakai `--obfuscate`**. Obfuscation membuat
-nama class jadi `kr`/`Ew` dan stack trace tidak bisa di-symbolize ke file:line
-(kecuali simbol cocok PERSIS per build_id, yang sering tidak cocok karena build_id
-berubah tiap build). Akibatnya jam terbuang cuma untuk nebak lokasi error.
+**Kesepakatan kerja: pasang APK `--profile` ke HP untuk kerja harian supaya
+error langsung terbaca dari log. APK rilis (obfuscate) baru dipakai kalau sudah
+bagus, untuk APKPure/Play.**
 
-Untuk build diagnosis, lewati `--obfuscate` DAN `--split-debug-info` agar nama
-class asli (`FlexParentData`, `StackParentData`, dll) dan pesan Flutter
-("Incorrect use of ParentDataWidget ... parent: Column") tetap utuh di APK:
+Kenapa `--profile` (bukan `--debug` / `--release`):
+
+| Build | Google Sign-In | `dlog` muncul di logcat? |
+|---|---|---|
+| `--debug` | ❌ gagal `12500` (debug key) | ✅ |
+| `--release` (obfuscate) | ✅ | ❌ `kDebugMode=false` → di-strip |
+| **`--profile`** | ✅ (di-sign keystore RILIS) | ✅ `kProfileMode=true` |
+
+BuildType `profile` di `android/app/build.gradle.kts` sudah di-sign
+`signingConfigs.release` → SHA-1 `8ccc42e3...` → Sign-In JALAN, tapi
+`kProfileMode` membuat `dlog()` AKTIF → `[PHOTO-DBG]`/`[AVATAR]`/`[NAV]`/
+`[CALL-START]`/`[CACHE-TIME]` dll. muncul di logcat.
 
 ```bash
-rm -rf build/app/outputs build/app/symbols build/app/intermediates \
+rm -rf build/app/outputs build/app/intermediates \
   build/app/tmp .dart_tool/flutter_build
-flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
-cp build/app/outputs/flutter-apk/app-apkpure-release.apk ~/Downloads/chatyuk_dbg.apk
+KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+  flutter build apk --profile --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
+cp build/app/outputs/flutter-apk/app-apkpureprod-profile.apk ~/Downloads/chatyuk_profile.apk
 ```
 
-- Nama file `chatyuk_dbg.apk` (bukan `chatyuk.apk`) supaya tidak tertukar dengan
-  build rilis. User install `chatyuk_dbg.apk`, lalu baca log — error sudah jelas
-  sebut file:line + parent widget.
-- Build diagnosis TIDAK boleh diupload ke store/Play (tidak diobfuskasi).
+- **JANGAN** tambah `--obfuscate`/`--split-debug-info` di build profil —
+  obfuscation justru bikin stack trace susah dibaca.
+- Signature sama rilis → bisa menimpa install rilis tanpa uninstall (sesi aman).
+- Verifikasi SHA-1 sebelum pasang (harus `8ccc42e3...`) lalu baca log:
+  `adb logcat -c` → reproduksi → `adb logcat -d -v time | grep -E
+  "PHOTO-DBG|AVATAR|NAV|CALL-START|CACHE-TIME|POINTS|flutter" | tail -80`.
+- Detail lengkap: `docs/troubleshoot-build-miui.md`.
 
 Catatan: `flutter clean` tetap wajib KALAU ada perubahan di `pubspec.yaml` (dependency
 baru) atau plugin native berubah. Untuk perubahan kode Dart murni, pakai cara di atas.
