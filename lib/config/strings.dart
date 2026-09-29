@@ -1868,6 +1868,7 @@ class S {
       : 'Be the first to post on the timeline!';
   String get emptyTimelineCta =>
       isId ? 'Ketuk + untuk membuat postingan' : 'Tap + to create a post';
+  String get postAddTooltip => isId ? 'Buat Postingan' : 'Create Post';
   String get emptyFollowing => isId
       ? 'Belum ada postingan dari yang kamu ikuti'
       : 'No posts from people you follow';
