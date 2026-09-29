@@ -29,6 +29,10 @@ extension SAdminX on S {
       ? 'Audio mode telepon (speaker gagal)'
       : 'Phone audio mode (speaker failed)';
 
+  /// Banner di monitor admin: pesan ini sudah dihapus pengirim (isi tetap
+  /// ditampilkan sebagai bukti/verifikasi laporan).
+  String get adminDeletedMarker =>
+      isId ? 'Dihapus oleh pengirim' : 'Deleted by sender';
   String get adminContactTab => isId ? 'Kontak' : 'Contact';
 
   String get adminDeviceTab => isId ? 'Perangkat' : 'Devices';

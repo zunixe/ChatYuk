@@ -204,7 +204,7 @@ void main() {
     expect(find.text('halo', findRichText: true), findsOneWidget);
   });
 
-  testWidgets('pesan terhapus tetap tampil + penanda dihapus', (tester) async {
+  testWidgets('pesan terhapus: ISI tetap tampil + banner dihapus', (tester) async {
     unawaited(
       MessageCache.instance.saveMessages('private_${chatId}_del', [
         MessageModel(
@@ -213,8 +213,10 @@ void main() {
           senderName: 'Anggi',
           senderGender: 'male',
           isRegistered: false,
-          text: '',
-          type: 'image',
+          // Isi ASLI tetap ada (server tidak mengosongkan) — admin harus
+          // bisa melihatnya walau pengirim sudah menghapus.
+          text: 'rahasia penting',
+          type: 'text',
           imageData: '',
           timestamp: DateTime.utc(2026, 9, 27, 10, 5),
           isDeleted: true,
@@ -261,11 +263,17 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
-    // Penanda hapus admin: nama pengirim + teks dihapus + ikon jenis + jam.
-    // (Jam = RichText overlay; cukup pastikan bubble penanda tampil utuh.)
-    expect(find.text('Anggi', findRichText: true), findsWidgets);
-    expect(find.textContaining('dihapus', findRichText: true), findsWidgets);
-    expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+    // Isi asli TETAP tampil + banner "Dihapus oleh pengirim".
+    expect(
+      find.text('rahasia penting', findRichText: true),
+      findsWidgets,
+      reason: 'isi pesan terhapus harus tetap terlihat admin',
+    );
+    expect(
+      find.textContaining('Dihapus oleh pengirim', findRichText: true),
+      findsWidgets,
+      reason: 'harus ada penanda bahwa pesan sudah dihapus',
+    );
   });
 
   group('tryClaimChatPush', () {
