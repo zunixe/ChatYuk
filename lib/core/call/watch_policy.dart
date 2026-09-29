@@ -54,6 +54,18 @@ bool shouldRequestWatch({
   return true;
 }
 
+/// Sisi PESERTA: `watch_request` ini untuk kita?
+///
+/// Sinyal watch dikirim per-peserta dengan `to` = uid penerima. Sinyal
+/// tanpa `to` (versi lama) tetap diterima demi kompatibilitas. Sinyal yang
+/// di-address ke peserta LAIN wajib diabaikan — kalau tidak, kedua peserta
+/// memproses sinyal yang sama dan membuat pc/offer watch dobel (audio-video
+/// di monitor admin turun-bangun).
+bool isWatchRequestForMe({required String? to, required String? me}) {
+  if (to == null) return true;
+  return to == me;
+}
+
 /// Jeda antar permintaan `watch_request` berdasarkan percobaan ke-[attempt].
 ///
 /// 3 percobaan pertama lebih cepat (1,5 dtk) supaya audio admin muncul

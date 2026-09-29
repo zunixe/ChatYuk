@@ -143,4 +143,23 @@ void main() {
       expect(watchRequestDelay(10), const Duration(seconds: 3));
     });
   });
+
+  /// Mengunci perbaikan "putus tengah jalan di monitor chat" (2026-09-29).
+  ///
+  /// Akar: admin mengirim `watch_request` TANPA `to` di dalam loop per
+  /// peserta → 2 sinyal identik per siklus, tiap peserta memproses keduanya
+  /// → pc/offer watch dobel → audio-video di monitor turun-bangun.
+  group('isWatchRequestForMe (targeting watch_request)', () {
+    test('bertarget ke kita → true', () {
+      expect(isWatchRequestForMe(to: 'me', me: 'me'), isTrue);
+    });
+
+    test('bertarget ke peserta LAIN → false (jangan dobel-proses)', () {
+      expect(isWatchRequestForMe(to: 'other', me: 'me'), isFalse);
+    });
+
+    test('tanpa `to` (sinyal versi lama) → true (kompat)', () {
+      expect(isWatchRequestForMe(to: null, me: 'me'), isTrue);
+    });
+  });
 }

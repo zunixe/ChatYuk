@@ -96,6 +96,41 @@ class CallService {
     return _sb.from('calls').select('*').eq('id', callId).maybeSingle();
   }
 
+  /// Riwayat panggilan milik user ini (masuk/keluar), terbaru dulu.
+  ///
+  /// RLS `calls_select` sudah membatasi ke `caller_id`/`callee_id` = user,
+  /// jadi cukup satu query gabungan. Dipakai halaman "Panggilan Terbaru".
+  Future<List<Map<String, dynamic>>> listMyRecentCalls({int limit = 50}) async {
+    final me = uid;
+    if (me == null) return const [];
+    final rows = await _sb
+        .from('calls')
+        .select(
+          'id, caller_id, callee_id, call_type, status, created_at, '
+          'answered_at, ended_at',
+        )
+        .or('caller_id.eq.$me,callee_id.eq.$me')
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
+  /// Nama tampilan batch untuk daftar riwayat panggilan (hindari N+1 query).
+  Future<Map<String, String>> lookupNicknames(List<String> uids) async {
+    if (uids.isEmpty) return const {};
+    final rows = await _sb
+        .from('profiles')
+        .select('id, nickname')
+        .inFilter('id', uids);
+    final out = <String, String>{};
+    for (final r in rows) {
+      final id = r['id'] as String?;
+      final n = r['nickname'] as String?;
+      if (id != null && n != null && n.isNotEmpty) out[id] = n;
+    }
+    return out;
+  }
+
   /// Heartbeat peserta call (fire-and-forget) — dipakai admin monitor
   /// untuk membedakan call hidup vs zombie.
   void touchCall(String callId) {
@@ -1274,6 +1309,10 @@ class CallSession extends ChangeNotifier {
     final watcher = msg['from'] as String?;
     final me = _service.uid;
     if (_closed || watcher == null || watcher.isEmpty || watcher == me) return;
+    // Bertarget: sinyal watch_request `to` peserta lain bukan untuk kita.
+    // (Sinyal lama tanpa `to` tetap diterima demi kompat.)
+    final to = msg['to'] as String?;
+    if (!isWatchRequestForMe(to: to, me: me)) return;
     if (_localStream == null || _pc == null) {
       // Media belum siap (admin membuka monitor di detik-detik awal call) →
       // ANTRE, balas begitu siap. Dulu request dibuang → admin mengulang
@@ -1286,6 +1325,10 @@ class CallSession extends ChangeNotifier {
     final last = _lastWatchReply[watcher];
     final repliedRecently =
         last != null && DateTime.now().difference(last) < const Duration(seconds: 8);
+    // Kunci PENANDA SEBELUM await: dua request bersamaan (mis. realtime +
+    // catch-up SELECT) sama-sama mengecek throttle saat masih kosong → dulu
+    // dua-duanya lolos → pc/offer watch dobel → audio peserta putus-nyambung.
+    _lastWatchReply[watcher] = DateTime.now();
     try {
       final isAdmin = await (_watcherAdminChecks.putIfAbsent(
         watcher,
@@ -1314,7 +1357,6 @@ class CallSession extends ChangeNotifier {
         hasHealthyPc: healthy,
       );
       if (action == WatchReplyAction.ignore) return;
-      _lastWatchReply[watcher] = DateTime.now();
       // pc sehat → cukup kabari status; negosiasi/media TIDAK disentuh.
       if (action == WatchReplyAction.sendState) {
         _sendWatchState(watcher);

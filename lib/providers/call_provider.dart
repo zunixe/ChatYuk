@@ -148,6 +148,13 @@ class CallProvider extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>?> getCall(String callId) => _service.getCall(callId);
+  /// Riwayat panggilan user (masuk/keluar) — untuk halaman Panggilan Terbaru.
+  Future<List<Map<String, dynamic>>> recentCalls({int limit = 50}) =>
+      _service.listMyRecentCalls(limit: limit);
+
+  /// Nama tampilan batch (uid → nickname) untuk riwayat panggilan.
+  Future<Map<String, String>> lookupNames(List<String> uids) =>
+      _service.lookupNicknames(uids);
   Future<String?> getNickname(String uid) => _service.getNickname(uid);
   Stream<String> onCallStatus(String callId) => _service.onCallStatus(callId);
   void releaseCallStatus(String callId) => _service.releaseCallStatus(callId);
