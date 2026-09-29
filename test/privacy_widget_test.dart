@@ -92,7 +92,7 @@ void main() {
     expect(find.text(s.privacyHint), findsOneWidget);
   });
 
-  testWidgets('tap tile presence → sheet 5 opsi visibility', (tester) async {
+  testWidgets('tap tile presence → sheet 6 opsi visibility', (tester) async {
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
@@ -103,7 +103,40 @@ void main() {
     expect(find.text(s.privacyEveryoneExcept), findsOneWidget);
     expect(find.text(s.privacyFriends), findsOneWidget);
     expect(find.text(s.privacyFriendsExcept), findsOneWidget);
+    expect(find.text(s.privacyCircle), findsOneWidget);
     expect(find.text(s.privacyNobody), findsOneWidget);
+  });
+
+  testWidgets('pilih Kenalan → update(presence: circle) tanpa picker',
+      (tester) async {
+    when(() => service.update(
+          presence: PrivacyVisibility.circle,
+          lastSeen: null,
+          profilePhoto: null,
+          about: null,
+          story: null,
+          readReceipts: null,
+        )).thenAnswer(
+      (_) async => const PrivacySettings(presence: PrivacyVisibility.circle),
+    );
+
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(s.privacyPresence));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.privacyCircle));
+    await tester.pumpAndSettle();
+
+    verify(() => service.update(
+          presence: PrivacyVisibility.circle,
+          lastSeen: null,
+          profilePhoto: null,
+          about: null,
+          story: null,
+          readReceipts: null,
+        )).called(1);
+    expect(find.text(s.privacyCircle), findsOneWidget);
   });
 
   testWidgets('pilih nobody → update(presence) + subtitle berubah',
@@ -123,6 +156,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text(s.privacyPresence));
+    await tester.pumpAndSettle();
+    // Sheet kini 6 opsi — 'Tidak ada' bisa di bawah lipatan di viewport test.
+    await tester.ensureVisible(find.text(s.privacyNobody));
     await tester.pumpAndSettle();
     await tester.tap(find.text(s.privacyNobody));
     await tester.pumpAndSettle();

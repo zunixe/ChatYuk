@@ -10,9 +10,9 @@ import '../providers/privacy_provider.dart';
 /// Pengaturan Privasi — struktur & gaya sama dengan halaman Notifikasi
 /// (kartu bgCard, ikon lingkaran 36, divider indent 52).
 ///
-/// 5 pilihan per bagian:
+/// 6 pilihan per bagian:
 ///   Semua orang / Semua orang kecuali... / Teman saya /
-///   Teman saya kecuali... / Tidak ada
+///   Teman saya kecuali... / Kenalan / Tidak ada
 /// Opsi "kecuali..." bisa memilih TEMAN maupun ANON (yang pernah chat).
 class PrivacySettingsScreen extends StatefulWidget {
   const PrivacySettingsScreen({super.key});
@@ -41,6 +41,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       PrivacyVisibility.everyoneExcept => Icons.person_remove_alt_1,
       PrivacyVisibility.friends => Icons.people_alt,
       PrivacyVisibility.friendsExcept => Icons.group_remove,
+      PrivacyVisibility.circle => Icons.groups,
       PrivacyVisibility.nobody => Icons.lock,
     };
   }
@@ -52,6 +53,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       PrivacyVisibility.everyoneExcept => s.privacyEveryoneExceptDesc,
       PrivacyVisibility.friends => s.privacyFriendsDesc,
       PrivacyVisibility.friendsExcept => s.privacyFriendsExceptDesc,
+      PrivacyVisibility.circle => s.privacyCircleDesc,
       PrivacyVisibility.nobody => s.privacyNobodyDesc,
     };
   }
@@ -62,6 +64,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       PrivacyVisibility.everyoneExcept => s.privacyEveryoneExcept,
       PrivacyVisibility.friends => s.privacyFriends,
       PrivacyVisibility.friendsExcept => s.privacyFriendsExcept,
+      PrivacyVisibility.circle => s.privacyCircle,
       PrivacyVisibility.nobody => s.privacyNobody,
     };
   }
