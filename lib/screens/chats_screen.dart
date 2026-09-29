@@ -7,6 +7,7 @@ import '../providers/locale_provider.dart';
 import 'group_screen.dart';
 import 'private_chats_screen.dart';
 import 'lobby_screen.dart';
+import 'call_history_screen.dart';
 
 /// Menu "Chat" gabungan: sub-tab Pesan (private) + Grup + Room.
 class ChatsScreen extends StatefulWidget {
@@ -152,6 +153,14 @@ class _ChatsScreenState extends State<ChatsScreen>
                   icon: const Icon(Icons.more_vert),
                   onSelected: (v) {
                     switch (v) {
+                      case 'recent_calls':
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CallHistoryScreen(),
+                          ),
+                        );
+                        break;
                       case 'new_group':
                         showCreateGroupDialog(context);
                         break;
@@ -163,6 +172,16 @@ class _ChatsScreenState extends State<ChatsScreen>
                     }
                   },
                   itemBuilder: (_) => <PopupMenuEntry<String>>[
+                    PopupMenuItem(
+                      value: 'recent_calls',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.call_rounded, size: 20),
+                        title: Text(s.menuRecentCalls),
+                      ),
+                    ),
+                    const PopupMenuDivider(height: 1),
                     PopupMenuItem(
                       value: 'new_group',
                       child: ListTile(

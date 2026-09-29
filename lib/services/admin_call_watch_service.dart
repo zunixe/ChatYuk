@@ -114,7 +114,14 @@ class WatchSession extends ChangeNotifier {
         continue;
       }
       p.requestedAt ??= now;
-      _service.sendSignal(call.id, 'watch_request', payload: {'from': myUid});
+      // WAJIB bertarget `to` per peserta: satu siklus mengirim satu sinyal
+      // (dulu tanpa `to` → 2 sinyal identik, dan tiap peserta memproses
+      // keduanya → pc/offer watch dobel → audio-video di monitor turun-bangun).
+      _service.sendSignal(
+        call.id,
+        'watch_request',
+        payload: {'from': myUid, 'to': p.uid},
+      );
     }
     // Hemat sinyal: berhenti minta saat semua sudah connected.
     if (allConnected) {
