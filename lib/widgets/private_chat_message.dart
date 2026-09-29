@@ -34,6 +34,30 @@ import '../core/media/chat_photo_helper.dart';
 // ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.
 String cacheKeyFor(String chatId) => 'private_$chatId';
 
+/// Ikon jenis pesan untuk penanda "dihapus" di monitor admin — supaya admin
+/// tahu pesan apa yang dihapus (teks/gambar/video/suara/lokasi/panggilan).
+/// Murni & testable.
+IconData adminDeletedTypeIcon(String type) {
+  switch (type) {
+    case 'image':
+    case 'view_once':
+    case 'view_once_expired':
+      return Icons.image_outlined;
+    case 'video':
+    case 'video_once':
+    case 'video_once_expired':
+      return Icons.videocam_outlined;
+    case 'voice':
+      return Icons.mic_outlined;
+    case 'location':
+      return Icons.location_on_outlined;
+    case 'call':
+      return Icons.call_outlined;
+    default:
+      return Icons.chat_bubble_outline;
+  }
+}
+
 /// Highlight teks hasil search chat (ala WhatsApp): bagian yang cocok
 /// diberi latar kuning. Style & recognizer (link/mention) span asal
 /// dipertahankan — hanya background yang ditimpa.
@@ -947,8 +971,102 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.read<LocaleProvider>().s;
-    // Pesan yang dihapus (soft delete) → tampilkan teks redup, bukan isinya.
+    final timeStr = formatBubbleTime(msg.timestamp);
+    // Pesan yang dihapus (soft delete).
+    // Monitor admin: TETAP tampil sebagai bubble penanda lengkap (pengirim +
+    // jenis pesan + jam + centang) supaya admin tahu siapa menghapus apa dan
+    // kapan — bukan teks polos tanpa konteks seperti chat biasa.
     if (msg.isDeleted) {
+      if (isAdminView) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            mainAxisAlignment: isMe
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
+            children: [
+              Flexible(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.sizeOf(context).width * 0.8,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgCard,
+                    border: Border.all(
+                      color: AppTheme.textSecondary.withValues(alpha: 0.4),
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(10),
+                      topRight: const Radius.circular(10),
+                      bottomLeft: Radius.circular(isMe ? 10 : 4),
+                      bottomRight: Radius.circular(isMe ? 4 : 10),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: isMe
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        msg.senderName,
+                        style: AppText.label.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            adminDeletedTypeIcon(msg.type),
+                            size: 14,
+                            color: AppTheme.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              s.messageDeleted,
+                              style: AppText.chatBodySmall.copyWith(
+                                color: AppTheme.textSecondary,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            timeStr,
+                            style: AppText.chatTime.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          if (isMe || showChecksBothSides) ...[
+                            const SizedBox(width: 3),
+                            Icon(
+                              (isPending || isQueued)
+                                  ? Icons.done
+                                  : Icons.done_all,
+                              size: 12,
+                              color:
+                                  (!isQueued && !isPending && isRead)
+                                      ? AppTheme.primary
+                                      : AppTheme.textSecondary,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Row(
@@ -967,7 +1085,6 @@ class MessageBubble extends StatelessWidget {
         ),
       );
     }
-    final timeStr = formatBubbleTime(msg.timestamp);
     return CompositedTransformTarget(
       link: link,
       // AppGestureDetector: tahan 320ms (bukan 500ms) → toolbar seleksi/

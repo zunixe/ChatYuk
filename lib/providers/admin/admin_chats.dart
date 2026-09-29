@@ -1,5 +1,56 @@
 part of '../admin_provider.dart';
 
+/// Hasil merge pesan monitor: daftar gabungan + apakah ada perubahan.
+/// Murni & testable (tanpa I/O/cache).
+class AdminChatMerge {
+  final List<Map<String, dynamic>> merged;
+  final bool changed;
+  const AdminChatMerge(this.merged, this.changed);
+}
+
+/// Sidik satu baris pesan monitor: id + field yang bisa berubah lewat poll
+/// (isi, tipe, media, hapus, edit). Dipakai mendeteksi pesan BARU maupun
+/// pesan LAMA yang berubah (dihapus/diedit) — dulu merge hanya menyisipkan
+/// id baru sehingga pesan yang dihapus terjebak tampil konten lama selamanya
+/// (teks tak berubah saat soft-delete, hanya flag is_deleted).
+String adminChatRowSig(Map<String, dynamic> m) =>
+    '${m['id']}|${m['text']}|${m['type']}|${m['is_deleted']}|${m['edited']}|'
+    '${m['image_data']}|${m['image_path']}|${m['voice_path']}';
+
+/// Gabung `latest` (DESC terbaru dulu) ke `current` (DESC): sisipkan id baru
+/// di depan (urutan DESC dipertahankan), TIMPA baris dikenal yang sidiknya
+/// berubah (hapus/edit).
+@visibleForTesting
+AdminChatMerge mergeAdminChatMessages(
+  List<Map<String, dynamic>> current,
+  List<Map<String, dynamic>> latest,
+) {
+  final sigById = <String, String>{};
+  for (final m in current) {
+    sigById['${m['id']}'] = adminChatRowSig(m);
+  }
+  final merged = List<Map<String, dynamic>>.from(current);
+  final fresh = <Map<String, dynamic>>[];
+  var changed = false;
+  for (final m in latest) {
+    final id = '${m['id']}';
+    final prev = sigById[id];
+    if (prev == null) {
+      fresh.add(m);
+      changed = true;
+    } else if (prev != adminChatRowSig(m)) {
+      final idx = merged.indexWhere((e) => '${e['id']}' == id);
+      if (idx >= 0) merged[idx] = m;
+      changed = true;
+    }
+  }
+  // latest sudah DESC → sisipkan berurutan di depan (tak dibalik).
+  for (var i = fresh.length - 1; i >= 0; i--) {
+    merged.insert(0, fresh[i]);
+  }
+  return AdminChatMerge(merged, changed);
+}
+
 /// Monitor chat + call aktif + pesan kontak + pesan per-chat + cache.
 mixin AdminChatsMx on AdminBase {
   // ── Admin Chat Monitor ──
@@ -575,21 +626,15 @@ mixin AdminChatsMx on AdminBase {
         }
         return;
       }
-      final knownIds = current.map((m) => '${m['id']}').toSet();
-      final merged = List<Map<String, dynamic>>.from(current);
-      var added = 0;
-      // Pesan baru (belum ada) ditambahkan di depan (terbaru duluan).
-      for (final m in latest) {
-        if (!knownIds.contains('${m['id']}')) {
-          merged.insert(0, m);
-          added++;
-        }
-      }
-      if (added == 0) return;
-      _chatMsgMemPut(chatId, merged);
+      // Merge murni: id baru disisipkan, baris dikenal yang berubah
+      // (dihapus/diedit) ditimpa. Diam bila tak ada perubahan supaya daftar
+      // di belakang layar tidak rebuild tiap poll.
+      final res = mergeAdminChatMessages(current, latest);
+      if (!res.changed) return;
+      _chatMsgMemPut(chatId, res.merged);
       MessageCache.instance.saveRawList(
         AdminBase.adminChatMsgKey(chatId),
-        merged,
+        res.merged,
       );
       if (!_disposed) notifyListeners();
     } catch (e) {

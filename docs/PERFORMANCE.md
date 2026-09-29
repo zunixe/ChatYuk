@@ -1393,6 +1393,12 @@ ulang, dan daftar di belakang layar rebuild tiap poll.
   daftar monitor tidak rebuild tiap 5-10 dtk.
 - Timeout foto monitor 30 dtk -> 15 dtk (gagal-cepat, retry via tap).
 - Prefetch saat tap kartu (`preloadMessages`) selagi animasi transisi jalan.
+- 2026-09-29 (pesan terhapus): merge poll kini TIMPA baris dikenal yang
+  berubah (`mergeAdminChatMessages`, sidik id+isi+tipe+hapus+edit) — dulu
+  hanya sisip id baru + banding layar cuma id+teks, sehingga pesan yang
+  dihapus terjebak tampil konten lama selamanya. Diam bila identik
+  (imageData dikecualikan supaya thumb tak terhapus tiap poll); layar simpan
+  cache saat berubah. Test: `test/admin_chat_merge_test.dart`.
 
 ### 17.6 Sisi bubble dikunci stabil (2026-09-28)
 
