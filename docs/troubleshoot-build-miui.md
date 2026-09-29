@@ -163,3 +163,32 @@ Verifikasi terinstall = build debug: `dumpsys package ... | grep DEBUGGABLE`.
   `adb shell logcat -d -s flutter | grep ZZZLOG` — membuktikan fungsi dieksekusi.
 - Selalu: `logcat -c` dulu, force-stop/user-kill, launch, baru baca log.
 - HAPUS semua marker/log sementara setelah selesai + rebuild bersih.
+
+## Screenshot hitam ≠ app freeze (FLAG_SECURE)
+
+`app_settings.screenshot_enabled=false` → app pasang **FLAG_SECURE** →
+`adb exec-out screencap` / `screencap -p` mengembalikan **gambar HITAM**
+(status bar & nav button tetap kelihatan karena itu system UI).
+Dart tetap jalan, data tetap masuk — yang hitam hanya hasil capture.
+
+Jangan diagnosa "app freeze / layar hitam" dari screenshot sebelum cek:
+1. `screenshot_enabled` di DB (`select screenshot_enabled from app_settings`).
+2. Log Dart masih mengalir (`logcat --pid=<pid> | grep flutter`).
+3. `dumpsys activity activities | grep topResumedActivity` (activity resumed?).
+
+Kasus 2026-09-29: capture hitam dikira render freeze, ternyata FLAG_SECURE
+(user di HP melihat konten normal: "udah tampil").
+
+## Room kosong sesaat = jaringan putus, bukan data hilang
+
+Gejala "room kadang tampil kadang kosong" (2026-09-29, room General + room lain):
+- Data server UTUH (General: 9 pesan; `room_* server=... n=9` di logcat).
+- Penyebab: HP sempat **kehilangan jaringan total** (`Failed host lookup ...
+  No address associated with hostname`, RPC timeout 30 dtk) — hotspot
+  192.168.137.x flapping. Fetch gagal + cache kosong → tampil kosong.
+- Setelah jaringan balik → room keisi sendiri.
+
+Urutan diagnosa room kosong: (1) cek data ada di server, (2) cek logcat
+`room_<id> server=... n=...` (kalau n>0 = data masuk, masalah render),
+(3) cek `Failed host lookup` / TimeoutException (jaringan), (4) baru curigai
+kode/RLS. Jangan lompat ke kesimpulan kode rusak.
