@@ -332,10 +332,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   /// WAJIB memakai pesan chat INI (`chatMessagesFor`) — dulu `admin.chatMessages`
   /// (buffer bersama) sehingga saat dua layar monitor hidup pesan chat lain
   /// ikut tampil di layar ini ("pesan kecampur", semua bubble ke kanan).
-  void _applyMessages() {
-    if (!mounted) return;
+  bool _applyMessages() {
+    if (!mounted) return false;
     final admin = context.read<AdminProvider>();
-    _applyRawMessages(admin.chatMessagesFor(widget.chatId));
+    return _applyRawMessages(admin.chatMessagesFor(widget.chatId));
   }
 
   /// Pasang daftar pesan mentah (dari cache prefetch monitor / provider) ke
@@ -346,12 +346,17 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   ///    replace akan MEMANGKAS riwayat yang sudah dimuat via scroll.
   ///  - dua sumber (provider map vs SQLite view) bisa punya window beda.
   /// Hasil selalu: union(incoming, existing) urut terbaru dulu.
-  void _applyRawMessages(List<Map<String, dynamic>> raw) {
-    if (!mounted || raw.isEmpty) return;
+  ///
+  /// Return true bila _msgs berubah (pemanggil menyimpan ke cache).
+  /// Perbandingan mencakup isDeleted/edited/type — teks TAK BERUBAH saat
+  /// soft-delete (hanya flag), jadi banding id+teks saja membuat penanda
+  /// hapus tak pernah muncul.
+  bool _applyRawMessages(List<Map<String, dynamic>> raw) {
+    if (!mounted || raw.isEmpty) return false;
     final incoming = _mapMessages(raw);
     if (incoming.isEmpty) {
       _ensureLeftUid();
-      return;
+      return false;
     }
     // Union by id: incoming menang untuk id yang sama (data lebih segar).
     final byId = <String, MessageModel>{};
@@ -374,18 +379,28 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         list[i] = list[i].copyWith(imageData: kept);
       }
     }
-    // Anti-rebuild: isi identik (id + jumlah) → tak perlu setState.
+    // Anti-rebuild: isi identik → tak perlu setState. Bandingkan juga
+    // isDeleted/edited/type (bukan cuma id+teks) supaya penanda hapus/edit
+    // yang masuk tetap memicu rebuild. imageData SENGAJA dikecualikan:
+    // foto yang sudah di-load (thumb) vs datang '' dari server — ikut
+    // dibandingkan malah menghapus foto yang tampil tiap poll.
     if (list.length == _msgs.length) {
       var same = true;
       for (var i = 0; i < list.length; i++) {
-        if (list[i].id != _msgs[i].id || list[i].text != _msgs[i].text) {
+        final a = list[i];
+        final b = _msgs[i];
+        if (a.id != b.id ||
+            a.text != b.text ||
+            a.isDeleted != b.isDeleted ||
+            a.edited != b.edited ||
+            a.type != b.type) {
           same = false;
           break;
         }
       }
       if (same) {
         _ensureLeftUid();
-        return;
+        return false;
       }
     }
     final senderSet = <String>{};
@@ -406,6 +421,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       _error = false;
     });
     _loadPhotos();
+    return true;
   }
 
   // ── Voice: VoiceBubble cache disk sendiri (play pertama download
@@ -546,7 +562,13 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       // Poll hanya butuh pesan BARU (15 cukup) — bukan 1 halaman penuh.
       await admin.refreshChatMessages(widget.chatId, limit: 15);
       if (!mounted) return;
-      _applyMessages();
+      // Berubah (baru/dihapus/diedit) → simpan ke cache lokal supaya
+      // buka-ulang langsung benar tanpa menunggu poll berikutnya.
+      if (_applyMessages()) {
+        if (_msgs.isNotEmpty) {
+          unawaited(MessageCache.instance.saveMessages(_chatKey, _msgs));
+        }
+      }
       _hasMore = admin.chatMessagesHasMoreFor(widget.chatId);
       // last-read jarang berubah — cek tiap ~15 dtk, bukan tiap 5 dtk.
       if (++_pollCount % 3 == 0) unawaited(_refreshRead());

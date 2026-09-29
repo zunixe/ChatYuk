@@ -204,6 +204,70 @@ void main() {
     expect(find.text('halo', findRichText: true), findsOneWidget);
   });
 
+  testWidgets('pesan terhapus tetap tampil + penanda dihapus', (tester) async {
+    unawaited(
+      MessageCache.instance.saveMessages('private_${chatId}_del', [
+        MessageModel(
+          id: '9',
+          senderId: uidAnggi,
+          senderName: 'Anggi',
+          senderGender: 'male',
+          isRegistered: false,
+          text: '',
+          type: 'image',
+          imageData: '',
+          timestamp: DateTime.utc(2026, 9, 27, 10, 5),
+          isDeleted: true,
+        ),
+      ]),
+    );
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AdminProvider>.value(value: admin),
+          ChangeNotifierProvider(create: (_) => LocaleProvider()),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (ctx) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      ctx,
+                      MaterialPageRoute(
+                        builder: (_) => const AdminChatViewScreen(
+                          chatId: '${chatId}_del',
+                          chatLabel: 'Anggi & Jaky',
+                          participantOrder: [uidAnggi, uidJaky],
+                          participantNames: {
+                            uidAnggi: 'Anggi',
+                            uidJaky: 'Jaky',
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('buka-del'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('buka-del'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    // Penanda hapus admin: nama pengirim + teks dihapus + ikon jenis + jam.
+    // (Jam = RichText overlay; cukup pastikan bubble penanda tampil utuh.)
+    expect(find.text('Anggi', findRichText: true), findsWidgets);
+    expect(find.textContaining('dihapus', findRichText: true), findsWidgets);
+    expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+  });
+
   group('tryClaimChatPush', () {
     const id = 'test-chat-guard';
 
