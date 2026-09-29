@@ -4,7 +4,6 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
-import '../widgets/anon_prompt_dialog.dart';
 import 'group_screen.dart';
 import 'private_chats_screen.dart';
 import 'lobby_screen.dart';

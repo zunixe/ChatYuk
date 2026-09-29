@@ -13,6 +13,7 @@ import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
+import '../config/strings_admin.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
 import '../providers/chat_provider.dart';
@@ -973,100 +974,11 @@ class MessageBubble extends StatelessWidget {
     final s = context.read<LocaleProvider>().s;
     final timeStr = formatBubbleTime(msg.timestamp);
     // Pesan yang dihapus (soft delete).
-    // Monitor admin: TETAP tampil sebagai bubble penanda lengkap (pengirim +
-    // jenis pesan + jam + centang) supaya admin tahu siapa menghapus apa dan
-    // kapan — bukan teks polos tanpa konteks seperti chat biasa.
-    if (msg.isDeleted) {
-      if (isAdminView) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            mainAxisAlignment: isMe
-                ? MainAxisAlignment.end
-                : MainAxisAlignment.start,
-            children: [
-              Flexible(
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width * 0.8,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.bgCard,
-                    border: Border.all(
-                      color: AppTheme.textSecondary.withValues(alpha: 0.4),
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(10),
-                      topRight: const Radius.circular(10),
-                      bottomLeft: Radius.circular(isMe ? 10 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 10),
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: isMe
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        msg.senderName,
-                        style: AppText.label.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            adminDeletedTypeIcon(msg.type),
-                            size: 14,
-                            color: AppTheme.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              s.messageDeleted,
-                              style: AppText.chatBodySmall.copyWith(
-                                color: AppTheme.textSecondary,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            timeStr,
-                            style: AppText.chatTime.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          if (isMe || showChecksBothSides) ...[
-                            const SizedBox(width: 3),
-                            Icon(
-                              (isPending || isQueued)
-                                  ? Icons.done
-                                  : Icons.done_all,
-                              size: 12,
-                              color:
-                                  (!isQueued && !isPending && isRead)
-                                      ? AppTheme.primary
-                                      : AppTheme.textSecondary,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      }
+    // - Chat biasa: cukup teks redup "Pesan ini telah dihapus".
+    // - Monitor admin: TETAP tampilkan ISI ASLI (teks/foto/video) + banner
+    //   "Dihapus oleh pengirim" — supaya admin bisa memverifikasi laporan
+    //   tanpa kehilangan bukti. RPC admin memang mengirim konten asli.
+    if (msg.isDeleted && !isAdminView) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Row(
@@ -1198,6 +1110,44 @@ class MessageBubble extends StatelessWidget {
                           isMe: isMe,
                           deletedIds: deletedIds,
                         )!,
+                      // Monitor admin: pesan yang dihapus pengirim tetap
+                      // menampilkan ISI ASLI, ditandai banner jelas supaya
+                      // admin tahu itu sudah dihapus.
+                      if (msg.isDeleted && isAdminView)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.danger.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: AppTheme.danger.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.delete_outline,
+                                  size: 12,
+                                  color: AppTheme.danger,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  s.adminDeletedMarker,
+                                  style: AppText.micro.copyWith(
+                                    color: AppTheme.danger,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       if (msg.type == 'voice' && msg.imageData.isNotEmpty)
                         VoiceBubble(
                           path: msg.imageData,
