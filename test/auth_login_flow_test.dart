@@ -372,6 +372,37 @@ void main() {
     });
   });
 
+  // ── Gerbang Timeline absolut (anon) ──
+  // Server `list_posts` raise ANON_DISABLED untuk akun anon. UI memakai
+  // `anonTimelineBlocked` untuk menampilkan dialog "daftar dulu" (bukan
+  // layar error retry) dan tidak menembak RPC yang pasti gagal.
+  group('anonTimelineBlocked', () {
+    test('sesi anon biasa → true (diblokir)', () async {
+      when(() => auth.isAnonymous).thenReturn(true);
+      when(() => auth.dummySessionActive).thenReturn(false);
+      when(() => auth.currentUser).thenReturn(null); // bukan admin
+      provider = await build();
+      expect(provider.anonTimelineBlocked, isTrue);
+    });
+
+    test('sesi dummy (admin jadi anon) → false (bypass, server juga bypass)', () async {
+      when(() => auth.isAnonymous).thenReturn(true);
+      when(() => auth.dummySessionActive).thenReturn(true);
+      when(() => auth.currentUser).thenReturn(null);
+      provider = await build();
+      expect(provider.anonTimelineBlocked, isFalse,
+          reason: 'dummy di-bypass guard, sama seperti admin_dummy_uids');
+    });
+
+    test('user non-anon (registrasi) → false (tidak diblokir)', () async {
+      when(() => auth.isAnonymous).thenReturn(false);
+      when(() => auth.dummySessionActive).thenReturn(false);
+      when(() => auth.currentUser).thenReturn(null);
+      provider = await build();
+      expect(provider.anonTimelineBlocked, isFalse);
+    });
+  });
+
   // ── LOGOUT CLEAN (anti-flash halaman lain) ──
   // Gate root membaca `signingOut` untuk langsung merender EntryScreen.
   // Tanpa flag ini, `profile=null` sementara sesi bukan anon (mis. dummy

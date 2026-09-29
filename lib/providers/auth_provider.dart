@@ -116,6 +116,15 @@ class AuthProvider extends ChangeNotifier {
   bool get anonBlocked =>
       _requireRegistration && _auth.isAnonymous && !_auth.dummySessionActive;
 
+  /// Gerbang Timeline/sosial ABSOLUT (selalu aktif, tak tergantung toggle
+  /// `require_registration`): akun anon (belum registrasi) TIDAK bisa melihat
+  /// Timeline. Server menegakkan via `list_posts` → raise 'ANON_DISABLED'.
+  /// Dipakai UI supaya anon melihat dialog "daftar dulu" (bukan layar error
+  /// retry dari RPC yang memang pasti gagal). Bypass: dummy & admin (server
+  /// juga bypass via admin_dummy_uids).
+  bool get anonTimelineBlocked =>
+      _auth.isAnonymous && !dummySessionActive && !isRealAdmin;
+
   /// User sesi aktif adalah admin sungguhan (zunixe)? Dipakai untuk
   /// menampilkan/menyembunyikan seluruh UI admin di build admin — login
   /// anon/user biasa di ChatYuk Admin tetap melihat tampilan USER biasa.
