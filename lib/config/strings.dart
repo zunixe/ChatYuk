@@ -650,7 +650,7 @@ class S {
   String get privacyFriends => isId ? 'Teman saya' : 'My friends';
   String get privacyFriendsExcept =>
       isId ? 'Teman saya kecuali...' : 'My friends except...';
-  String get privacyCircle => isId ? 'Kenalan' : 'People I know';
+  String get privacyOnly => isId ? 'Hanya orang tertentu' : 'Only certain people';
   String get privacyNobody => isId ? 'Tidak ada' : 'Nobody';
   // Deskripsi tiap opsi (sub-judul di sheet pemilih).
   String get privacyEveryoneDesc =>
@@ -663,9 +663,8 @@ class S {
   String get privacyFriendsExceptDesc =>
       isId ? 'Hanya teman, kecuali orang terpilih'
           : 'Only friends, except selected people';
-  String get privacyCircleDesc =>
-      isId ? 'Teman, pengikut, subscriber & yang pernah chat'
-          : 'Friends, followers, subscribers & people you have chatted with';
+  String get privacyOnlyDesc =>
+      isId ? 'Hanya orang yang kamu pilih' : 'Only people you pick';
   String get privacyNobodyDesc =>
       isId ? 'Tidak ada yang bisa melihat' : 'No one can see';
   String get privacyPresence => isId ? 'Status online' : 'Online status';
@@ -682,6 +681,11 @@ class S {
   String get privacyExceptDesc => isId
       ? 'Orang yang dipilih di sini TIDAK bisa melihat bagian ini.'
       : 'People picked here CANNOT see this.';
+  String get privacyOnlyPickerTitle =>
+      isId ? 'Hanya orang tertentu' : 'Only certain people';
+  String get privacyOnlyPickerDesc => isId
+      ? 'Hanya orang yang dipilih di sini yang bisa melihat bagian ini.'
+      : 'Only people picked here CAN see this.';
   String get privacyNoFriends =>
       isId ? 'Belum ada yang bisa dipilih' : 'Nobody to pick yet';
   String get privacyNoFriendsHint => isId
@@ -691,8 +695,11 @@ class S {
       isId ? '$privacyEveryoneExcept ($n)' : '$privacyEveryoneExcept ($n)';
   String privacyFriendsExceptCount(int n) =>
       isId ? '$privacyFriendsExcept ($n)' : '$privacyFriendsExcept ($n)';
+  String privacyOnlyCount(int n) =>
+      isId ? '$privacyOnly ($n)' : '$privacyOnly ($n)';
   String get privacyBadgeFriend => isId ? 'Teman' : 'Friend';
   String get privacyBadgeAnon => isId ? 'Anon' : 'Anon';
+  String get privacyBadgeOther => isId ? 'Orang' : 'Person';
   String get privacySaveFailed =>
       isId ? 'Gagal menyimpan privasi' : 'Failed to save privacy';
   String get privacyReadReceiptsTitle =>
@@ -819,6 +826,16 @@ class S {
   String get msgCallMissed => isId ? 'Panggilan tidak dijawab' : 'Missed call';
   String get msgCallError =>
       isId ? 'Panggilan gagal terhubung' : 'Call failed to connect';
+  // ── Panggilan Terbaru (riwayat call, menu titik-3 tab Pesan) ──
+  String get menuRecentCalls => isId ? 'Panggilan Terbaru' : 'Recent calls';
+  String get callHistoryEmpty =>
+      isId ? 'Belum ada riwayat panggilan' : 'No call history yet';
+  String get callHistoryEmptyHint => isId
+      ? 'Panggilan masuk dan keluar akan muncul di sini'
+      : 'Incoming and outgoing calls will appear here';
+  String get callDirOutgoing => isId ? 'Keluar' : 'Outgoing';
+  String get callDirIncoming => isId ? 'Masuk' : 'Incoming';
+  String get callRedial => isId ? 'Panggil ulang' : 'Call back';
   String get errCallPermission =>
       isId ? 'Izin kamera & mikrofon diperlukan untuk panggilan' : 'Camera & microphone permission needed for calls';
   String get errCallPermissionVideo =>

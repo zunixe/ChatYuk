@@ -3,15 +3,14 @@
 /// - [everyoneExcept] : semua orang KECUALI daftar (teman & anon bisa dipilih)
 /// - [friends]        : hanya teman
 /// - [friendsExcept]  : teman, kecuali daftar
-/// - [circle]         : kenalan (teman | follower-ku | subscriber-ku aktif |
-///                      pernah 1:1 chat incl. anon) — tanpa daftar kecuali
+/// - [only]           : hanya orang tertentu yang dipilih (daftar putih)
 /// - [nobody]         : tidak ada
 enum PrivacyVisibility {
   everyone,
   everyoneExcept,
   friends,
   friendsExcept,
-  circle,
+  only,
   nobody;
 
   /// Key yang dikirim/dibaca server (snake_case).
@@ -20,18 +19,27 @@ enum PrivacyVisibility {
     PrivacyVisibility.everyoneExcept => 'everyone_except',
     PrivacyVisibility.friends => 'friends',
     PrivacyVisibility.friendsExcept => 'friends_except',
-    PrivacyVisibility.circle => 'circle',
+    PrivacyVisibility.only => 'only',
     PrivacyVisibility.nobody => 'nobody',
   };
 
-  /// True bila opsi ini memakai daftar pengecualian.
+  /// True bila opsi ini memakai daftar pemilih orang:
+  /// "kecuali" = daftar hitam, "hanya orang tertentu" = daftar putih.
   bool get usesExclusions =>
       this == PrivacyVisibility.everyoneExcept ||
-      this == PrivacyVisibility.friendsExcept;
+      this == PrivacyVisibility.friendsExcept ||
+      this == PrivacyVisibility.only;
 
-  /// True bila opsi ini hanya untuk teman.
+  /// True bila opsi ini hanya berlaku untuk teman (kandidat picker dibatasi
+  /// ke teman). "Hanya orang tertentu" = false — kandidatnya luas.
   bool get friendsOnly =>
       this == PrivacyVisibility.friends ||
+      this == PrivacyVisibility.friendsExcept;
+
+  /// True bila opsi "kecuali" (daftar hitam): semua/teman kecuali... —
+  /// "Hanya orang tertentu" adalah daftar putih (bukan except).
+  bool get isExcept =>
+      this == PrivacyVisibility.everyoneExcept ||
       this == PrivacyVisibility.friendsExcept;
 
   static PrivacyVisibility fromWire(dynamic value) {

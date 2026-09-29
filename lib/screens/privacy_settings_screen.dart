@@ -6,14 +6,16 @@ import '../models/privacy_settings.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/privacy_provider.dart';
+import 'privacy_settings/widgets/privacy_exclusions_sheet.dart';
 
 /// Pengaturan Privasi — struktur & gaya sama dengan halaman Notifikasi
 /// (kartu bgCard, ikon lingkaran 36, divider indent 52).
 ///
 /// 6 pilihan per bagian:
 ///   Semua orang / Semua orang kecuali... / Teman saya /
-///   Teman saya kecuali... / Kenalan / Tidak ada
-/// Opsi "kecuali..." bisa memilih TEMAN maupun ANON (yang pernah chat).
+///   Teman saya kecuali... / Hanya orang tertentu / Tidak ada
+/// Opsi pemilih orang ("kecuali..." & "hanya orang tertentu") memakai satu
+/// picker yang sama; "Teman kecuali..." dibatasi ke teman saja.
 class PrivacySettingsScreen extends StatefulWidget {
   const PrivacySettingsScreen({super.key});
 
@@ -41,7 +43,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       PrivacyVisibility.everyoneExcept => Icons.person_remove_alt_1,
       PrivacyVisibility.friends => Icons.people_alt,
       PrivacyVisibility.friendsExcept => Icons.group_remove,
-      PrivacyVisibility.circle => Icons.groups,
+      PrivacyVisibility.only => Icons.verified_user,
       PrivacyVisibility.nobody => Icons.lock,
     };
   }
@@ -53,7 +55,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       PrivacyVisibility.everyoneExcept => s.privacyEveryoneExceptDesc,
       PrivacyVisibility.friends => s.privacyFriendsDesc,
       PrivacyVisibility.friendsExcept => s.privacyFriendsExceptDesc,
-      PrivacyVisibility.circle => s.privacyCircleDesc,
+      PrivacyVisibility.only => s.privacyOnlyDesc,
       PrivacyVisibility.nobody => s.privacyNobodyDesc,
     };
   }
@@ -64,7 +66,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       PrivacyVisibility.everyoneExcept => s.privacyEveryoneExcept,
       PrivacyVisibility.friends => s.privacyFriends,
       PrivacyVisibility.friendsExcept => s.privacyFriendsExcept,
-      PrivacyVisibility.circle => s.privacyCircle,
+      PrivacyVisibility.only => s.privacyOnly,
       PrivacyVisibility.nobody => s.privacyNobody,
     };
   }
@@ -91,7 +93,8 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     };
   }
 
-  /// Nilai tile: untuk opsi "kecuali..." sekaligus tampil jumlahnya.
+  /// Nilai tile: untuk opsi bercabang (kecuali.../hanya orang tertentu)
+  /// sekaligus tampil jumlah orangnya.
   String _valueLabel(S s, String field, PrivacySettings p) {
     final value = _valueOf(field, p);
     final n = (p.exclusions[field] ?? const {}).length;
@@ -100,6 +103,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     }
     if (value == PrivacyVisibility.friendsExcept) {
       return s.privacyFriendsExceptCount(n);
+    }
+    if (value == PrivacyVisibility.only) {
+      return s.privacyOnlyCount(n);
     }
     return _label(s, value);
   }
@@ -165,36 +171,52 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     );
     if (selected == null || !mounted) return;
 
+    // Daftar putih ('Hanya orang tertentu'): pilih orangnya DULU, baru simpan
+    // nilai — server menolak 'only' bila daftar masih kosong.
+    if (selected.usesExclusions && !selected.isExcept) {
+      final picked = await _editExclusions(field, mode: selected);
+      if (picked == null || picked.isEmpty || !mounted) return;
+      await _applyField(field, selected);
+      return;
+    }
+
     await _applyField(field, selected);
     if (!mounted) return;
-    // Opsi "kecuali..." → langsung pilih siapa yang dikecualikan.
+    // Opsi "kecuali..." → pilih siapa yang dikecualikan.
     if (selected.usesExclusions) {
-      await _editExclusions(field, friendsOnly: selected.friendsOnly);
+      await _editExclusions(field, mode: selected);
     }
   }
 
-  Future<void> _editExclusions(
+  Future<Set<String>?> _editExclusions(
     String field, {
-    required bool friendsOnly,
+    required PrivacyVisibility mode,
   }) async {
     final s = context.read<LocaleProvider>().s;
     final provider = context.read<PrivacyProvider>();
     await provider.ensureExcludable();
-    if (!mounted) return;
+    if (!mounted) return null;
 
     final all = provider.excludable;
-    // 'Teman kecuali' hanya menampilkan teman; 'Semua kecuali' menampilkan
-    // semua kandidat (teman + anon yang pernah chat).
-    final list = friendsOnly
+    // 'Teman kecuali' hanya menampilkan teman; 'Semua kecuali' & 'Hanya orang
+    // tertentu' menampilkan semua kandidat (teman + anon yang pernah chat).
+    final list = mode.friendsOnly
         ? all.where((e) => e['is_friend'] == true).toList()
         : all;
+    final isWhitelist = !mode.isExcept;
+    if (isWhitelist && list.isEmpty) {
+      // Tak ada kandidat → tak mungkin daftar putih; batalkan.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.privacyNoFriends)),
+        );
+      }
+      return null;
+    }
 
     final selected = Set<String>.of(
       provider.settings.exclusions[field] ?? const {},
     );
-    // Pencarian nama — list "kecuali" bisa ratusan entri.
-    final queryCtrl = TextEditingController();
-    if (!mounted) return;
 
     final result = await showModalBottomSheet<Set<String>>(
       context: context,
@@ -203,132 +225,23 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) {
-        var query = '';
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            final filtered = query.isEmpty
-                ? list
-                : list
-                    .where((e) => '${e['nickname'] ?? ''}'
-                        .toLowerCase()
-                        .contains(query.toLowerCase()))
-                    .toList();
-            return SafeArea(
-            child: SizedBox(
-              height: MediaQuery.of(ctx).size.height * 0.72,
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(s.privacyExceptTitle, style: AppText.title),
-                              const SizedBox(height: 2),
-                              Text(
-                                s.privacyExceptDesc,
-                                style: AppText.bodySmall.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, selected),
-                          child: Text(s.btnSave),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Kotak pencarian (nama) — mempermudah saat daftar panjang.
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: TextField(
-                      controller: queryCtrl,
-                      onChanged: (v) => setSheetState(() => query = v.trim()),
-                      style: TextStyle(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        hintText: s.searchHint,
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        isDense: true,
-                        suffixIcon: query.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  queryCtrl.clear();
-                                  setSheetState(() => query = '');
-                                },
-                              ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Divider(height: 1, color: AppTheme.divider),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? (list.isEmpty
-                            ? _EmptyExcludable(s: s)
-                            : Center(
-                                child: Text(
-                                  s.searchNoResult,
-                                  style: AppText.body.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ))
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            itemCount: filtered.length,
-                            itemBuilder: (_, i) {
-                              final e = filtered[i];
-                              final uid = '${e['uid'] ?? ''}';
-                              final name = '${e['nickname'] ?? uid}';
-                              final isFriend = e['is_friend'] == true;
-                              final checked = selected.contains(uid);
-                              return CheckboxListTile(
-                                value: checked,
-                                activeColor: AppTheme.primary,
-                                secondary: _PersonAvatar(name: name),
-                                title: Text(name, style: AppText.bodyStrong),
-                                subtitle: Text(
-                                  isFriend
-                                      ? s.privacyBadgeFriend
-                                      : s.privacyBadgeAnon,
-                                  style: AppText.caption.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                                onChanged: (v) => setSheetState(() {
-                                  if (v == true) {
-                                    selected.add(uid);
-                                  } else {
-                                    selected.remove(uid);
-                                  }
-                                }),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          );
-          },
-        );
-      },
+      // Sheet punya controller pencarian SENDIRI (dibuang di dispose-nya,
+      // waktu yang benar dari framework). Dulu controller dibuat di sini &
+      // di-dispose tepat setelah await → "used after being disposed" +
+      // assertion `_dependents.isEmpty` (2026-09-29).
+      builder: (_) => PrivacyExclusionsSheet(
+        candidates: list,
+        initialSelected: selected,
+        isWhitelist: isWhitelist,
+        title: isWhitelist ? s.privacyOnlyPickerTitle : s.privacyExceptTitle,
+        desc: isWhitelist ? s.privacyOnlyPickerDesc : s.privacyExceptDesc,
+        s: s,
+      ),
     );
-    queryCtrl.dispose();
     if (result != null && mounted) {
       await provider.updateExclusions(field, result);
     }
+    return result;
   }
 
   @override
@@ -641,55 +554,6 @@ class _PrivacyIcon extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: Icon(icon, color: AppTheme.primary, size: 18),
-    );
-  }
-}
-
-class _PersonAvatar extends StatelessWidget {
-  final String name;
-  const _PersonAvatar({required this.name});
-
-  @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 18,
-      backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
-      child: Text(
-        name.isNotEmpty ? name[0].toUpperCase() : '?',
-        style: AppText.label.copyWith(color: AppTheme.primary),
-      ),
-    );
-  }
-}
-
-class _EmptyExcludable extends StatelessWidget {
-  final S s;
-  const _EmptyExcludable({required this.s});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.group_outlined,
-              size: 40,
-              color: AppTheme.textSecondary,
-            ),
-            const SizedBox(height: 12),
-            Text(s.privacyNoFriends, style: AppText.bodyStrong),
-            const SizedBox(height: 4),
-            Text(
-              s.privacyNoFriendsHint,
-              textAlign: TextAlign.center,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
