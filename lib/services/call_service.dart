@@ -116,10 +116,29 @@ class CallService {
 
   /// Cek apakah uid adalah admin ChatYuk — dipakai sebelum melayani
   /// permintaan "watch" dari admin panel (pantau call).
+  ///
+  /// Cache hanya hasil POSITIF (TTL 30 mnt): uid admin stabil, jadi request
+  /// pertama tak perlu bayar RPC tiap sesi call baru. Hasil negatif TIDAK
+  /// di-cache → selalu di-recheck, gerbang keamanan tetap ketat.
+  static final Map<String, DateTime> _adminUidCache = {};
+  static const _adminUidTtl = Duration(minutes: 30);
+  static const _adminUidCacheMax = 20;
+
   Future<bool> isAdminUid(String uid) async {
+    final at = _adminUidCache[uid];
+    if (at != null && DateTime.now().difference(at) < _adminUidTtl) {
+      return true;
+    }
     try {
       final r = await _sb.rpc('is_chatyuk_admin', params: {'p_uid': uid});
-      return r == true;
+      if (r == true) {
+        if (_adminUidCache.length >= _adminUidCacheMax) {
+          _adminUidCache.remove(_adminUidCache.keys.first);
+        }
+        _adminUidCache[uid] = DateTime.now();
+        return true;
+      }
+      return false;
     } catch (_) {
       return false;
     }
@@ -418,6 +437,10 @@ class CallSession extends ChangeNotifier {
   final Map<String, List<Map<String, dynamic>>> _watchPendingCands = {};
   final Map<String, DateTime> _lastWatchReply = {};
   final Map<String, Future<bool>> _watcherAdminChecks = {};
+  // Watcher yang minta pantau SEBELUM media lokal siap — diantre, dibalas
+  // begitu `_setupMediaAndPeer` selesai (dulu request dibuang diam-diam →
+  // admin menunggu tick permintaan berikutnya = audio telat).
+  final Set<String> _pendingWatchRequests = {};
   /// Waktu pc watch dibuat per watcher — kunci anti-deadlock: pc yang belum
   /// `connected` lebih dari [_watchPcStale] dianggap mati → boleh rebuild
   /// (mis. offer hilang / ICE nyangkut di `connecting`).
@@ -507,6 +530,9 @@ class CallSession extends ChangeNotifier {
     }, onError: (e) => dlog('[CallService] status stream error: $e'));
 
     await PerfProbe.timed('call.setupMedia', _setupMediaAndPeer);
+
+    // Media siap → balas permintaan pantau yang datang terlalu dini.
+    unawaited(_flushPendingWatchRequests());
 
     // Callee: cek status terakhir — caller bisa sudah membatalkan sebelum
     // kita subscribe status (Realtime tidak replay event lama).
@@ -1248,7 +1274,13 @@ class CallSession extends ChangeNotifier {
     final watcher = msg['from'] as String?;
     final me = _service.uid;
     if (_closed || watcher == null || watcher.isEmpty || watcher == me) return;
-    if (_localStream == null || _pc == null) return;
+    if (_localStream == null || _pc == null) {
+      // Media belum siap (admin membuka monitor di detik-detik awal call) →
+      // ANTRE, balas begitu siap. Dulu request dibuang → admin mengulang
+      // menunggu tick berikutnya (audio telat beberapa detik).
+      _pendingWatchRequests.add(watcher);
+      return;
+    }
     // Throttle: request ulang <8s diabaikan agar pc tidak dibuat-ulang
     // tiap polling; request setelah itu dianggap retry negosiasi mati.
     final last = _lastWatchReply[watcher];
@@ -1334,9 +1366,19 @@ class CallSession extends ChangeNotifier {
     }
   }
 
+  /// Balas permintaan pantau yang diantre karena media lokal belum siap.
+  Future<void> _flushPendingWatchRequests() async {
+    if (_pendingWatchRequests.isEmpty) return;
+    final uids = _pendingWatchRequests.toList();
+    _pendingWatchRequests.clear();
+    for (final uid in uids) {
+      if (_closed) return;
+      await _handleWatchRequest({'from': uid});
+    }
+  }
+
   /// Kirim ulang status mic/kamera ke satu watcher (tanpa rebuild pc).
-  void _sendWatchState(String watcher) {
-    _service.sendSignal(
+  void _sendWatchState(String watcher) {    _service.sendSignal(
       callId,
       'watch_state',
       payload: {
@@ -1584,6 +1626,7 @@ class CallSession extends ChangeNotifier {
     _lastWatchReply.clear();
     _watcherAdminChecks.clear();
     _watchPcCreatedAt.clear();
+    _pendingWatchRequests.clear();
     await _signalSub?.cancel();
     await _statusSub?.cancel();
     _service.disposeSignal(callId);

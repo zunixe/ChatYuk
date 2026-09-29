@@ -260,7 +260,11 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
     _scrollCtrl.addListener(_onScroll);
     // Call aktif: fetch pertama + polling 5 detik selama layar terbuka.
+    // Call aktif: mulai pantau SEGERA bila daftar sudah memuat call ini
+    // (jangan tunggu RPC fetchActiveCalls — menghapus jeda s.d. ±5 dtk).
+    // Fetch tetap jalan paralel sebagai penyegar + penanganan call baru.
     final admin = context.read<AdminProvider>();
+    unawaited(_syncCallWatch());
     Future.microtask(() async {
       await admin.fetchActiveCalls();
       if (mounted) await _syncCallWatch();

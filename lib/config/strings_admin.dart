@@ -25,6 +25,10 @@ extension SAdminX on S {
   String get adminWatchConnecting =>
       isId ? 'Menyambungkan...' : 'Connecting...';
 
+  String get adminSpeakerFallback => isId
+      ? 'Audio mode telepon (speaker gagal)'
+      : 'Phone audio mode (speaker failed)';
+
   String get adminContactTab => isId ? 'Kontak' : 'Contact';
 
   String get adminDeviceTab => isId ? 'Perangkat' : 'Devices';

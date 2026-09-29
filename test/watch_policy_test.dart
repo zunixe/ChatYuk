@@ -130,4 +130,17 @@ void main() {
       expect(shouldRequestWatch(connected: false, negotiating: false), isTrue);
     });
   });
+
+  group('watchRequestDelay (kadens permintaan)', () {
+    test('3 percobaan pertama cepat (1,5 dtk)', () {
+      expect(watchRequestDelay(0), const Duration(milliseconds: 1500));
+      expect(watchRequestDelay(1), const Duration(milliseconds: 1500));
+      expect(watchRequestDelay(2), const Duration(milliseconds: 1500));
+    });
+
+    test('percobaan ke-4+ kembali 3 dtk (anti spam peserta)', () {
+      expect(watchRequestDelay(3), const Duration(seconds: 3));
+      expect(watchRequestDelay(10), const Duration(seconds: 3));
+    });
+  });
 }
