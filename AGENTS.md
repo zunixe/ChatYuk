@@ -723,6 +723,25 @@ Langkah:
     | `…pc5vquunrmjoqvvq4hs5rpj2ec8tf26k` | `com.chatyuk.chatyuk` | `7A:19:AF:A5:…` (**Play App Signing**) | AAB **play** (Google Play) |
     | `…hg56bq0nc2m6kig6hg41lmrbtfel5n2c` | — | — | **Web** client = `serverClientId`/`aud` (dipakai kode) |
     - Nama di Console: `ChatYuk User Android` (upload) & `ChatYuk User Android (Play Signing)` (Play).
+  - **DEBUG keystore (PC Windows `zaini`, 2026-09-29):** debug APK di-sign
+    `~/.android/debug.keystore` (alias `androiddebugkey`) yang SHA-1-nya
+    **beda per mesin** — debug build PC ini TIDAK BISA pakai client rilis.
+    Didaftarkan 2026-09-29 (via Firebase Console + GCP, user `zunixe`):
+    - SHA-1 debug PC ini: `7B:B9:0B:29:1A:A1:99:7D:F6:CC:C7:65:67:1A:74:D7:7C:67:7E:3E`
+      (`keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android`)
+    - Fingerprint ditambahkan ke **kedua** app Firebase: `com.chatyuk.chatyuk`
+      DAN `com.chatyuk.chatyuk.admin` (cuma tambah, fingerprint rilis/Play
+      tidak disentuh — production aman).
+    - OAuth client baru (Android):
+      | Client ID | Package | Dipakai oleh |
+      |---|---|---|
+      | `…hrsb28f5arna3jujqtpmb9ruv5akc11f` | `com.chatyuk.chatyuk` | APK **debug user** (`apkpureProdDebug`) |
+      | `…ck1n70lj2q48u6uhtkagr9sdq9racjvi` | `com.chatyuk.chatyuk.admin` | APK **debug admin** (`adminProdDebug`) |
+    - Keduanya ditambahkan ke whitelist Supabase `external_google_client_id`
+      (comma-separated, total 5 client).
+    - **Kalau build debug di PC/Mac LAIN** → SHA-1 debugnya beda → ulangi
+      langkah ini untuk SHA mesin itu. JANGAN hapus fingerprint lama (mesin
+      lain masih pakai).
     - Kalau ada SHA baru (keystore baru / Play re-sign), **buat client Android baru**
       untuk SHA itu — jangan edit yang lama (bikin apkpure rusak).
     - **`serverClientId` di kode = Web client `hg56bq0n…`** (SAMA untuk apkpure & play).
@@ -738,9 +757,12 @@ Langkah:
     memvalidasi KEDUANYA: `aud` DAN `azp` idToken Google terhadap whitelist.
     Token dari Android punya `aud` = Web client dan `azp` = Android client,
     jadi keduanya WAJIB di-whitelist Supabase:
-    - `external_google_client_id` (via Management API) = **kedua client
-      comma-separated**: Web `599111437536-hg56bq0nc2m6kig6hg41lmrbtfel5n2c`
-      + Android `599111437536-r1rb2m8pfko85lh1nu8ufdesiinv4cso`.
+    - `external_google_client_id` (via Management API) = **semua client
+      comma-separated** (per 2026-09-29 total 5): Web `…hg56bq0nc2m6kig6hg41lmrbtfel5n2c`
+      + Android upload `…r1rb2m8pfko85lh1nu8ufdesiinv4cso`
+      + Android Play `…pc5vquunrmjoqvvq4hs5rpj2ec8tf26k`
+      + Android debug user `…hrsb28f5arna3jujqtpmb9ruv5akc11f`
+      + Android debug admin `…ck1n70lj2q48u6uhtkagr9sdq9racjvi`.
     - Diagnostic: pesan `Unacceptable audience in id_token` = `aud` tidak
       terdaftar; token valid tapi 400 "Internal Server Error" = azp/aud
       mismatch. Baca payload token dari logcat `[GOOGLE] idToken payload`.
