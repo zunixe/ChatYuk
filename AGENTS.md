@@ -455,6 +455,41 @@ cp build/app/outputs/flutter-apk/app-apkpureprod-profile.apk ~/Downloads/chatyuk
   "PHOTO-DBG|AVATAR|NAV|CALL-START|CACHE-TIME|POINTS|flutter" | tail -80`.
 - Detail lengkap: `docs/troubleshoot-build-miui.md`.
 
+### Build APK `--debug` — WAJIB re-sign keystore RILIS (kalau tidak, Google Sign-In `12500`)
+
+`flutter build apk --debug` menandatangani APK dengan `~/.android/debug.keystore`
+(SHA-1 `ff1ff62d…` di Mac ini) → **tidak dikenal Firebase** → login Google gagal
+`12500,null,null`. Kalau memang butuh APK debug (mis. minta user install cepat),
+**re-sign dulu** dengan keystore rilis supaya SHA-1 = `8ccc42e3…`:
+
+```bash
+# 1) build debug (flavor + --dart-define tetap wajib)
+flutter build apk --debug --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
+# admin: tambah  -t lib/main_admin.dart  &  --flavor adminProd
+
+# 2) re-sign dengan keystore rilis
+APKSIGNER=$HOME/Library/Android/sdk/build-tools/36.0.0/apksigner
+KS=android/keystore/chatyuk-release-v2.jks
+for f in chatyuk-debug chatyuk-admin-debug; do
+  "$APKSIGNER" sign --ks "$KS" \
+    --ks-pass pass:chatyuk2024secure --key-pass pass:chatyuk2024secure \
+    --ks-key-alias chatyuk --out "$HOME/Downloads/${f}-signed.apk" "$HOME/Downloads/${f}.apk"
+  "$APKSIGNER" verify --print-certs "$HOME/Downloads/${f}-signed.apk" | grep SHA-1
+  # WAJIB muncul: 8ccc42e3fe9337216ce4250e2bfccb22941e50a2
+done
+
+# 3) pasang. Signature = rilis → bisa menimpa install rilis TANPA uninstall.
+#    Kalau di HP masih ada APK debug-key lama → uninstall dulu (di MIUI bisa
+#    DELETE_FAILED_INTERNAL_ERROR → user uninstall manual dari Setelan).
+adb install -r "$HOME/Downloads/chatyuk-debug-signed.apk"
+```
+
+SHA-1 debug key Mac ini (`ff:1f:f6:2d:e6:f2:7b:f7:da:bc:b6:fe:e1:fa:c5:df:3d:00:60:02`)
+**belum** & tidak perlu didaftarkan ke Firebase — dari dulu cukup re-sign. (HP
+Windows `zaini` sudah punya SHA debug terdaftar sendiri, lihat § Google Sign-In.)
+Aturan umum: **semua APK yang dipasang ke HP harus ber-SHA-1 `8ccc42e3…`** —
+verifikasi dengan `apksigner verify --print-certs`.
+
 Catatan: `flutter clean` tetap wajib KALAU ada perubahan di `pubspec.yaml` (dependency
 baru) atau plugin native berubah. Untuk perubahan kode Dart murni, pakai cara di atas.
 - Keamanan: jangan pernah simpan secret server (password DB, Supabase service_role key) di app — hanya `publishableKey` di `lib/config/supabase_config.dart`. Data dilindungi RLS per-user.

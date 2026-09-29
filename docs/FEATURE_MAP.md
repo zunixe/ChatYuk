@@ -230,9 +230,11 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 
 | Lapis | Lokasi |
 |---|---|
-| UI | `lib/screens/call_screen.dart`, `incoming_call_screen.dart`, `lib/widgets/call_banner.dart`, `chat_call_overlay.dart` |
-| Provider | `lib/providers/call_provider.dart` |
-| Service | `lib/services/call_service.dart`, `admin_call_watch_service.dart` |
+| UI | `lib/screens/call_screen.dart`, `incoming_call_screen.dart`, `call_history_screen.dart` (Panggilan Terbaru), `lib/widgets/call_banner.dart`, `chat_call_overlay.dart` |
+| Provider | `lib/providers/call_provider.dart` (`recentCalls`/`lookupNames`) |
+| Service | `lib/services/call_service.dart` (`listMyRecentCalls`), `admin_call_watch_service.dart` |
+| Core | `lib/core/call/call_history_entry.dart` (klasifikasi arah/outcome — murni) |
+| Entry | menu ⋮ tab Pesan `lib/screens/chats_screen.dart` → `CallHistoryScreen` |
 | UI sistem | `lib/services/call/` (CallUi) + `android/.../call/` (ConnectionService) — lihat `docs/CALL_NATIVE.md` |
 | Edge | `supabase/functions/turn-credentials/` |
 | SQL inti | `call_push()`, `notify_call_ended()`, monitor `calls` realtime, `admin_sweep_calls()` |
@@ -293,10 +295,10 @@ ke user asli). Dikunci: `supabase/tests/schema_sync_test.sql`.
 | Provider | `lib/providers/privacy_provider.dart` |
 | Service | `lib/services/privacy_service.dart` |
 | Model | `lib/models/privacy_settings.dart` |
-| SQL inti | `privacy_can_view()`, `_privacy_are_friends()`, `_privacy_is_circle()` (2026-09-29), `my_privacy_settings()`, `update_privacy_settings()`, `replace_privacy_exclusions()`, `privacy_excludable_users()`, `profile_public()`, `get_online_users()`, `nearby_users()`, `story_slides()`, `story_tray()` |
+| SQL inti | `privacy_can_view()`, `_privacy_are_friends()`, `my_privacy_settings()`, `update_privacy_settings()`, `replace_privacy_exclusions()`, `privacy_excludable_users()`, `profile_public()`, `get_online_users()`, `nearby_users()`, `story_slides()`, `story_tray()` |
 | RPC baca ber-privacy (baru 2026-09-22) | `presence_for(uuid[])`, `avatar_for(uuid)`, `avatars_for(uuid[])`, `my_photos()`, `get_user_photos_access()` |
-| Kolom | `profiles.{presence,last_seen,profile_photo,about,story}_visibility` (6 nilai: everyone/everyone_except/friends/friends_except/**circle**/nobody; circle = teman \| follower-ku \| subscriber-ku aktif \| pernah 1:1 chat incl. anon; TANPA circle_except), `profiles.read_receipts_enabled`, `profile_privacy_exclusions`, `user_photos.photo` (di-revoke), `user_photos.photo_preview` |
-| Test | `test/privacy_settings_test.dart`, `test/privacy_service_io_test.dart`, `test/privacy_provider_test.dart`, `test/privacy_widget_test.dart`, `test/photo_privacy_access_test.dart`, `supabase/tests/privacy_test.sql`, `supabase/tests/privacy_circle_test.sql` |
+| Kolom | `profiles.{presence,last_seen,profile_photo,about,story}_visibility` (6 nilai: everyone/everyone_except/friends/friends_except/**only**/nobody; **only** = daftar PUTIH di `profile_privacy_exclusions` — hanya uid terpilih yang lolos; `update_privacy_settings` MENOLAK `only` bila daftar field itu kosong), `profiles.read_receipts_enabled`, `profile_privacy_exclusions` (tabel yang sama dipakai sebagai daftar hitam `*_except` maupun daftar putih `only`), `user_photos.photo` (di-revoke), `user_photos.photo_preview` |
+| Test | `test/privacy_settings_test.dart`, `test/privacy_service_io_test.dart`, `test/privacy_provider_test.dart`, `test/privacy_widget_test.dart`, `test/photo_privacy_access_test.dart`, `supabase/tests/privacy_test.sql`, `supabase/tests/privacy_only_test.sql` |
 
 **Invariant (dijaga test — JANGAN diregresikan):**
 1. **Kolom sensitif TIDAK boleh ter-grant SELECT** ke `anon`/`authenticated`:
@@ -309,14 +311,17 @@ ke user asli). Dikunci: `supabase/tests/schema_sync_test.sql`.
    untuk cabut, revoke TABLE-level lalu grant kolom aman (`id, user_id,
    photo_preview, created_at`).
 3. `privacy_can_view(owner, field, viewer)`: owner=self → true; `nobody` →
-   false; `everyone_except`/`friends_except` → cek `profile_privacy_exclusions`;
-   `friends`/`friends_except` → cek `_privacy_are_friends` (mutual follow);
-   `circle` (2026-09-29) → cek `_privacy_is_circle` (mutual tercakup
-   follows-inbound | subscriber aktif | pernah 1:1 chat incl. anon; daftar
-   kecuali DIABAIKAN, konsisten `friends`).
-4. `story_tray` WAJIB cek `privacy_can_view(author,'story')` + mask avatar —
+   false; `everyone_except`/`friends_except` → cek `profile_privacy_exclusions`
+   (daftar HITAM); `friends`/`friends_except` → cek `_privacy_are_friends`
+   (mutual follow); `only` (2026-09-29) → **daftar PUTIH**: lolos HANYA bila
+   viewer ADA di `profile_privacy_exclusions(owner, field, viewer)` — teman/
+   follower TIDAK otomatis lolos (kebalikan `everyone_except`).
+4. `update_privacy_settings` allowlist = 6 nilai; `only` DITOLAK bila daftar
+   field itu masih kosong (client `replace_privacy_exclusions` dulu, baru set
+   nilai) → cegah mode "Hanya orang tertentu (0)".
+5. `story_tray` WAJIB cek `privacy_can_view(author,'story')` + mask avatar —
    dulu tidak (story "nobody" bocor di tray).
-5. `mark_chat_read`: `read_receipts_enabled=false` → unread tetap 0 tapi
+6. `mark_chat_read`: `read_receipts_enabled=false` → unread tetap 0 tapi
    `last_read_at` tidak ditulis (centang-2 lawan tidak muncul).
 
 **Review/diagnosa cepat:** `select has_column_privilege('authenticated',
