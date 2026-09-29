@@ -5,8 +5,8 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | Tanggal | Branch | Flavor | Isi | Install |
 |---|---|---|---|---|
-| 2026-09-29 13:50 | develop | adminProdDebug | Reinstall admin debug v1.2.60-admin (pastikan versi terbaru; uninstall tidak perlu — signature debug sama) | Success (adb install -r 192.168.137.215:43859, lastUpdateTime 13:50) |
-| 2026-09-29 11:01 | develop | apkpureProdDebug + adminProdDebug | Debug APK user+admin v1.2.60+82 (privacy circle, anon timeline gate, FCM token fix). Uninstall dulu (sign rilis vs debug beda → INSTALL_FAILED_UPDATE_INCOMPATIBLE), lalu install fresh | Success (adb install 192.168.137.215, user+admin) |
+| 2026-09-29 13:50 | develop | adminProdDebug | Reinstall admin debug v1.2.60-admin (pastikan versi terbaru; uninstall tidak perlu — signature debug sama) | Success (stream install 192.168.137.215:43859, lastUpdateTime 13:50) |
+| 2026-09-29 11:01 | develop | apkpureProdDebug + adminProdDebug | Debug APK user+admin v1.2.60+82 (privacy circle, anon timeline gate, FCM token fix). Uninstall dulu (sign rilis vs debug beda → INSTALL_FAILED_UPDATE_INCOMPATIBLE), lalu install fresh | Success (stream install 192.168.137.215, user+admin) |
 | 2026-09-28 08:20 | develop | playProd (AAB) | Upload 1.2.59+81 ke production (boot anti-stuck logo + Play compliance edge-to-edge + no-portrait + input no HP sedunia). Ganti vc 80 yang sudah terpakai | Success: AAB upload track production, vc 81 / 1.2.59 completed; latest_version app_settings=1.2.59 |
 | 2026-09-28 08:06 | develop | adminProd | Fix stuck di logo: boot guard timeout per-init (supabase/msgdb/mediadisk/firebase/notif/chatbg/theme) + fix build cepat kehilangan assets/flutter_assets (ikon tofu) — wajib `flutter clean`, bukan rm intermediates | Success (install 240+72, frames 18/65, [BOOT] runApp) |
 | 2026-09-24 12:30 | develop | adminProd | Perf monitor: batch thumbnail lokal dulu, unduh hanya yang baru | Success (stream install 192.168.137.99:33689, v1.2.52-admin) |
