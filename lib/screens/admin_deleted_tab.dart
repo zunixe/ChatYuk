@@ -317,31 +317,37 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                   ),
           ),
         ),
-        // Filter: Semua / Terhapus / Belum dihapus (anon).
+        // Filter: Semua / Terhapus / Belum dihapus (anon) — SATU baris
+        // horizontal (bisa di-scroll bila layar sempit), bukan Wrap yang
+        // menjatuhkan chip terakhir ke baris kedua.
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-          child: Row(
-            children: [
-              _filterChip(
-                s.adminDeletedFilterAll,
-                'all',
-                admin.deleted.where((r) => r['pending'] != true).length +
-                    admin.deleted.where((r) => r['pending'] == true).length,
-              ),
-              const SizedBox(width: 6),
-              _filterChip(
-                s.adminDeletedFilterDeleted,
-                'deleted',
-                admin.deleted.where((r) => r['pending'] != true).length,
-              ),
-              const SizedBox(width: 6),
-              _filterChip(
-                s.adminDeletedFilterPending,
-                'pending',
-                admin.deleted.where((r) => r['pending'] == true).length,
-                highlight: true,
-              ),
-            ],
+          padding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                _filterChip(
+                  s.adminDeletedFilterAll,
+                  'all',
+                  admin.deleted.where((r) => r['pending'] != true).length +
+                      admin.deleted.where((r) => r['pending'] == true).length,
+                ),
+                const SizedBox(width: 6),
+                _filterChip(
+                  s.adminDeletedFilterDeleted,
+                  'deleted',
+                  admin.deleted.where((r) => r['pending'] != true).length,
+                ),
+                const SizedBox(width: 6),
+                _filterChip(
+                  s.adminDeletedFilterPending,
+                  'pending',
+                  admin.deleted.where((r) => r['pending'] == true).length,
+                  highlight: true,
+                ),
+              ],
+            ),
           ),
         ),
         SearchField(
