@@ -258,6 +258,27 @@ class _TimelineScreenState extends State<TimelineScreen>
                 ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        // Tombol + kanan-atas (seperti Online): ke halaman Post.
+        // Anon: popup lengkapi email (pola sama dengan CTA empty-state).
+        actions: [
+          IconButton(
+            tooltip: s.postAddTooltip,
+            icon: const Icon(Icons.add_circle_outline),
+            color: Colors.white,
+            onPressed: () {
+              final auth = context.read<AuthProvider>();
+              if (!(auth.profile?.isRegistered ?? false)) {
+                showAnonPromptDialog(context);
+                return;
+              }
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PostComposerScreen(),
+                ),
+              );
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tab,
           indicatorColor: Colors.white,
