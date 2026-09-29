@@ -442,6 +442,33 @@ admin membuka panel → untuk user biasa call zombie menggantung & `call_signals
 menumpuk (terukur 2.160 kB untuk 81 baris). Sekarang dijadwalkan cron
 `chatyuk-call-sweep` `*/5 * * * *`. Tidak mengubah isi fungsi (bukan FROZEN).
 
+### 1m. Watch monitor admin — `watch_request` bertarget (2026-09-29)
+
+**Masalah (call audio dian↔sary):** di layar monitor admin, audio-video
+peserta "putus tengah jalan" berulang. Bukti DB `call_signals` (call
+`3cfd652c`): 12 `watch_request` + peserta membuat `watch_offer` baru 5x
+(sary) / 4x (dian) dalam 87 dtk — tiap offer baru menutup pc watch lama.
+
+**Akar:** `watch_request` dikirim **tanpa `to`** padahal dikirim di dalam
+loop per peserta (`admin_call_watch_service.dart`) → 2 sinyal identik per
+siklus, dan **tiap peserta memproses keduanya** → pc/offer watch dobel
+(tak terlihat 4 ms di call video `871e93d9`: 2 offer). Ditambah race
+throttle: `_lastWatchReply` baru di-set **setelah** `await isAdminUid`,
+jadi dua request bersamaan sama-sama lolos cek "belum pernah balas".
+
+**Perbaikan (tanpa sentuh pc sehat, tanpa ubah fungsi FROZEN):**
+1. `watch_request` kini bertarget `to: p.uid` per peserta.
+2. Peserta memfilter via `isWatchRequestForMe` (`watch_policy.dart`) —
+   sinyal tanpa `to` (versi lama) tetap diterima.
+3. Penanda throttle `_lastWatchReply` di-set **sebelum** `await` (tutup
+   race double-handle).
+
+**Verifikasi:** `flutter analyze` 0 error/0 warning (info lama tetap);
+`test/watch_policy_test.dart` 16/16 (3 assert baru untuk targeting);
+subset test call/admin hijau (70/70). Belum diukur ulang di HP — jalankan
+build `--profile` lalu pilih call yang di-monitor dan buktikan jumlah
+`watch_offer` per 90 dtk turun (target ≤2, dari 9).
+
 ### Cara mengukur ulang (WAJIB pakai jalur ini)
 
 ```bash

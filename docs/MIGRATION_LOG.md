@@ -1,5 +1,52 @@
 ﻿
-## 2026-09-29 — Privasi mode "circle" (Kenalan), nilai visibility ke-6
+## 2026-09-29 — Privacy picker: kandidat = semua yang pernah chat (registered + anon)
+
+**Keluhan (user):** memilih "Hanya orang tertentu", nama "Kartika"
+(registered, pernah 1:1 chat) tidak muncul saat dicari.
+**Akar:** `privacy_excludable_users` @20260929130000 hanya menambah chatters
+`is_registered = false` (anon) → user registered non-teman tak pernah jadi
+kandidat.
+**Migrasi:** `20260929140000_privacy_excludable_all_chatters.sql` — buang
+syarat `is_registered = false`; kandidat kini = teman | follower-ku |
+subscriber aktifku | **pernah 1:1 chat (registered maupun anon)** | sudah di
+daftar saya. Limit 300→500.
+**Apply:** Management API + catat `schema_migrations`. Verifikasi live: sebagai
+`tisubasah` → `privacy_excludable_users()` memuat `Kartika` (is_friend=false).
+**Test:** pgTAP `privacy_only_test.sql` 15/15 (+2 assert: chatter registered
+muncul; isolated tak muncul).
+
+## 2026-09-29 — Privasi "Hanya orang tertentu" (only) menggantikan circle + fix allowlist
+
+**Keluhan (user):** di Pengaturan › Privasi, memilih opsi "Kenalan" tidak
+bisa memilih siapa orangnya; harusnya ada pilihan orang tertentu saja.
+**Akar (lebih besar):** `update_privacy_settings` di DB live MASIH 4 nilai
+lama (`everyone/friends/except/nobody`) — jadi memilih `circle`,
+`everyone_except`, maupun `friends_except` SELALU gagal
+(`Invalid presence visibility`) dan tak tersimpan. Keputusan user: ganti
+mode otomatis `circle` → `only` = daftar PUTIH yang dipilih manual.
+**Migrasi:** `20260929130000_privacy_only_whitelist.sql` — constraint 6
+nilai `..._except`, `only`, `nobody` (data `circle`→`only`); drop
+`_privacy_is_circle` (tak ada pemakai lain); `privacy_can_view` cabang
+`only` → `v_excluded` (whitelist, **menyentuh: privacy_can_view**);
+`get_online_users` cermin `only` (join exclusion yang sama = daftar putih);
+`update_privacy_settings` allowlist 6 nilai + guard `only` wajib 1+ orang;
+`privacy_excludable_users` kandidat diperluas (teman|follower|sub-aktif|
+anon-pernah-chat|sudah-di-daftar-`only`).
+**Apply:** Management API + catat `schema_migrations`. Verifikasi live:
+constraint_ok (`only`), helper circle=0, gate/online has `only`,
+update allowlist has `only`, versi tercatat.
+**Test:** pgTAP `privacy_only_test.sql` 13/13 (daftar putih lolos; teman
+non-daftar DITOLAK; field tanpa daftar tak ada yang lolos; guard `only`
+tanpa daftar ditolak; cermin online list). `privacy_test.sql` 6-opsi OK.
+Widget `privacy_widget_test.dart` (picker daftar putih) + unit enum hijau.
+**Rollback:** constraint `circle`, re-apply gate/online @20260929120000
+(helper circle), re-apply `update_privacy_settings` @20260920130000.
+
+## 2026-09-29 — Privasi mode "circle" (Kenalan), nilai visibility ke-6 — DIGANTIKAN
+
+> DIGANTIKAN oleh `20260929130000_privacy_only_whitelist.sql` (di atas):
+> mode `circle` otomatis → `only` daftar putih manual; helper
+> `_privacy_is_circle` di-drop. Catatan di bawah untuk riwayat.
 
 **Kebutuhan (user):** profil hanya tampil untuk orang tertentu — teman,
 follower, subscriber, atau yang pernah chat (termasuk anon). Opsi lama
@@ -1912,3 +1959,19 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - Bukan fungsi FROZEN. Snapshot FROZEN TIDAK berubah (revert diff `nearby_users`
   pre-existing dari sesi lain).
 
+
+## 2026-09-29 — Panggilan Terbaru (fitur klien, TANPA migrasi)
+
+- **Fitur:** menu ⋮ tab Pesan → halaman "Panggilan Terbaru" (riwayat call
+  masuk/keluar ala WhatsApp). Tap baris → buka chat; ikon call → panggil ulang
+  jenis terakhir (audio→fullscreen, video→mode chat).
+- **Data:** tabel `public.calls` yang SUDAH ADA — RLS `calls_select`
+  (`auth.uid() = caller_id OR callee_id`) otomatis membatasi ke user sendiri.
+  Query client `.or(caller_id.eq.me,callee_id.eq.me)` → **tidak ada perubahan
+  DB, tidak ada RPC baru, tidak ada grant/RLS yang disentuh.**
+- **Kode:** `lib/services/call_service.dart` (`listMyRecentCalls`,
+  `lookupNicknames`), `lib/providers/call_provider.dart` (passthrough),
+  `lib/core/call/call_history_entry.dart` (murni), `lib/screens/call_history_screen.dart`,
+  `lib/screens/chats_screen.dart` (item menu), `lib/config/strings.dart` (7 getter).
+- **Verifikasi:** `flutter analyze` 0 error/0 warning; `test/call_history_test.dart`
+  14/14 hijau; `check_screen_boundary.sh` — file baru 0 import services.
