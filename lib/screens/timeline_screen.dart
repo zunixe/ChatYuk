@@ -136,6 +136,10 @@ class _TimelineScreenState extends State<TimelineScreen>
   Future<void> _load({bool refresh = false, bool skipIfFresh = false}) async {
     final auth = context.read<AuthProvider>();
     if (auth.uid == null) return;
+    // Gerbang Timeline absolut: anon (belum registrasi) TIDAK bisa lihat feed.
+    // Jangan tembak RPC `list_posts` (pasti raise ANON_DISABLED → layar error
+    // retry palsu). UI menampilkan state "daftar dulu" (lihat build()).
+    if (auth.anonTimelineBlocked) return;
     await context
         .read<TimelineProvider>()
         .load(_scope, refresh: refresh, skipIfFresh: skipIfFresh);
@@ -271,7 +275,32 @@ class _TimelineScreenState extends State<TimelineScreen>
               // Empty state HANYA saat fetch selesai & benar-benar kosong. Saat
               // loading pertama kali (atau tab switch) tampilkan spinner — jangan
               // blink ke "Belum ada postingan" kalau sebenarnya ada data.
-              child: posts.isEmpty && !loading && fetchFailed
+              child: context.select<AuthProvider, bool>(
+                          (a) => a.anonTimelineBlocked)
+                      // Gerbang Timeline absolut: anon tidak bisa lihat feed.
+                      // Tampilkan ajakan daftar (bukan error retry dari RPC
+                      // yang memang selalu ditolak server).
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            SizedBox(
+                              height: 400,
+                              child: EmptyStateView(
+                                icon: Icons.dynamic_feed_rounded,
+                                title: s.promptCompleteEmailTimelineTitle,
+                                hint: s.promptCompleteEmailTimelineMsg,
+                                actionLabel: s.btnGoProfile,
+                                onAction: () => showAnonPromptDialog(
+                                  context,
+                                  title: s.promptCompleteEmailTimelineTitle,
+                                  message: s.promptCompleteEmailTimelineMsg,
+                                  icon: Icons.dynamic_feed_rounded,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : posts.isEmpty && !loading && fetchFailed
             // Fetch gagal (network/RPC) — BUKAN feed kosong. Tampilkan
             // pesan error + tombol coba lagi, jangan empty state palsu.
             ? ListView(

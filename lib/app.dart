@@ -614,7 +614,11 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     // warm-up utama auth/rooms/online): saat user tap tab Timeline feed
     // sudah terisi, tidak ada spinner RPC list_posts pertama.
     Timer(const Duration(seconds: 3), () {
-      if (mounted) context.read<TimelineProvider>().prewarm();
+      // Gerbang Timeline absolut: anon tidak bisa lihat feed → jangan prewarm
+      // (RPC list_posts pasti raise ANON_DISABLED, buang kuota + isi error).
+      final anonBlocked =
+          mounted && context.read<AuthProvider>().anonTimelineBlocked;
+      if (mounted && !anonBlocked) context.read<TimelineProvider>().prewarm();
       // Prewarm juga daftar grup (tab Grup) — klik tab instant.
       if (mounted) context.read<RoomProvider>().loadMyGroups(refresh: true);
     });
