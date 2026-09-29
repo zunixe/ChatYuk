@@ -53,3 +53,12 @@ bool shouldRequestWatch({
   if (negotiating) return false;
   return true;
 }
+
+/// Jeda antar permintaan `watch_request` berdasarkan percobaan ke-[attempt].
+///
+/// 3 percobaan pertama lebih cepat (1,5 dtk) supaya audio admin muncul
+/// segera setelah layar monitor dibuka; setelah itu kembali 3 dtk agar tidak
+/// membombardir peserta (throttle peserta 8 dtk tetap pengaman utama).
+Duration watchRequestDelay(int attempt) =>
+    Duration(milliseconds: attempt < 3 ? 1500 : 3000);
+

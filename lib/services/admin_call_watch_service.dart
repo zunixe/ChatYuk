@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../config/call_config.dart';
 import '../core/call/watch_policy.dart';
+import '../core/perf/perf_probe.dart';
 import '../models/active_call_model.dart';
 import 'call_service.dart';
 
@@ -39,14 +40,29 @@ class WatchSession extends ChangeNotifier {
   bool get isVideo => call.callType == 'video';
   bool get stopped => _stopped;
 
+  /// True bila `setSpeakerphoneOn(true)` gagal (mis. audio nyangkut di
+  /// earpiece) — UI memakai ini untuk membedakan "belum tersambung" dari
+  /// "tersambung tapi pelan". Dulu error ini ditelan tanpa jejak.
+  bool speakerFailed = false;
+
+  /// Kapan sesi pantau dibuka — dasar metrik `watch.openFirst`.
+  DateTime? _openedAt;
+  bool _firstConnectedRecorded = false;
+  /// Percobaan `watch_request` ke berapa (kadens cepat 3 percobaan pertama).
+  int _requestAttempt = 0;
+
   /// Peserta yang jadi video utama (index di [participants]).
   int mainIndex = 0;
 
   Future<void> start() async {
     if (_stopped) return;
+    _openedAt = DateTime.now();
     try {
       await Helper.setSpeakerphoneOn(true);
-    } catch (_) {}
+    } catch (_) {
+      speakerFailed = true;
+      notifyListeners();
+    }
     for (final p in participants) {
       try {
         await p.renderer.initialize();
@@ -58,13 +74,10 @@ class WatchSession extends ChangeNotifier {
       _onSignal,
       onError: (e) => dlog('[AdminCallWatch] signal stream error: $e'),
     );
-    _requestAll();
     // Ulangi permintaan sampai tiap peserta menjawab (callee belum accept
     // belum punya media/session → baru merespon setelah call diterima).
-    _requestTimer = Timer.periodic(
-      const Duration(seconds: 3),
-      (_) => _requestAll(),
-    );
+    // Kadens cepat (1,5 dtk) di 3 percobaan pertama, lalu 3 dtk.
+    _requestAll();
     // Deteksi call berakhir → tutup otomatis. 12 dtk (dulu 5 dtk) —
     // watch hanya monitor, realtime sinyal jalur utama perubahan.
     _statusTimer = Timer.periodic(const Duration(seconds: 12), (_) async {
@@ -100,13 +113,27 @@ class WatchSession extends ChangeNotifier {
       if (!shouldRequestWatch(connected: p.connected, negotiating: negotiating)) {
         continue;
       }
+      p.requestedAt ??= now;
       _service.sendSignal(call.id, 'watch_request', payload: {'from': myUid});
     }
     // Hemat sinyal: berhenti minta saat semua sudah connected.
     if (allConnected) {
       _requestTimer?.cancel();
       _requestTimer = null;
+      return;
     }
+    _scheduleRequest();
+  }
+
+  /// Jadwalkan permintaan berikutnya sesuai kadens ([watchRequestDelay]).
+  void _scheduleRequest() {
+    if (_stopped) return;
+    _requestTimer?.cancel();
+    _requestTimer = Timer(watchRequestDelay(_requestAttempt), () {
+      if (_stopped) return;
+      _requestAttempt++;
+      _requestAll();
+    });
   }
 
   String? get myUid => _service.uid;
@@ -150,11 +177,21 @@ class WatchSession extends ChangeNotifier {
       p.connecting = true;
       p.hasVideoTrack = false;
       pc.onTrack = (event) {
-        if (_stopped) return;
+        final pp = p;
+        if (_stopped || pp == null) return;
         final stream = event.streams.isNotEmpty ? event.streams.first : null;
         if (stream == null) return;
-        if (stream.getVideoTracks().isNotEmpty) p!.hasVideoTrack = true;
-        p!.renderer.srcObject = stream;
+        if (stream.getVideoTracks().isNotEmpty) pp.hasVideoTrack = true;
+        // Metrik: kapan audio pertama benar-benar tiba (bukan sekadar
+        // "connected") — menjawab "suara baru keluar agak lama".
+        if (stream.getAudioTracks().isNotEmpty && !pp.audioRecorded) {
+          pp.audioRecorded = true;
+          final base = pp.requestedAt;
+          if (base != null) {
+            PerfProbe.record('watch.firstAudio', DateTime.now().difference(base));
+          }
+        }
+        pp.renderer.srcObject = stream;
         notifyListeners();
       };
       pc.onIceCandidate = (c) {
@@ -169,6 +206,22 @@ class WatchSession extends ChangeNotifier {
         p.connected =
             state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
         dlog('[ADMIN-WATCH] ${p.name} state=$state');
+        // Metrik: lama tunggu dari request pertama sampai tersambung, dan
+        // sejak layar monitor dibuka sampai peserta PERTAMA tersambung.
+        if (p.connected && !p.connectRecorded) {
+          p.connectRecorded = true;
+          final base = p.requestedAt;
+          if (base != null) {
+            PerfProbe.record('watch.connect', DateTime.now().difference(base));
+          }
+          if (!_firstConnectedRecorded && _openedAt != null) {
+            _firstConnectedRecorded = true;
+            PerfProbe.record(
+              'watch.openFirst',
+              DateTime.now().difference(_openedAt!),
+            );
+          }
+        }
         // Satu pihak sudah tersambung → matikan timer permintaan supaya
         // peserta TIDAK rebuild pc (audio tidak putus-nyambung). Peserta
         // yang belum konek tetap diminta oleh _requestAll iterasi lain.
@@ -183,12 +236,9 @@ class WatchSession extends ChangeNotifier {
         // hidupkan ulang permintaan watch.
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
             state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-          if (_requestTimer == null) {
-            _requestTimer = Timer.periodic(
-              const Duration(seconds: 3),
-              (_) => _requestAll(),
-            );
-          }
+          p.connectRecorded = false;
+          p.audioRecorded = false;
+          _scheduleRequest();
         }
         notifyListeners();
       };
@@ -402,4 +452,13 @@ class WatchParticipant {
   /// putus-nyambung).
   DateTime? lastOfferAt;
 
-  WatchParticipant({required this.uid, required this.name});}
+  /// Waktu `watch_request` PERTAMA dikirim ke peserta ini — dasar metrik
+  /// `watch.connect` / `watch.firstAudio` (lama tunggu sampai audio nyala).
+  DateTime? requestedAt;
+
+  /// Penanda metrik sudah dicatat (sekali per peserta).
+  bool connectRecorded = false;
+  bool audioRecorded = false;
+
+  WatchParticipant({required this.uid, required this.name});
+}

@@ -7,7 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/active_call_model.dart';
 import '../services/admin_service.dart';
 import '../services/admin_call_watch_service.dart';
-export '../services/admin_call_watch_service.dart' show WatchSession;
+export '../services/admin_call_watch_service.dart'
+    show WatchSession, WatchParticipant;
 import '../core/cache/message_cache.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/admin_err.dart';

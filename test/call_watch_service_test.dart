@@ -49,6 +49,13 @@ void main() {
       expect(p.cameraOn, isTrue);
       expect(p.hasVideoTrack, isFalse);
     });
+
+    test('metrik baru: requestedAt & penanda belum tercatat', () {
+      final p = WatchParticipant(uid: 'u1', name: 'Budi');
+      expect(p.requestedAt, isNull);
+      expect(p.connectRecorded, isFalse);
+      expect(p.audioRecorded, isFalse);
+    });
   });
 
   group('WatchSession — daftar peserta', () {
@@ -70,6 +77,8 @@ void main() {
       final s = WatchSession(call());
       expect(s.stopped, isFalse);
       expect(s.mainIndex, 0);
+      // Sinyal "speaker gagal" belum tentu — default false sampai start().
+      expect(s.speakerFailed, isFalse);
     });
   });
 
