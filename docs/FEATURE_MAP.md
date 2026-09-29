@@ -293,10 +293,10 @@ ke user asli). Dikunci: `supabase/tests/schema_sync_test.sql`.
 | Provider | `lib/providers/privacy_provider.dart` |
 | Service | `lib/services/privacy_service.dart` |
 | Model | `lib/models/privacy_settings.dart` |
-| SQL inti | `privacy_can_view()`, `_privacy_are_friends()`, `my_privacy_settings()`, `update_privacy_settings()`, `replace_privacy_exclusions()`, `privacy_excludable_users()`, `profile_public()`, `get_online_users()`, `nearby_users()`, `story_slides()`, `story_tray()` |
+| SQL inti | `privacy_can_view()`, `_privacy_are_friends()`, `_privacy_is_circle()` (2026-09-29), `my_privacy_settings()`, `update_privacy_settings()`, `replace_privacy_exclusions()`, `privacy_excludable_users()`, `profile_public()`, `get_online_users()`, `nearby_users()`, `story_slides()`, `story_tray()` |
 | RPC baca ber-privacy (baru 2026-09-22) | `presence_for(uuid[])`, `avatar_for(uuid)`, `avatars_for(uuid[])`, `my_photos()`, `get_user_photos_access()` |
-| Kolom | `profiles.{presence,last_seen,profile_photo,about,story}_visibility` (5 nilai: everyone/everyone_except/friends/friends_except/nobody), `profiles.read_receipts_enabled`, `profile_privacy_exclusions`, `user_photos.photo` (di-revoke), `user_photos.photo_preview` |
-| Test | `test/privacy_settings_test.dart`, `test/privacy_service_io_test.dart`, `test/privacy_provider_test.dart`, `test/privacy_widget_test.dart`, `test/photo_privacy_access_test.dart`, `supabase/tests/privacy_test.sql` |
+| Kolom | `profiles.{presence,last_seen,profile_photo,about,story}_visibility` (6 nilai: everyone/everyone_except/friends/friends_except/**circle**/nobody; circle = teman \| follower-ku \| subscriber-ku aktif \| pernah 1:1 chat incl. anon; TANPA circle_except), `profiles.read_receipts_enabled`, `profile_privacy_exclusions`, `user_photos.photo` (di-revoke), `user_photos.photo_preview` |
+| Test | `test/privacy_settings_test.dart`, `test/privacy_service_io_test.dart`, `test/privacy_provider_test.dart`, `test/privacy_widget_test.dart`, `test/photo_privacy_access_test.dart`, `supabase/tests/privacy_test.sql`, `supabase/tests/privacy_circle_test.sql` |
 
 **Invariant (dijaga test — JANGAN diregresikan):**
 1. **Kolom sensitif TIDAK boleh ter-grant SELECT** ke `anon`/`authenticated`:
@@ -310,7 +310,10 @@ ke user asli). Dikunci: `supabase/tests/schema_sync_test.sql`.
    photo_preview, created_at`).
 3. `privacy_can_view(owner, field, viewer)`: owner=self → true; `nobody` →
    false; `everyone_except`/`friends_except` → cek `profile_privacy_exclusions`;
-   `friends`/`friends_except` → cek `_privacy_are_friends` (mutual follow).
+   `friends`/`friends_except` → cek `_privacy_are_friends` (mutual follow);
+   `circle` (2026-09-29) → cek `_privacy_is_circle` (mutual tercakup
+   follows-inbound | subscriber aktif | pernah 1:1 chat incl. anon; daftar
+   kecuali DIABAIKAN, konsisten `friends`).
 4. `story_tray` WAJIB cek `privacy_can_view(author,'story')` + mask avatar —
    dulu tidak (story "nobody" bocor di tray).
 5. `mark_chat_read`: `read_receipts_enabled=false` → unread tetap 0 tapi

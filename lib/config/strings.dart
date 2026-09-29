@@ -650,6 +650,7 @@ class S {
   String get privacyFriends => isId ? 'Teman saya' : 'My friends';
   String get privacyFriendsExcept =>
       isId ? 'Teman saya kecuali...' : 'My friends except...';
+  String get privacyCircle => isId ? 'Kenalan' : 'People I know';
   String get privacyNobody => isId ? 'Tidak ada' : 'Nobody';
   // Deskripsi tiap opsi (sub-judul di sheet pemilih).
   String get privacyEveryoneDesc =>
@@ -662,6 +663,9 @@ class S {
   String get privacyFriendsExceptDesc =>
       isId ? 'Hanya teman, kecuali orang terpilih'
           : 'Only friends, except selected people';
+  String get privacyCircleDesc =>
+      isId ? 'Teman, pengikut, subscriber & yang pernah chat'
+          : 'Friends, followers, subscribers & people you have chatted with';
   String get privacyNobodyDesc =>
       isId ? 'Tidak ada yang bisa melihat' : 'No one can see';
   String get privacyPresence => isId ? 'Status online' : 'Online status';

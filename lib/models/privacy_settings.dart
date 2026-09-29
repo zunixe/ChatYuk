@@ -1,14 +1,17 @@
-/// Visibilitas privacy — 5 pilihan:
+/// Visibilitas privacy — 6 pilihan:
 /// - [everyone]       : semua orang
 /// - [everyoneExcept] : semua orang KECUALI daftar (teman & anon bisa dipilih)
 /// - [friends]        : hanya teman
 /// - [friendsExcept]  : teman, kecuali daftar
+/// - [circle]         : kenalan (teman | follower-ku | subscriber-ku aktif |
+///                      pernah 1:1 chat incl. anon) — tanpa daftar kecuali
 /// - [nobody]         : tidak ada
 enum PrivacyVisibility {
   everyone,
   everyoneExcept,
   friends,
   friendsExcept,
+  circle,
   nobody;
 
   /// Key yang dikirim/dibaca server (snake_case).
@@ -17,6 +20,7 @@ enum PrivacyVisibility {
     PrivacyVisibility.everyoneExcept => 'everyone_except',
     PrivacyVisibility.friends => 'friends',
     PrivacyVisibility.friendsExcept => 'friends_except',
+    PrivacyVisibility.circle => 'circle',
     PrivacyVisibility.nobody => 'nobody',
   };
 
