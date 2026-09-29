@@ -637,6 +637,56 @@ yang dibangun), `ChatVideoBubble` menunda `_loadPoster()` 1 frame via
 Catatan: `_autoLoadMissingImages` sengaja hanya untuk `image` — video punya
 alur poster sendiri di bubble, tidak lewat antrean foto.
 
+### 2.15 Monitor call admin — status jelas + audio lebih cepat (2026-09-29)
+
+Keluhan: saat memantau call dari monitor chat, "suaranya keluar aga lama" dan
+tidak jelas apakah itu orangnya belum bicara atau handshake belum selesai.
+
+**Akar (terverifikasi di kode):**
+1. `admin_chat_view_screen` menunggu `fetchActiveCalls()` (RPC) dulu baru
+   mulai `_syncCallWatch()` → bila call belum ada di daftar, pantau baru jalan
+   di tick 5 dtk.
+2. Peserta wajib RPC `is_chatyuk_admin` sebelum melayani pantau (tidak ada
+   cache) → 1 RTT ekstra tiap sesi.
+3. `_handleWatchRequest` membuang permintaan yang datang sebelum media lokal
+   siap (`_localStream == null`) → admin menunggu tick berikutnya.
+4. Permintaan admin tetap 3 dtk dari awal (tidak ada kadens cepat).
+5. `AudioListenChip` selalu menulis "Mendengarkan..." — indikator
+   connected/mic hanya ada di overlay **video**, jadi call audio tidak punya
+   cara membedakan "belum nyambung" / "mic mati" / "memang diam".
+6. `setSpeakerphoneOn(true)` gagal ditelan `catch (_) {}` → audio bisa
+   nyangkut di earpiece tanpa tanda.
+
+**Perbaikan (klien saja, tanpa SQL — RLS `call_signals` sudah mengizinkan admin):**
+- **A1** `audio_listen_chip.dart`: status NYATA per peserta (Memanggil /
+  Menyambungkan / Mikrofon mati / Mendengarkan) + ikon warna; peringatan
+  "Audio mode telepon (speaker gagal)".
+- **A2** `WatchSession.speakerFailed` di-set saat `setSpeakerphoneOn` gagal.
+- **B1** `admin_chat_view_screen`: `_syncCallWatch()` dipanggil langsung (tak
+  tunggu RPC fetch), fetch tetap paralel.
+- **B2** `CallService.isAdminUid`: cache **positif saja**, TTL 30 mnt (negatif
+  selalu recheck — gerbang keamanan tetap).
+- **B3** `CallSession._pendingWatchRequests`: permintaan yang datang sebelum
+  media siap diantre, dibalas oleh `_flushPendingWatchRequests()` tepat
+  setelah `call.setupMedia`.
+- **B4** `watch_policy.watchRequestDelay(attempt)`: 3 percobaan pertama 1,5 dtk,
+  lalu 3 dtk (throttle peserta 8 dtk & stale 20 dtk **tidak diubah** — pengaman
+  anti-putus-audio).
+
+**Metrik baru (PERF_PROBE):** `watch.connect` (request→connected),
+`watch.openFirst` (buka layar→peserta pertama connected), `watch.firstAudio`
+(track audio pertama tiba). Muncul otomatis di `[PERF]` via `report()`.
+
+**Cara ukur:** build rilis + `--dart-define=PERF_PROBE=true` → 3 call audio →
+app di-background → `adb logcat | grep '\[PERF\]'`; tulis tabel sebelum/sesudah
+di sini.
+
+| Metrik | Sebelum | Sesudah |
+|---|---|---|
+| `watch.connect` | (belum ada metrik) | _diisi setelah pengukuran_ |
+| `watch.openFirst` | (belum ada metrik) | _diisi setelah pengukuran_ |
+| `watch.firstAudio` | (belum ada metrik) | _diisi setelah pengukuran_ |
+
 ### 2.14 Monitor chat admin — spinner lama saat buka chat (2026-09-28)
 
 Keluhan: klik chat di monitor admin kadang muter lama. Akar masalahnya tiga,
@@ -703,6 +753,9 @@ Titik ukur terpasang:
 | `CallScreen` (build) | `call_screen.dart` | jumlah rebuild layar call |
 | `CallOverlay` (build) | `chat_call_overlay.dart` | jumlah rebuild overlay video chat |
 | `call.watchPc` (build) | `call_service.dart` | jumlah PC watcher admin dibuat |
+| `watch.connect` | `admin_call_watch_service.dart` | `watch_request` pertama → peserta tersambung |
+| `watch.openFirst` | `admin_call_watch_service.dart` | layar monitor dibuka → peserta PERTAMA tersambung |
+| `watch.firstAudio` | `admin_call_watch_service.dart` | `watch_request` pertama → track audio pertama tiba |
 
 > `timeline.rpc` dipisah dari `timeline.rpcMore` karena hanya halaman pertama
 > yang menahan kemunculan tab Timeline; paginasi terjadi saat user sudah
@@ -902,6 +955,7 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-27 | **Avatar: satu kunci cache per uid** (§16) — `getByPath` cek `_cache[uid]` dulu + peta path→uid + seed sinkron RAM/disk di `UserInfoScreen`/`ProfileAvatar` | Halaman profil tak lagi "nge-blink" saat dibuka dari private chat (foto dari disk/daftar chat dipakai instan) |
 | 2026-09-27 | **Admin monitor chat: lokal-first** (§17) — `fetchChatMessages({force})` & `_fetch({force})` skip RPC saat pesan sudah ada di cache; server hanya saat kosong / pull-to-refresh | Buka-ulang chat di monitor tidak load ulang dari server; pesan baru tetap via poll 5 dtk + realtime |
 | 2026-09-28 | **Monitor chat: timeout RPC + antre foto** (§2.14) — `getChatMessages`/`getChatLastRead` + `.timeout(30s)`; load foto admin dibatasi 3 bersamaan + cooldown 10 dtk; `_applyMessages` O(n²)→O(n) | Konstruksi (belum diukur di HP); spinner abadi hilang, foto tak berebut |
+| 2026-09-29 | **Monitor call admin** (§2.15) — chip status nyata per peserta (+ speaker-fallback), mulai pantau tanpa tunggu RPC, cache positif `isAdminUid` 30 mnt, antre request sebelum media siap, kadens 1,5 dtk (3×) lalu 3 dtk; metrik `watch.connect`/`openFirst`/`firstAudio` | Konstruksi (metrik disiapkan); audio mulai lebih cepat + admin bisa bedakan "belum nyambung" vs "mic mati/diam" |
 
 ### 8. Target tersisa
 
@@ -1511,3 +1565,52 @@ Penyebabnya 2:
 - Jangan kembalikan "tutup pc tiap watch_request" — itu penyebab audio putus.
 - `watch_state` bukan pengganti negosiasi: hanya dipakai saat pc sudah ada.
 - Test: `test/watch_policy_test.dart`.
+
+---
+
+## 22. Stall admin 2026-09-29 — akar: compute NANO (RAM 0.5 GB), bukan beban
+
+**Keluhan:** panel admin "mati" (RPC timeout, `statement_timeout` 57014,
+`realtime.list_changes` 14 s, `ShareLock` menunggu 3.7 s). DB lambat sekaligus
+(`select 1` 11–15 s).
+
+**Diagnosa (ukur `EXPLAIN`, `pg_stat_*`, metrics):**
+
+| Ukur | Nilai | Arti |
+|---|---|---|
+| `node_memory_MemTotal_bytes` | **406 MB** | instance **Nano** (0.5 GB) |
+| Dashboard Infrastructure | MEMORY **89%**, CPU **89%** | memory pressure |
+| I/O terpakai kita | **91 KB/s = 0,81%** baseline | **BUKAN** beban tinggi |
+| Checkpoint | 1432 s untuk 16.364 buffer | disk tersendat (karena mem pressure) |
+
+**Kesimpulan: bukan Query/RLS/kode.** Nano terlalu kecil: ~45 MB RAM sisa →
+checkpoint & WAL tersendat → statement timeout → admin "mati".
+
+**Perbaikan GRATIS (harga Nano == Micro, dashboard menandai "Free Upgrade"):**
+`PATCH /v1/projects/{ref}/billing/addons {compute_instance: ci_micro}`:
+
+| | Nano | Micro |
+|---|---|---|
+| RAM | 0,5 GB | 1 GB |
+| Baseline I/O | 11 MB/s | **87 MB/s** |
+| Max I/O | 261 MB/s | 2085 MB/s |
+| Harga | $0.01344/jam | **$0.01344/jam (sama)** |
+
+Hasil: `select 1` **0.7–2.3 s** (dari 11–15 s), REST 0,36 s, cron 0 gagal.
+
+**Aturan (JANGAN dibalik):**
+- **Cek compute lebih dulu** sebelum menuduh beban DB. Nano (0,5 GB) TIDAK
+  layak produksi; **WAJIB minimal Micro (1 GB)** — harganya sama untuk org Pro,
+  jadi tidak ada alasan tetap di Nano.
+- Metric `MEMORY` > 85% + I/O %consumed rendah = **naikkan compute**, bukan
+  optimasi query.
+
+**Perbaikan pendamping (mengurangi volume tulis, tetap berguna):**
+migrasi `20260929020000_reduce_presence_write_load.sql`:
+- `notify_online_fanout` diubah **AFTER → BEFORE UPDATE** sehingga set
+  `new.last_online_notified_at` langsung — menghapus `UPDATE profiles` NESTED
+  di dalam trigger (dulu satu transisi status = 2× tulis + 9 trigger ulang).
+- Kedua trigger online **mengecualikan akun dummy** (14 bot dulu ikut fanout
+  tiap `ai_presence_tick` → `net.http_post` + outbox spam; 94 chat dummy).
+- `housekeeping_tick` memangkas `cron.job_run_details` > 7 hari (44 MB / 137k
+  baris tumbuh tanpa batas).

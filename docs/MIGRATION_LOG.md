@@ -1861,3 +1861,22 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - **⚠️ PELAJARAN:** setiap loop hapus-user WAJIB bungkus `exception` per user —
   satu baris bermasalah (mis. ledger) tidak boleh menggagalkan migrasi data
   massal, kalau tidak akun stale diam-diam menumpuk berbulan-bulan.
+
+## 2026-09-29 — 20260929020000_reduce_presence_write_load.sql (SUDAH APPLY)
+
+- **Konteks:** stall panel admin (57014/timeout). Akar UTAMA = compute **Nano**
+  (RAM 0,5 GB, I/O 11 MB/s) — DIPERBAIKI dengan upgrade ke **Micro** (RAM 1 GB,
+  I/O 87 MB/s, harga SAMA) via API `billing/addons`. Lihat PERFORMANCE.md §22.
+- **Migrasi ini = perbaikan pendamping** (mengurangi volume tulis profiles):
+  1. `notify_online_fanout` AFTER → **BEFORE UPDATE**: set
+     `new.last_online_notified_at` langsung, hapus `UPDATE profiles` NESTED
+     (dulu 1 transisi status = 2× tulis + 9 trigger profiles dipicu ulang).
+  2. `notify_online_fanout` + `notify_contact_online` **skip akun dummy**
+     (14 bot ikut fanout tiap `ai_presence_tick` tiap 5 menit → http_post +
+     outbox spam; 94 chat berisi dummy).
+  3. `housekeeping_tick` pangkas `cron.job_run_details` > 7 hari.
+- **Verifikasi live:** trigger `profiles_online_fanout_trigger` = BEFORE UPDATE
+  (`tgtype` bit); uji transisi dummy online → `net._http_response` TIDAK nambah
+  (224 → 224); `housekeeping_tick()` → `cron_purged` kendali jalan.
+- Bukan fungsi FROZEN. Snapshot FROZEN TIDAK berubah (revert diff `nearby_users`
+  pre-existing dari sesi lain).
