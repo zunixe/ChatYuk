@@ -108,9 +108,10 @@ select supabase_tests.check('constraint memuat everyone_except + friends_except'
 select supabase_tests.check('RPC privacy_excludable_users ada',
   exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'public' and p.proname = 'privacy_excludable_users'));
-select supabase_tests.check('privacy_can_view memuat 5 opsi',
+select supabase_tests.check('privacy_can_view memuat 6 opsi',
   (select pg_get_functiondef(p.oid) like '%everyone_except%'
      and pg_get_functiondef(p.oid) like '%friends_except%'
+     and pg_get_functiondef(p.oid) like '%''only''%'
    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = 'privacy_can_view' limit 1));
 

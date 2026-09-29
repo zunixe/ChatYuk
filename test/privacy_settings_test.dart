@@ -43,7 +43,7 @@ void main() {
     for (final v in PrivacyVisibility.values) {
       expect(PrivacyVisibility.fromWire(v.wireKey), v);
     }
-    expect(PrivacyVisibility.circle.wireKey, 'circle');
+    expect(PrivacyVisibility.only.wireKey, 'only');
   });
 
   test("nilai lama 'except' dibaca sebagai friendsExcept (kompatibel)", () {
@@ -58,12 +58,16 @@ void main() {
     expect(PrivacyVisibility.everyoneExcept.usesExclusions, isTrue);
     expect(PrivacyVisibility.friends.usesExclusions, isFalse);
     expect(PrivacyVisibility.friendsExcept.usesExclusions, isTrue);
-    expect(PrivacyVisibility.circle.usesExclusions, isFalse);
+    expect(PrivacyVisibility.only.usesExclusions, isTrue);
     expect(PrivacyVisibility.nobody.usesExclusions, isFalse);
 
     expect(PrivacyVisibility.friends.friendsOnly, isTrue);
     expect(PrivacyVisibility.friendsExcept.friendsOnly, isTrue);
     expect(PrivacyVisibility.everyoneExcept.friendsOnly, isFalse);
-    expect(PrivacyVisibility.circle.friendsOnly, isFalse);
+    expect(PrivacyVisibility.only.friendsOnly, isFalse);
+
+    expect(PrivacyVisibility.everyoneExcept.isExcept, isTrue);
+    expect(PrivacyVisibility.friendsExcept.isExcept, isTrue);
+    expect(PrivacyVisibility.only.isExcept, isFalse);
   });
 }

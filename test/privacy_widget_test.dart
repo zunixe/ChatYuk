@@ -103,21 +103,34 @@ void main() {
     expect(find.text(s.privacyEveryoneExcept), findsOneWidget);
     expect(find.text(s.privacyFriends), findsOneWidget);
     expect(find.text(s.privacyFriendsExcept), findsOneWidget);
-    expect(find.text(s.privacyCircle), findsOneWidget);
+    expect(find.text(s.privacyOnly), findsOneWidget);
     expect(find.text(s.privacyNobody), findsOneWidget);
   });
 
-  testWidgets('pilih Kenalan → update(presence: circle) tanpa picker',
+  testWidgets('pilih Hanya orang tertentu → update(presence: only) + picker',
       (tester) async {
     when(() => service.update(
-          presence: PrivacyVisibility.circle,
+          presence: PrivacyVisibility.only,
           lastSeen: null,
           profilePhoto: null,
           about: null,
           story: null,
           readReceipts: null,
         )).thenAnswer(
-      (_) async => const PrivacySettings(presence: PrivacyVisibility.circle),
+      (_) async => const PrivacySettings(presence: PrivacyVisibility.only),
+    );
+    when(() => service.excludableUsers()).thenAnswer(
+      (_) async => [
+        {'uid': 'u1', 'nickname': 'Budi', 'is_friend': true},
+      ],
+    );
+    when(() => service.replaceExclusions('presence', {'u1'})).thenAnswer(
+      (_) async => const PrivacySettings(
+        presence: PrivacyVisibility.only,
+        exclusions: {
+          'presence': {'u1'},
+        },
+      ),
     );
 
     await tester.pumpWidget(wrap());
@@ -125,18 +138,28 @@ void main() {
 
     await tester.tap(find.text(s.privacyPresence));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(s.privacyCircle));
+    await tester.ensureVisible(find.text(s.privacyOnly));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.privacyOnly));
     await tester.pumpAndSettle();
 
+    // Picker daftar putih tampil → pilih Budi lalu simpan.
+    expect(find.text(s.privacyOnlyPickerTitle), findsOneWidget);
+    await tester.tap(find.text('Budi'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.btnSave));
+    await tester.pumpAndSettle();
+
+    // Daftar disimpan DULU, baru nilai 'only' (guard server butuh 1+ orang).
+    verify(() => service.replaceExclusions('presence', {'u1'})).called(1);
     verify(() => service.update(
-          presence: PrivacyVisibility.circle,
+          presence: PrivacyVisibility.only,
           lastSeen: null,
           profilePhoto: null,
           about: null,
           story: null,
           readReceipts: null,
         )).called(1);
-    expect(find.text(s.privacyCircle), findsOneWidget);
   });
 
   testWidgets('pilih nobody → update(presence) + subtitle berubah',
@@ -252,6 +275,55 @@ void main() {
     expect(find.text('Guest1'), findsOneWidget);
     expect(find.text(s.privacyBadgeFriend), findsOneWidget);
     expect(find.text(s.privacyBadgeAnon), findsOneWidget);
+  });
+
+  // Regresi 2026-09-29: dulu TextEditingController pencarian dibuat di layar
+  // pemanggil & di-dispose tepat setelah `await showModalBottomSheet` →
+  // "used after being disposed" saat animasi keluar masih jalan, memicu
+  // assertion lanjutan `_dependents.isEmpty`. Sekarang controller dimiliki
+  // sheet sendiri → mengetik lalu menutup harus aman.
+  testWidgets('ketik di pencarian picker lalu tutup → tidak crash',
+      (tester) async {
+    when(() => service.excludableUsers()).thenAnswer(
+      (_) async => [
+        {'uid': 'u1', 'nickname': 'Budi', 'is_friend': true},
+        {'uid': 'u2', 'nickname': 'Guest1', 'is_friend': false},
+      ],
+    );
+    when(() => service.update(
+          presence: PrivacyVisibility.everyoneExcept,
+          lastSeen: null,
+          profilePhoto: null,
+          about: null,
+          story: null,
+          readReceipts: null,
+        )).thenAnswer(
+      (_) async =>
+          const PrivacySettings(presence: PrivacyVisibility.everyoneExcept),
+    );
+
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(s.privacyPresence));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.privacyEveryoneExcept));
+    await tester.pumpAndSettle();
+
+    // Picker terbuka → ketik untuk memfilter.
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Bud');
+    await tester.pumpAndSettle();
+    expect(find.text('Budi'), findsOneWidget);
+    expect(find.text('Guest1'), findsNothing);
+
+    // Tutup lewat back (tanpa simpan) → animasi keluar jalan, controller
+    // dibuang oleh dispose() milik sheet (bukan pemanggil).
+    final nav = tester.state<NavigatorState>(find.byType(Navigator).last);
+    nav.pop();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('kecuali tanpa kandidat → empty state', (tester) async {

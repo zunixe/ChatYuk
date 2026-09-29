@@ -28,6 +28,35 @@
 - ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
 - ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
 
+## 2026-09-29 — 20260929140000_privacy_excludable_all_chatters.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-09-29.
+- **Isi:** `privacy_excludable_users` — kandidat picker privasi kini memuat
+  SEMUA yang pernah 1:1 chat (registered + anon), bukan hanya anon; limit
+  300→500. Sebelumnya user registered non-teman (mis. "Kartika") tak bisa
+  dipilih di "Hanya orang tertentu".
+- **Verifikasi live:** sebagai `tisubasah` → `privacy_excludable_users()`
+  memuat `Kartika` (is_friend=false); versi tercatat; pgTAP 15/15.
+
+## 2026-09-29 — 20260929130000_privacy_only_whitelist.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-09-29 (remote DB
+  `fohcucyyejdryryoxitm`).
+- **Isi:** ganti mode otomatis `circle` (Kenalan) → `only` (Hanya orang
+  tertentu) = daftar PUTIH `profile_privacy_exclusions`; constraint 6 nilai
+  + migrasi data `circle`→`only`; drop `_privacy_is_circle`; cabang `only` di
+  `privacy_can_view` (menyentuh gate) + cermin `get_online_users`;
+  **fix bug kritis:** `update_privacy_settings` allowlist dari 4 nilai lama
+  (`everyone/friends/except/nobody`) → 6 nilai + guard `only` wajib 1+ orang;
+  `privacy_excludable_users` kandidat diperluas.
+- **Apply:** Management API POST /v1/projects/{ref}/database/query (dry-run
+  begin/rollback dulu → `[]`), versi dicatat di `schema_migrations`.
+- **Verifikasi live:** constraint memuat `only`; `_privacy_is_circle` count=0;
+  `privacy_can_view`/`get_online_users`/`update_privacy_settings` memuat
+  `only`; versi tercatat; pgTAP `privacy_only_test.sql` 13/13.
+- **Rollback:** constraint `circle`, re-apply gate/online @20260929120000 +
+  `update_privacy_settings` @20260920130000.
+
 ## 2026-09-27 — 20260927010000_posts_image_dims_backfill.sql
 
 - **Status:** SUDAH TERAPPLIED via Management API pada 2026-09-27.
