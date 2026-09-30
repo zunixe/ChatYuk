@@ -71,6 +71,10 @@ mixin AuthServiceProfileMx on AuthBase {
       'status': 'online',
       'avatar': '',
       'is_registered': hasEmail,
+      // User SUDAH memilih username di layar register → gerbang isi
+      // username tidak perlu ditampilkan lagi (lihat GateScreen/profiles.
+      // nickname_set). Ini satu-satunya jalur yang menandai true.
+      'nickname_set': true,
       'login_at': now.toUtc().toIso8601String(),
       'created_at': now.toUtc().toIso8601String(),
       'last_seen': now.toUtc().toIso8601String(),

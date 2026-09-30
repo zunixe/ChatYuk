@@ -11,6 +11,10 @@ class UserModel {
   final String status;
   final String avatar;
   final bool isRegistered;
+  /// true bila user sudah pernah memilih username (atau user lama hasil
+  /// backfill). false → app wajib minta isi username dulu sebelum masuk main.
+  /// Default true supaya profil lama/cache lama tidak tiba-tiba ter-gate.
+  final bool nicknameSet;
   final DateTime loginAt;
   final DateTime createdAt;
   final DateTime lastSeen;
@@ -40,6 +44,7 @@ class UserModel {
     required this.status,
     required this.avatar,
     required this.isRegistered,
+    this.nicknameSet = true,
     required this.loginAt,
     required this.createdAt,
     required this.lastSeen,
@@ -69,6 +74,9 @@ class UserModel {
       status: map['status'] ?? (map['online'] == true ? 'online' : 'offline'),
       avatar: map['avatar'] ?? '',
       isRegistered: map['isRegistered'] == true,
+      // Default true bila kolom belum ada (DB lama / cache lama) supaya
+      // user yang sudah pakai tidak tiba-tiba diminta isi username.
+      nicknameSet: map['nicknameSet'] != false,
       loginAt: parseDate(map['loginAt']),
       createdAt: parseDate(map['createdAt']),
       lastSeen: parseDate(map['lastSeen']),
@@ -112,6 +120,7 @@ class UserModel {
       'status': status,
       'avatar': avatar,
       'isRegistered': isRegistered,
+      'nicknameSet': nicknameSet,
       'loginAt': loginAt.toUtc().toIso8601String(),
       'createdAt': createdAt.toUtc().toIso8601String(),
       'lastSeen': lastSeen.toUtc().toIso8601String(),
@@ -134,6 +143,7 @@ class UserModel {
     String? status,
     String? avatar,
     bool? isRegistered,
+    bool? nicknameSet,
     DateTime? lastSeen,
     List<String>? hashtags,
     int? points,
@@ -159,6 +169,7 @@ class UserModel {
       status: status ?? this.status,
       avatar: avatar ?? this.avatar,
       isRegistered: isRegistered ?? this.isRegistered,
+      nicknameSet: nicknameSet ?? this.nicknameSet,
       loginAt: loginAt,
       createdAt: createdAt,
       lastSeen: lastSeen ?? this.lastSeen,
