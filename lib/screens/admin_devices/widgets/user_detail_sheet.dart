@@ -400,6 +400,7 @@ class _UserDetailSheetState extends State<UserDetailSheet> {
     final lat = '${l['lat'] ?? ''}';
     final lon = '${l['lon'] ?? ''}';
     final source = '${l['source'] ?? ''}';
+    final mocked = l['mocked'] == true;
     final at = l['at'] != null
         ? formatRelativeTime(
             DateTime.tryParse('${l['at']}') ?? DateTime.now(),
@@ -410,12 +411,35 @@ class _UserDetailSheetState extends State<UserDetailSheet> {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Icon(Icons.place_outlined, size: 14, color: AppTheme.accent),
+          Icon(
+            mocked ? Icons.gpp_bad : Icons.place_outlined,
+            size: 14,
+            color: mocked ? AppTheme.danger : AppTheme.accent,
+          ),
           const SizedBox(width: 6),
           Text(
             '$lat, $lon',
-            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+            style: AppText.caption.copyWith(
+              color: mocked ? AppTheme.danger : AppTheme.textSecondary,
+            ),
           ),
+          if (mocked) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: AppTheme.danger.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                widget.s.mapFakeGps,
+                style: AppText.micro.copyWith(
+                  color: AppTheme.danger,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
           const Spacer(),
           if (source.isNotEmpty)
             Text(

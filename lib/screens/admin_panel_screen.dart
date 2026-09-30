@@ -9,6 +9,7 @@ import '../config/strings_admin.dart';
 import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/points_provider.dart';
 import '../utils.dart';
 import 'admin_chat_list_screen.dart';
 import 'admin_contact_tab.dart';
@@ -16,12 +17,14 @@ import 'admin_devices_tab.dart';
 import 'admin_deleted_tab.dart';
 import 'admin_dummy_tab.dart';
 import 'admin_global_setting_tab.dart';
+import 'admin_attribution_tab.dart';
 import 'admin_panel/widgets/usermap_card.dart';
 import 'admin_panel/widgets/storageusage_card.dart';
 import 'admin_panel/widgets/registrationschart_card.dart';
 import 'admin_panel/widgets/stat_detail_sheet.dart';
 import 'admin_panel/widgets/point_tab_cards.dart';
 import 'admin_panel/widgets/overview_cards.dart';
+import 'admin_panel/widgets/app_stats_card.dart';
 import '../providers/theme_provider.dart';
 import '../main.dart' show localNotifications;
 
@@ -50,42 +53,61 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   final _shareUrlCtrl = TextEditingController();
   bool _pointSettingsLoaded = false;
   bool _savingPointSettings = false;
+  // Toggle boolean (Switch) pengaturan YukCoin.
+  final Map<String, bool> _pointFlags = {};
 
-  // Urutan & label field pengaturan poin.
+  // Urutan & label field pengaturan YukCoin (selaras app_settings live).
+  // Semua nilai bertipe int kecuali yang ditandai (bool/url ditangani terpisah).
+  // Label bilingual via `s.` (AGENTS.md: tak boleh hardcode Indonesia).
   static const List<(String, String)> _pointFields = [
-    // ── Fitur berbayar (overhaul coin 2026-10) ──
+    // ── Call berbayar (per menit) ──
     ('call_audio_cost_per_min', 'Call audio — koin / menit'),
     ('call_video_cost_per_min', 'Call video — koin / menit'),
-    ('call_cut_pct', 'Bagian platform dari call (%) — sisanya ke penerima'),
+    ('call_cut_pct', 'Bagian platform dari call (%)'),
+    // ── Filter gender & orang sekitar (per hari) ──
     ('filter_gender_cost', 'Filter gender (koin / hari)'),
     ('nearby_cost', 'Orang sekitar (koin / hari)'),
-    ('photo_upload_reward', 'Reward upload foto (slot 2-6)'),
+    // ── YukCoin v2 (fitur koin generik) ──
+    ('cost_undo_message', 'Hapus pesan (undo)'),
+    ('cost_edit_message', 'Edit pesan'),
+    ('cost_extra_photo_slot', 'Slot foto tambahan'),
+    ('cost_ghost_mode_daily', 'Mode invisible (per hari)'),
+    // ── Foto berbayar ──
+    ('photo_upload_reward', 'Reward upload foto'),
     ('photo_unlock_once', 'Buka foto: lihat sekali'),
     ('photo_unlock_perm', 'Buka foto: permanen'),
     ('photo_unlock_owner_pct', '% ke pemilik foto'),
+    // ── Biaya chat ──
     ('cost_chat_text', 'Biaya kirim teks'),
     ('cost_chat_image', 'Biaya kirim foto'),
     ('cost_view_once', 'Biaya kirim view-once'),
-    ('room_create_paid', 'Buat room (paid)'),
-    ('room_create_pw_paid', 'Buat room +password (paid)'),
-    ('room_join_paid', 'Join room (paid)'),
-    ('room_extend_paid', 'Perpanjang room (paid)'),
+    // ── Room berbayar ──
+    ('room_create_paid', 'Buat room'),
+    ('room_create_pw_paid', 'Buat room +password'),
+    ('room_join_paid', 'Join room'),
+    ('room_extend_paid', 'Perpanjang room'),
+    ('bonus_price_multiplier', 'Pengali harga tier bonus'),
+    // ── Gift & subscribe ──
+    ('gift_cut_pct', 'Potongan platform gift (%)'),
     ('subscribe_cut_pct', 'Potongan subscribe (%)'),
     ('subscription_duration_days', 'Durasi subscribe (hari)'),
-    // ── Bonus lama (faucet dihapus; disimpan agar form tidak error) ──
-    ('bonus_registered', 'Bonus daftar email (nonaktif)'),
-    ('bonus_price_multiplier', 'Pengali harga tier bonus'),
-    ('room_reads_daily_limit', 'Limit baca room / hari'),
-    ('new_chats_daily_limit', 'Limit chat baru / hari'),
-    ('share_click_reward', 'Reward per klik link share (nonaktif)'),
-    ('share_click_cap_daily', 'Maks reward klik/hari (nonaktif)'),
+    // ── Welcome bonus user baru (anti-farming per install/IP) ──
+    ('welcome_anon_coins', 'Welcome bonus — anon'),
+    ('welcome_register_coins', 'Welcome bonus — register email'),
+    ('welcome_max_claims_per_ip_day', 'Maks klaim welcome / IP / hari'),
+  ];
+
+  // Field boolean (Switch) — ditangani terpisah dari field int.
+  // (reengage_enabled sengaja TIDAK di sini — bukan bagian halaman Poin.)
+  static const List<String> _pointBoolFields = [
+    'yukcoin_v2_enabled',
   ];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _tabCtrl = TabController(length: 8, vsync: this);
+    _tabCtrl = TabController(length: 9, vsync: this);
     _tabCtrl.addListener(_onTabChanged);
     final admin = context.read<AdminProvider>();
     Future.microtask(() => admin.fetchStats());
@@ -191,6 +213,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       for (final f in _pointFields) {
         _pointCtrls[f.$1] = TextEditingController(text: '${data[f.$1] ?? ''}');
       }
+      for (final key in _pointBoolFields) {
+        _pointFlags[key] = data[key] == true;
+      }
       _shareUrlCtrl.text = '${data['share_url'] ?? ''}';
       if (mounted) setState(() => _pointSettingsLoaded = true);
     } catch (e) {
@@ -206,7 +231,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         final v = int.tryParse(e.value.text.trim());
         if (v != null) payload[e.key] = v;
       }
+      for (final e in _pointFlags.entries) {
+        payload[e.key] = e.value;
+      }
       await context.read<AdminProvider>().updatePointSettings(payload);
+      // Sinkron ulang status YukCoin v2 ke provider poin supaya perubahan
+      // toggle (mis. membuka jalur topup) langsung terlihat tanpa restart.
+      if (mounted) {
+        unawaited(context.read<PointsProvider>().refreshYukcoinV2());
+        unawaited(context.read<PointsProvider>().refreshMeteredPricing());
+      }
       if (mounted) _toast(context.read<LocaleProvider>().s.adminPointSettingsSaved);
     } catch (e) {
       if (mounted) _toast(context.read<LocaleProvider>().s.adminSaveFailed('$e'));
@@ -309,6 +343,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             Tab(text: s.adminContactTab),
             Tab(text: s.adminDeviceTab),
             Tab(text: s.adminDeletedTab),
+            Tab(text: s.adminAttributionTab),
           ],
         ),
       ),
@@ -349,6 +384,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             const AdminDeletedTab()
           else
             const SizedBox.shrink(),
+          if (_visitedTabs.contains(8))
+            const AdminAttributionTab()
+          else
+            const SizedBox.shrink(),
         ],
       ),
     );
@@ -387,6 +426,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 _lastUpdatedHeader(s),
                 const SizedBox(height: 8),
                 _statsGrid(stats, s),
+                const SizedBox(height: 12),
+                AdminAppStatsCard(stats: stats, s: s),
                 const SizedBox(height: 12),
                 AdminStorageUsageCard(),
                 const SizedBox(height: 12),
@@ -446,6 +487,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                   shareCtrl: _shareUrlCtrl,
                   fields: _pointFields,
                   ctrls: _pointCtrls,
+                  flags: _pointFlags,
+                  onFlagChanged: (k, v) => setState(() => _pointFlags[k] = v),
                   saving: _savingPointSettings,
                   onSave: _savePointSettings,
                 ),

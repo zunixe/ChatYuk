@@ -22,6 +22,7 @@ part 'admin/admin_devices.dart';
 part 'admin/admin_deleted.dart';
 part 'admin/admin_chats.dart';
 part 'admin/admin_chat_org.dart';
+part 'admin/admin_attribution.dart';
 
 /// AdminProvider: state global panel admin (statistik, devices, deleted,
 /// chats, calls, contact, notifikasi) + passthrough RPC AdminService.
@@ -38,7 +39,8 @@ class AdminProvider extends AdminBase
         AdminDevicesMx,
         AdminDeletedMx,
         AdminChatsMx,
-        AdminChatOrgMx {
+        AdminChatOrgMx,
+        AdminAttributionMx {
   AdminProvider({super.service, super.sb}) {
     // Bridge sync organisasi monitor (pin/kategori) ke server — agar
     // kategori yang dibuat di 1 HP admin muncul di HP admin lain.

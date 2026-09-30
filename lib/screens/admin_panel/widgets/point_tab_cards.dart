@@ -17,13 +17,13 @@ class PointStatsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       (
-        s.statsAvg,
+        s.adminAvgBalance,
         '${stats?['avg_points'] ?? '-'}',
         Icons.trending_up,
         Colors.amber.shade700,
       ),
       (
-        s.statsTotal,
+        s.adminTotalBalance,
         '${stats?['total_points'] ?? '-'}',
         Icons.monetization_on_outlined,
         Colors.pink,
@@ -54,11 +54,17 @@ class PointStatsCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: 2),
-                Text(
-                  items[i].$1,
-                  style: AppText.micro.copyWith(
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w400,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    items[i].$1,
+                    style: AppText.micro.copyWith(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                   ),
                 ),
               ],
@@ -123,7 +129,9 @@ class TopEarnersCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  '${earners[i]['points'] ?? 0} pts',
+                  s.adminCoinAmount(
+                    (earners[i]['points'] as num?)?.toInt() ?? 0,
+                  ),
                   style: AppText.caption.copyWith(
                     color: AppTheme.primary,
                     fontWeight: FontWeight.w800,
@@ -227,6 +235,8 @@ class PointSettingsCard extends StatelessWidget {
   final TextEditingController shareCtrl;
   final List<(String, String)> fields;
   final Map<String, TextEditingController> ctrls;
+  final Map<String, bool> flags;
+  final void Function(String key, bool value) onFlagChanged;
   final bool saving;
   final Future<void> Function() onSave;
   const PointSettingsCard({
@@ -236,6 +246,8 @@ class PointSettingsCard extends StatelessWidget {
     required this.shareCtrl,
     required this.fields,
     required this.ctrls,
+    required this.flags,
+    required this.onFlagChanged,
     required this.saving,
     required this.onSave,
   });
@@ -272,10 +284,45 @@ class PointSettingsCard extends StatelessWidget {
         ),
         SizedBox(height: 4),
         Text(
-          'Klik link share user → redirect ke link ini. Ganti ke Google Play nanti.',
+          s.adminShareLinkHint,
           style: AppText.caption.copyWith(color: AppTheme.textSecondary),
         ),
         SizedBox(height: 10),
+        // Toggle booleans (Switch) — fitur on/off.
+        if (flags.containsKey('yukcoin_v2_enabled'))
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    s.adminYukcoinV2,
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+                Switch(
+                  value: flags['yukcoin_v2_enabled'] ?? false,
+                  onChanged: saving
+                      ? null
+                      : (v) => onFlagChanged('yukcoin_v2_enabled', v),
+                  activeColor: AppTheme.primary,
+                ),
+              ],
+            ),
+          ),
+        // Status ringkas YukCoin v2 (konteks di sebelah toggle-nya).
+        if (flags.containsKey('yukcoin_v2_enabled'))
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 6),
+            child: Text(
+              (flags['yukcoin_v2_enabled'] ?? false)
+                  ? s.adminYukcoinV2On
+                  : s.adminYukcoinV2Off,
+              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+            ),
+          ),
         for (final f in fields)
           Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
@@ -378,7 +425,10 @@ class MassBonusCard extends StatelessWidget {
               if (amount <= 0) return;
               final result = await admin.massBonus(amount);
               if (result != null) {
-                onToast('+$amount → ${result['affected']} users');
+                onToast(s.adminMassBonusDone(
+                  amount,
+                  (result['affected'] as num?)?.toInt() ?? 0,
+                ));
               }
             },
             icon: Icon(Icons.send_rounded, size: 16),
@@ -413,11 +463,11 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
   bool _loaded = false;
   bool _saving = false;
 
-  static const List<(String, String)> _items = [
-    ('call_billing', 'Call berbayar (per menit)'),
-    ('gender_filter_paid', 'Filter gender (harian)'),
-    ('nearby_paid', 'Orang sekitar (harian)'),
-    ('play_topup', 'Topup YukCoin (Play Billing)'),
+  List<(String, String)> get _items => [
+    ('call_billing', widget.s.adminFlagCallBilling),
+    ('gender_filter_paid', widget.s.adminFlagGenderFilter),
+    ('nearby_paid', widget.s.adminFlagNearby),
+    ('play_topup', widget.s.adminFlagPlayTopup),
   ];
 
   @override
@@ -446,10 +496,12 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
       await pp.refreshMeteredPricing();
       if (mounted) {
         setState(() => _flags = res);
-        widget.onToast(v ? 'Fitur dipublish ke semua user' : 'Fitur disembunyikan');
+        widget.onToast(
+          v ? widget.s.adminFeaturePublished : widget.s.adminFeatureHidden,
+        );
       }
     } catch (e) {
-      if (mounted) widget.onToast('Gagal: $e');
+      if (mounted) widget.onToast('${widget.s.errGeneric}$e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -457,10 +509,13 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
 
   @override
   Widget build(BuildContext context) {
-    return PanelCard('Publish Fitur', Icons.rocket_launch_outlined, Colors.teal, [
+    return PanelCard(
+      widget.s.adminPublishTitle,
+      Icons.rocket_launch_outlined,
+      Colors.teal,
+      [
       Text(
-        'Fitur baru tampil ke user HANYA setelah dipublish. Sebelum itu '
-        'hanya akun admin yang bisa memakai (test di build adminProd).',
+        widget.s.adminPublishDesc,
         style: AppText.caption.copyWith(color: AppTheme.textSecondary),
       ),
       const SizedBox(height: 8),
@@ -488,6 +543,7 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
               ],
             ),
           ),
-    ]);
+      ],
+    );
   }
 }

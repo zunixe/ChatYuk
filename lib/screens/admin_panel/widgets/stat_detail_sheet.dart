@@ -330,17 +330,25 @@ Future<void> showStatDetailSheet(
                         padding: const EdgeInsets.only(top: 2),
                         child: Row(
                           children: [
-                            const Icon(
-                              Icons.my_location,
+                            Icon(
+                              u['location_mocked'] == true
+                                  ? Icons.gpp_bad
+                                  : Icons.my_location,
                               size: 12,
-                              color: Colors.teal,
+                              color: u['location_mocked'] == true
+                                  ? AppTheme.danger
+                                  : Colors.teal,
                             ),
                             const SizedBox(width: 3),
                             Flexible(
                               child: Text(
-                                '${s.gpsLast}: $lat, $lon',
+                                u['location_mocked'] == true
+                                    ? '${s.gpsFake}: $lat, $lon'
+                                    : '${s.gpsLast}: $lat, $lon',
                                 style: AppText.caption.copyWith(
-                                  color: Colors.teal,
+                                  color: u['location_mocked'] == true
+                                      ? AppTheme.danger
+                                      : Colors.teal,
                                   fontWeight: FontWeight.w700,
                                 ),
                                 maxLines: 1,

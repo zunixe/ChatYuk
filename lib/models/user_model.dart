@@ -29,6 +29,12 @@ class UserModel {
   /// Nomor HP (Pengaturan › Akun). '' = belum diisi.
   final String phone;
 
+  /// Profil dibuat otomatis (trigger `handle_new_user_profile`) dan user
+  /// BELUM menyelesaikan isi nickname. Dipakai gerbang root supaya user
+  /// anon baru tetap diarahkan ke EntryScreen (bukan langsung masuk).
+  /// Default false (kompatibel dengan cache/DB lama tanpa kolom ini).
+  final bool needsOnboarding;
+
   UserModel({
     required this.uid,
     required this.nickname,
@@ -55,6 +61,7 @@ class UserModel {
     this.about = '',
     this.birthDate,
     this.phone = '',
+    this.needsOnboarding = false,
   });
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -86,6 +93,7 @@ class UserModel {
       about: map['about'] ?? '',
       birthDate: _parseBirthDate(map['birthDate'] ?? map['birth_date']),
       phone: map['phone'] ?? '',
+      needsOnboarding: map['needsOnboarding'] == true,
     );
   }
 
@@ -121,6 +129,7 @@ class UserModel {
       'about': about,
       'birthDate': birthDate?.toIso8601String(),
       'phone': phone,
+      'needsOnboarding': needsOnboarding,
     };
   }
 
@@ -147,6 +156,7 @@ class UserModel {
     String? about,
     DateTime? birthDate,
     String? phone,
+    bool? needsOnboarding,
   }) {
     return UserModel(
       uid: uid,
@@ -174,6 +184,7 @@ class UserModel {
       about: about ?? this.about,
       birthDate: birthDate ?? this.birthDate,
       phone: phone ?? this.phone,
+      needsOnboarding: needsOnboarding ?? this.needsOnboarding,
     );
   }
 

@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../services/geo_service.dart';
 export '../services/geo_service.dart' show GeoInfo, GeoService;
 import '../services/location_service.dart';
-export '../services/location_service.dart' show LocationService;
+export '../services/location_service.dart' show LocationService, DeviceFix;
 
 /// Provider lokasi + geolokasi (IP/GPS) — screen tidak import `services/`.
 class LocationProvider extends ChangeNotifier {
@@ -14,7 +14,7 @@ class LocationProvider extends ChangeNotifier {
         geo = geo ?? GeoService();
 
   Future<String?> updateMyLocation() => location.updateMyLocation();
-  Future<(double, double)?> tryDevicePositionForRegister() =>
+  Future<DeviceFix?> tryDevicePositionForRegister() =>
       location.tryDevicePositionForRegister();
   Future<(double, double)?> lastKnownPosition() => location.lastKnownPosition();
   Future<bool> requestPermission() => location.requestPermission();

@@ -258,12 +258,21 @@ mixin AuthServiceAuthMx on AuthBase {
 
   /// Cek apakah nickname sudah dipakai oleh user lain.
   /// Nickname terlarang dianggap "tidak tersedia" untuk non-admin.
+  ///
+  /// CEK CASE-INSENSITIVE: bandingkan dengan lower(trim(...)) karena
+  /// unique index DB `profiles_nickname_lower_unique` juga case-insensitive.
+  /// Tanpa ini user melihat "nickname sudah digunakan" secara salah untuk
+  /// varian beda kapitalisasi ("Budi" vs "budi").
   Future<bool> isNicknameAvailable(String nickname) async {
-    if (isBannedNickname(nickname) && !AdminGate.isRealAdmin(userEmail)) {
+    final nick = nickname.trim();
+    if (isBannedNickname(nick) && !AdminGate.isRealAdmin(userEmail)) {
       return false;
     }
     final id = uid;
-    var query = _sb.from('profiles').select('id').eq('nickname', nickname);
+    // PostgREST `.ilike` = ILIKE (case-insensitive) — pakai pola exact agar
+    // wildcard di nickname tidak diartikan sebagai pattern.
+    final pattern = escapeIlikePattern(nick);
+    var query = _sb.from('profiles').select('id').ilike('nickname', pattern);
     if (id != null) query = query.neq('id', id);
     final res = await query.maybeSingle();
     return res == null; // null = tidak ada yang pakai

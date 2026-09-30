@@ -75,6 +75,7 @@ abstract class AdminBase extends ChangeNotifier {
   static const kAdminDevicesKey = 'admin_devices';
   static const kAdminDeletedKey = 'admin_deleted';
   static const kAdminContactKey = 'admin_contact';
+  static const kAdminAttributionKey = 'admin_attribution';
   static String adminDummyKey(String myUid) => 'admin_dummy_$myUid';
   static String adminChatMsgKey(String chatId) => 'admin_chatmsg_$chatId';
 
@@ -85,5 +86,6 @@ abstract class AdminBase extends ChangeNotifier {
     kAdminDevicesKey,
     kAdminDeletedKey,
     kAdminContactKey,
+    kAdminAttributionKey,
   ];
 }

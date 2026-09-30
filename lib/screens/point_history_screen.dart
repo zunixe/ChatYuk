@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/app_flavor.dart';
@@ -33,7 +35,12 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
 
   Future<void> _load() async {
     try {
-      final rows = await _service.pointHistory(limit: 200);
+      // Segarkan status YukCoin v2 + feature flags supaya visibilitas tombol
+      // topup (yang ikut dikontrol toggle v2 / publish admin) selalu akurat.
+      final points = _service;
+      unawaited(points.refreshYukcoinV2());
+      unawaited(points.refreshMeteredPricing());
+      final rows = await points.pointHistory(limit: 200);
       if (!mounted) return;
       setState(() {
         _items = rows;
@@ -67,7 +74,9 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
                     child: YukcoinHeader(
                       s: s,
                       total: points.points,
-                      showTopup: AppFlavor.topupEnabled || AdminGate.enabled,
+                      showTopup: AppFlavor.topupEnabled ||
+                          AdminGate.enabled ||
+                          points.topupPathOpen,
                     ),
                   ),
                   // Cara dapat & cara pakai.

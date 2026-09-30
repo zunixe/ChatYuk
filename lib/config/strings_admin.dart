@@ -345,20 +345,75 @@ extension SAdminX on S {
   String get adminNoUsers => isId ? 'Tidak ada user' : 'No users';
 
   String get adminPointSettings =>
-      isId ? 'Pengaturan Nilai Poin' : 'Point Value Settings';
+      isId ? 'Pengaturan Tarif YukCoin' : 'YukCoin Pricing Settings';
+
+  String get adminShareLinkHint => isId
+      ? 'Klik link share user → redirect ke link ini (Google Play).'
+      : 'User share link click → redirects to this link (Google Play).';
+
+  String get adminYukcoinV2 => isId
+      ? 'YukCoin v2 (fitur koin generik)'
+      : 'YukCoin v2 (generic coin features)';
 
   String get adminSavePointSettings =>
       isId ? 'Simpan Pengaturan' : 'Save Settings';
 
   String get adminViewOnMaps => isId ? 'Lihat di Maps' : 'View on Maps';
 
-  String get adminTopEarners => isId ? 'Top Earners' : 'Top Earners';
+  String get adminTopEarners =>
+      isId ? 'Saldo YukCoin Tertinggi' : 'Top YukCoin Balances';
 
-  String get adminMassBonus => isId ? 'Bonus Massal' : 'Mass Bonus';
+  /// Ringkasan kartu statistik YukCoin (rata-rata & total saldo).
+  String get adminAvgBalance =>
+      isId ? 'Rata-rata YukCoin' : 'Avg YukCoin';
+  String get adminTotalBalance =>
+      isId ? 'Total YukCoin' : 'Total YukCoin';
+  String adminCoinAmount(int n) => isId ? '$n koin' : '$n coins';
+
+  String get adminMassBonus => isId ? 'Bonus Massal YukCoin' : 'Mass YukCoin Bonus';
 
   String get adminForceLogout => isId ? 'Force Logout' : 'Force Logout';
 
-  String get adminPointsSystem => isId ? 'Sistem Poin' : 'Points System';
+  // ── Toast hasil aksi panel (bilingual, bukan hardcode) ──
+  String adminForceLogoutDone(String uid8) =>
+      isId ? 'Force logout: $uid8…' : 'Force logout: $uid8…';
+
+  String adminMassBonusDone(int amount, int users) => isId
+      ? '+$amount → $users user'
+      : '+$amount → $users users';
+
+  String adminResetDone(int users) =>
+      isId ? '$users user di-reset' : '$users users reset';
+
+  String get adminFeaturePublished =>
+      isId ? 'Fitur dipublish ke semua user' : 'Feature published to all users';
+
+  String get adminFeatureHidden =>
+      isId ? 'Fitur disembunyikan' : 'Feature hidden';
+
+  // ── Label fitur yang bisa dipublish (Publish Fitur) ──
+  String get adminFlagCallBilling =>
+      isId ? 'Call berbayar (per menit)' : 'Paid calls (per minute)';
+  String get adminFlagGenderFilter =>
+      isId ? 'Filter gender (harian)' : 'Gender filter (daily)';
+  String get adminFlagNearby =>
+      isId ? 'Orang sekitar (harian)' : 'Nearby people (daily)';
+  String get adminFlagPlayTopup =>
+      isId ? 'Topup YukCoin (Play Billing)' : 'YukCoin topup (Play Billing)';
+
+  String get adminPublishTitle => isId ? 'Publish Fitur' : 'Publish Features';
+  String get adminPublishDesc => isId
+      ? 'Fitur baru tampil ke user HANYA setelah dipublish. Sebelum itu hanya akun admin yang bisa memakai (uji di build adminProd).'
+      : 'New features appear to users ONLY after publishing. Until then only admin accounts can use them (test in the adminProd build).';
+
+  String get adminYukcoinV2On => isId
+      ? 'Aktif · fitur undo / edit / invisible / slot foto tampil ke user'
+      : 'Active · undo / edit / invisible / photo-slot features shown to users';
+  String get adminYukcoinV2Off => isId
+      ? 'Nonaktif · fitur koin generik disembunyikan dari user'
+      : 'Inactive · generic coin features hidden from users';
+
+  String get adminPointsSystem => isId ? 'Sistem YukCoin' : 'YukCoin System';
 
   String get adminReports => isId ? 'Laporan' : 'Reports';
 
@@ -366,15 +421,17 @@ extension SAdminX on S {
 
   String get adminDangerZone => isId ? 'Zona Bahaya' : 'Danger Zone';
 
-  String get adminResetAllPoints =>
-      isId ? 'Reset semua user ke 50 poin' : 'Reset all users to 50 points';
+  String get adminResetAllPoints => isId
+      ? 'Reset saldo semua user ke 50 YukCoin'
+      : 'Reset all users to 50 YukCoin';
 
-  String get adminResetAllTitle =>
-      isId ? 'Reset Semua Poin?' : 'Reset All Points?';
+  String get adminResetAllTitle => isId
+      ? 'Reset Semua Saldo YukCoin?'
+      : 'Reset All YukCoin Balances?';
 
   String get adminResetAllBody => isId
-      ? 'Semua user akan memiliki 50 poin.'
-      : 'All users will have 50 points.';
+      ? 'Semua user akan memiliki 50 YukCoin.'
+      : 'All users will have 50 YukCoin.';
 
   String get adminWipeAll => isId ? 'Reset Semua' : 'Wipe All';
 
@@ -387,8 +444,10 @@ extension SAdminX on S {
   String get adminPaused => isId ? 'Dihentikan' : 'Paused';
 
   String get adminRealtimeDesc => isId
-      ? 'Realtime — efek langsung ke semua device'
-      : 'Realtime — immediate effect on all devices';
+      ? 'Saklar utama seluruh ekonomi koin (topup, gift, room, foto). '
+      'Fitur generik (undo/edit/invisible/slot) diatur di kartu tarif.'
+      : 'Master switch for the whole coin economy (topup, gift, room, photo). '
+      'Generic features (undo/edit/invisible/slots) are set in the pricing card.';
 
   String get adminCallTitle => isId ? 'Anon Bisa Call' : 'Anon Can Call';
   String get adminCallDesc => isId
@@ -398,8 +457,9 @@ extension SAdminX on S {
   String get adminRegisteredOnly =>
       isId ? 'Hanya user registered' : 'Registered users only';
 
-  String get adminStuckUsers =>
-      isId ? 'user terjebak (0 poin)' : 'users stuck (0 points)';
+  String get adminStuckUsers => isId
+      ? 'user terdaftar saldo 0 (7 hari)'
+      : 'registered users with 0 balance (7d)';
 
   String get adminOverview => isId ? 'Ringkasan' : 'Overview';
 
@@ -485,8 +545,50 @@ extension SAdminX on S {
   String get mapTapHint =>
       isId ? 'Ketuk pin untuk detail' : 'Tap a pin for details';
 
+  /// Tombol & judul mode layar penuh peta user.
+  String get mapFullscreen => isId ? 'Layar penuh' : 'Full screen';
+
+  String get mapFullscreenTitle =>
+      isId ? 'Peta User — Layar Penuh' : 'User Map — Full screen';
+
   /// Label titik GPS terakhir user (ringkasan → users).
   String get gpsLast => isId ? 'GPS terakhir' : 'Last GPS';
+
+  // ── Fake GPS (mock) — deteksi, bukan bukti pasti ──
+  String get mapFakeGps => isId ? 'Fake GPS' : 'Fake GPS';
+  String get gpsFake => isId ? 'GPS (Fake)' : 'GPS (Fake)';
+  String get mapFakeGpsDesc => isId
+      ? 'Lokasi terindikasi palsu (mock/kecepatan mustahil). Cek reason di detail.'
+      : 'Location flagged as fake (mock/impossible speed). See reason in detail.';
+  String get fakeReasonIsMocked =>
+      isId ? 'Provider lokasi dilaporkan mock' : 'Location provider reported mocked';
+  String get fakeReasonSpeed =>
+      isId ? 'Lompatan kecepatan mustahil' : 'Impossible speed jump';
+  String get fakeReasonAccuracy =>
+      isId ? 'Akurasi lokasi 0' : 'Location accuracy is 0';
+  String get fakeReasonDelta =>
+      isId ? 'Jarak GPS vs IP terlalu jauh' : 'GPS vs IP distance too far';
+
+  /// Terjemahkan reason koma-terpisah → label ringkas.
+  String fakeReasonLabel(String reason) {
+    if (reason.isEmpty) return mapFakeGps;
+    final labels = <String>[];
+    for (final r in reason.split(',')) {
+      final t = r.trim();
+      if (t == 'is_mocked') {
+        labels.add(fakeReasonIsMocked);
+      } else if (t == 'impossible_speed') {
+        labels.add(fakeReasonSpeed);
+      } else if (t == 'accuracy_zero') {
+        labels.add(fakeReasonAccuracy);
+      } else if (t == 'spoof_delta') {
+        labels.add(fakeReasonDelta);
+      } else if (t.isNotEmpty) {
+        labels.add(t);
+      }
+    }
+    return labels.join(' • ');
+  }
 
   // ── Penjelasan legenda peta (GPS / IP / IP online) ──
   String get mapLegendTitle =>
@@ -1095,6 +1197,66 @@ extension SAdminExcludeX on S {
   String get adminClearCacheConfirm => isId
       ? 'Hapus semua data admin yang tersimpan di perangkat ini?'
       : 'Delete all admin data saved on this device?';
+
+  // ── Tab Atribusi (sumber user: FB/IG/Google/TikTok/referral/organik) ──
+  String get adminAttributionTab => isId ? 'Atribusi' : 'Attribution';
+  String get adminAttrSubtitle => isId
+      ? 'Asal user: iklan atau kanal mana yang membawa mereka install.'
+      : 'Where users came from: which ad or channel drove their install.';
+  String get adminAttrTotalInstalls =>
+      isId ? 'Total install' : 'Total installs';
+  String get adminAttrUsers => isId ? 'user' : 'users';
+  String get adminAttrEmpty => isId
+      ? 'Belum ada data atribusi. Data terkumpul dari instal baru setelah fitur ini aktif.'
+      : 'No attribution data yet. Data is collected from new installs after this feature went live.';
+  String get adminAttrNoResult =>
+      isId ? 'Tidak ada user di kanal ini' : 'No users in this channel';
+  String get adminAttrLast7 => isId ? '7 hari' : '7 days';
+  String get adminAttrLast30 => isId ? '30 hari' : '30 days';
+  String get adminAttrAll => isId ? 'Semua' : 'All';
+  String get adminAttrCampaigns => isId ? 'Kampanye' : 'Campaigns';
+  String get adminAttrNoCampaign =>
+      isId ? 'Tanpa kampanye' : 'No campaign';
+  String get adminAttrUsersBySource =>
+      isId ? 'User per kanal' : 'Users by channel';
+  String get adminAttrLinkHint => isId
+      ? 'Menampilkan link/referrer yang membawa user install (dari Play Install Referrer).'
+      : 'Shows the link/referrer that brought the user to install (from Play Install Referrer).';
+
+  // ── Kartu Ringkasan: tipe akun (pie) + versi aplikasi ──
+  String get adminAppStatsTitle =>
+      isId ? 'Tipe Akun & Versi Aplikasi' : 'Account Type & App Version';
+  String get adminAppStatsUsers => isId ? 'user' : 'users';
+  String get adminAppStatsReg => isId ? 'Terdaftar (email)' : 'Registered (email)';
+  String get adminAppStatsAnon => isId ? 'Anonim (guest)' : 'Anonymous (guest)';
+  String get adminAppStatsDevices => isId ? 'device' : 'devices';
+  String get adminAppVersionAvg =>
+      isId ? 'Rata-rata versi aplikasi' : 'Average app version';
+  String get adminAppVersionEmpty =>
+      isId ? 'Belum ada data versi.' : 'No version data yet.';
+  String get adminAttrViewUsers => isId ? 'Lihat user' : 'View users';
+  String get adminAttrSourceLabel => isId ? 'Kanal' : 'Channel';
+  String get adminAttrCampaignLabel => isId ? 'Kampanye' : 'Campaign';
+  String get adminAttrWhen => isId ? 'Saat install' : 'Installed at';
+  // Nama kanal (untuk badge) — sengaja sama di kedua bahasa (nama brand).
+  String get adminAttrFacebook => 'Facebook';
+  String get adminAttrInstagram => 'Instagram';
+  String get adminAttrGoogle => 'Google';
+  String get adminAttrTiktok => 'TikTok';
+  String get adminAttrReferral => isId ? 'Referral (share)' : 'Referral (share)';
+  String get adminAttrOrganic => isId ? 'Organik' : 'Organic';
+  String get adminAttrUnknown => isId ? 'Tidak diketahui' : 'Unknown';
+
+  /// Label tampilan ramah untuk key sumber dari server.
+  String adminAttrSourceName(String key) => switch (key) {
+    'facebook' => adminAttrFacebook,
+    'instagram' => adminAttrInstagram,
+    'google' => adminAttrGoogle,
+    'tiktok' => adminAttrTiktok,
+    'referral' => adminAttrReferral,
+    'organic' => adminAttrOrganic,
+    _ => adminAttrUnknown,
+  };
 
   /// Judul pesan ramah untuk kategori kegagalan admin. Detail exception
   /// mentah tidak pernah ditampilkan (lihat lib/core/admin_err.dart).

@@ -2,8 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:provider/provider.dart';
+import 'package:latlong2/latlong.dart';import 'package:provider/provider.dart';
 import '../../../providers/location_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -52,6 +51,8 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
     'lat',
     'lon',
     'loc_source',
+    'location_mocked',
+    'mock_reason',
   ];
 
   @override
@@ -373,19 +374,39 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(Icons.my_location, size: 14, color: Colors.teal),
+                  Icon(
+                    u['location_mocked'] == true
+                        ? Icons.gpp_bad
+                        : Icons.my_location,
+                    size: 14,
+                    color: u['location_mocked'] == true
+                        ? AppTheme.danger
+                        : Colors.teal,
+                  ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      '${s.gpsLast}: $lat, $lon',
+                      u['location_mocked'] == true
+                          ? '${s.gpsFake}: $lat, $lon'
+                          : '${s.gpsLast}: $lat, $lon',
                       style: AppText.caption.copyWith(
-                        color: Colors.teal,
+                        color: u['location_mocked'] == true
+                            ? AppTheme.danger
+                            : Colors.teal,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ],
               ),
+              if (u['location_mocked'] == true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, left: 18),
+                  child: Text(
+                    s.fakeReasonLabel('${u['mock_reason'] ?? ''}'),
+                    style: AppText.micro.copyWith(color: AppTheme.danger),
+                  ),
+                ),
             ],
             const SizedBox(height: 14),
             SizedBox(
@@ -411,7 +432,12 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
     if (lat == null || lon == null) return null;
     final isGps = u['loc_source'] == 'gps';
     final isResolved = u['resolved_ip'] == true;
-    final color = isGps
+    final isFake = u['location_mocked'] == true;
+    // Fake GPS = merah (prioritas), lalu GPS (hijau) → IP online (ungu) →
+    // IP login (oranye).
+    final color = isFake
+        ? AppTheme.danger
+        : isGps
         ? Colors.green
         : isResolved
         ? Colors.deepPurple
@@ -436,13 +462,19 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
             ],
           ),
           child: Center(
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: AppText.caption.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+            child: isFake
+                ? const Icon(
+                    Icons.gpp_bad,
+                    size: 14,
+                    color: Colors.white,
+                  )
+                : Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: AppText.caption.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
           ),
         ),
       ),
@@ -456,15 +488,24 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
         .where((u) => (u['lat'] as num?) != null && (u['lon'] as num?) != null)
         .length;
     // Hitungan legenda HARUS sama persis dengan logika warna marker (_marker):
-    // GPS (hijau) → IP ter-resolve admin (ungu) → IP login (oranye).
-    // Kategori eksklusif (else-if) supaya tidak ada user terhitung dobel →
-    // dulu `ipLoginCount = withPos - gps - resolved` bisa NEGATIF kalau ada
-    // user GPS yang juga ter-resolve. Sekarang dihitung langsung per kategori.
+    // Fake (merah) → GPS (hijau) → IP ter-resolve admin (ungu) → IP login
+    // (oranye). Kategori eksklusif (else-if) supaya tidak ada user terhitung
+    // dobel — dulu `ipLoginCount = withPos - gps - resolved` bisa NEGATIF
+    // kalau ada user GPS yang juga ter-resolve.
+    final fakeCount = _users
+        .where(
+          (u) =>
+              (u['lat'] as num?) != null &&
+              (u['lon'] as num?) != null &&
+              u['location_mocked'] == true,
+        )
+        .length;
     final gpsCount = _users
         .where(
           (u) =>
               (u['lat'] as num?) != null &&
               (u['lon'] as num?) != null &&
+              u['location_mocked'] != true &&
               u['loc_source'] == 'gps',
         )
         .length;
@@ -473,6 +514,7 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
           (u) =>
               (u['lat'] as num?) != null &&
               (u['lon'] as num?) != null &&
+              u['location_mocked'] != true &&
               u['loc_source'] != 'gps' &&
               u['resolved_ip'] == true,
         )
@@ -482,6 +524,7 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
           (u) =>
               (u['lat'] as num?) != null &&
               (u['lon'] as num?) != null &&
+              u['location_mocked'] != true &&
               u['loc_source'] != 'gps' &&
               u['resolved_ip'] != true,
         )
@@ -591,6 +634,18 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
                 ),
               IconButton(
                 icon: Icon(
+                  Icons.fullscreen,
+                  size: 20,
+                  color: AppTheme.primary,
+                ),
+                tooltip: s.mapFullscreen,
+                visualDensity: VisualDensity.compact,
+                onPressed: _loading || _error != null
+                    ? null
+                    : () => _openFullscreen(s),
+              ),
+              IconButton(
+                icon: Icon(
                   Icons.refresh_rounded,
                   size: 18,
                   color: AppTheme.primary,
@@ -605,6 +660,8 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
             spacing: 6,
             runSpacing: 6,
             children: [
+              if (fakeCount > 0)
+                legendChip(AppTheme.danger, s.mapFakeGps, fakeCount),
               legendChip(Colors.green, s.mapSourceGps, gpsCount),
               legendChip(Colors.orange, s.mapSourceIp, ipLoginCount),
               legendChip(Colors.deepPurple, s.mapSourceResolved, resolvedCount),
@@ -628,92 +685,122 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
                         ),
                       ),
                     )
-                  : Stack(
-                      children: [
-                        FlutterMap(
-                          mapController: _mapCtrl,
-                          options: MapOptions(
-                            initialCenter: LatLng(-2.5489, 118.0149),
-                            initialZoom: 4,
-                            minZoom: 2,
-                            interactionOptions: InteractionOptions(
-                              flags:
-                                  InteractiveFlag.all & ~InteractiveFlag.rotate,
-                            ),
-                          ),
-                          children: [
-                            TileLayer(
-                              urlTemplate:
-                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                              userAgentPackageName: 'com.chatyuk.chatyuk',
-                            ),
-                            MarkerLayer(
-                              markers: _users
-                                  .take(_maxMarkers)
-                                  .map((u) => _marker(u, s))
-                                  .whereType<Marker>()
-                                  .toList(),
-                            ),
-                          ],
-                        ),
-                        if (noLoc > 0)
-                          Positioned(
-                            left: 8,
-                            bottom: 8,
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.bgCard.withValues(alpha: 0.92),
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.12),
-                                    blurRadius: 6,
-                                  ),
-                                ],
-                              ),
-                              child: Text(
-                                _resolving
-                                    ? s.mapResolving
-                                    : '$noLoc ${s.mapNoLocation}',
-                                style: AppText.micro.copyWith(
-                                  color: AppTheme.textSecondary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (withPos == 0 && !_resolving)
-                          Positioned(
-                            left: 8,
-                            top: 8,
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.bgCard.withValues(alpha: 0.92),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                s.mapTapHint,
-                                style: AppText.micro.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                  : _buildMapLayer(_mapCtrl, noLoc, withPos, s),
             ),
           ),
           SizedBox(height: 10),
           _LegendExplanations(s: s),
         ],
+      ),
+    );
+  }
+
+  /// Satu sumber render peta — dipakai inline (kartu) dan mode layar penuh.
+  /// Menyertakan marker, badge "tanpa lokasi", dan hint ketuk-pin. Tiap
+  /// pemanggil WAJIB memberi [ctrl] sendiri (MapController tak boleh dipakai
+  /// dua FlutterMap sekaligus).
+  Widget _buildMapLayer(
+    MapController ctrl,
+    int noLoc,
+    int withPos,
+    S s,
+  ) {
+    return Stack(
+      children: [
+        FlutterMap(
+          mapController: ctrl,
+          options: MapOptions(
+            initialCenter: LatLng(-2.5489, 118.0149),
+            initialZoom: 4,
+            minZoom: 2,
+            interactionOptions: InteractionOptions(
+              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+            ),
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.chatyuk.chatyuk',
+            ),
+            MarkerLayer(
+              markers: _users
+                  .take(_maxMarkers)
+                  .map((u) => _marker(u, s))
+                  .whereType<Marker>()
+                  .toList(),
+            ),
+          ],
+        ),
+        if (noLoc > 0)
+          Positioned(
+            left: 8,
+            bottom: 8,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.bgCard.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+              child: Text(
+                _resolving ? s.mapResolving : '$noLoc ${s.mapNoLocation}',
+                style: AppText.micro.copyWith(
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        if (withPos == 0 && !_resolving)
+          Positioned(
+            left: 8,
+            top: 8,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.bgCard.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                s.mapTapHint,
+                style: AppText.micro.copyWith(color: AppTheme.textSecondary),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Buka peta layar penuh di route baru. Memakai MapController terpisah,
+  /// di-center pada posisi peta inline saat tombol ditekan (kontinuitas).
+  void _openFullscreen(S s) {
+    MapCamera? cam;
+    try {
+      cam = _mapCtrl.camera;
+    } catch (_) {
+      // Kamera belum siap (peta belum di-render) — biarkan default.
+    }
+    final withPos = _users
+        .where((u) => (u['lat'] as num?) != null && (u['lon'] as num?) != null)
+        .length;
+    final noLoc = _users.length - withPos;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _FullscreenMapPage(
+          users: _users,
+          resolving: _resolving,
+          noLoc: noLoc,
+          withPos: withPos,
+          initialCenter: cam?.center,
+          initialZoom: cam?.zoom,
+          markerBuilder: _marker,
+          detailBuilder: _showDetail,
+        ),
       ),
     );
   }
@@ -785,6 +872,7 @@ class _LegendExplanations extends StatelessWidget {
         row(Colors.green, s.mapSourceGps, s.mapLegendGpsDesc),
         row(Colors.orange, s.mapSourceIp, s.mapLegendIpDesc),
         row(Colors.deepPurple, s.mapSourceResolved, s.mapLegendResolvedDesc),
+        row(AppTheme.danger, s.mapFakeGps, s.mapFakeGpsDesc),
         Padding(
           padding: EdgeInsets.only(top: 8),
           child: Text(
@@ -796,6 +884,119 @@ class _LegendExplanations extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Halaman peta user layar penuh (route baru). Memakai MapController SENDIRI
+/// (controller tak boleh dipakai dua FlutterMap sekaligus) — di-center pada
+/// posisi peta inline saat dibuka supaya transisi terasa mulus. Data user
+/// dioper sebagai snapshot; sumber tetap kartu (realtime berjalan di sana).
+class _FullscreenMapPage extends StatefulWidget {
+  const _FullscreenMapPage({
+    required this.users,
+    required this.resolving,
+    required this.noLoc,
+    required this.withPos,
+    required this.markerBuilder,
+    required this.detailBuilder,
+    this.initialCenter,
+    this.initialZoom,
+  });
+
+  final List<Map<String, dynamic>> users;
+  final bool resolving;
+  final int noLoc;
+  final int withPos;
+  final LatLng? initialCenter;
+  final double? initialZoom;
+  final Marker? Function(Map<String, dynamic>, S) markerBuilder;
+  final void Function(Map<String, dynamic>, Color, S) detailBuilder;
+
+  @override
+  State<_FullscreenMapPage> createState() => _FullscreenMapPageState();
+}
+
+class _FullscreenMapPageState extends State<_FullscreenMapPage> {
+  final MapController _fsCtrl = MapController();
+  // Batas marker sama dengan kartu — cegah beban render berlebih.
+  static const _maxMarkers = 300;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final markers = widget.users
+        .take(_maxMarkers)
+        .map((u) => widget.markerBuilder(u, s))
+        .whereType<Marker>()
+        .toList();
+    return Scaffold(
+      appBar: AppBar(title: Text(s.mapFullscreenTitle)),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _fsCtrl,
+            options: MapOptions(
+              initialCenter: widget.initialCenter ?? LatLng(-2.5489, 118.0149),
+              initialZoom: widget.initialZoom ?? 4,
+              minZoom: 2,
+              interactionOptions: InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.chatyuk.chatyuk',
+              ),
+              MarkerLayer(markers: markers),
+            ],
+          ),
+          if (widget.noLoc > 0)
+            Positioned(
+              left: 12,
+              bottom: 12,
+              child: _MapBadge(
+                text: widget.resolving
+                    ? s.mapResolving
+                    : '${widget.noLoc} ${s.mapNoLocation}',
+              ),
+            ),
+          if (widget.withPos == 0 && !widget.resolving)
+            Positioned(
+              left: 12,
+              top: 12,
+              child: _MapBadge(text: s.mapTapHint),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Badge kecil di atas peta (tanpa lokasi / hint). Dipakai mode layar penuh.
+class _MapBadge extends StatelessWidget {
+  const _MapBadge({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 6),
+        ],
+      ),
+      child: Text(
+        text,
+        style: AppText.micro.copyWith(
+          color: AppTheme.textSecondary,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

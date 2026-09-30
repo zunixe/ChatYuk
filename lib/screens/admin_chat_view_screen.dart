@@ -13,7 +13,7 @@ import '../core/nav_guard.dart';
 import '../models/active_call_model.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
-import '../widgets/profile_avatar.dart';
+import '../widgets/gender_avatar.dart';
 import '../providers/storage_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/cache/photo_cache.dart';
@@ -101,12 +101,17 @@ class AdminChatViewScreen extends StatefulWidget {
 
   /// uid → nama peserta (untuk avatar 2 sisi di header monitor).
   final Map<String, String> participantNames;
+
+  /// uid → gender peserta (untuk ring warna avatar tanpa foto di header,
+  /// sama seperti daftar "Pengguna Online" & kartu monitor).
+  final Map<String, String> participantGenders;
   const AdminChatViewScreen({
     super.key,
     required this.chatId,
     required this.chatLabel,
     this.participantOrder = const [],
     this.participantNames = const {},
+    this.participantGenders = const {},
   });
 
   @override
@@ -871,6 +876,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     if (uids.isEmpty) return const SizedBox.shrink();
     const size = 34.0;
     const overlap = 12.0;
+
     Widget avatarOf(String uid, int i) {
       final name = widget.participantNames[uid] ?? '';
       return Container(
@@ -884,14 +890,13 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         ),
         child: GestureDetector(
           onTap: () => _openProfile(uid, name),
-          child: ProfileAvatar(
+          // Gaya SAMA PERSIS dengan daftar "Pengguna Online": lingkaran latar
+          // + ring warna gender untuk yang tanpa foto.
+          child: GenderAvatar(
             uid: uid,
             name: name,
+            gender: widget.participantGenders[uid] ?? '',
             size: size,
-            borderRadius: 0,
-            borderColor: i == 0 ? AppTheme.male : AppTheme.accent,
-            bgColor: AppTheme.avatarBg,
-            textColor: AppTheme.textPrimary,
           ),
         ),
       );

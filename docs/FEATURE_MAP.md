@@ -295,6 +295,27 @@ hanya `service_role` (user tak bisa mendebit orang lain); saldo = cache ledger
 **Invariant:** admin list tidak bocor ke build rilis (tree-shake lewat
 `admin_gate.dart`); fitur admin 24/7 (`ai_always_online`) tetap utuh.
 
+### 8.1 Tab Atribusi (sumber user / kanal install)
+
+| Lapis | Lokasi |
+|---|---|
+| UI | `lib/screens/admin_attribution_tab.dart` (tab ke-9 di `admin_panel_screen.dart`) |
+| Provider | `lib/providers/admin/admin_attribution.dart` (mixin `AdminAttributionMx`) |
+| Instrumentasi | `lib/services/attribution_service.dart` (Play Install Referrer + Firebase Analytics) |
+| Jalur simpan | `device_info_service.dart` → RPC `upsert_device` (param `p_attr_*`) → kolom `user_devices.attribution_*` |
+| SQL | `admin_attribution_summary(p_days)`, `admin_attribution_users_page(p_source,limit,offset)`; migrasi `20261004000000_attribution.sql` |
+| Test | `test/attribution_test.dart` (normalisasi sumber & parse referrer) |
+
+**Cara kerja:** link iklan (FB/IG/TikTok) ditempeli `?referrer=utm_source%3D…`
+di Play Store; Google Ads otomatis `gclid`. Saat first-launch, app baca
+Install Referrer → normalisasi ke `facebook|instagram|google|tiktok|referral|
+organic|unknown` → simpan via `upsert_device`. Server **TULIS SEKALI**
+(`coalesce(existing, excluded)`) supaya resume/re-login tidak menimpa kanal
+asli. Data **hanya** terkumpul untuk install baru (referrer tidak retroaktif).
+iOS/web → `unknown` (Install Referrer Android-only).
+
+---
+
 **Kebijakan EXCLUDE (sejak 2026-09-27):** admin melihat **SEMUA** user di
 ringkasan/peta — user ter-exclude (device/uid) TETAP tampil dengan flag
 `'excluded': true` (UI kasih badge "EXCLUDED"), TIDAK lagi disembunyikan total.

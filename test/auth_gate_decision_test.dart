@@ -17,6 +17,7 @@ void main() {
     bool hasProfile = true,
     bool needsProfile = false,
     bool banned = false,
+    bool needsOnboarding = false,
   }) =>
       decideGateScreen(
         loading: loading,
@@ -28,6 +29,7 @@ void main() {
         hasProfile: hasProfile,
         needsProfile: needsProfile,
         banned: banned,
+        needsOnboarding: needsOnboarding,
       );
 
   test('signingOut menang atas loading → entry (tanpa kedip splash)', () {
@@ -67,6 +69,47 @@ void main() {
   test('anon tanpa profil → entry', () {
     expect(
       decide(isAnonymous: true, hasProfile: false),
+      GateScreen.entry,
+    );
+  });
+
+  // ── needs_onboarding (regresi "login anon otomatis", 2026-10-04) ──
+  // Trigger mencegah hantu membuat profil anon otomatis. Tanpa flag ini,
+  // gate melihat hasProfile=true → anon langsung masuk app. Flag memaksa
+  // anon tsb tetap ke EntryScreen sampai ia memilih nickname.
+  test('anon + profil ada + needsOnboarding → entry (bukan langsung main)', () {
+    expect(
+      decide(isAnonymous: true, hasProfile: true, needsOnboarding: true),
+      GateScreen.entry,
+    );
+  });
+
+  test('anon + profil ada + tidak onboarding → main', () {
+    expect(
+      decide(isAnonymous: true, hasProfile: true, needsOnboarding: false),
+      GateScreen.main,
+    );
+  });
+
+  test('dummy (admin jadi anon) + onboarding → tetap main (bypass)', () {
+    // needsProfile sudah mengecualikan dummy; needsOnboarding TIDAK boleh
+    // memaksa dummy ke entry.
+    expect(
+      decide(
+        isAnonymous: true,
+        dummySessionActive: true,
+        hasProfile: true,
+        needsOnboarding: true,
+      ),
+      GateScreen.main,
+    );
+  });
+
+  test('banned menang atas onboarding? tidak — onboarding (anon) dicek dulu', () {
+    // Urutan: hasError/loading/signOut → needsProfile → anon(onboarding)
+    // → banned. Anon dengan onboarding=true → entry (belum pilih nama).
+    expect(
+      decide(isAnonymous: true, hasProfile: true, needsOnboarding: true, banned: true),
       GateScreen.entry,
     );
   });

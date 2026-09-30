@@ -578,4 +578,50 @@ void main() {
       expect(coins, 0);
     });
   });
+
+  group('visibilitas topup (topupPathOpen)', () {
+    test('default: tanpa flag → tertutup', () {
+      expect(provider.playTopupPublished, isFalse);
+      expect(provider.yukcoinV2Active, isFalse);
+      expect(provider.topupPathOpen, isFalse);
+    });
+
+    test('publish play_topup → terbuka', () async {
+      when(() => service.meteredPricing())
+          .thenAnswer((_) async => <String, dynamic>{});
+      when(() => service.featureFlags()).thenAnswer(
+        (_) async => {
+          'play_topup': {'published': true},
+        },
+      );
+      await provider.refreshMeteredPricing();
+      expect(provider.playTopupPublished, isTrue);
+      expect(provider.topupPathOpen, isTrue);
+    });
+
+    test('toggle YukCoin v2 aktif → topup terbuka', () async {
+      when(() => service.yukcoinV2Status()).thenAnswer(
+        (_) async => <String, dynamic>{'active': true},
+      );
+      await provider.refreshYukcoinV2();
+      expect(provider.yukcoinV2Active, isTrue);
+      expect(provider.topupPathOpen, isTrue);
+    });
+
+    test('toggle YukCoin v2 non-aktif & tanpa publish → tertutup', () async {
+      when(() => service.yukcoinV2Status()).thenAnswer(
+        (_) async => <String, dynamic>{'active': false},
+      );
+      await provider.refreshYukcoinV2();
+      expect(provider.yukcoinV2Active, isFalse);
+      expect(provider.topupPathOpen, isFalse);
+    });
+
+    test('yukcoinV2Status error → tetap tertutup (aman)', () async {
+      when(() => service.yukcoinV2Status()).thenThrow(Exception('offline'));
+      await provider.refreshYukcoinV2();
+      expect(provider.yukcoinV2Active, isFalse);
+      expect(provider.topupPathOpen, isFalse);
+    });
+  });
 }

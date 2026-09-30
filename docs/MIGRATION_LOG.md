@@ -1,4 +1,28 @@
 ﻿
+## 2026-10-04 — Gate onboarding (`needs_onboarding`) + fix test tertinggal
+
+**Alasan:** gate "wajib isi username" dulu (`nicknameSet` / migrasi
+`20261002070000/080000`) di-**revert** di commit `5eb347e`. Pendekatan baru
+memakai kolom **`needs_onboarding`** (dibuat trigger `handle_new_user_profile`).
+
+- **Migrasi** `20261004060000_needs_onboarding_flag.sql` (kolom
+  `needs_onboarding boolean not null default true`) + `20261004070000_reapply_trigger_with_onboarding.sql`.
+- **App:** `UserModel.needsOnboarding` (fromMap/toMap/copyWith), gerbang root
+  `app.dart`, `auth_provider.dart`, `auth_service_profile.dart`.
+- **Fix:** `test/models_test.dart` masih menguji `nicknameSet` (API yang sudah
+  di-revert) → **7 `flutter analyze` error**. Diganti 6 test `needsOnboarding`
+  (key absen → false, true/false eksplisit, non-bool → false, toMap, copyWith).
+  `flutter analyze` kembali 0 error/0 warning.
+
+### Rename timestamp (AGENTS.md §2)
+
+`20261001000000_admin_chats_participant_genders.sql` **bentrok** dengan
+`20261001000000_coin_engine_config.sql` (dua file, prefix sama → apply tidak
+deterministik, `check_migrations` menolak). Di-rename →
+**`20261001005000_admin_chats_participant_genders.sql`** (slot bebas, urut
+setelah coin_engine_config). Fungsi `admin_list_chats_page` sudah live di prod
+(participant_genders terpasang).
+
 ## 2026-10-04 — Noise filter `ai_reply_log`
 
 **Alasan (audit):** tabel `ai_reply_log` (retensi 7 hari) mentok ~11.4k baris /

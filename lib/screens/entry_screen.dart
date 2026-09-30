@@ -55,7 +55,7 @@ class _EntryScreenState extends State<EntryScreen> {
     try {
       final gps = await context.read<LocationProvider>().tryDevicePositionForRegister();
       if (gps != null) {
-        info = await _geo.detectByCoordinates(gps.$1, gps.$2);
+        info = await _geo.detectByCoordinates(gps.lat, gps.lon);
       }
     } catch (_) {}
     // 2. Fallback: IP geolocation.
@@ -231,8 +231,21 @@ class _EntryScreenState extends State<EntryScreen> {
       // Retry lapis ganda dihapus — andalkan retry internal provider
       // (registerProfile sudah refresh session anon stale lalu retry sekali).
       final msg = e.toString().toLowerCase();
+      // Error IZIN/SERVER (42501 permission denied, 403) BUKAN "nickname
+      // terpakai". Jangan tawarkan claim / tampilkan "nickname sudah
+      // digunakan" — itu menyesatkan (insiden 2026-10-04: 42501 dari
+      // ON CONFLICT tampil sebagai pesan nickname taken).
+      final isPermError =
+          msg.contains('42501') ||
+          msg.contains('permission denied') ||
+          msg.contains('403');
+      if (isPermError) {
+        _failRegistration(s, e);
+        return;
+      }
       // Nickname taken → coba ambil alih (akun stale >7 hari), sekali saja.
       if (msg.contains('duplicate') ||
+          msg.contains('23505') ||
           msg.contains('taken') ||
           msg.contains('nickname')) {
         var claimed = false;
@@ -264,10 +277,17 @@ class _EntryScreenState extends State<EntryScreen> {
     }
     dlog('[ENTRY] registerProfile returned OK');
     // Catat identitas perangkat + install ID untuk pelacakan admin.
-    unawaited(
-      context.read<DeviceInfoProvider>().syncToServer(ipAddress: _ipAddress),
-    );
-    if (mounted) setState(() => _loading = false);
+    // Ambil provider HANYA bila masih mounted — setelah `registerProfile`
+    // (async) widget ini bisa sudah unmounted (gate root pindah ke MainNav),
+    // lalu `context` jadi defunct (crash "State no longer has a context").
+    if (mounted) {
+      unawaited(
+        context
+            .read<DeviceInfoProvider>()
+            .syncToServer(ipAddress: _ipAddress),
+      );
+      setState(() => _loading = false);
+    }
     dlog('[ENTRY] _enter done, loading=false');
   }
 

@@ -238,4 +238,62 @@ void main() {
       expect(back.isMutedFor('u2'), isTrue);
     });
   });
+
+  group('UserModel.needsOnboarding (gerbang isi username)', () {
+    // Profil yang dibuat trigger `handle_new_user_profile` ditandai
+    // `needs_onboarding = true` → user anon baru diarahkan ke EntryScreen
+    // sampai selesai memilih username. Key absen (cache/DB lama) harus
+    // default false supaya user lama tidak ikut ter-gate.
+    test('key absen -> false (kompatibel cache/DB lama)', () {
+      final u = UserModel.fromMap('u1', {'nickname': 'AnonABC123'});
+      expect(
+        u.needsOnboarding,
+        isFalse,
+        reason: 'tanpa key, user lama tidak boleh ter-gate',
+      );
+    });
+
+    test('nilai true eksplisit -> true (user anon belum selesai onboarding)', () {
+      final u = UserModel.fromMap('u1', {
+        'nickname': 'AnonABC123',
+        'needsOnboarding': true,
+      });
+      expect(u.needsOnboarding, isTrue);
+    });
+
+    test('nilai false eksplisit -> false (sudah pilih username)', () {
+      final u = UserModel.fromMap('u1', {
+        'nickname': 'Budi',
+        'needsOnboarding': false,
+      });
+      expect(u.needsOnboarding, isFalse);
+    });
+
+    test('nilai non-bool (mis. null) -> false (fail-safe ke user lama)', () {
+      final u = UserModel.fromMap('u1', {
+        'nickname': 'AnonABC123',
+        'needsOnboarding': null,
+      });
+      expect(u.needsOnboarding, isFalse);
+    });
+
+    test('toMap menyertakan needsOnboarding (agar cache berikutnya benar)', () {
+      final u = UserModel.fromMap('u1', {
+        'nickname': 'AnonABC123',
+        'needsOnboarding': true,
+      });
+      expect(u.toMap()['needsOnboarding'], isTrue);
+      final u2 = UserModel.fromMap('u1', {'nickname': 'Budi'});
+      expect(u2.toMap()['needsOnboarding'], isFalse);
+    });
+
+    test('copyWith bisa mengubah needsOnboarding', () {
+      final u = UserModel.fromMap('u1', {
+        'nickname': 'AnonABC123',
+        'needsOnboarding': true,
+      });
+      expect(u.needsOnboarding, isTrue);
+      expect(u.copyWith(needsOnboarding: false).needsOnboarding, isFalse);
+    });
+  });
 }

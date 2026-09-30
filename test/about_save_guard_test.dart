@@ -12,6 +12,7 @@ UserModel _user({
   String status = 'online',
   String avatar = '',
   int points = 50,
+  bool needsOnboarding = false,
 }) => UserModel(
   uid: 'u1',
   nickname: nickname,
@@ -28,6 +29,7 @@ UserModel _user({
   lastSeen: DateTime.utc(2026, 9, 25),
   about: about,
   points: points,
+  needsOnboarding: needsOnboarding,
 );
 
 void main() {
@@ -78,6 +80,19 @@ void main() {
         presentKeys: {'id', 'points'},
       );
       expect(out.points, 60);
+    });
+
+    // Regresi 2026-10-01: payload realtime TIDAK memuat needs_onboarding
+    // (kolom non-publik) → event default false. Tanpa mempertahankan nilai
+    // lokal, flag berubah true→false saat status/points berubah → user anon
+    // baru langsung lolos ke MainNav ("login anon otomatis").
+    test('needsOnboarding TIDAK hilang saat event realtime lain', () {
+      final out = AuthProvider.mergeProfileEvent(
+        current: _user(needsOnboarding: true),
+        event: _user(needsOnboarding: false), // payload tanpa kolom ini
+        presentKeys: {'id', 'status', 'points'},
+      );
+      expect(out.needsOnboarding, isTrue);
     });
   });
 }

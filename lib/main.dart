@@ -36,6 +36,7 @@ import 'config/strings.dart';
 import 'config/supabase_config.dart';
 import 'config/theme.dart';
 import 'services/auth_service.dart';
+import 'services/attribution_service.dart';
 import 'services/chat_service.dart';
 import 'utils.dart';
 import 'core/cache/message_cache.dart';
@@ -1583,6 +1584,9 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   unawaited(AdminGate.postInit?.call());
   // Meta App Events (FB Ads): no-op selama App ID belum diisi.
   unawaited(MetaAnalytics.init());
+  // Atribusi sumber user (Play Install Referrer + Firebase Analytics).
+  // Baca sekali; aman & murah bila dipanggil berkali-kali.
+  unawaited(AttributionService.instance.readOnce());
   // Wiring downloader foto post (core/ tidak boleh import services/).
   PostPhotoCache.downloader = StoragePhotoService.instance.downloadBytes;
   unawaited(MessageCache.instance.clearLegacyV1Only());
