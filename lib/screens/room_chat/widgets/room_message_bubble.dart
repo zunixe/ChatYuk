@@ -50,6 +50,13 @@ class RoomMessageBubble extends StatelessWidget {
   // supaya sinkron dengan warna bubble (bgInput / primary alpha).
   static Color get _textColor => AppTheme.textPrimary;
 
+  /// Warna ring gender avatar inisial — pemetaan SAMA dengan daftar Online.
+  static Color _genderColor(String gender) => gender == 'male'
+      ? AppTheme.male
+      : gender == 'female'
+      ? AppTheme.female
+      : AppTheme.accent;
+
   bool get _isMedia =>
       msg.type == 'image' ||
       msg.type == 'view_once' ||
@@ -361,17 +368,29 @@ class RoomMessageBubble extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onTapUser,
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: color,
-              child: Text(
-                msg.senderName.isNotEmpty
-                    ? msg.senderName[0].toUpperCase()
-                    : '?',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: AppGlyph.avatarInitial(32),
-                  fontWeight: FontWeight.w700,
+            // Ring gender di sekeliling inisial (room tidak membawa foto):
+            // merah muda = perempuan, biru = laki-laki — sama seperti
+            // daftar Online (`AppTheme.female/male`).
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _genderColor(msg.senderGender),
+                  width: 1.5,
+                ),
+              ),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: color,
+                child: Text(
+                  msg.senderName.isNotEmpty
+                      ? msg.senderName[0].toUpperCase()
+                      : '?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: AppGlyph.avatarInitial(32),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -393,6 +412,21 @@ class RoomMessageBubble extends StatelessWidget {
                           letterSpacing: 0,
                         ),
                       ),
+                      // Ikon gender setelah nama — sama seperti daftar Online
+                      // (biru = laki-laki, merah muda = perempuan).
+                      if (msg.senderGender == 'male' ||
+                          msg.senderGender == 'female') ...[
+                        SizedBox(width: 3),
+                        Icon(
+                          msg.senderGender == 'male'
+                              ? Icons.male
+                              : Icons.female,
+                          size: 14,
+                          color: msg.senderGender == 'male'
+                              ? AppTheme.male
+                              : AppTheme.female,
+                        ),
+                      ],
                       if (msg.isRegistered) ...[
                         SizedBox(width: 3),
                         Icon(
