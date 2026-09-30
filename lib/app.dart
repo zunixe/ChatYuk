@@ -630,6 +630,16 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   }
 
   /// Bangun halaman tab lain di belakang layar, satu per satu saat idle.
+  ///
+  /// TIMING (diukur 2026-09-30, Xiaomi 24129PN74G): tiap `setState` di sini
+  /// membangun SATU halaman tab penuh secara sinkron dalam frame itu (build
+  /// berat = 1 jank frame). Dulu mulai 1200ms + interval 800ms → tab3 baru
+  /// hangat di 2800ms, padahal UI sudah interaktif ~1300ms. Jendela 1300-2800ms
+  /// itulah sumber jank terukur saat tap: tab belum dibangun → build halaman
+  /// jatuh di frame tap (tap@1.5-1.8s = 14-22ms/jank; tap tab hangat = 0 jank).
+  /// Percepat jadi mulai 300ms + interval 250ms → semua tab hangat ~800ms,
+  /// SEBELUM UI interaktif, jadi tap tak pernah membangun halaman. Jangan
+  /// perlambat tanpa mengukur ulang (metrik `tab{N} tap→frame` + `janky(build)`).
   void _scheduleTabPrewarm() {
     const order = [1, 2, 3]; // Pesan/Chat, Timeline, Profil
     var step = 0;
@@ -641,10 +651,10 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
         return;
       }
       if (mounted) setState(() => _visitedTabs.add(i));
-      Future<void>.delayed(const Duration(milliseconds: 800), next);
+      Future<void>.delayed(const Duration(milliseconds: 250), next);
     }
 
-    Future<void>.delayed(const Duration(milliseconds: 1200), next);
+    Future<void>.delayed(const Duration(milliseconds: 300), next);
   }
 
   @override
@@ -766,10 +776,21 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       (a) => a.dummySessionActive,
     );
     final s = context.read<LocaleProvider>().s;
-    // Tombol Admin Panel melayang (admin sungguhan saja) — tampil di SEMUA
-    // tab supaya tidak "hilang" saat pindah tab. Hanya ikon, tanpa bulatan.
-    final showAdminFab =
-        AdminGate.panelBuilder != null && isRealAdmin && !dummySession;
+    // Tombol Admin Panel melayang (admin sungguhan saja) — HANYA di tab
+    // Online (index 0), supaya tidak menutupi konten di tab lain.
+    final showAdminFab = AdminGate.panelBuilder != null &&
+        isRealAdmin &&
+        !dummySession &&
+        tab == 0;
+    // Di tab Online saat kotak Disembunyikan ada isi: FAB mepet di atas
+    // header kotak yang ketutup (~51px + spasi dikit) supaya tidak
+    // bertumpuk dengan card-nya tapi juga tidak mengambang kejauhan.
+    // `select` int → rebuild _MainNav hanya saat jumlahnya berubah, bukan
+    // tiap heartbeat presence.
+    final hiddenCount = context.select<OnlineUsersProvider, int>(
+      (p) => p.hiddenCount,
+    );
+    final adminFabBottom = (tab == 0 && hiddenCount > 0) ? 64.0 : 14.0;
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
@@ -858,7 +879,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
           if (showAdminFab)
             Positioned(
               left: 14,
-              bottom: 14,
+              bottom: adminFabBottom,
               child: SafeArea(
                 child: Tooltip(
                   message: 'Admin Panel',

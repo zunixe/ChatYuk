@@ -43,6 +43,22 @@ void main() {
           await NotificationPrefsService.shouldShowForFcmType('halo_baru'),
           isTrue);
     });
+
+    test('timeline_post & timeline mengikuti toggle timeline', () async {
+      SharedPreferences.setMockInitialValues({'notif_type_timeline': false});
+      expect(await NotificationPrefsService.shouldShowForFcmType('timeline_post'),
+          isFalse);
+      expect(await NotificationPrefsService.shouldShowForFcmType('timeline'),
+          isFalse);
+    });
+
+    test('timeline on → keduanya true', () async {
+      SharedPreferences.setMockInitialValues({'notif_type_timeline': true});
+      expect(await NotificationPrefsService.shouldShowForFcmType('timeline_post'),
+          isTrue);
+      expect(await NotificationPrefsService.shouldShowForFcmType('timeline'),
+          isTrue);
+    });
   });
 
   group('mute per-chat', () {
