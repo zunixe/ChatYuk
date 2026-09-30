@@ -146,9 +146,24 @@ select supabase_tests.check('nearby_users() filter blocks (blokir tak muncul)',
   (select pg_get_functiondef(p.oid) like '%public.blocks%'
    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='public' and p.proname='nearby_users' limit 1));
-select supabase_tests.check('nearby_users() gate share_location (Share required)',
-  (select pg_get_functiondef(p.oid) like '%Share required%'
-      and pg_get_functiondef(p.oid) like '%share_location%'
+-- nearby_users (20260928100000 "show all with location"): gate
+-- `share_location=true` DUA ARAH DIHAPUS atas keputusan produk — di produksi
+-- hanya ~24/231 user share_location=true dan hanya 1 yang eligible online,
+-- sehingga "Orang Sekitar" nyaris selalu kosong. Sekarang: tampilkan semua
+-- user yang PUNYA koordinat lat/lon, tanpa wajib menekan "bagikan lokasi".
+-- Yang dipertahankan: punya lat/lon, status online/idle <= 30 menit,
+-- privacy presence, blokir dua arah, exclude admin.
+select supabase_tests.check('nearby_users() TIDAK lagi wajib share_location (keputusan produk)',
+  (select pg_get_functiondef(p.oid) not like '%Share required%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='nearby_users' limit 1));
+select supabase_tests.check('nearby_users() tetap butuh koordinat (viewer & target)',
+  (select pg_get_functiondef(p.oid) like '%my_lat%'
+      and pg_get_functiondef(p.oid) like '%lat%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='nearby_users' limit 1));
+select supabase_tests.check('nearby_users() hormati privacy presence',
+  (select pg_get_functiondef(p.oid) like '%privacy_can_view%'
    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='public' and p.proname='nearby_users' limit 1));
 select supabase_tests.check('get_online_users() filter blocks',
