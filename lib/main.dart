@@ -27,6 +27,8 @@ import 'providers/update_provider.dart';
 import 'screens/incoming_call_screen.dart';
 import 'screens/call_screen.dart';
 import 'screens/friend_requests_screen.dart';
+import 'screens/user_info_screen.dart';
+import 'screens/post_detail_screen.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/env.dart';
@@ -45,6 +47,7 @@ import 'core/perf/perf_probe.dart';
 import 'services/meta_analytics_service.dart';
 import 'services/notification_prefs_service.dart';
 import 'services/storage_photo_service.dart';
+import 'services/topup_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final LocaleProvider localeProvider = LocaleProvider();
@@ -1101,8 +1104,17 @@ void _openFromData(Map<String, dynamic> data) {
       : '${data['chatId'] ?? ''}';
   if (openedKey.isNotEmpty) unawaited(_clearChatNotif(openedKey, cancelShade: false));
   final s = localeProvider.s;
-  // Timeline post baru dari yang diikuti
-  if (data['type'] == 'timeline_post') {
+  // Timeline post baru → buka langsung postingannya (detail). Tanpa postId
+  // (notif lama) fallback ke tab Timeline seperti dulu.
+  if (data['type'] == 'timeline_post' || data['type'] == 'timeline') {
+    final postId = '${data['postId'] ?? ''}';
+    if (postId.isNotEmpty) {
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => PostDetailScreen(postId: postId)),
+        (route) => route.isFirst,
+      );
+      return;
+    }
     nav.popUntil((r) => r.isFirst);
     final ctx = navigatorKey.currentContext;
     if (ctx != null) {
@@ -1133,7 +1145,24 @@ void _openFromData(Map<String, dynamic> data) {
       if (routeTracker.contains(target)) {
         nav.popUntil((r) => r.isFirst || r.settings.name == target);
       } else {
-        nav.pushAndRemoveUntil(
+  // Notif "X online" tanpa chat 1:1 (teman/follower baru) → buka PROFIL-nya,
+  // bukan chat kosong (chatId '').
+  if (data['type'] == 'online' && '${data['chatId'] ?? ''}'.isEmpty) {
+    final ouid = '${data['otherUid'] ?? ''}';
+    if (ouid.isNotEmpty) {
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => UserInfoScreen(
+            userId: ouid,
+            fallbackName: '${data['otherName'] ?? s.unknownUser}',
+          ),
+        ),
+        (route) => route.isFirst,
+      );
+    }
+    return;
+  }
+  nav.pushAndRemoveUntil(
           MaterialPageRoute(
             settings: RouteSettings(name: target),
             builder: (_) => PrivateChatScreen(
@@ -1507,6 +1536,12 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
     }, 25),
   ]);
   debugPrint('[BOOT] all init done — lanjut runApp');
+  // Topup YukCoin (Google Play Billing) — hanya aktif di build play.
+  try {
+    await TopupService.instance.init();
+  } catch (e) {
+    dlog('[BOOT] topup init error: $e');
+  }
   // Swap dummy ⇄ admin: hapus notifikasi akun lama yang masih tampil.
   AdminGate.onDummySwap = () async {
     try {
