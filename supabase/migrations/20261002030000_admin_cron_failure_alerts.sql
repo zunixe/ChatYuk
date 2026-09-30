@@ -60,8 +60,8 @@ create unique index if not exists admin_alerts_dedupe_idx
 
 alter table public.admin_alerts enable row level security;
 
-drop policy if exists admin_alerts_admin on public.admin_alerts;
-create policy admin_alerts_admin on public.admin_alerts
+drop policy if exists admin_alerts_admin on public.admin_alerts; -- SAFE: hapus-buat ulang policy milik migrasi ini sendiri (idempoten); tabel baru jadi tidak ada policy lama yang tersentuh.
+create policy admin_alerts_admin on public.admin_alerts -- SAFE: hanya admin (zunixe@gmail.com) yang boleh lihat/ubah alarm; tidak membuka akses ke anon/authenticated umum.
   for all
   using (coalesce(auth.jwt() ->> 'email', '') = 'zunixe@gmail.com')
   with check (coalesce(auth.jwt() ->> 'email', '') = 'zunixe@gmail.com');

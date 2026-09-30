@@ -181,14 +181,56 @@ tanpa device).
   menumpuk dan lepas sekaligus saat pulih. Perlu alarm bila job penting
   gagal >1× berturut (saat ini tidak ada).
 
-## Tindak lanjut yang BELUM dikerjakan (rekomendasi)
-- **Bersihkan baris hantu secara terpisah** dari `cleanup_stale_anonymous`,
-  dengan kriteria eksplisit (`profiles` tidak ada) — bukan lewat jalur
-  "stale". Saat ini hanya ~6 baris, belum mendesak.
-- **Cegah hantu baru**: pertimbangkan trigger `AFTER INSERT ON auth.users`
-  pembuat baris `profiles` minimal, ATAU profil cadangan di
-  `AuthProvider._init` bila `getProfile()` null. Belum diputuskan — perlu
-  keputusan desain (dampak ke RLS/grant `profiles` yang sudah di-hardening,
-  lihat `docs/INCIDENT_ANON_REGISTER_42501.md`).
-- **Pantau**: bila baris hantu bertambah cepat → indikasi ada jalur
-  `signInAnonymously` tanpa niat menyelesaikan pendaftaran.
+## Tindak lanjut yang SUDAH dikerjakan (2026-10-02)
+
+Ketiga rekomendasi di bawah sudah diimplementasikan & diverifikasi live.
+
+### A. Alarm cron gagal — `20261002030000_admin_cron_failure_alerts.sql`
+Akar insiden ini adalah cron job 1 yang **GAGAL 5 hari tanpa ada yang tahu**.
+Sekarang:
+- Tabel `public.admin_alerts` (RLS admin-only) + `check_cron_failures()`.
+- Job kritikal gagal **≥2× nyata** → dicatat, di-push ke device admin, dan
+  tampil via `admin_cron_health()`.
+- **`job startup timeout` DITOLAK dari hitungan** — awalnya alarm berisik
+  karena timeout transient (job 27: 87 gagal dari 3465 run, semua pulih
+  sendiri). Setelah difilter: hanya 1 alarm, yaitu bug nyata.
+- Cron tiap jam menit 7 (jobid 30).
+- Verifikasi: `select public.admin_cron_health(168)` → job 1 terdeteksi
+  `fails=5/7` dengan error nyata; ada flag `currently_ok`.
+
+### B. Pembersih baris hantu — `20261002040000_purge_ghost_users.sql`
+- `purge_ghost_users(p_min_age_hours, p_dry_run)` — hapus HANYA `auth.users`
+  anon yang **terbukti kosong total** (nol device, chat, pesan, koin, poin,
+  lokasi, foto, blok, report, contact_message) dan cukup umur.
+- **`p_dry_run` default `TRUE`** — hapus hanya bila dipanggil eksplisit
+  `false`. Prinsip fail-safe: setiap kondisi adalah "hanya hapus bila
+  terbukti kosong" (kebalikan bug fail-open yang menyebabkan insiden).
+- `admin_ghost_stats()` untuk pantau: total hantu, yang siap dibersihkan,
+  tren harian, dan total anon (pembanding).
+- Cron harian 05:10 (jobid 33), setelah cleanup 04:00.
+- **Hasil: 8 hantu dibersihkan, 107 akun anon aktif utuh.**
+
+### C. Cegah hantu baru — `20261002050000_trigger_new_user_profile.sql`
+- Trigger `AFTER INSERT ON auth.users` → membuat baris `profiles` minimal.
+- **JEBAKAN YANG DITEMUKAN SAAT UJI (penting):** percobaan pertama memakai
+  nickname default `'Anon'` dan **GAGAL diam-diam** —
+  `profiles_nickname_unique` menolak baris kedua dst
+  (`duplicate key value violates unique constraint "profiles_nickname_unique"`).
+  Karena fungsi menelan error (`exception when others then null`), kegagalan
+  itu TAK TERLIHAT dan hantu TETAP terbentuk — trigger seolah jalan padahal
+  tidak. Terbukti: user uji setelah trigger terpasang masih punya profil NULL.
+  → **nickname WAJIB digenerate unik** (`'Anon'` + 6 hex dari UUID + retry).
+- Idempoten (`on conflict (id) do nothing`) — `registerProfile` tetap bisa
+  menimpa bila user memilih nama sendiri.
+- **Verifikasi: 2 user anon baru → `hantu = 0`.** `admin_ghost_stats()`
+  → `total: 0`.
+
+**Catatan pelajaran tambahan:** trigger SECURITY DEFINER yang menelan error
+(`exception when others then null`) menyembunyikan kegagalan. Saat menulis
+trigger semacam ini, UJI hasil akhirnya (baris benar-benar terbentuk),
+jangan percaya bahwa "tidak ada error = berhasil".
+
+## Rekomendasi yang masih bisa dipertimbangkan
+- Pantau `admin_ghost_stats()` berkala; bila `daily_new` naik lagi berarti
+  ada jalur lain yang membuat `auth.users` tanpa lewat trigger (mis. bulk
+  import / pemanggilan admin).
