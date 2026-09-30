@@ -58,6 +58,21 @@ class NotificationPrefsService {
     return list.contains(chatId);
   }
 
+  // ── Sembunyikan dari daftar Online (cermin lokal dari OnlineUsersProvider:
+  //    prefs `hidden_online_<myUid>`) ──
+  // Dipakai gate notif "X online": user yang disembunyikan admin/user tidak
+  // boleh memunculkan notifikasi online lagi.
+  static String _hiddenKey(String owner) => 'hidden_online_$owner';
+
+  static Future<bool> isOnlineHidden(String uid) async {
+    if (uid.isEmpty) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final myUid = prefs.getString('current_uid') ?? '';
+    if (myUid.isEmpty) return false;
+    final list = prefs.getStringList(_hiddenKey(myUid)) ?? const [];
+    return list.contains(uid);
+  }
+
   static Future<bool> shouldShowForFcmType(String? fcmType) async {
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool('notif_enabled') ?? true)) return false;

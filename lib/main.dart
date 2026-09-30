@@ -550,6 +550,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       await NotificationPrefsService.isChatMuted(bgChatId)) {
     return;
   }
+  // User disembunyikan dari daftar Online → jangan beri notif "online".
+  if (type == 'online') {
+    final ouid = '${data['otherUid'] ?? data['uid'] ?? ''}';
+    if (await NotificationPrefsService.isOnlineHidden(ouid)) {
+      dlog('[NOTIF_BG] drop online: $ouid disembunyikan');
+      return;
+    }
+  }
   // call_ended → panggilan selesai/dibatalkan. UPDATE notif call yang sama
   // (id = callId) jadi "Call ended". Langsung show dengan id sama (update
   // in-place) tanpa cancel dulu — cancel+show di MIUI justru menyisakan
@@ -926,6 +934,11 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
           (_fcmType == null && data.containsKey('chatId'))) &&
       await NotificationPrefsService.isChatMuted(chatKey)) {
     return;
+  }
+  // User disembunyikan dari daftar Online → jangan beri notif "online".
+  if (_fcmType == 'online') {
+    final ouid = '${data['otherUid'] ?? data['uid'] ?? ''}';
+    if (await NotificationPrefsService.isOnlineHidden(ouid)) return;
   }
 
   final s = localeProvider.s;
