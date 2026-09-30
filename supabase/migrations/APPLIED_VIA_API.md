@@ -2,6 +2,29 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-03 — stuck_users: hanya user terdaftar
+
+- **Status:** SUDAH TERAPPLIED via Management API (version 20261003000300).
+- **File:** `20261003000300_stuck_users_registered.sql` — rewrite
+  `admin_stats_compute` (hanya baris `stuck_users` diubah: + `is_registered =
+  true`); ACL service_role dipertahankan; cache stats di-reset.
+- **Alasan:** di YukCoin saldo awal 0 → user anon baru false-positive
+  "terjebak". Kini hanya user terdaftar email dengan saldo 0.
+- **Verifikasi live:** `has_new_def=true`, `has_old_def=false`;
+  `authenticated=false`, `service_role=true`. Dry-run transaksi+rollback dulu.
+
+## 2026-10-03 — Admin Pengaturan Poin selaras sistem YukCoin
+
+- **Status:** SUDAH TERAPPLIED via Management API (version 20261003000200).
+- **File:** `20261003000200_admin_point_settings_yukcoin.sql` — rewrite
+  `admin_update_point_settings` (buang `call_free_minutes_daily` yang sudah
+  DROPPED → fix bug simpan 42703; tambah welcome bonus + YukCoin v2 +
+  gift_cut_pct); rewrite `points_quests` (tak baca kolom faucet); DROP 18
+  kolom faucet mati di `app_settings`.
+- **Verifikasi live:** 0 sisa kolom mati; kedua fungsi tak menyebut kolom
+  yang di-drop; 30 kolom target RPC semua ada. Dry-run transaksi+rollback
+  sebelum apply (SQL valid, live tak berubah).
+
 ## 2026-10-03 — Coin untuk nelp (tanpa gratis) + welcome bonus
 
 - **Status:** SUDAH TERAPPLIED via Management API.
@@ -1206,3 +1229,24 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
 - **Apply:** Management API (3 versi). Catat `schema_migrations`.
 - **Verifikasi:** ketiga definisi live sesuai; 89 test hijau;
   `check_migrations.sh` OK bersih.
+
+## 2026-10-04 — 20261004080000_ai_reply_log_noise_filter (APPLY) + ai-reply v196
+
+- **Latar:** `ai_reply_log` (retensi 7h) ~11.4k baris / ~7 MB, hanya ~39
+  `replied`/7h. 84% isi = `skipped:dummy_disabled` (5.401) +
+  `skipped:ai_disabled` (4.195) — "dummy penerima AI-off", sinyalnya sudah ada
+  di `dummy_accounts.ai_enabled`. Noise menenggelamkan kasus menarik.
+- **Migrasi:** `create or replace public.ai_log_reply(...)` (+denylist 2
+  decision, signature identik). Semua call-site SQL lewat helper pusat →
+  terfilter; **FROZEN `ai_reply_enqueue`/`ai_reply_post` TIDAK disentuh** (tak
+  butuh snapshot). Apply Management API **3 statement** (create fn, revoke
+  execute, grant execute) — SUDAH TERAPPLIED di `fohcucyyejdryryoxitm`.
+- **Edge `ai-reply`:** denylist setara di shadow `json()` (jalur insert
+  `edge`). Deploy: `supabase functions deploy ai-reply --use-api` →
+  **ACTIVE v196**. verify_jwt=false (tak berubah).
+- **Cleanup sekali jalan:** `delete from ai_reply_log where decision in
+  ('skipped:dummy_disabled','skipped:ai_disabled')` → 9.596 baris terhapus
+  (11.417 → 1.821); `vacuum public.ai_reply_log` → dead tuples 0.
+- **Verifikasi live:** `prosrc` `ai_log_reply` memuat filter; uji terarah
+  noise=tidak insert, `skipped:rate_max`=insert (baris uji dibersihkan);
+  `check_migrations.sh --all` OK bersih.

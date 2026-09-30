@@ -923,6 +923,10 @@ Deno.serve(async (req: Request) => {
       };
     } catch (_) {}
     let arlAdmin: any = null;
+    // Noise filter: dua gate ini tidak lagi dicatat di ai_reply_log (sinyalnya
+    // tersedia langsung di dummy_accounts.ai_enabled). Sama dengan denylist di
+    // SQL ai_log_reply() — menjaga tabel tetap fokus ke kasus menarik.
+    const arlNoise = new Set(['skipped:dummy_disabled', 'skipped:ai_disabled']);
     function json(obj: unknown, status = 200): Response {
       try {
         const o: any = (obj as any) ?? {};
@@ -931,7 +935,7 @@ Deno.serve(async (req: Request) => {
         else if (o.skipped) decision = 'skipped:' + o.skipped;
         else if (o.blocked) decision = 'blocked:' + o.blocked;
         else if (o.ok === false) decision = 'error:' + (o.error ?? 'unknown');
-        if (decision && arlAdmin && (arlCtx.chatId || decision.startsWith('replied'))) {
+        if (decision && arlAdmin && !arlNoise.has(decision) && (arlCtx.chatId || decision.startsWith('replied'))) {
           const row = {
             chat_id: arlCtx.chatId,
             trigger_msg_id: arlCtx.triggerMsgId,

@@ -13,6 +13,26 @@ select supabase_tests.check('ai_reply_claim_recovery() ada',
   exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='ai_reply_claim_recovery'));
 
+-- ── Noise filter ai_log_reply (migrasi 20261004080000) ──
+-- Dua decision ini TIDAK boleh menulis baris ke ai_reply_log.
+select supabase_tests.check('ai_log_reply() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='ai_log_reply'));
+select supabase_tests.check('ai_log_reply() filter skipped:dummy_disabled',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='ai_log_reply'
+           and p.prosrc like '%skipped:dummy_disabled%'
+           and p.prosrc like '%skipped:ai_disabled%'));
+-- Panggil ai_log_reply (efek samping) di statement TERPISAH dari asersi:
+-- subquery dalam satu statement tidak melihat baris yang di-insert statement
+-- itu sendiri, jadi hitung di statement berikutnya.
+select public.ai_log_reply('[TEST-NOISE]', null, null, null, false, 'enqueue', 'skipped:dummy_disabled', '{}');
+select supabase_tests.check('ai_log_reply() tolak dummy_disabled (tidak insert)',
+  (select count(*) from public.ai_reply_log where chat_id = '[TEST-NOISE]') = 0);
+select public.ai_log_reply('[TEST-KEEP]', null, null, null, false, 'enqueue', 'skipped:rate_max', '{}');
+select supabase_tests.check('ai_log_reply() tetap catat decision lain',
+  (select count(*) from public.ai_reply_log where chat_id = '[TEST-KEEP]') = 1);
+
 -- ── Trigger enqueue terpasang di private_messages ──
 select supabase_tests.check('trigger ai_reply_enqueue terpasang',
   exists(select 1 from pg_trigger t

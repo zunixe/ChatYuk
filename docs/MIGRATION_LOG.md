@@ -1,4 +1,89 @@
 ﻿
+## 2026-10-04 — Noise filter `ai_reply_log`
+
+**Alasan (audit):** tabel `ai_reply_log` (retensi 7 hari) mentok ~11.4k baris /
+~7 MB, padahal hanya ~39 baris `replied` per 7 hari. **84% isinya DUA decision
+tak informatif:** `skipped:dummy_disabled` (5.401) + `skipped:ai_disabled`
+(4.195) = "dummy penerima AI-off", yang sinyalnya sudah ada di
+`dummy_accounts.ai_enabled`. Noise ini menenggelamkan kasus menarik.
+
+- **Migrasi** `20261004080000_ai_reply_log_noise_filter.sql`:
+  - `create or replace public.ai_log_reply(...)` (signature identik) + denylist:
+    `if p_decision in ('skipped:dummy_disabled','skipped:ai_disabled') then return;`.
+  - Semua call-site SQL (`ai_reply_enqueue`/`ai_reply_post` — FROZEN) ikut
+    terfilter otomatis karena lewat helper pusat. **Fungsi FROZEN TIDAK
+    disentuh** → tak butuh header `-- menyentuh:` / snapshot refresh.
+  - Apply via Management API (3 statement: create fn, revoke, grant). SUDAH
+    TERAPPLIED di `fohcucyyejdryryoxitm`.
+- **Edge:** `supabase/functions/ai-reply/index.ts` — denylist setara di shadow
+  `json()` (jalur insert `edge`). **Deploy v196 ACTIVE** via
+  `supabase functions deploy ai-reply --use-api`.
+- **Cleanup:** hapus 9.596 baris noise lama → 11.417 → 1.821 baris (84% turun);
+  `VACUUM public.ai_reply_log` → dead tuples 0 (ruang dipakai-ulang insert
+  berikutnya; file tetap ~7 MB, tidak akan tumbuh lagi).
+- **Verifikasi live:** definisi `ai_log_reply` memuat filter; uji terarah —
+  `skipped:dummy_disabled` & `skipped:ai_disabled` → **tidak** insert,
+  `skipped:rate_max` → insert (baris uji dihapus); `check_migrations.sh --all`
+  OK bersih; pgTAP `ai_test.sql` hijau.
+- **Efek:** skema/retensi tak berubah — hanya penulis log. Cara debug
+  "dummy diam" berpindah ke `dummy_accounts.ai_enabled` (lihat
+  `docs/AI_DUMMY_DEBUG.md §7.0`).
+
+## 2026-10-04 — Atribusi sumber user (tab admin baru)
+
+**Tujuan:** admin tahu user datang dari kanal mana (Facebook/IG/Google/TikTok/
+referral/organik).
+
+- **Migrasi** `20261004000000_attribution.sql`:
+  - Kolom `attribution_source`, `utm_source/medium/campaign/content`,
+    `referrer_raw`, `attribution_at` di `public.user_devices` (+2 index).
+  - `upsert_device` diperluas dgn 6 param attribution (DEFAULT '') — call-site
+    lama (7/8 arg) tetap valid (overload PostgREST). **TULIS SEKALI**
+    (`coalesce(existing, excluded)`) supaya resume tidak menimpa kanal asli.
+  - RPC admin: `admin_attribution_summary(p_days)`,
+    `admin_attribution_users_page(p_source,limit,offset)`.
+- **App:** `lib/services/attribution_service.dart` (Play Install Referrer +
+  Firebase Analytics), disuntik di `device_info_service.dart` (`upsert_device`)
+  + bootstrap `main.dart`. UI: `admin_attribution_tab.dart` (tab ke-9).
+- **Build fix:** `android/build.gradle.kts` menaikkan `compileSdk` plugin lama
+  (mis. `android_play_install_referrer` = 33) ke 36 → build release tidak gagal
+  karena `androidx.exifinterface` menuntut compileSdk ≥ 34.
+- **Verifikasi:** migrasi diuji di Postgres 16 lokal (idempotent, write-once,
+  RPC ok, backward-compat 7/8-arg ok); `test/attribution_test.dart` (14 test);
+  build APK `apkpureProd` OK + gate anti-admin OK.
+
+## 2026-10-03 — stuck_users: hanya user terdaftar
+
+**Alasan:** di ekonomi YukCoin, saldo awal semua user = 0 (kecuali klaim
+welcome bonus anon). Definisi lama `stuck_users` (points = 0 & aktif 7 hari)
+jadi false-positive — hampir semua user baru anon terhitung "terjebak"
+padahal normal. Ditambah `is_registered = true` → yang dihitung hanya user
+yang SUDAH daftar email tapi saldo 0.
+
+**Migrasi:** `20261003000300_stuck_users_registered.sql` (apply via Management
+API, SUDAH TERAPPLIED): rewrite `admin_stats_compute` — SALINAN PERSIS body
+live (dari `20260905100000_admin_stats_exclude_dummies.sql`), **hanya baris
+`stuck_users`** diubah. ACL `service_role` dipertahankan. Cache stats di-reset.
+- Bukan fungsi FROZEN (tak ada di frozen_functions.txt / snapshot).
+- **Verifikasi live:** `has_new_def=true`, `has_old_def=false`; ACL
+  `authenticated=false`, `service_role=true`.
+
+**Kode klien:** `config/strings_admin.dart` (`adminStuckUsers` →
+"user terdaftar saldo 0 (7 hari)").
+
+## 2026-10-03 — Rapikan label & toast panel Poin (bilingual)
+
+- **Danger Zone**: "Reset semua user ke 50 poin" → "Reset saldo semua user
+  ke 50 YukCoin" (+judul/body). Mass bonus → "Bonus Massal YukCoin".
+- **Hardcode toast → `s.`** (AGENTS.md): ForceLogoutCard
+  (`adminForceLogoutDone`, reuse `errGeneric`), DangerZone (`adminResetDone`),
+  MassBonusCard (`adminMassBonusDone`), FeaturePublishCard
+  (`adminFeaturePublished`/`adminFeatureHidden`, `errGeneric`, judul/desc +
+  4 label fitur `adminFlag*`).
+- **Status YukCoin v2** ditampilkan di bawah toggle-nya (`adminYukcoinV2On/Off`)
+  + `adminRealtimeDesc` diperjelas (points_enabled = saklar utama ekonomi).
+- TANPA migrasi. `flutter analyze` 0 error/0 warning.
+
 ## 2026-10-03 — Admin Pengaturan Poin selaras sistem YukCoin
 
 **Bug kritis diperbaiki:** `admin_update_point_settings` (versi 20261001020000)
