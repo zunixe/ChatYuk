@@ -1,4 +1,62 @@
 ﻿
+## 2026-09-30 — Notif "X online" → teman + follower + pernah chat
+
+**Minta user:** saat A online, notifikasinya ke teman, follower, dan orang
+yang pernah chat dengan dia (dulu HANYA yang pernah chat).
+**Migrasi:** `20260930052500_online_notify_friends_followers.sql` — penerima
+`notify_contact_online` = UNION(teman mutual | follower-ku | pernah 1:1
+chat); chatId diisi bila ada chat (tap → chat), NULL bila tidak (klien:
+tap → profil); skip blokir dua arah (selaras get_online_users; dulu tak
+dicek); guard lain utuh (transisi →online; author dummy tak notify).
+**Klien:** `_openFromData` — `online` tanpa chatId → `UserInfoScreen`
+(sebelumnya jatuh ke chat kosong).
+**Apply:** Management API + catat `schema_migrations`.
+**Test:** pgTAP `online_notify_test.sql` 6/6 (teman/follower/chatter dapat +
+chatId; stranger & diblokir tidak; idle→online notify lagi).
+
+## 2026-09-30 — Fix chatId NULL di payload outbox "online" (temuan review)
+
+**Bug:** penerima tanpa chat 1:1 dapat `chatId: null` → outbox-worker →
+send-push `String(null)` = string `"null"` → cek `.isEmpty` klien gagal →
+jatuh ke layar chat rusak, bukan profil.
+**Migrasi:** `20260930053000_online_notify_chatid_fix.sql` — 1 baris:
+`coalesce(contact_chat,'')` di `notify_contact_online`.
+**Review lanjutan:** PostCard di layar detail tak refresh (like/komen/share/
+follow/boost) karena hanya andalkan `updatePost` provider + rebuild parent —
+tambah `_patchLocal` (patch map lokal + setState) di 5 situs; hapus post
+dari detail kini pop via callback `onDeleted`.
+
+## 2026-09-29 — Audit notif post timeline (3 kurang diperbaiki)
+
+**Diminta user cek ulang.** Temuan & fix (`20260929220200_timeline_post_notify_audit.sql`):
+1. `get_post` belum ada gate ANON_DISABLED (ada di `list_posts`) → anon bisa
+   baca post public. Ditambah (bypass dummy & admin, cermin list_posts).
+2. Post public dari author **dummy** akan blast semua user asli → cabang
+   public→semua kini dilewati bila author dummy (follower/subscriber dummy
+   tetap dapat seperti dulu).
+3. Klien: tipe FCM `timeline` (topic) lolos dari toggle prefs Timeline →
+   `shouldShowForFcmType` kini memetakan `timeline` → toggle `timeline`.
+**Test:** pgTAP `timeline_post_notify_test.sql` 13/13 (+anon ditolak, +cek
+definisi); prefs timeline on/off hijau.
+
+## 2026-09-29 — Notif post timeline sesuai visibilitas + tap buka postingan
+
+**Minta user:** post PUBLIC → notifikasi untuk SEMUA + tap masuk ke
+postingannya; FOLLOWERS → follower saja; SUBSCRIBERS → subscriber saja.
+**Temuan:** trigger `notify_post_followers` untuk public hanya ke follower
+(+subscriber-non-follower); fanout topic `timeline-all` tembak SEMUA
+visibilitas (bocor isi followers/subscribers-only; walau topic belum ada
+subscriber); tap `timeline_post` hanya buka tab Timeline (bukan postnya).
+**Migrasi:** `20260929213300_timeline_post_notify_all.sql` — cabang `public`
+→ loop semua profil registered non-dummy non-exclude (kecuali author; skip
+blokir); `notify_timeline_post_fanout` hanya bila `public`; RPC BARU
+`get_post(p_id)` (bentuk = item `list_posts`, hormat visibilitas+blokir).
+**Klien:** `PostDetailScreen` (pakai ulang `PostCard`); tap
+`timeline_post`/`timeline` + `postId` → detail; tanpa postId → tab Timeline.
+**Apply:** Management API + catat `schema_migrations`.
+**Test:** pgTAP `timeline_post_notify_test.sql` 10/10; `timeline_service_test`
+(+getPost) hijau; `post_detail_screen_test` hijau; `flutter analyze` 0/0.
+
 ## 2026-09-29 — Privacy picker: kandidat = semua yang pernah chat (registered + anon)
 
 **Keluhan (user):** memilih "Hanya orang tertentu", nama "Kartika"

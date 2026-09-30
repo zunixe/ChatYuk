@@ -5,7 +5,7 @@
 > bukan **merusak** (mis. mengembalikan `context.watch` yang sudah diganti
 > `select`, atau menghapus `TickerMode`/`RepaintBoundary`).
 
-Terakhir diperbarui: 2026-09-18 (branch `develop`).
+Terakhir diperbarui: 2026-09-30 (branch `develop`).
 
 ---
 
@@ -740,6 +740,128 @@ Belum diukur di perangkat (butuh chat berisi banyak foto + jaringan buruk);
 klaim "lebih cepat" di sini bersifat konstruksi (konkurensi dibatasi +
 timeout), bukan angka. Ukur ulang bila keluhan muncul lagi.
 
+### 2.16 Prewarm tab dipercepat — hilangkan jank "kadang delay" saat pindah tab (2026-09-30)
+
+**Keluhan:** "klik halaman kadang ada delay" saat pindah tab bawah (Online/
+Chat/Timeline/Profil). Intermitten → menuntut pengukuran, bukan tebakan.
+
+**Cara ukur (build rilis + `--dart-define=PERF_PROBE=true`, Xiaomi
+24129PN74G Android 16, apkpureProd):** skenario cold start → tap tab pada
+variasi jeda (1.5/1.8/2.5s) + tab hangat; baca `[PERF] tab{N} tap→frame`,
+`janky(build)`, dan `build max`. Jalur data (RPC) diukur bersamaan sebagai
+pembanding.
+
+**Data — SEBELUM (n=42 tap, tab1-3 setelah cold start):**
+
+| Metrik | Nilai |
+|---|---|
+| avg / p50 | 9.5 / 9.1 ms |
+| p90 / max | 17.0 / **25.6 ms** |
+| tap >16.7ms (jank) | **5 (12%)** |
+| `janky(build)` saat prewarm **tanpa tap** | **2** (max 21.2ms) |
+
+Bukti pemisah kunci: tab **hangat** → tap 1.7-13ms, `janky(build)=0`; tab
+**belum di-prewarm** (tap@1.5-1.8s) → 14.6-22ms; **prewarm sendiri tanpa tap**
+→ 2 jank. Jadi bukan render umum (p50 build 1.4ms) & bukan jalur data
+(RPC 115-320ms normal) — melainkan **waktu pembangunan halaman tab**.
+
+**Akar (terukur):** `_scheduleTabPrewarm` (`app.dart`) dulu mulai 1200ms +
+interval 800ms → tab3 baru dibangun di **2800ms**, padahal UI sudah interaktif
+~1300ms. Tiap `setState(() => _visitedTabs.add(i))` membangun SATU halaman tab
+penuh **sinkron dalam frame itu** (1 jank frame). Jendela 1300-2800ms = user
+bisa tap tab yang belum dibangun → build halaman jatuh di frame tap → jank.
+
+**Fix (timing saja, `lib/app.dart`):** mulai **300ms** + interval **250ms** →
+semua tab hangat ~800ms, **sebelum** UI interaktif. Struktur prewarm tidak
+diubah (persis pola "pil nav 500→260ms" §2.8).
+
+**Data — SESUDAH (n=38 tap):**
+
+| Metrik | Sebelum | Sesudah |
+|---|---|---|
+| tap p90 | 17.0 ms | **14.6 ms** |
+| tap max | 25.6 ms | **20.3 ms** |
+| tap >16.7ms (jank) | **12%** | **2.6%** (1 dari 38) |
+| `janky(build)` prewarm tanpa tap | **2** | **0** (max 13.9ms) |
+| tap tab3 @1.8s | 22.0 ms | **6.0 ms** |
+
+**Jangan:** perlambat prewarm (≥800ms interval / ≥1.2s mulai) tanpa mengukur
+ulang — itu mengembalikan jendela "belum hangat" & jank tap. Verifikasi dengan
+metrik `tab{N} tap→frame` + `janky(build)` di build probe.
+
+### 2.17 Sisa jank tap = FRAME SCHEDULING (vsync), bukan build/raster — BUKAN bug kode (2026-09-30)
+
+Setelah §2.16, sisa jank tap diselidiki mendalam. **Kesimpulan akhir: jank tap
+adalah keterlambatan PENJADWALAN frame (menunggu vsync), bukan pekerjaan render.**
+
+**Bukti 1 — frame-nya sendiri cepat.** `frameSummary` sesi tap:
+
+| Sesi | build (p50/max) | raster (p50/max) | janky(build) | janky(raster) |
+|---|---|---|---|---|
+| A: diam di tab2 | 1.3 / 14.8ms | 3.0 / 10.9ms | 0 | **0** |
+| B: scroll tab2 | 0.3 / 13.8ms | 1.9 / 15.2ms | 0 | **0** |
+| C: tap bolak-balik | 1.3 / 11.8ms | 2.4 / 10.1ms | 0 | **0** |
+| D/E: tap cepat | 1.3 / **8.3ms** | 2.3 / **8.6ms** | 0 | **0** |
+
+Padahal tap→frame bisa 16-18ms. **Frame render hanya ~8ms** — jadi 8-10ms
+sisanya = **waktu tunggu vsync** (tap jatuh setelah vsync terlewat → frame baru
+menunggu interval berikutnya). Terbukti: `tap→frame ≈ +frame0` (semua waktu di
+frame pertama), dan frame pertama itu sendiri cepat.
+
+**Bukti 2 — bukan spesifik tab.** Eksperimen C/D/E (n=192 tap, semua tab):
+avg 10.1 / p50 9.3 / p90 17.3 / max 27.1ms; **13% >16.7ms**. Jank muncul di
+**tab0 (Online) juga** (17.9/22.2/27.1ms), bukan cuma Timeline. Distribusi
+bimodal (p25=5.8ms "langsung", p75=15.4ms "nunggu vsync") — ciri frame pacing,
+bukan beban tab. Semakin cepat tap beruntun, semakin sering kena.
+
+**Hipotesis yang GUGUR (terukur):**
+- ~~Spike raster foto tab2~~ → diam & scroll di tab2 = `janky(raster)=0`.
+- ~~Rebuild widget berat~~ → `build max 8.3ms`, p50 1.3ms.
+- ~~Alokasi `_imagePaths()` 2×/build~~ → cache diuji (n=12, jank 8%), DIREVERT.
+
+**Artinya:** "kadang delay" yang dirasa user = **frame pacing Flutter/device**,
+bukan kode widget. Mengubah build widget **tidak akan** memperbaikinya (frame
+sudah jauh di bawah 16.7ms). Jangan kejar angka ini dengan mengubah kode render
+`PostCard`/`TimelineScreen` — akan sia-sia. Bila user menuntut hilang total,
+arahnya arsitektur (mis. `SchedulerBinding.scheduleFrame`, mode performa device,
+atau investigasi compositor) — risiko tinggi, belum dikerjakan.
+
+**Yang tetap benar dari penyelidikan ini:** §2.16 (prewarm) tetap valid — ia
+memangkas jendela "belum hangat" sehingga tab tidak dibangun di frame tap.
+Sesudah §2.16, sisa ~13% tap-pacing adalah batas platform.
+
+**AKAR PLATFORM (terukur 2026-09-30): app di-lock 60Hz walau layar 120Hz.**
+`dumpsys SurfaceFlinger` saat app jalan: `activeMode vsyncRate=60.00 Hz`
+(device global bisa 120). `dumpsys display`: `renderFrameRate 60.000004`,
+`appRequest render: (0.0 60.0)`. **Di 60Hz 1 frame = 16.7ms** → tap→frame
+16-18ms = tepat 1 interval; di 120Hz akan ~8.3ms (halver).
+
+Penyebab: `AndroidManifest` **tidak** meng-opt-in high-refresh
+(`android:preferHighRefreshRate="true"`). Bukti: saat device di-set global 120
+(`settings put system peak_refresh_rate 120` + toggle layar), **launch app
+langsung menjatuhkan mode ke 60Hz** (id=7) — MIUI menahan app tanpa opt-in.
+
+**Fix DIUJI & DIREVERT (2026-09-30).** Dicoba `preferredDisplayModeId` (mode
+refreshRate tertinggi) di `MainActivity.onCreate`. Hasil:
+
+| | tap avg | tap p50 | `janky(raster)` |
+|---|---|---|---|
+| 60Hz (baseline) | 8.0ms | 7.8ms | **0** |
+| 120Hz (fix) | **7.3ms** | **6.6ms** | **41** (raster max 64ms!) |
+
+- Perbaikan tap **marginal** (~0.7ms) — karena frame render cuma ~2ms, latency
+  tetap didominasi tunggu vsync (1 interval, di kedua Hz).
+- **Regresi raster berat**: `janky(raster)` 0→41 (max 64ms) di 120Hz — GPU
+  Adreno tersendat saat dipaksa 120.
+- **Tidak konsisten**: `preferredDisplayModeId` kadang dihormati (120),
+  kadang tidak (HyperOS override balik 60) — 3/3 sample terakhir = 60Hz.
+
+Kesimpulan: **tidak layak.** Perubahan `MainActivity.kt` DIKEMBALIKAN (§6).
+`preferHighRefreshRate` bukan attribute manifest valid (AAPT menolak).
+Jangan ulangi tanpa mengukur `janky(raster)` — di device ini 120Hz justru
+merugikan. Bila mau dikejar lagi: butuh kontrol per-app dari sisi sistem
+(MIUI whitelist) atau profil performa — bukan perubahan app.
+
 ---
 
 ## 3. Alat ukur (opsional, untuk pengembangan)
@@ -983,6 +1105,44 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-27 | **Admin monitor chat: lokal-first** (§17) — `fetchChatMessages({force})` & `_fetch({force})` skip RPC saat pesan sudah ada di cache; server hanya saat kosong / pull-to-refresh | Buka-ulang chat di monitor tidak load ulang dari server; pesan baru tetap via poll 5 dtk + realtime |
 | 2026-09-28 | **Monitor chat: timeout RPC + antre foto** (§2.14) — `getChatMessages`/`getChatLastRead` + `.timeout(30s)`; load foto admin dibatasi 3 bersamaan + cooldown 10 dtk; `_applyMessages` O(n²)→O(n) | Konstruksi (belum diukur di HP); spinner abadi hilang, foto tak berebut |
 | 2026-09-29 | **Monitor call admin** (§2.15) — chip status nyata per peserta (+ speaker-fallback), mulai pantau tanpa tunggu RPC, cache positif `isAdminUid` 30 mnt, antre request sebelum media siap, kadens 1,5 dtk (3×) lalu 3 dtk; metrik `watch.connect`/`openFirst`/`firstAudio` | Konstruksi (metrik disiapkan); audio mulai lebih cepat + admin bisa bedakan "belum nyambung" vs "mic mati/diam" |
+| 2026-09-30 | **Prewarm tab dipercepat** (§2.16) — `_scheduleTabPrewarm` mulai 1200→**300ms**, interval 800→**250ms** (semua tab hangat ~800ms, sebelum UI interaktif ~1300ms) | Jank tap tab 12%→**2.6%** (max 25.6→20.3ms); `janky(build)` prewarm 2→**0**; tap tab3 @1.8s 22.0→**6.0ms** (build rilis+`PERF_PROBE`, Xiaomi 24129PN74G) |
+| 2026-09-30 | **Diagnosa sisa jank tap** (§2.17) — 4 eksperimen (diam/scroll/tap-cepat, n=192): frame render cuma **8ms** tapi tap→frame 16-18ms → jank = **frame scheduling (vsync)**, bukan build/raster/tab. Hipotesis raster-foto & alokasi `_imagePaths` GUGUR terukur (cache di-revert) | Bukan bug kode — batas platform. "Kadang delay" = frame pacing; jangan kejar dgn ubah build widget |
+| 2026-09-30 | **Memory audit** — PSS cold 233 MB → aktif puncak 267 MB → idle 60s **245 MB** → HOME 185 MB (kembali turun) | **Sehat, tanpa leak** (GC normal); PSS konsisten dgn §13 (~225 MB) |
+| 2026-09-30 | **QA Perf TAB TIMELINE** (§2.18) — ukur feed/komentar/like/composer (build probe); tambah metrik `timeline.getPost`/`timeline.createPost` + `buildCount('PostDetail')` | Semua jalur **normal**: `timeline.rpc` 118-211ms, komentar buka #2-3 = 0 RPC (cache §12.1 jalan), like 122-157ms, `build Timeline`=3, jank 0-2. Timeline SEHAT |
+
+### 2.18 QA Perf TAB TIMELINE (2026-09-30)
+
+Diminta "sisir semua bagian Timeline". Ukur dulu (build rilis + `PERF_PROBE`,
+Xiaomi 24129PN74G, 60Hz), perbaiki hanya bila ada angka buruk (§6).
+
+| Bagian | Metrik | Hasil | Ukur ulang # | Putusan |
+|---|---|---|---|---|
+| Feed halaman-1 | `timeline.rpc` | 118-211ms (p50 ~149) | 3× scope | ✅ normal |
+| Paginasi | `timeline.rpcMore` | tak terpicu (feed pendek) | — | — |
+| Buka komentar ×3 | `timeline.comments` | **n=1, 126.7ms** | #2-3 = **0 RPC** | ✅ cache §12.1 jalan |
+| Like/unlike | `timeline.like` | 122-157ms | 2× | ✅ normal |
+| Render tab | `buildCount('Timeline')` | 3 | tiap sesi | ✅ sehat |
+| Render composer | `buildCount('PostComposer')` | 1 | — | ✅ |
+| Jank (semua) | `janky(build/raster)` | 0-2 | tiap sesi | ✅ sama dgn §12.6 |
+
+**Dibanding doc §12.6 (2026-09-20): tidak ada regresi.** `timeline.rpc`
+136-144→118-211ms (noise jaringan), komentar cache tetap 0 RPC, like
+168→122-157ms.
+
+**Instrumentasi ditambah** (celah yang belum terukur, additive & no-op saat
+probe off):
+- `timeline_provider.dart`: `getPost`→`timeline.getPost`, `createPost`→
+  `timeline.createPost`.
+- `post_detail_screen.dart`: `buildCount('PostDetail')`.
+
+**Belum terverifikasi otomatis** (butuh interaksi manual, adb tak andal):
+submit composer (`create_post`) & buka `PostDetailScreen` dari notifikasi
+`timeline_post`. Metriknya sudah siap — jalankan manual utk mengisi angka.
+
+**Kesimpulan:** Timeline **sehat** — tidak ada masalah performa yang bisa
+diperbaiki kode. Sisa keterlambatan (bila ada) = frame pacing (§2.17), bukan
+jalur Timeline. Jangan ubah `TimelineScreen`/`PostCard`/provider tanpa angka
+baru.
 
 ### 8. Target tersisa
 

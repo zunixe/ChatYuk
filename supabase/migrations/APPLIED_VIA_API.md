@@ -28,6 +28,39 @@
 - ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
 - ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
 
+## 2026-09-30 — 20260930053000_online_notify_chatid_fix.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-09-30.
+- **Isi:** 1 baris — `coalesce(contact_chat,'')` di `notify_contact_online`
+  (NULL → string `"null"` di send-push → klien salah buka chat rusak).
+- **Verifikasi live:** definisi memuat `coalesce(contact_chat,`; versi tercatat.
+
+## 2026-09-30 — 20260930052500_online_notify_friends_followers.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-09-30.
+- **Isi:** `notify_contact_online` penerima = teman mutual + follower +
+  pernah chat (dulu hanya chatters); chatId NULL bila tak ada chat;
+  skip blokir dua arah.
+- **Verifikasi live:** versi tercatat; pgTAP `online_notify_test.sql` 6/6.
+
+## 2026-09-29 — 20260929220200_timeline_post_notify_audit.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-09-29.
+- **Isi:** `get_post` + gate ANON_DISABLED (cermin `list_posts`); cabang
+  public→semua di `notify_post_followers` dilewati bila author dummy.
+- **Verifikasi live:** versi tercatat; pgTAP `timeline_post_notify_test.sql`
+  13/13.
+
+## 2026-09-29 — 20260929213300_timeline_post_notify_all.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-09-29.
+- **Isi:** `notify_post_followers` cabang `public` → semua user (registered,
+  non-dummy, non-exclude, tanpa blokir); `notify_timeline_post_fanout` hanya
+  untuk `public` (tutup bocor isi followers/subscribers-only ke topic);
+  RPC baru `get_post(p_id)` untuk layar detail post.
+- **Verifikasi live:** definisi ketiga fungsi sesuai; versi tercatat; pgTAP
+  `timeline_post_notify_test.sql` 10/10.
+
 ## 2026-09-29 — 20260929140000_privacy_excludable_all_chatters.sql
 
 - **Status:** SUDAH TERAPPLIED via Management API pada 2026-09-29.
@@ -1105,3 +1138,44 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
 - **Apply:** Management API (respons `[{"schedule":26}]`).
 - **Aksi:** catat `schema_migrations` 20260926100000.
 - **Verifikasi:** kedua tabel ada; 5 RPC ada; cron job 26 aktif.
+
+## 2026-10-02 — FIX KRITIS tab "Terhapus" (mass-delete + limit diabaikan) (APPLY)
+- **Konteks:** keluhan "tab Terhapus kenapa banyak banget sampai 1781".
+  Investigasi via Management API menemukan DUA bug aktif, bukan sekadar
+  tampilan. Detail lengkap: `docs/INCIDENT_STALE_CLEANUP_MASS_DELETE.md`.
+- **Bukti (query produksi):**
+  - `deleted_users` = 1782; rincian reason: `stale_cleanup` **1671**
+    (94%), `admin_delete` 87, `self_delete` 18, `nickname_claim` 6.
+  - dari 1671 `stale_cleanup`: **1646 (98,5%) `last_seen_at` NULL +
+    `created_at` NULL + nickname `''`** (tanpa profil sama sekali).
+  - `admin_list_deleted(5,0,true)` → `items` length **1883** (harusnya 5).
+- **Kronologi (cron.job_run_details jobid 1):** cleanup GAGAL 24–28 Sep
+  (`coin_ledger is append-only`) → akun menumpuk 5 hari; 28 Sep **23:00**
+  (run manual, bukan cron 04:00) **1594 lepas sekaligus**; 29–30 Sep sukses
+  setelah `20260929000000`.
+- **26000000 — `cleanup_stale_anonymous` (FIX FAIL-OPEN → FAIL-SAFE).**
+  Logika lama `not exists(profiles where last_seen > now()-min_age)` =
+  FAIL-OPEN: user tanpa baris profil / `last_seen IS NULL` diperlakukan
+  "stale" lalu dihapus tanpa bukti. Diganti: hapus HANYA bila
+  `coalesce(last_seen, profiles.created_at, auth.users.created_at)` ADA
+  dan < `now() - min_age_days`; bila semua NULL → **tidak dihapus**.
+  Verifikasi live: `ada_failsafe=true`, `masih_bug_lama=false`; uji
+  `cleanup_stale_anonymous(7)` → 0 user hidup terhapus (aturan lama: ~105
+  anon aktif jadi korban tiap run 04:00).
+- **010000 — `admin_list_deleted` split total.** Tambah `total_archive` &
+  `total_pending` (aditif; `total` dipertahankan). Live: total =
+  arsip + pending.
+- **020000 — `admin_list_deleted` fix `p_limit`/`p_offset` diabaikan.**
+  LIMIT/OFFSET berada DI DALAM subquery yang di-`jsonb_agg` (agregasi
+  luar) sehingga tidak berefek — server selalu mengirim SELURUH baris
+  tiap request (termasuk polling 30 dtk). Dipindah ke subquery `page`
+  sebelum agregasi. Verifikasi live: limit5=5, limit100=100, halaman-1 vs
+  halaman-2 tidak overlap.
+- **Klien:** `AdminProvider.deletedTotal/deletedArchivedTotal/
+  deletedPendingTotal` (chip filter memakai total server, bukan jumlah
+  baris ter-load); `admin_deleted_tab.dart` hitung `_filtered()` sekali
+  per build (dulu O(n²) di `itemBuilder`). Test regresi:
+  `test/admin_service_test.dart` + `test/admin_provider_di_test.dart`.
+- **Apply:** Management API (3 versi). Catat `schema_migrations`.
+- **Verifikasi:** ketiga definisi live sesuai; 89 test hijau;
+  `check_migrations.sh` OK bersih.
