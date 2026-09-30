@@ -1465,6 +1465,20 @@ class S {
   String get yukcoinTitle => isId ? 'YukCoin' : 'YukCoin';
   String get yukcoinMyBalance => isId ? 'Saldo kamu' : 'Your balance';
   String get yukcoinHowToEarn => isId ? 'Cara dapat YukCoin' : 'How to earn YukCoin';
+  // Overhaul 2026-10: tidak ada bonus gratis — coin dari topup/welcome.
+  String get yukcoinEarnTopup => isId ? 'Top-up (beli koin)' : 'Top-up (buy coins)';
+  String get yukcoinEarnWelcome => isId ? 'Bonus pendaftaran' : 'Sign-up bonus';
+  String get yukcoinEarnCallIncome =>
+      isId ? 'Terima panggilan' : 'Receive calls';
+  String get yukcoinFeatureCallAudio =>
+      isId ? 'Panggilan audio' : 'Audio call';
+  String get yukcoinFeatureCallVideo =>
+      isId ? 'Panggilan video' : 'Video call';
+  String get yukcoinFeatureFilterGender =>
+      isId ? 'Filter gender' : 'Gender filter';
+  String get yukcoinFeatureNearby =>
+      isId ? 'Cari orang sekitar' : 'Find people nearby';
+  String get yukcoinPerMin => isId ? 'koin/menit' : 'coins/min';
   String get yukcoinHowToSpend =>
       isId ? 'Cara pakai YukCoin' : 'How to spend YukCoin';
   String get yukcoinTopup => isId ? 'Isi YukCoin' : 'Top up YukCoin';
