@@ -1,4 +1,38 @@
 ﻿
+## 2026-10-03 — Admin Pengaturan Poin selaras sistem YukCoin
+
+**Bug kritis diperbaiki:** `admin_update_point_settings` (versi 20261001020000)
+masih menulis kolom `call_free_minutes_daily` yang DROPPED di
+`20261003000000_coin_call_no_free.sql` → SETIAP Simpan Pengaturan Poin dari
+panel admin GAGAL (SQLSTATE 42703). Migrasi `20261003000100` sudah membetulkan
+`metered_pricing_public` tapi melewatkan RPC ini.
+
+**Migrasi:** `20261003000200_admin_point_settings_yukcoin.sql` (apply via
+Management API, SUDAH TERAPPLIED):
+1. Rewrite `admin_update_point_settings`: buang `call_free_minutes_daily` +
+   semua field faucet mati; TAMBAH welcome bonus (`welcome_anon_coins`,
+   `welcome_register_coins`, `welcome_max_claims_per_ip_day`), YukCoin v2
+   (`yukcoin_v2_enabled`, `cost_undo_message`, `cost_edit_message`,
+   `cost_extra_photo_slot`, `cost_ghost_mode_daily`), `gift_cut_pct`.
+2. Rewrite `points_quests`: tak baca lagi kolom faucet (daily/weekly/oneTime
+   dikosongkan — layar misi sudah orphan & reward faucet no-op).
+3. DROP 19 kolom faucet mati di `app_settings` (`bonus_registered/rated/shared/
+   profile/first_photo/room_read/new_chat/invited/first_room/referral/
+   online_5min/30min/60min/120min/first_friend`, `room_reads_daily_limit`,
+   `new_chats_daily_limit`, `share_click_reward`, `share_click_cap_daily`).
+   `bonus_price_multiplier` DIPERTAHANKAN (masih dipakai room_pricing,
+   send_gift, unlock_photo).
+- Bukan fungsi FROZEN. Snapshot FROZEN tidak berubah.
+- **Verifikasi live:** 0 sisa kolom mati; `admin_update_point_settings` &
+  `points_quests` tak menyebut kolom yang di-drop; 30 kolom yang ditulis RPC
+  semua ada.
+
+**Kode klien:** `lib/screens/admin_panel_screen.dart` (`_pointFields` dirapikan
+per grup + toggle boolean `_pointFlags`), `admin_panel/widgets/point_tab_cards.dart`
+(switch YukCoin v2 + label), `config/strings_admin.dart` (label YukCoin bilingual).
+`flutter analyze` 0 error. Layar misi (`missions_screen.dart`) orphan — tak
+tersentuh perilaku.
+
 ## 2026-10-03 — Coin untuk nelp (tanpa gratis) + welcome bonus bertahap + fix keamanan
 
 **Keputusan produk:** nelp MURNI pakai coin (tanpa kuota gratis); tarif audio 6 /
@@ -2095,3 +2129,24 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
   `lib/screens/chats_screen.dart` (item menu), `lib/config/strings.dart` (7 getter).
 - **Verifikasi:** `flutter analyze` 0 error/0 warning; `test/call_history_test.dart`
   14/14 hijau; `check_screen_boundary.sh` — file baru 0 import services.
+
+## 2026-10-01 — Setup Produk Google Play (in-app products) + secret edge function
+
+- **Masalah:** Play Console blokir pembuatan produk: "Aplikasi belum memiliki
+  produk sekali beli — harus menambahkan izin PENAGIHAN ke APK". APK rilis
+  (1.2.61) di-upload sebelum `in_app_purchase` ditambahkan.
+- **Fix:** bump 1.2.62+84 → build AAB `playProd` (izin `com.android.vending.BILLING`
+  ikut dari plugin) → upload ke **internal testing** via Play Console. Blokir
+  terbuka.
+- **Produk dibuat via Google Play Developer API** (service account
+  `chatyuk-play-upload@chatyuk-7c9e4`, sudah ada di `fastlane/google-play.json`,
+  ter-gitignore):
+  - Endpoint: `PATCH .../v3/applications/{pkg}/onetimeproducts/{id}?allowMissing=true&regionsVersion.version=2026/01&updateMask=listings,purchaseOptions`
+    (catatan: path **huruf kecil** `onetimeproducts`; bahasa listing `id`).
+  - Aktivasi: `POST .../oneTimeProducts/-/purchaseOptions:batchUpdateStates`
+    (`activatePurchaseOptionRequest`, purchaseOptionId `buy`).
+  - 5 produk ACTIVE: `chatyuk_coins_700`/1850/3900/8200/21500 =
+    Rp 10.000/25.000/50.000/100.000/250.000 (sinkron `topup_packages`).
+- **Secret edge function** (`play-topup-verify`): `GOOGLE_PLAY_SA_JSON`
+  (isi `fastlane/google-play.json`), `ANDROID_PACKAGE_NAME=com.chatyuk.chatyuk`.
+- **Verifikasi:** kelima produk `state=ACTIVE` + harga IDR sesuai.
