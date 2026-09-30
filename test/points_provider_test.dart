@@ -28,6 +28,11 @@ void main() {
     when(() => service.getWallet()).thenAnswer(
       (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 50},
     );
+    // Overhaul coin: harga fitur + feature flags (dipanggil di konstruktor).
+    when(() => service.meteredPricing())
+        .thenAnswer((_) async => <String, dynamic>{});
+    when(() => service.featureFlags())
+        .thenAnswer((_) async => <String, dynamic>{});
     provider = PointsProvider(service: service);
   });
 
@@ -36,59 +41,30 @@ void main() {
   });
 
   group('milestone online', () {
-    // Flag enabled wajib terkonfirmasi server (lihat refreshEnabled) —
-    // tanpa ini klaim ditahan guard `enabled` dan service tak dipanggil.
+    // Overhaul coin 2026-10: bonus online DIHAPUS — tidak ada klaim ke service.
     setUp(() async {
       when(() => service.fetchEnabled()).thenAnswer((_) async => true);
+      when(() => service.meteredPricing()).thenAnswer((_) async => <String, dynamic>{});
+      when(() => service.featureFlags()).thenAnswer((_) async => <String, dynamic>{});
       await provider.refreshEnabled();
     });
 
-    test('300 dtk → klaim online_5min sekali', () async {
+    test('300 dtk → TIDAK klaim (faucet dihapus)', () async {
       provider.setOnlineSecondsForTest(300);
-      await provider.debugClaimOnlineBonus();
-      verify(() => service.oneTimeBonus('online_5min', 5)).called(1);
-    });
-
-    test('di bawah threshold tidak klaim', () async {
-      provider.setOnlineSecondsForTest(299);
       await provider.debugClaimOnlineBonus();
       verifyNever(() => service.oneTimeBonus(any(), any()));
     });
 
-    test('klaim idempoten — dobel picu tetap sekali', () async {
+    test('4000 dtk → TIDAK klaim apa pun', () async {
       provider.setOnlineSecondsForTest(4000);
       await provider.debugClaimOnlineBonus();
-      await provider.debugClaimOnlineBonus();
-      verify(() => service.oneTimeBonus('online_5min', 5)).called(1);
-      verify(() => service.oneTimeBonus('online_30min', 10)).called(1);
-      verify(() => service.oneTimeBonus('online_60min', 15)).called(1);
+      verifyNever(() => service.oneTimeBonus(any(), any()));
     });
 
-    test('reset membuka klaim ulang', () async {
+    test('resetOnlineTrackers tidak memanggil service', () async {
       provider.setOnlineSecondsForTest(300);
-      await provider.debugClaimOnlineBonus();
       provider.resetOnlineTrackers();
-      provider.setOnlineSecondsForTest(300);
       await provider.debugClaimOnlineBonus();
-      verify(() => service.oneTimeBonus('online_5min', 5)).called(2);
-    });
-
-    test('batas 120 menit memakai ambang 7200', () async {
-      provider.setOnlineSecondsForTest(7199);
-      await provider.debugClaimOnlineBonus();
-      verifyNever(() => service.oneTimeBonus('online_120min', 15));
-      provider.setOnlineSecondsForTest(7200);
-      await provider.debugClaimOnlineBonus();
-      verify(() => service.oneTimeBonus('online_120min', 15)).called(1);
-    });
-
-    test('sistem OFF → milestone tidak klaim ke service', () async {
-      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
-      await provider.refreshEnabled();
-
-      provider.setOnlineSecondsForTest(7200);
-      await provider.debugClaimOnlineBonus();
-
       verifyNever(() => service.oneTimeBonus(any(), any()));
     });
   });
@@ -254,22 +230,12 @@ void main() {
       await provider.refreshEnabled();
     });
 
-    test('claimDailyLogin sukses → saldo/streak/bonus + reset tracker',
+    test('claimDailyLogin → no-op (faucet dihapus), saldo tak berubah',
         () async {
-      when(() => service.dailyLoginBonus()).thenAnswer(
-        (_) async => {'points': 70, 'streak': 3, 'bonus': 5},
-      );
-      when(() => service.oneTimeBonus(any(), any()))
-          .thenAnswer((_) async => 70);
-
       await provider.claimDailyLogin();
-
-      expect(provider.points, 70);
-      expect(provider.loginStreak, 3);
-      // Tracker online di-reset → milestone bisa diklaim lagi.
-      provider.setOnlineSecondsForTest(300);
-      await provider.debugClaimOnlineBonus();
-      verify(() => service.oneTimeBonus('online_5min', 5)).called(1);
+      // Tidak memanggil RPC daily_login_bonus & saldo tetap.
+      verifyNever(() => service.dailyLoginBonus());
+      expect(provider.points, 50);
     });
 
     test('claimDailyLogin OFF → diam', () async {
@@ -279,14 +245,6 @@ void main() {
       await provider.claimDailyLogin();
 
       verifyNever(() => service.dailyLoginBonus());
-    });
-
-    test('claimDailyLogin error → saldo tetap', () async {
-      when(() => service.dailyLoginBonus()).thenThrow(Exception('offline'));
-
-      await provider.claimDailyLogin();
-
-      expect(provider.points, 50);
     });
 
     test('newChatBonus naik → true; gagal → false', () async {
