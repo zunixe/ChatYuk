@@ -25,7 +25,6 @@ class PointsService {
     return {
       'call_audio_cost_per_min': 6,
       'call_video_cost_per_min': 20,
-      'call_free_minutes_daily': 5,
       'filter_gender_cost': 15,
       'nearby_cost': 25,
     };
@@ -79,6 +78,25 @@ class PointsService {
       dlog('[PointsService] verifyPlayTopup error: $e');
     }
     return 0;
+  }
+
+  /// Klaim WELCOME BONUS via edge function `welcome-bonus` (IP server-side,
+  /// anti-farming). kind: 'anon' | 'register'. Return map {granted, coins, total}.
+  Future<Map<String, dynamic>> claimWelcomeBonus({
+    required String installId,
+    required String kind,
+  }) async {
+    try {
+      final res = await _sb.functions.invoke(
+        'welcome-bonus',
+        body: {'install_id': installId, 'kind': kind},
+      );
+      final data = res.data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+    } catch (e) {
+      dlog('[PointsService] claimWelcomeBonus($kind) error: $e');
+    }
+    return {'granted': false, 'coins': 0};
   }
 
   /// Potong akses harian (filter gender / nearby). Return {ok, charged, ...}.

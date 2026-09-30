@@ -2626,6 +2626,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       );
       return;
     }
+    // Nelp pakai COIN (tanpa gratis). Bila saldo < tarif 1 menit → edukasi +
+    // topup, batalkan. Hanya untuk penelepon (isCaller).
+    {
+      final pp = context.read<PointsProvider>();
+      if (pp.callBillingPublished) {
+        final ok = await pp.ensureEnoughForCall(context, callType, s.isId);
+        if (!ok) return;
+      }
+    }
     // Izin kamera/mikrofon WAJIB sebelum getUserMedia — tanpa ini video call
     // pertama (izin belum ada) langsung gagal senyap (CallPhase.error).
     final perm = await ensureCallPermissions(video: callType == 'video');
@@ -2659,6 +2668,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         notifChannel: s.callNotifActiveAudio,
         notifDesc: s.callNotifActiveAudio,
         chatId: widget.chatId,
+      );
+      // Tarif per menit untuk banner (server kirim ulang tiap tick).
+      session.setBillingPerMinute(
+        context.read<PointsProvider>().callCostPerMin(callType),
       );
       if (!mounted) return;
       if (mode == CallMode.fullscreen) {

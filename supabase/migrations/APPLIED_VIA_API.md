@@ -2,6 +2,21 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-03 — Coin untuk nelp (tanpa gratis) + welcome bonus
+
+- **Status:** SUDAH TERAPPLIED via Management API.
+- **File:**
+  - `20261003000000_coin_call_no_free.sql` — drop kuota-gratis call; rewrite
+    `call_billing_tick` (tanpa gratis, return `per_minute`); fix keamanan
+    `charge_metered` → service_role; tabel `bonus_claims` + RPC
+    `credit_welcome_bonus`; config welcome bonus.
+  - `20261003000100_fix_metered_pricing_public.sql` — fix 42703 (kolom
+    `call_free_minutes_daily` dihapus).
+- **Verifikasi live:** `metered_pricing_public()` OK (audio 6/video 20);
+  `charge_metered` ACL hanya service_role; kolom `call_free_*` 0 sisa.
+- **Edge function (deploy --use-api):** `welcome-bonus` + `play-topup-verify`
+  (keduanya verify_jwt=true, ACTIVE).
+
 ## METODE YANG JALAN di Mac ini (cheat sheet — jangan pakai yang hang)
 
 - ❌ `supabase db query --linked` → **HANG** (timeout 120s+). JANGAN dipakai.
@@ -27,6 +42,18 @@
 - ✅ **Cek DB read-only**: Management API query di atas (SELECT cepat, tidak hang).
 - ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
 - ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
+
+## 2026-10-02 — 20261002060000_fake_gps_detect.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-10-02.
+- **Isi:** kolom Fake-GPS di `profiles` + `user_location_history`;
+  `update_my_location` 6-arg (+p_mocked/p_accuracy, overload lama DROP) +
+  heuristik is_mocked/accuracy_zero/impossible_speed/spoof_delta;
+  `admin_stats_detail` (+location_mocked/mock_reason, FROZEN→snapshot) &
+  `admin_user_detail` (+mocked/reason/accuracy_m di history).
+- **Verifikasi live:** kolom ada, fungsi 6-arg, `admin_stats_detail`/
+  `admin_user_detail` memuat field baru; snapshot di-regen (diff hanya
+  `admin_stats_detail` +4 baris, 0 hapus); pgTAP `fake_gps_test.sql` 7/7.
 
 ## 2026-09-30 — 20260930053000_online_notify_chatid_fix.sql
 
