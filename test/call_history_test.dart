@@ -199,4 +199,40 @@ void main() {
       expect(e.isVideo, isTrue);
     });
   });
+
+  group('callHistoryStamp (stempel waktu gaya WhatsApp)', () {
+    final ref = DateTime(2026, 9, 29, 15, 0);
+
+    test('hari sama → "Today, h:mm AM/PM"', () {
+      final at = DateTime(2026, 9, 29, 10, 50);
+      expect(
+        callHistoryStamp(at, today: 'Today', yesterday: 'Yesterday', now: ref),
+        'Today, 10:50 AM',
+      );
+    });
+
+    test('kemarin → "Yesterday, h:mm AM/PM"', () {
+      final at = DateTime(2026, 9, 28, 20, 21);
+      expect(
+        callHistoryStamp(at, today: 'Today', yesterday: 'Yesterday', now: ref),
+        'Yesterday, 8:21 PM',
+      );
+    });
+
+    test('lebih lama → "d MMM, h:mm AM/PM"', () {
+      final at = DateTime(2026, 9, 27, 21, 48);
+      expect(
+        callHistoryStamp(at, today: 'Today', yesterday: 'Yesterday', now: ref),
+        '27 Sep, 9:48 PM',
+      );
+    });
+
+    test('versi Indonesia pakai label dari S', () {
+      final at = DateTime(2026, 9, 29, 10, 50);
+      expect(
+        callHistoryStamp(at, today: 'Hari ini', yesterday: 'Kemarin', now: ref),
+        'Hari ini, 10:50 AM',
+      );
+    });
+  });
 }
