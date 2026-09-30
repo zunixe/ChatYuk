@@ -16,10 +16,10 @@
 | UI | `lib/screens/online_users_screen.dart`, `chats_screen.dart` |
 | Provider | `lib/providers/online_users_provider.dart`, `auth_provider.dart` |
 | Service | `lib/services/chat_service.dart` (`effectiveStatusOf`, `getUserStatus`), `rt_resilient.dart` |
-| SQL inti | `ai_presence_tick()`, `presence_idle_tick` cron, `get_online_users()` |
+| SQL inti | `ai_presence_tick()`, `presence_idle_tick` cron, `get_online_users()`, `notify_contact_online()` |
 | Cron | `chatyuk-ai-presence` (*/5m, menit 2-59/5), `chatyuk-housekeeping` (*/1m — presence idle + voice + room cleanup sekaligus) |
 | Kolom kritis | `profiles.status`, `profiles.last_seen`, `dummy_accounts.ai_always_online`, `ai_active_hours`, `ai_wake_until`, `ai_offline_until` |
-| Test | `test/presence_test.dart`, `test/online_users_provider_test.dart`, `test/online_visibility_test.dart`, `supabase/tests/presence_test.sql` |
+| Test | `test/presence_test.dart`, `test/online_users_provider_test.dart`, `test/online_visibility_test.dart`, `supabase/tests/presence_test.sql`, `supabase/tests/online_notify_test.sql` |
 
 **Regresi yang pernah terjadi:**
 - `ai_always_online` (Admin Chatyuk) hilang saat `ai_presence_tick` di-replace
@@ -33,6 +33,10 @@
 4. `ai_offline_until` (ngambek) aktif → paksa offline, abaikan jadwal.
 5. Dummy jadwal-normal: dalam jam aktif → online/idle (drift); luar → offline.
 6. `effectiveStatusOf`: last_seen >30 mnt = offline; `invisible` = offline.
+7. Notif "X online" (2026-09-30): penerima = UNION(teman mutual |
+   follower-ku | pernah 1:1 chat), kecuali author/blokir/author-dummy;
+   via outbox (transaksi tak menunggu HTTP). Tap: ada chatId → chat,
+   tanpa chatId → profil (`UserInfoScreen`).
 
 ---
 
@@ -217,12 +221,20 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 |---|---|
 | UI | `lib/screens/timeline_screen.dart`, `story_*.dart`, `social_list_screen.dart`, `nearby_screen.dart` |
 | Provider | `lib/providers/timeline_provider.dart`, `story_provider.dart`, `social_provider.dart` |
-| SQL inti | `list_posts()`, `create_story()`, `story_slides()`, `follow_count_sync()`, `nearby_users()` |
+| SQL inti | `list_posts()`, `get_post()`, `create_story()`, `story_slides()`, `follow_count_sync()`, `nearby_users()`, `notify_post_followers()` |
 | Cron | `purge-stories` (17:00), `purge_inactive_90d` |
 | Test | `test/story_provider_test.dart`, `test/timeline_provider_test.dart`, `test/story_social_io_test.dart` (payload RPC story/social via HTTP palsu) |
 
 **Invariant:** visibility story ikut follower; counter sosial konsisten
 (`follow_count_sync`); timeline hanya user terdaftar.
+
+**Notif post baru (2026-09-29) — sesuai visibilitas post:**
+- `public` → SEMUA user (registered, non-dummy, non-exclude, tanpa blokir);
+  `followers` → follower saja; `subscribers` → subscriber aktif saja.
+- Fanout topic `timeline-all` HANYA untuk `public` (dulu semua visibilitas →
+  bocor isi followers/subscribers-only).
+- Tap notif (`timeline_post`/`timeline` + `postId`) → `PostDetailScreen`
+  (`get_post`, hormat visibilitas); tanpa postId → tab Timeline.
 
 ---
 
