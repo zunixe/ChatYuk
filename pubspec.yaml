@@ -48,6 +48,9 @@ dependencies:
   # WebRTC (call 1:1 audio/video)
   flutter_webrtc: ^1.6.0
 
+  # Topup YukCoin via Google Play Billing (hanya build flavor `play`).
+  in_app_purchase: ^3.3.0
+
   # State management
   provider: ^6.1.4
 

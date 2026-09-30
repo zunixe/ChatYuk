@@ -14,6 +14,87 @@ class PointsService {
     return res == true;
   }
 
+  /// Harga fitur berbayar (call per menit, filter, nearby) untuk UI.
+  Future<Map<String, dynamic>> meteredPricing() async {
+    try {
+      final res = await measuredRpc(_sb, 'metered_pricing_public');
+      if (res is Map) return Map<String, dynamic>.from(res);
+    } catch (e) {
+      dlog('[PointsService] meteredPricing error: $e');
+    }
+    return {
+      'call_audio_cost_per_min': 6,
+      'call_video_cost_per_min': 20,
+      'call_free_minutes_daily': 5,
+      'filter_gender_cost': 15,
+      'nearby_cost': 25,
+    };
+  }
+
+  /// Feature flags (published per fitur) untuk gate UI.
+  Future<Map<String, dynamic>> featureFlags() async {
+    try {
+      final res = await measuredRpc(_sb, 'get_feature_flags');
+      if (res is Map) return Map<String, dynamic>.from(res);
+    } catch (e) {
+      dlog('[PointsService] featureFlags error: $e');
+    }
+    return {};
+  }
+
+  /// Katalog paket topup (id, coins, price_idr, bonus_label, play_product_id).
+  Future<List<Map<String, dynamic>>> listTopupPackages() async {
+    try {
+      final res = await measuredRpc(_sb, 'list_topup_packages');
+      if (res is List) {
+        return res
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      }
+    } catch (e) {
+      dlog('[PointsService] listTopupPackages error: $e');
+    }
+    return const [];
+  }
+
+  /// Verifikasi pembelian Play ke server (edge function play-topup-verify).
+  /// Return jumlah coin yang dikredit (0 bila gagal).
+  Future<int> verifyPlayTopup({
+    required String productId,
+    required String purchaseToken,
+  }) async {
+    try {
+      final res = await _sb.functions.invoke(
+        'play-topup-verify',
+        body: {
+          'product_id': productId,
+          'purchase_token': purchaseToken,
+        },
+      );
+      final data = res.data;
+      if (data is Map && data['coins'] != null) {
+        return (data['coins'] as num).toInt();
+      }
+    } catch (e) {
+      dlog('[PointsService] verifyPlayTopup error: $e');
+    }
+    return 0;
+  }
+
+  /// Potong akses harian (filter gender / nearby). Return {ok, charged, ...}.
+  /// Raise 'YukCoin tidak cukup' bila saldo kurang.
+  Future<Map<String, dynamic>> gateFeature(
+    String feature, {
+    String? priceFeature,
+  }) async {
+    final res = await measuredRpc(
+      _sb,
+      'gate_feature',
+      params: {'p_feature': feature, if (priceFeature != null) 'p_price_feature': priceFeature},
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
   Stream<bool> watchEnabled() async* {
     // TIDAK memakai `.stream()`: ia selalu `SELECT *` (supabase 2.16.x),
     // sementara `app_shared_secret` di-revoke dari anon/authenticated

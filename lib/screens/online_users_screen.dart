@@ -22,6 +22,7 @@ import '../providers/online_users_provider.dart';
 import '../providers/room_provider.dart';
 import '../widgets/search_dropdown.dart';
 import '../widgets/skeleton_card.dart';
+import 'online_users/widgets/hidden_box_widgets.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../core/nav_guard.dart';
 import '../core/ui/online_pill_mode.dart';
@@ -376,6 +377,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   final TextEditingController _searchCtrl = TextEditingController();
   StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
   Map<String, int> _unreadMap = {};
+  String? _hiddenOwner;
+  bool _showHidden = false;
 
   // Cache decode avatar sendiri — persis pola tile story: bytes di-decode
   // SEKALI per foto baru; rebuild sebanyak apa pun memakai instance bytes
@@ -455,6 +458,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     super.didChangeDependencies();
     _unreadSub?.cancel();
     final auth = context.read<AuthProvider>();
+    if (_hiddenOwner != auth.uid) {
+      _hiddenOwner = auth.uid;
+      try {
+        context.read<OnlineUsersProvider>().setOwner(auth.uid);
+      } catch (_) {}
+    }
     if (auth.uid != null) {
       _unreadSub = context
           .read<ChatProvider>()
@@ -1094,6 +1103,29 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     }
   }
 
+  // Sembunyikan TANPA snackbar: swipe beruntun + bar transient = bar
+  // seolah nempel/muncul terus. Feedback-nya = kotak bawah otomatis
+  // terbuka menampilkan orangnya + tombol Tampilkan per kartu (tanpa
+  // timeout, jauh lebih jelas daripada snackbar 3 detik).
+  Future<void> _hideUser(UserModel user) async {
+    if (!mounted) return;
+    try {
+      await context.read<OnlineUsersProvider>().hideUser(user.uid);
+    } catch (_) {}
+    if (!mounted) return;
+    // Langsung buka kotak bawah supaya user MELIHAT ke mana perginya.
+    // Tanpa reset `_page`: hide 1 user tidak boleh melempar scroll ke atas.
+    setState(() => _showHidden = true);
+  }
+
+  Future<void> _unhideUser(UserModel user) async {
+    if (!mounted) return;
+    // Box ikut rebuild lewat notify provider; tidak perlu setState khusus.
+    try {
+      await context.read<OnlineUsersProvider>().unhideUser(user.uid);
+    } catch (_) {}
+  }
+
   Future<void> _showUnreadBubble(
     BuildContext cardCtx,
     UserModel user,
@@ -1440,7 +1472,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   key: const ValueKey('title'),
                   builder: (_, prov, __) {
                     // Hitung sama seperti list: exclude self + blocked +
-                    // dedupe by uid/nickname, supaya angka = jumlah kartu.
+                    // hidden + dedupe by uid/nickname, supaya angka = kartu.
                     final chat = context.read<ChatProvider>();
                     final seenU = <String>{};
                     final seenN = <String>{};
@@ -1450,6 +1482,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               u.uid != authUid &&
                               u.uid.isNotEmpty &&
                               !chat.isBlocked(u.uid) &&
+                              !prov.isHidden(u.uid) &&
                               seenU.add(u.uid) &&
                               seenN.add(u.nickname.toLowerCase()),
                         )
@@ -1550,7 +1583,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             builder: (_, provider, __) {
               final chat = context.read<ChatProvider>();
               // Ukur biaya filter per emission (kandidat optimasi QA).
-              final users = PerfProbe.measure('Online.filter', () {
+              // Partisi: utama = filter penuh + !hidden; kotak bawah =
+              // semua hidden (abaikan negara/gender/search, hormati blokir)
+              // supaya yang dibenam tetap di bawah walau online.
+              late List<UserModel> users;
+              late List<UserModel> hiddenUsers;
+              PerfProbe.measure('Online.filter', () {
                 final allUsers = provider.users
                     .where((u) => u.uid != authUid && !chat.isBlocked(u.uid))
                     .toList();
@@ -1559,9 +1597,16 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                 // duplikat lolos dari stream/cache, kartu tidak boleh tampil 2x.
                 final seenU = <String>{};
                 final seenN = <String>{};
-                return allUsers.where((u) {
+                final base = allUsers.where((u) {
                   if (!seenU.add(u.uid)) return false;
                   if (!seenN.add(u.nickname.toLowerCase())) return false;
+                  return true;
+                }).toList();
+                hiddenUsers = base
+                    .where((u) => provider.isHidden(u.uid))
+                    .toList();
+                users = base.where((u) {
+                  if (provider.isHidden(u.uid)) return false;
                   if (_negaraSel.isNotEmpty &&
                       !_negaraSel.contains(u.country)) {
                     return false;
@@ -1732,35 +1777,147 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                   ),
                                 );
                               }
-                              return Builder(
-                                key: ValueKey('uc-${paged[i].uid}'),
+                              final user = paged[i];
+                              // Geser kiri = Sembunyikan (benam ke kotak bawah).
+                              // confirmDismiss=false: kartu tidak terbang,
+                              // hanya memicu hide + snackbar Undo.
+                              return Dismissible(
+                                key: ValueKey('uc-${user.uid}'),
+                                direction: DismissDirection.endToStart,
+                                secondaryBackground: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 20),
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.textSecondary,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(
+                                        Icons.visibility_off_outlined,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        s.btnHide,
+                                        style: AppText.caption.copyWith(
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                background: const SizedBox.shrink(),
+                                // Fire-and-forget: kartu langsung meluncur
+                                // balik tanpa menunggu I/O prefs; hide +
+                                // snackbar jalan di latar. Kalau di-await,
+                                // kartu tertahan terbuka selama future jalan.
+                                confirmDismiss: (_) {
+                                  unawaited(_hideUser(user));
+                                  return Future.value(false);
+                                },
                                 // RepaintBoundary: kartu lain tidak ikut
                                 // repaint saat satu kartu berubah (badge,
                                 // status dot, avatar) — list panjang jadi
                                 // jauh lebih murah.
-                                builder: (cardCtx) => RepaintBoundary(
-                                  child: _UserCard(
-                                    user: paged[i],
-                                    onTap: () => _startChat(context, paged[i]),
-                                    onAvatarTap: (c) =>
-                                        _zoomUserAvatar(paged[i], c),
-                                    onLongPressStart:
-                                        unreadMap[paged[i].uid] != null &&
-                                            unreadMap[paged[i].uid]! > 0
-                                        ? (d) => _showUnreadBubble(
-                                            cardCtx,
-                                            paged[i],
-                                            unreadMap[paged[i].uid]!,
-                                            d.globalPosition,
-                                          )
-                                        : null,
-                                    unreadCount: unreadMap[paged[i].uid] ?? 0,
+                                child: Builder(
+                                  builder: (cardCtx) => RepaintBoundary(
+                                    child: _UserCard(
+                                      user: user,
+                                      onTap: () => _startChat(context, user),
+                                      onAvatarTap: (c) =>
+                                          _zoomUserAvatar(user, c),
+                                      onLongPressStart:
+                                          unreadMap[user.uid] != null &&
+                                              unreadMap[user.uid]! > 0
+                                          ? (d) => _showUnreadBubble(
+                                              cardCtx,
+                                              user,
+                                              unreadMap[user.uid]!,
+                                              d.globalPosition,
+                                            )
+                                          : null,
+                                      unreadCount: unreadMap[user.uid] ?? 0,
+                                    ),
                                   ),
                                 ),
                               );
                             },
                           ),
                   ),
+                  // Kotak bawah: yang disembunyikan tetap di bawah walau
+                  // online, sampai di-release (swipe kanan / tombol).
+                  // Hanya tampil jika ada isi (hemat ruang).
+                  if (hiddenUsers.isNotEmpty)
+                    HiddenBox(
+                      title: s.labelHidden(hiddenUsers.length),
+                      expanded: _showHidden,
+                      onToggle: () =>
+                          setState(() => _showHidden = !_showHidden),
+                      children: [
+                        for (final user in hiddenUsers)
+                          Dismissible(
+                            key: ValueKey('hid-${user.uid}'),
+                            direction: DismissDirection.startToEnd,
+                            background: Container(
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.only(left: 20),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.visibility_outlined,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    s.btnUnhide,
+                                    style: AppText.caption.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            secondaryBackground: const SizedBox.shrink(),
+                            confirmDismiss: (_) {
+                              unawaited(_unhideUser(user));
+                              return Future.value(false);
+                            },
+                            child: Builder(
+                              builder: (cardCtx) => RepaintBoundary(
+                                child: _UserCard(
+                                  user: user,
+                                  onTap: () => _startChat(context, user),
+                                  onAvatarTap: (c) =>
+                                      _zoomUserAvatar(user, c),
+                                  onLongPressStart:
+                                      unreadMap[user.uid] != null &&
+                                          unreadMap[user.uid]! > 0
+                                      ? (d) => _showUnreadBubble(
+                                          cardCtx,
+                                          user,
+                                          unreadMap[user.uid]!,
+                                          d.globalPosition,
+                                        )
+                                      : null,
+                                  unreadCount: unreadMap[user.uid] ?? 0,
+                                  onUnhide: () => _unhideUser(user),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                 ],
               );
             },
@@ -1777,6 +1934,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             child: _OnlinePill(
               onOpenRoom: () => _openGeneralRoom(context),
               onOpenTimeline: () => context.read<NavProvider>().goTo(2),
+              ownerUid: authUid,
             ),
           ),
         ],
@@ -1820,6 +1978,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 ///  - mode **Timeline** (jam genap): label "Timeline", klik → pindah tab.
 ///  - mode **Global Room** (jam ganjil): label "Global Room" + jumlah online,
 ///    klik → buka room kategori General (perilaku lama).
+/// Kapsul bisa DI-DRAG vertikal (tetap nempel tepi kanan); posisi terakhir
+/// disimpan per akun sehingga logout/login tetap di sana.
 ///
 /// Perilaku animasi:
 ///  - Saat halaman Online dibuka → kapsul SLIDE MASUK dari kanan (dari tidak
@@ -1838,9 +1998,14 @@ class _OnlinePill extends StatefulWidget {
   /// Aksi saat kapsul mode Timeline diketuk — pindah ke tab Timeline.
   final VoidCallback onOpenTimeline;
 
+  /// Uid pemilik posisi drag (persist per akun — logout/login tetap di
+  /// posisi terakhir user itu).
+  final String? ownerUid;
+
   const _OnlinePill({
     required this.onOpenRoom,
     required this.onOpenTimeline,
+    this.ownerUid,
   });
 
   @override
@@ -1866,11 +2031,42 @@ class _OnlinePillState extends State<_OnlinePill>
   // Kapsul kecil: tinggi 40, teks ringkas.
   static const double _h = 40;
 
+  /// Offset vertikal dari posisi default (60+inset): + = ke atas.
+  /// Disimpan per akun; dimuat ulang saat ganti akun.
+  double _dragDy = 0;
+  String? _pillOwner;
+
+  static String _pillKeyFor(String owner) => 'online_pill_dy_$owner';
+
+  Future<void> _loadPillPos() async {
+    final owner = widget.ownerUid;
+    _pillOwner = owner;
+    if (mounted) setState(() => _dragDy = 0);
+    if (owner == null || owner.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final dy = prefs.getDouble(_pillKeyFor(owner));
+      if (!mounted || dy == null) return;
+      if (widget.ownerUid != _pillOwner) return;
+      setState(() => _dragDy = dy);
+    } catch (_) {}
+  }
+
+  Future<void> _savePillPos() async {
+    final owner = widget.ownerUid;
+    if (owner == null || owner.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_pillKeyFor(owner), _dragDy);
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
     _mode = onlinePillModeFor(DateTime.now());
     _scheduleHourFlip();
+    _loadPillPos();
     // PENTING: mulai dari 1.0 (MENEMPEL) agar kapsul PASTI tampil, apa pun
     // kondisi TickerMode (halaman Online dibuild di dalam IndexedStack +
     // TickerMode; bila ticker ter-pause, animasi tak jalan → kapsul
@@ -1914,6 +2110,13 @@ class _OnlinePillState extends State<_OnlinePill>
       _tickerNotifier?.addListener(_onTickerChanged);
     }
     _onTickerChanged();
+  }
+
+  @override
+  void didUpdateWidget(covariant _OnlinePill old) {
+    super.didUpdateWidget(old);
+    // Ganti akun (dummy ⇄ admin) → muat posisi milik akun baru.
+    if (old.ownerUid != widget.ownerUid) _loadPillPos();
   }
 
   ValueListenable<bool>? _tickerNotifier;
@@ -1988,30 +2191,52 @@ class _OnlinePillState extends State<_OnlinePill>
     // Lebar kapsul ± 150px → travel lebih besar supaya benar-benar di luar.
     const travel = 170.0;
 
-    return AnimatedBuilder(
-      animation: Listenable.merge([_slide, _chev]),
-      builder: (context, _) {
-        // `_slide.value`: 0 = seluruhnya di LUAR kanan, 1 = MENEMPEL tepi.
-        // `out`: 1 = di luar, 0 = menempel (dipakai untuk `right`).
-        final out = reduceMotion
-            ? 0.0
-            : (1 - Curves.easeOutCubic.transform(_slide.value.clamp(0.0, 1.0)));
-        // Opacity: 0 saat di luar, 1 saat menempel (berbanding terbalik out).
-        final opacity = (1 - out).clamp(0.0, 1.0);
+    // LayoutBuilder: batas drag = tinggi body (8px margin atas-bawah).
+    // Kapsul hanya geser VERTIKAL — `right` tetap menempel tepi kanan.
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        final maxBottom = (constraints.maxHeight - _h - 8.0)
+            .clamp(8.0, double.infinity)
+            .toDouble();
+        final bottom = (60 + bottomInset + _dragDy)
+            .clamp(8.0, maxBottom)
+            .toDouble();
+        return AnimatedBuilder(
+          animation: Listenable.merge([_slide, _chev]),
+          builder: (_, __) {
+            // `_slide.value`: 0 = seluruhnya di LUAR kanan, 1 = MENEMPEL tepi.
+            // `out`: 1 = di luar, 0 = menempel (dipakai untuk `right`).
+            final out = reduceMotion
+                ? 0.0
+                : (1 -
+                      Curves.easeOutCubic.transform(
+                        _slide.value.clamp(0.0, 1.0),
+                      ));
+            // Opacity: 0 saat di luar, 1 saat menempel (berbanding terbalik out).
+            final opacity = (1 - out).clamp(0.0, 1.0);
 
-        // Chevron: geser 0→3px halus (hanya ini yang bergerak saat diam).
-        final chevDx = reduceMotion ? 0.0 : (_chev.value * 3.0);
+            // Chevron: geser 0→3px halus (hanya ini yang bergerak saat diam).
+            final chevDx = reduceMotion ? 0.0 : (_chev.value * 3.0);
 
-        return Stack(
-          children: [
-            Positioned(
-              // out=0 → right 0 (menempel). out=1 → right -travel (di luar).
-              right: -travel * out,
-              // Menempel lebih ke bawah (nav bar ±52) — 8px di atasnya.
-              bottom: 60 + bottomInset,
-              child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _handleTap,
+            return Stack(
+              children: [
+                Positioned(
+                  // out=0 → right 0 (menempel). out=1 → right -travel (di luar).
+                  right: -travel * out,
+                  bottom: bottom,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _handleTap,
+                    // Drag vertikal: geser jari 1:1 dengan kapsul; horizontal
+                    // diabaikan (tetap nempel kanan). Tap tetap jalan karena
+                    // cuma drag vertikal yang masuk arena gesture.
+                    onVerticalDragStart: (_) =>
+                        HapticFeedback.lightImpact(),
+                    onVerticalDragUpdate: (d) {
+                      setState(() => _dragDy += -d.delta.dy);
+                    },
+                    onVerticalDragEnd: (_) =>
+                        unawaited(_savePillPos()),
                   child: Opacity(
                     opacity: opacity,
                     child: Container(
@@ -2091,9 +2316,11 @@ class _OnlinePillState extends State<_OnlinePill>
                 ),
               ),
             ],
-        );
-      },
-    );
+          );
+        },
+      );
+    },
+  );
   }
 }
 
@@ -2505,12 +2732,14 @@ class _UserCard extends StatelessWidget {
   final void Function(Color avatarColor) onAvatarTap;
   final void Function(LongPressStartDetails)? onLongPressStart;
   final int unreadCount;
+  final VoidCallback? onUnhide;
   const _UserCard({
     required this.user,
     required this.onTap,
     required this.onAvatarTap,
     this.onLongPressStart,
     this.unreadCount = 0,
+    this.onUnhide,
   });
 
   Color _statusColor(String status) => AppTheme.statusColor(status);
@@ -2718,6 +2947,26 @@ class _UserCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(
                     children: [
+                      if (onUnhide != null)
+                        Tooltip(
+                          message: s.btnUnhide,
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: onUnhide,
+                              child: const SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: Icon(
+                                  Icons.visibility_outlined,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       // Tombol TAMBAH TEMAN hanya untuk user ter-registrasi.
                       // Lingkaran belakang ikon transparan — ikon saja.
                       if (user.isRegistered)

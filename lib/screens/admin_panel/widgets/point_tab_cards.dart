@@ -395,3 +395,99 @@ class MassBonusCard extends StatelessWidget {
     ]);
   }
 }
+
+/// Kartu "Publish Fitur" — toggle published per fitur berbayar baru.
+/// Fitur dibangun & diuji di build adminProd (admin selalu lolos gate),
+/// lalu dipublish global dari sini (tanpa rebuild app).
+class FeaturePublishCard extends StatefulWidget {
+  final S s;
+  final void Function(String msg) onToast;
+  const FeaturePublishCard({super.key, required this.s, required this.onToast});
+
+  @override
+  State<FeaturePublishCard> createState() => _FeaturePublishCardState();
+}
+
+class _FeaturePublishCardState extends State<FeaturePublishCard> {
+  Map<String, dynamic> _flags = {};
+  bool _loaded = false;
+  bool _saving = false;
+
+  static const List<(String, String)> _items = [
+    ('call_billing', 'Call berbayar (per menit)'),
+    ('gender_filter_paid', 'Filter gender (harian)'),
+    ('nearby_paid', 'Orang sekitar (harian)'),
+    ('play_topup', 'Topup YukCoin (Play Billing)'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await context.read<AdminProvider>().getFeatureFlags();
+      if (mounted) setState(() { _flags = res; _loaded = true; });
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  bool _isPublished(String f) =>
+      (_flags[f] is Map) && ((_flags[f] as Map)['published'] == true);
+
+  Future<void> _toggle(String feature, bool v) async {
+    setState(() => _saving = true);
+    try {
+      final res = await context.read<AdminProvider>().setFeatureFlag(feature, v);
+      final pp = context.read<PointsProvider>();
+      await pp.refreshMeteredPricing();
+      if (mounted) {
+        setState(() => _flags = res);
+        widget.onToast(v ? 'Fitur dipublish ke semua user' : 'Fitur disembunyikan');
+      }
+    } catch (e) {
+      if (mounted) widget.onToast('Gagal: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PanelCard('Publish Fitur', Icons.rocket_launch_outlined, Colors.teal, [
+      Text(
+        'Fitur baru tampil ke user HANYA setelah dipublish. Sebelum itu '
+        'hanya akun admin yang bisa memakai (test di build adminProd).',
+        style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+      ),
+      const SizedBox(height: 8),
+      if (!_loaded)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+          ),
+        )
+      else
+        for (final it in _items)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(it.$2, style: AppText.bodySmall),
+                ),
+                Switch(
+                  value: _isPublished(it.$1),
+                  onChanged: _saving ? null : (v) => _toggle(it.$1, v),
+                  activeColor: AppTheme.primary,
+                ),
+              ],
+            ),
+          ),
+    ]);
+  }
+}
