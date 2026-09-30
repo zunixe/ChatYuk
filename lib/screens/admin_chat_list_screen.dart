@@ -324,6 +324,61 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
             ),
           ),
         ),
+        // Baris chip kategori (folder). SELALU tampil — termasuk saat daftar
+        // kosong — supaya dari kategori kosong tetap bisa tap "Semua" untuk
+        // balik (dulu chip ikut hilang bersama daftar → susah balik).
+        // Tap chip = filter; tahan chip = kelola (rename/hapus).
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            children: [
+              _catChip(
+                label: s.adminChatCatAll,
+                selected: admin.activeChatCategory == null,
+                onTap: () => admin.setActiveChatCategory(null),
+              ),
+              if (admin.chatCategories.isNotEmpty)
+                _catChip(
+                  label: s.adminChatCatNone,
+                  selected: admin.activeChatCategory == '',
+                  onTap: () => admin.setActiveChatCategory(''),
+                ),
+              for (final cat in admin.chatCategories)
+                _catChip(
+                  label: cat,
+                  selected: admin.activeChatCategory == cat,
+                  onTap: () => admin.setActiveChatCategory(cat),
+                  onLongPress: () => _manageCategory(context, cat),
+                ),
+              // Tombol buat kategori baru (tanpa perlu pin chat dulu).
+              ActionChip(
+                avatar: Icon(
+                  Icons.add,
+                  size: 16,
+                  color: AppTheme.primary,
+                ),
+                label: Text(s.adminChatNewCategory),
+                onPressed: () async {
+                  final name = await _promptCategoryName(context, s);
+                  if (name.isEmpty) return;
+                  await admin.addChatCategory(name);
+                  if (context.mounted) {
+                    admin.setActiveChatCategory(name);
+                  }
+                },
+                labelStyle: AppText.bodySmall.copyWith(
+                  color: AppTheme.primary,
+                ),
+                backgroundColor: AppTheme.bgInput,
+                side: BorderSide(color: AppTheme.primary),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ],
+          ),
+        ),
         Expanded(
           child: admin.chatsLoading && admin.chats.isEmpty
               ? Center(
@@ -371,6 +426,30 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                           label: Text(s.btnRetry),
                         ),
                       ],
+                      // Filter kategori bernama sedang aktif (isi boleh kosong)
+                      // → tombol hapus kategori langsung di sini, supaya tak
+                      // perlu tahu gesture tahan-chip.
+                      if (_query.isEmpty &&
+                          admin.activeChatCategory != null &&
+                          admin.activeChatCategory!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () => admin.removeChatCategory(
+                            admin.activeChatCategory!,
+                          ),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: AppTheme.danger,
+                          ),
+                          label: Text(
+                            s.adminChatDeleteCategory,
+                            style: AppText.body.copyWith(
+                              color: AppTheme.danger,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 )
@@ -404,62 +483,6 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                           ],
                         ),
                       ),
-                    // Baris chip kategori (folder). SELALU tampil: "Semua" +
-                    // "Tanpa kategori" + tiap folder + tombol "+ Kategori".
-                    // Tap chip = filter; tahan chip = kelola (rename/hapus).
-                    SizedBox(
-                      height: 40,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        children: [
-                          _catChip(
-                            label: s.adminChatCatAll,
-                            selected: admin.activeChatCategory == null,
-                            onTap: () => admin.setActiveChatCategory(null),
-                          ),
-                          if (admin.chatCategories.isNotEmpty)
-                            _catChip(
-                              label: s.adminChatCatNone,
-                              selected: admin.activeChatCategory == '',
-                              onTap: () => admin.setActiveChatCategory(''),
-                            ),
-                          for (final cat in admin.chatCategories)
-                            _catChip(
-                              label: cat,
-                              selected: admin.activeChatCategory == cat,
-                              onTap: () => admin.setActiveChatCategory(cat),
-                              onLongPress: () => _manageCategory(context, cat),
-                            ),
-                          // Tombol buat kategori baru (tanpa perlu pin chat dulu).
-                          ActionChip(
-                            avatar: Icon(
-                              Icons.add,
-                              size: 16,
-                              color: AppTheme.primary,
-                            ),
-                            label: Text(s.adminChatNewCategory),
-                            onPressed: () async {
-                              final name =
-                                  await _promptCategoryName(context, s);
-                              if (name.isEmpty) return;
-                              await admin.addChatCategory(name);
-                              if (context.mounted) {
-                                admin.setActiveChatCategory(name);
-                              }
-                            },
-                            labelStyle: AppText.bodySmall.copyWith(
-                              color: AppTheme.primary,
-                            ),
-                            backgroundColor: AppTheme.bgInput,
-                            side: BorderSide(color: AppTheme.primary),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ],
-                      ),
-                    ),
                     Expanded(
                       child: RefreshIndicator(
                   onRefresh: () => admin.fetchChats(),
