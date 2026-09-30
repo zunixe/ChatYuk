@@ -27,12 +27,38 @@ class YukcoinHowTo extends StatelessWidget {
         _sectionTitle(s.yukcoinHowToEarn),
         _card(
           children: [
-            _row(Icons.login, s.yukcoinEarnLogin, '+25'),
-            _row(Icons.timer_outlined, s.yukcoinEarnOnline, '+20'),
-            _row(Icons.menu_book_outlined, s.yukcoinEarnRoomRead, '+6'),
-            _row(Icons.person_add_alt, s.yukcoinEarnNewChat, '+10'),
-            _row(Icons.group_add_outlined, s.yukcoinEarnReferral, '+50'),
-            _row(Icons.emoji_events_outlined, s.yukcoinEarnQuest, '+150'),
+            _row(Icons.add_circle_outline, s.yukcoinEarnTopup, ''),
+            _row(Icons.card_giftcard, s.yukcoinEarnWelcome, ''),
+            _row(Icons.call_received, s.yukcoinEarnCallIncome, ''),
+          ],
+        ),
+        _sectionTitle(s.yukcoinHowToSpend),
+        _card(
+          children: [
+            _row(
+              Icons.call_outlined,
+              s.yukcoinFeatureCallAudio,
+              '${pp.callAudioCostPerMin}',
+              trailing: s.yukcoinPerMin,
+            ),
+            _row(
+              Icons.videocam_outlined,
+              s.yukcoinFeatureCallVideo,
+              '${pp.callVideoCostPerMin}',
+              trailing: s.yukcoinPerMin,
+            ),
+            _row(
+              Icons.person_outline,
+              s.yukcoinFeatureFilterGender,
+              '${pp.filterGenderCost}',
+              trailing: s.yukcoinPerDay,
+            ),
+            _row(
+              Icons.explore_outlined,
+              s.yukcoinFeatureNearby,
+              '${pp.nearbyCost}',
+              trailing: s.yukcoinPerDay,
+            ),
           ],
         ),
         if (v2Active) ...[
