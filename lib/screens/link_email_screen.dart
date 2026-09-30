@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
 import '../utils.dart';
 import '../providers/theme_provider.dart';
 
@@ -57,15 +56,9 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
     try {
       await context.read<AuthProvider>().linkEmailToAccount(email, password);
       if (!mounted) return;
-      // Kasih bonus poin +100
-      final pointsProvider = context.read<PointsProvider>();
-      await pointsProvider.claimRegisterBonus();
+      // Bonus register DIHAPUS (overhaul coin: tidak ada poin gratis).
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${s.msgAccountLinked} ${s.pointsGain(100, s.reasonRegister)}',
-          ),
-        ),
+        SnackBar(content: Text(s.msgAccountLinked)),
       );
       Navigator.of(context).pop();
     } on Exception catch (e) {

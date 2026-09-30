@@ -56,6 +56,16 @@ class CallService {
     return row['id'] as String;
   }
 
+  /// Tagih call per menit (server otoritatif). Dipanggil CallSession tiap menit.
+  Future<Map<String, dynamic>> callBillingTick(String callId) async {
+    final res = await _sb.rpc(
+      'call_billing_tick',
+      params: {'p_call_id': callId},
+    );
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'ok': true, 'can_continue': true};
+  }
+
   Future<void> updateStatus(String callId, String status) async {
     final now = DateTime.now().toUtc().toIso8601String();
     final patch = <String, dynamic>{'status': status};
@@ -448,6 +458,19 @@ class CallSession extends ChangeNotifier {
   CallMediaError? _mediaError;
   CallMediaError? get mediaError => _mediaError;
 
+  // ── Billing call (YukCoin) ──
+  // Penelepon didebit per menit oleh server (call_billing_tick) — server
+  // otoritatif dari calls.answered_at. Client hanya PEMICU tick tiap menit.
+  Timer? _billingTimer;
+  int _billingFreeRemainingSec = 0;
+  int _billingPerMin = 0;
+  int _billingCharged = 0;
+  bool _billingEndedNoCoin = false;
+  int get billingFreeRemainingSec => _billingFreeRemainingSec;
+  int get billingPerMinute => _billingPerMin;
+  int get billingChargedTotal => _billingCharged;
+  bool get endedDueToNoCoin => _billingEndedNoCoin;
+
   /// Test-only: paksa fase & alasan kegagalan media untuk memverifikasi UI
   /// (mis. overlay menampilkan pesan error + tombol sambung ulang).
   @visibleForTesting
@@ -735,6 +758,7 @@ class CallSession extends ChangeNotifier {
             _phase = CallPhase.inCall;
             _connectedAt = DateTime.now();
             _recordConnected('pcState');
+            _startBilling();
             notifyListeners();
           }
         }
@@ -822,6 +846,7 @@ class CallSession extends ChangeNotifier {
             _phase = CallPhase.inCall;
             _connectedAt = _connectedAt ?? DateTime.now();
             _recordConnected('iceState');
+            _startBilling();
             changed = true;
           }
           if (changed) notifyListeners();
@@ -1556,6 +1581,7 @@ class CallSession extends ChangeNotifier {
       _phase = CallPhase.inCall;
       _connectedAt = _connectedAt ?? DateTime.now();
       _recordConnected('syncSafetyNet');
+      _startBilling();
       notifyListeners();
     }
     try {
@@ -1635,6 +1661,47 @@ class CallSession extends ChangeNotifier {
     );
   }
 
+  // ── Billing call ──
+  // Hanya PEMANGGIL (isCaller) yang ditagih. Tick tiap menit; server
+  // memutuskan biaya dari answered_at. Bila server bilang can_continue=false
+  // → akhiri call ini (saldo habis).
+  void _startBilling() {
+    if (!isCaller) return;
+    _billingTimer?.cancel();
+    unawaited(_billingTick());
+    _billingTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => unawaited(_billingTick()),
+    );
+  }
+
+  Future<void> _billingTick() async {
+    if (_closed) return;
+    try {
+      final res = await _service.callBillingTick(callId);
+      if (_closed) return;
+      _billingFreeRemainingSec =
+          (res['free_remaining_sec'] as num?)?.toInt() ?? 0;
+      _billingCharged = (res['charged_total'] as num?)?.toInt() ?? 0;
+      if (res['can_continue'] == false) {
+        _billingEndedNoCoin = true;
+        _service.sendSignal(callId, 'bye');
+        _service.updateStatus(callId, 'ended');
+        _finish(CallEndReason.ended);
+        return;
+      }
+      notifyListeners();
+    } catch (e) {
+      // Kegagalan tick TIDAK memutus call (jaringan buruk).
+      dlog('[CALL] billing tick error: $e');
+    }
+  }
+
+  void _stopBilling() {
+    _billingTimer?.cancel();
+    _billingTimer = null;
+  }
+
   void _finish(CallEndReason reason) {
     if (_closed) return;
     dlog('[CallService] _finish reason=$reason phase=$_phase');
@@ -1642,6 +1709,7 @@ class CallSession extends ChangeNotifier {
     _endReason = reason;
     _ringTimer?.cancel();
     _syncTimer?.cancel();
+    _stopBilling();
     _service.releaseCallStatus(callId);
     _phase = CallPhase.ended;
     notifyListeners();
@@ -1656,6 +1724,7 @@ class CallSession extends ChangeNotifier {
     _closed = true;
     _ringTimer?.cancel();
     _syncTimer?.cancel();
+    _stopBilling();
     _pendingCandidates.clear();
     _pendingSignals.clear();
     for (final pc in _watchPcs.values) {

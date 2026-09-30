@@ -453,13 +453,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
   @override
   void photoFirstBonus(PointsProvider pp) {
-    if (!pp.enabled) return;
-    pp.oneTimeBonus('first_photo', 10).then((earned) {
-      if (earned && mounted) {
-        final s = context.read<LocaleProvider>().s;
-        pp.showPointsToast(context, s.pointsGain(10, s.reasonFirstPhoto));
-      }
-    });
+    // Bonus "first photo" DIHAPUS (overhaul coin: tidak ada poin gratis).
   }
 
   @override

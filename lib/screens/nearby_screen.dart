@@ -9,6 +9,7 @@ import 'nearby/widgets/nearby_card.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/points_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 
@@ -102,6 +103,15 @@ class _NearbyScreenState extends State<NearbyScreen> {
       }
       if (!mounted) return;
       final msg = e.toString().toLowerCase();
+      // Koin habis untuk Orang Sekitar (berbayar harian) → dialog topup.
+      if (msg.contains('yukcoin tidak cukup') || msg.contains('not enough')) {
+        setState(() => _loading = false);
+        context.read<PointsProvider>().showOutOfPointsDialog(
+              context,
+              context.read<LocaleProvider>().s.isId,
+            );
+        return;
+      }
       setState(() {
         _loading = false;
         _error = msg.contains('share required')
