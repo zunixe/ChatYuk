@@ -1480,17 +1480,19 @@ class S {
       ? 'Isi koin lewat top-up. Pakai koin untuk menelepon (audio/video), filter, dan cari orang sekitar.'
       : 'Top up to get coins. Use them for calls (audio/video), filters, and finding people nearby.';
   String get pointsOnboardCallFree => isId
-      ? 'Gratis 5 menit telepon tiap hari'
-      : 'First 5 minutes of calls free every day';
-  String callFreeRemaining(String mmss) => isId
-      ? '🎁 Gratis $mmss lagi'
-      : '🎁 Free $mmss left';
+      ? 'Menelepon (audio/video) pakai koin'
+      : 'Calling (audio/video) uses coins';
   String callCostPerMin(int coins) => isId
       ? '🪙 $coins koin/menit'
       : '🪙 $coins coins/min';
   String get callEndedNoCoin => isId
       ? 'Koin habis — panggilan diakhiri'
       : 'Out of coins — call ended';
+  // Edukasi: coin dipakai untuk nelp (ditampilkan saat saldo tak cukup).
+  String get callNeedCoinTitle => isId ? '🪙 Koin untuk menelepon' : '🪙 Coins for calling';
+  String callNeedCoinBody(int need) => isId
+      ? 'Untuk menelepon kamu butuh minimal $need koin (1 menit pertama). Isi koin lewat top-up untuk mulai menelepon.'
+      : 'You need at least $need coins to call (first minute). Top up to start calling.';
   String get yukcoinTopupSoon =>
       isId ? 'Top-up segera hadir' : 'Top-up coming soon';
   String get yukcoinEarnLogin => isId ? 'Login harian' : 'Daily login';

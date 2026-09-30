@@ -567,11 +567,6 @@ class _BillingBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S(isId: isId);
-    final freeSec = session.billingFreeRemainingSec;
-    final free = freeSec > 0;
-    final label = free
-        ? s.callFreeRemaining(_mmss(freeSec))
-        : s.callCostPerMin(session.billingPerMinute);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
@@ -579,18 +574,12 @@ class _BillingBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        label,
+        s.callCostPerMin(session.billingPerMinute),
         style: AppText.caption.copyWith(
-          color: free ? const Color(0xFF2ECC71) : Colors.amber,
+          color: Colors.amber,
           fontWeight: FontWeight.w700,
         ),
       ),
     );
-  }
-
-  static String _mmss(int sec) {
-    final m = (sec ~/ 60).toString().padLeft(2, '0');
-    final r = (sec % 60).toString().padLeft(2, '0');
-    return '$m:$r';
   }
 }

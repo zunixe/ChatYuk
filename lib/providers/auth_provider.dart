@@ -18,6 +18,7 @@ export '../services/auth_service.dart'
     show EmailNotRegisteredException, EmailAlreadyRegisteredException;
 import '../services/chat_service.dart';
 import '../services/device_info_service.dart';
+import '../services/points_service.dart';
 import '../services/location_service.dart';
 import '../core/cache/message_cache.dart';
 import '../core/media/image_cache_hygiene.dart';
@@ -341,6 +342,11 @@ class AuthProvider extends ChangeNotifier {
           // Akun banned: paksa offline supaya hilang dari daftar online.
           if (isProfileBanned) safeUnawaited(_auth.goOffline());
           if (!_disposed) notifyListeners();
+          // Welcome bonus ANON (100 coin) — sekali per install_id device.
+          // Hanya untuk sesi anon nyata (bukan admin/dummy).
+          if ((_profile?.isRegistered == false) && !_auth.dummySessionActive) {
+            safeUnawaited(_claimWelcome('anon'));
+          }
         }
         // Avatar lazy: path storage → base64 via AvatarB64Service (disk
         // first, network hanya saat miss). Fire-and-forget — boot tidak
@@ -992,10 +998,17 @@ class AuthProvider extends ChangeNotifier {
     await _auth.linkEmailToAccount(email, password);
     await _auth.markRegistered();
     _profile = _profile?.copyWith(isRegistered: true);
-    // Kasih bonus +100 poin untuk register email
-    _claimRegisterBonus();
+    // Welcome bonus: klaim 'anon' (bila belum — user daftar langsung dapat
+    // full) lalu 'register'. Server idempoten per install_id.
+    safeUnawaited(_claimWelcomeFull());
     safeUnawaited(updateFcmToken());
     if (!_disposed) notifyListeners();
+  }
+
+  /// Klaim welcome anon + register berurutan (untuk register langsung).
+  Future<void> _claimWelcomeFull() async {
+    await _claimWelcome('anon');
+    await _claimRegisterBonus();
   }
 
   /// Daily-login bonus DIHAPUS (overhaul coin: tidak ada poin gratis). No-op.
@@ -1003,9 +1016,32 @@ class AuthProvider extends ChangeNotifier {
     // Faucet dihapus — tidak ada bonus login. (lihat 20261001010000)
   }
 
-  /// Register bonus DIHAPUS (overhaul coin: tidak ada poin gratis). No-op.
+  /// Welcome bonus REGISTER (100 coin) via server sekali per install_id.
   Future<void> _claimRegisterBonus() async {
-    // Faucet dihapus — tidak ada bonus register.
+    await _claimWelcome('register');
+  }
+
+  /// Klaim welcome bonus (anon/register). Kirim install_id device (stabil
+  /// walau reinstall) — server cegah klaim ulang per device & limit IP.
+  Future<int> _claimWelcome(String kind) async {
+    try {
+      final installId = await DeviceInfoService.instance.installId();
+      if (installId.isEmpty) return 0;
+      final res = await PointsService().claimWelcomeBonus(
+        installId: installId,
+        kind: kind,
+      );
+      final coins = (res['coins'] as num?)?.toInt() ?? 0;
+      if (coins > 0) {
+        final cur = (_profile?.points ?? 0).toInt();
+        _profile = _profile?.copyWith(points: cur + coins);
+        if (!_disposed) notifyListeners();
+      }
+      return coins;
+    } catch (e) {
+      dlog('[AUTH] claimWelcome($kind) error: $e');
+      return 0;
+    }
   }
 
   /// Kirim ulang email verifikasi untuk user yang sudah signup tapi belum verify.

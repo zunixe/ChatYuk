@@ -462,14 +462,16 @@ class CallSession extends ChangeNotifier {
   // Penelepon didebit per menit oleh server (call_billing_tick) — server
   // otoritatif dari calls.answered_at. Client hanya PEMICU tick tiap menit.
   Timer? _billingTimer;
-  int _billingFreeRemainingSec = 0;
   int _billingPerMin = 0;
   int _billingCharged = 0;
   bool _billingEndedNoCoin = false;
-  int get billingFreeRemainingSec => _billingFreeRemainingSec;
   int get billingPerMinute => _billingPerMin;
   int get billingChargedTotal => _billingCharged;
   bool get endedDueToNoCoin => _billingEndedNoCoin;
+
+  /// Tarif per menit call ini (dari client pricing) — dipakai UI untuk
+  /// menampilkan banner SEBELUM tick pertama tiba.
+  void setBillingPerMinute(int v) => _billingPerMin = v;
 
   /// Test-only: paksa fase & alasan kegagalan media untuk memverifikasi UI
   /// (mis. overlay menampilkan pesan error + tombol sambung ulang).
@@ -1680,9 +1682,10 @@ class CallSession extends ChangeNotifier {
     try {
       final res = await _service.callBillingTick(callId);
       if (_closed) return;
-      _billingFreeRemainingSec =
-          (res['free_remaining_sec'] as num?)?.toInt() ?? 0;
       _billingCharged = (res['charged_total'] as num?)?.toInt() ?? 0;
+      // Tarif per menit dari server → banner "N coin/menit" hidup.
+      final perMin = (res['per_minute'] as num?)?.toInt();
+      if (perMin != null && perMin > 0) _billingPerMin = perMin;
       if (res['can_continue'] == false) {
         _billingEndedNoCoin = true;
         _service.sendSignal(callId, 'bye');

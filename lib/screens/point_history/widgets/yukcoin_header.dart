@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
-import '../../../services/topup_service.dart';
 import 'topup_sheet.dart';
 
 /// Header saldo YukCoin: satu angka besar + tombol top-up (Play only).
@@ -71,14 +70,9 @@ class YukcoinHeader extends StatelessWidget {
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: () {
-                  // Bila Play Billing tersedia → buka sheet paket; else info.
-                  if (TopupService.instance.available) {
-                    showTopupSheet(context, s);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(s.yukcoinTopupSoon)),
-                    );
-                  }
+                  // Buka sheet paket. Di build Play → transaksi Play Billing;
+                  // di build admin → tampilan paket read-only (uji UI).
+                  showTopupSheet(context, s);
                 },
                 icon: const Icon(Icons.add_circle_outline, size: 20),
                 label: Text(s.yukcoinTopup),

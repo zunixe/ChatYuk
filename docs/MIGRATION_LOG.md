@@ -1,4 +1,39 @@
 ﻿
+## 2026-10-03 — Coin untuk nelp (tanpa gratis) + welcome bonus bertahap + fix keamanan
+
+**Keputusan produk:** nelp MURNI pakai coin (tanpa kuota gratis); tarif audio 6 /
+video 20 coin per menit; welcome bonus bertahap — anon 100 coin (cukup video 5
+menit) + register 100 coin (total 200, register langsung dapat full); anti-farming
+sekali per device (`install_id`) + limit per IP/hari.
+
+**Migrasi (apply via Management API, urut):**
+1. `20261003000000_coin_call_no_free.sql`
+   - DROP kolom kuota-gratis: `profiles.call_free_{audio,video}_seconds_today`,
+     `call_free_date`, `app_settings.call_free_minutes_daily`; DROP fungsi
+     `call_free_limit_sec()`.
+   - Rewrite `call_billing_tick`: tanpa gratis, `billable_minutes = ceil(elapsed/60)`,
+     idempoten (`yukcoin_consumptions`), afford-guard (saldo tak minus), return
+     `per_minute`.
+   - **FIX KEAMANAN**: `charge_metered` revoke dari `authenticated` → hanya
+     `service_role` (sebelumnya user bisa mendebit coin user lain via param p_caller).
+   - Tabel `bonus_claims` (`install_id, kind, user_id, ip`) + RPC
+     `credit_welcome_bonus` (service_role, 3 lapis: install_id, IP/24jam, user).
+   - Config: `welcome_anon_coins=100`, `welcome_register_coins=100`,
+     `welcome_max_claims_per_ip_day=3`.
+2. `20261003000100_fix_metered_pricing_public.sql` — `metered_pricing_public`
+   error 42703 setelah kolom `call_free_minutes_daily` dihapus → dikembalikan
+   tanpa kolom itu.
+
+**Edge function (deploy --use-api):**
+- `welcome-bonus` (verify_jwt=true) — tangkap IP server-side (x-forwarded-for),
+  panggil `credit_welcome_bonus`.
+- `play-topup-verify` (verify_jwt=true) — verifikasi purchase ke Google Play
+  Developer API → `credit_play_topup`.
+
+**Verifikasi live:** kolom `call_free_*` = 0 sisa; `metered_pricing_public()`
+return audio 6/video 20; `charge_metered` ACL = {postgres, service_role};
+`credit_welcome_bonus` ada; 2 edge function ACTIVE.
+
 ## 2026-09-30 — Notif "X online" → teman + follower + pernah chat
 
 **Minta user:** saat A online, notifikasinya ke teman, follower, dan orang
@@ -13,6 +48,33 @@ dicek); guard lain utuh (transisi →online; author dummy tak notify).
 **Apply:** Management API + catat `schema_migrations`.
 **Test:** pgTAP `online_notify_test.sql` 6/6 (teman/follower/chatter dapat +
 chatId; stranger & diblokir tidak; idle→online notify lagi).
+
+## 2026-10-02 — Deteksi Fake GPS (flag device + heuristik server), tandai saja
+
+**Minta user:** di admin panel bisa tahu lokasi GPS asli atau palsu — flag
+device + heuristik; badge/ikon di info lat-long & peta; riwayat perlu.
+**Migrasi:** `20261002060000_fake_gps_detect.sql`:
+- `profiles` + `location_mocked / location_mock_reason / location_accuracy_m
+  / location_flagged_at`; `user_location_history` + `location_mocked /
+  mock_reason / accuracy_m`.
+- `update_my_location` 4-arg → 6-arg (`+p_mocked`, `+p_accuracy`); overload
+  lama DI-DROP. Heuristik: `is_mocked` (device `Position.isMocked`) |
+  `accuracy_zero` (akurasi ≤0) | `impossible_speed` (>250 m/s, **butuh jeda
+  ≥10 dtk**) | `spoof_delta` (GPS↔IP >500 km). Hanya `p_source='gps'`.
+- `admin_stats_detail` (FROZEN, `-- menyentuh:`) + `location_mocked` /
+  `mock_reason` di 4 query users_*; `admin_user_detail` location_history +
+  `mocked/reason/accuracy_m`.
+**Klien:** `LocationService` baru tipe `DeviceFix` (lat/lon/mocked/accuracy)
+→ `p_mocked`/`p_accuracy`; provider export `DeviceFix`; 3 call-site
+(entry/register/location_picker) diadaptasi.
+**Admin UI:** pin peta merah + ikon `gpp_bad` (prioritas), baris koordinat
+"GPS (Fake)" + reason, legenda, `stat_detail_sheet`, riwayat di
+`user_detail_sheet` (badge).
+**Apply:** Management API + catat `schema_migrations`. Snapshot FROZEN
+di-regenerate (diff = hanya 4 baris `admin_stats_detail`, 0 hapus).
+**Test:** pgTAP `fake_gps_test.sql` 7/7.
+**Batasan (SADAR):** `isMocked` bisa dilewati sebagian Fake GPS → indikator,
+BUKAN bukti 100%; tidak untuk auto-ban. Ambang heuristik konstanta mudah ubah.
 
 ## 2026-09-30 — Fix chatId NULL di payload outbox "online" (temuan review)
 

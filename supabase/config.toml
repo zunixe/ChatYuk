@@ -393,6 +393,16 @@ verify_jwt = false
 [functions.topup-create]
 verify_jwt = true
 
+# play-topup-verify dipanggil client authenticated (verifikasi purchase Play
+# lalu credit coin) — butuh JWT user.
+[functions.play-topup-verify]
+verify_jwt = true
+
+# welcome-bonus dipanggil client authenticated (klaim bonus sekali per device
+# + limit IP) — butuh JWT user.
+[functions.welcome-bonus]
+verify_jwt = true
+
 # r (referral redirect) dibuka dari browser publik — tanpa JWT.
 [functions.r]
 verify_jwt = false

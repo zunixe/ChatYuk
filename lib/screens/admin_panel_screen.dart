@@ -56,8 +56,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     // ── Fitur berbayar (overhaul coin 2026-10) ──
     ('call_audio_cost_per_min', 'Call audio — koin / menit'),
     ('call_video_cost_per_min', 'Call video — koin / menit'),
-    ('call_free_minutes_daily', 'Gratis call / hari (menit, per tipe)'),
-    ('call_cut_pct', 'Bagian platform dari call (%)'),
+    ('call_cut_pct', 'Bagian platform dari call (%) — sisanya ke penerima'),
     ('filter_gender_cost', 'Filter gender (koin / hari)'),
     ('nearby_cost', 'Orang sekitar (koin / hari)'),
     ('photo_upload_reward', 'Reward upload foto (slot 2-6)'),

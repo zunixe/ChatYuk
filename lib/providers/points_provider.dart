@@ -90,12 +90,10 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   // ── Harga fitur berbayar (call per menit, filter, nearby) ──
   int _callAudioCostPerMin = 6;
   int _callVideoCostPerMin = 20;
-  int _callFreeMinutesDaily = 5;
   int _filterGenderCost = 15;
   int _nearbyCost = 25;
   int get callAudioCostPerMin => _callAudioCostPerMin;
   int get callVideoCostPerMin => _callVideoCostPerMin;
-  int get callFreeMinutesDaily => _callFreeMinutesDaily;
   int get filterGenderCost => _filterGenderCost;
   int get nearbyCost => _nearbyCost;
 
@@ -121,8 +119,6 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
           (p['call_audio_cost_per_min'] as num?)?.toInt() ?? _callAudioCostPerMin;
       _callVideoCostPerMin =
           (p['call_video_cost_per_min'] as num?)?.toInt() ?? _callVideoCostPerMin;
-      _callFreeMinutesDaily =
-          (p['call_free_minutes_daily'] as num?)?.toInt() ?? _callFreeMinutesDaily;
       _filterGenderCost =
           (p['filter_gender_cost'] as num?)?.toInt() ?? _filterGenderCost;
       _nearbyCost = (p['nearby_cost'] as num?)?.toInt() ?? _nearbyCost;
@@ -143,6 +139,70 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       dlog('[POINTS] gateFeature($feature) error: $e');
       rethrow;
+    }
+  }
+
+  /// Gate sebelum nelp: butuh saldo >= tarif 1 menit. Bila kurang → tampilkan
+  /// dialog EDUKASI (coin dipakai untuk nelp) + tombol topup, return false.
+  /// Bila cukup → true (boleh mulai call).
+  Future<bool> ensureEnoughForCall(
+    BuildContext context,
+    String callType,
+    bool isId,
+  ) async {
+    await refreshWallet();
+    final need = callCostPerMin(callType);
+    if (_points >= need) return true;
+    if (!context.mounted) return false;
+    final s = S(isId: isId);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2E),
+        title: Text(s.callNeedCoinTitle,
+            style: const TextStyle(color: Colors.white)),
+        content: Text(
+          s.callNeedCoinBody(need),
+          style: AppText.bodySmall.copyWith(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(isId ? 'Nanti' : 'Later',
+                style: const TextStyle(color: Colors.white70)),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(s.yukcoinTopupSoon)),
+              );
+            },
+            icon: const Icon(Icons.add_circle_outline, size: 18),
+            label: Text(s.yukcoinTopup),
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
+
+  /// Klaim welcome bonus (anon/register) via server. Return jumlah coin
+  /// yang benar-benar diberikan (0 bila tidak / sudah diklaim).
+  Future<int> claimWelcomeBonus({
+    required String installId,
+    required String kind,
+  }) async {
+    try {
+      final res = await _service.claimWelcomeBonus(
+        installId: installId,
+        kind: kind,
+      );
+      await refreshWallet();
+      return (res['coins'] as num?)?.toInt() ?? 0;
+    } catch (e) {
+      dlog('[POINTS] claimWelcomeBonus($kind) error: $e');
+      return 0;
     }
   }
 

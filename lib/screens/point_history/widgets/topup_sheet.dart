@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
+import '../../../services/points_service.dart';
 import '../../../services/topup_service.dart';
 
 /// Bottom sheet pilih paket topup YukCoin (Google Play Billing).
@@ -18,14 +19,40 @@ void showTopupSheet(BuildContext context, S s) {
   );
 }
 
-class _TopupSheet extends StatelessWidget {
+class _TopupSheet extends StatefulWidget {
   const _TopupSheet();
+
+  @override
+  State<_TopupSheet> createState() => _TopupSheetState();
+}
+
+class _TopupSheetState extends State<_TopupSheet> {
+  List<Map<String, dynamic>> _packages = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    // Pakai paket dari TopupService bila ada (Play); else ambil dari server
+    // (build admin → verifikasi UI paket).
+    var pkgs = TopupService.instance.packages;
+    if (pkgs.isEmpty) {
+      try {
+        pkgs = await PointsService().listTopupPackages();
+      } catch (_) {}
+    }
+    if (mounted) setState(() { _packages = pkgs; _loading = false; });
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
-    final topup = TopupService.instance;
-    final packages = topup.packages;
+    // Tombol beli aktif hanya bila Play Billing tersedia (build Play).
+    final canBuy = TopupService.instance.available;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -39,8 +66,20 @@ class _TopupSheet extends StatelessWidget {
               s.yukcoinPickPackage,
               style: AppText.caption.copyWith(color: AppTheme.textSecondary),
             ),
+            if (!canBuy) ...[
+              const SizedBox(height: 6),
+              Text(
+                s.yukcoinTopupSoon,
+                style: AppText.caption.copyWith(color: Colors.orange),
+              ),
+            ],
             const SizedBox(height: 14),
-            if (packages.isEmpty)
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            else if (_packages.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Center(
@@ -51,7 +90,9 @@ class _TopupSheet extends StatelessWidget {
                 ),
               )
             else
-              ...packages.map((p) => _PackageTile(package: p)),
+              ..._packages.map(
+                (p) => _PackageTile(package: p, canBuy: canBuy),
+              ),
           ],
         ),
       ),
@@ -61,7 +102,8 @@ class _TopupSheet extends StatelessWidget {
 
 class _PackageTile extends StatelessWidget {
   final Map<String, dynamic> package;
-  const _PackageTile({required this.package});
+  final bool canBuy;
+  const _PackageTile({required this.package, this.canBuy = false});
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +118,7 @@ class _PackageTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: productId == null
+          onTap: (productId == null || !canBuy)
               ? null
               : () {
                   TopupService.instance.buy(productId);

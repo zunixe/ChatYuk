@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/app_flavor.dart';
+import '../core/admin_gate.dart';
 import '../providers/points_provider.dart';
 import '../config/theme.dart';
 import 'point_history/widgets/history_tile.dart';
@@ -61,12 +62,12 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
               },
               child: CustomScrollView(
                 slivers: [
-                  // Header saldo YukCoin + tombol top-up (Play only).
+                  // Header saldo YukCoin + tombol top-up (Play / build admin).
                   SliverToBoxAdapter(
                     child: YukcoinHeader(
                       s: s,
                       total: points.points,
-                      showTopup: AppFlavor.topupEnabled,
+                      showTopup: AppFlavor.topupEnabled || AdminGate.enabled,
                     ),
                   ),
                   // Cara dapat & cara pakai.
