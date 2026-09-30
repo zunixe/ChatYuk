@@ -295,6 +295,14 @@ hanya `service_role` (user tak bisa mendebit orang lain); saldo = cache ledger
 **Invariant:** admin list tidak bocor ke build rilis (tree-shake lewat
 `admin_gate.dart`); fitur admin 24/7 (`ai_always_online`) tetap utuh.
 
+**Kartu "Registrasi Email" (Ringkasan, 2026-10-05):** menampilkan KPI CEO
+(total terdaftar, konversi anon, baru bulan ini, rata-rata/hari, aktif hari
+ini, hari terbaik) + tren 12 bulan + bar harian + sumber akuisisi. Data dari
+`admin_registration_kpis()` & `admin_registrations_monthly(p_months)` —
+**keduanya mengecualikan dummy + excluded uid** (user nyata; beda dari
+`admin_stats_compute` yang tidak buang dummy). Jangan hilangkan filter dummy
+di dua RPC ini.
+
 ### 8.1 Tab Atribusi (sumber user / kanal install)
 
 | Lapis | Lokasi |

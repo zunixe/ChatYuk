@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:chatyuk/services/admin_service.dart';
 
@@ -399,6 +400,44 @@ void main() {
             {'day': 2, 'count': 3},
           ]);
       expect(await svc.fetchRegistrationsDaily(2026, 9), {1: 5, 2: 3});
+    });
+
+    test('fetchRegistrationKpis → map (fallback {} bila null)', () async {
+      handler.on('admin_registration_kpis', (_) => {
+            'registered_total': 231,
+            'conversion_pct': 64.7,
+          });
+      final k = await svc.fetchRegistrationKpis();
+      expect(k['registered_total'], 231);
+      expect(k['conversion_pct'], 64.7);
+
+      // RPC balas null → fallback {}.
+      handler.on(
+        'admin_registration_kpis',
+        (req) => http.Response('null', 200, request: req),
+      );
+      expect(await svc.fetchRegistrationKpis(), isEmpty);
+    });
+
+    test('fetchRegistrationsMonthly → list + p_months', () async {
+      handler.on('admin_registrations_monthly', (_) => [
+            {'ym': '2026-09', 'year': 2026, 'month': 9, 'count': 230},
+            {'ym': '2026-08', 'year': 2026, 'month': 8, 'count': 1},
+          ]);
+      final out = await svc.fetchRegistrationsMonthly(12);
+      expect(out.length, 2);
+      expect(out.first['count'], 230);
+      expect(
+        rpcParamsOf(handler, 'admin_registrations_monthly')['p_months'],
+        12,
+      );
+
+      // RPC balas null → list kosong.
+      handler.on(
+        'admin_registrations_monthly',
+        (req) => http.Response('null', 200, request: req),
+      );
+      expect(await svc.fetchRegistrationsMonthly(), isEmpty);
     });
 
     test('kontak: list/read/delete → endpoint benar', () async {

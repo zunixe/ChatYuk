@@ -1,4 +1,35 @@
 ﻿
+## 2026-10-05 — Insight registrasi CEO (panel admin Ringkasan)
+
+**Alasan:** kartu "Registrasi Email" hanya menampilkan bar per-hari satu bulan.
+Untuk keputusan CEO, dibutuhkan KPI + tren + konteks akuisisi.
+
+- **Migrasi** `20261005010000_admin_registrations_insights.sql`:
+  - `admin_registration_kpis()` → total terdaftar, total anon, konversi (%),
+    baru bulan ini, baru bulan lalu, MoM %, baru hari ini, rata-rata/hari,
+    hari terbaik (+jumlahnya), aktif hari ini. SEMUA mengecualikan dummy +
+    excluded uid (user nyata; beda dari `admin_stats_compute`).
+  - `admin_registrations_monthly(p_months)` → total per bulan (LEFT JOIN
+    `generate_series` supaya bulan kosong tidak bolong) untuk tren 12 bulan.
+- **App:** `AdminService.fetchRegistrationKpis/fetchRegistrationsMonthly`,
+  `AdminProvider.fetchRegistrationInsights` (cache 1×), kartu
+  `registrationschart_card.dart` dirombak: grid KPI (6 tile) + tren 12 bulan
+  (CustomPaint, highlight bulan terakhir + delta chip vs bulan lalu) + bar
+  harian (tandai hari terbaik) + tombol "Lihat daftar".
+- **Konsistensi KPI:** dummies (12 akun) & excluded uid dibuang → angka CEO
+  tidak menghitung akun dummy. MoM % hanya ditampilkan bila bulan lalu ≥ 10
+  (hindari +22900% saat bulan lalu = 1).
+- **Verifikasi:** `check_migrations` OK; pgTAP `schema_sync_test` 52/52;
+  `admin_service_test` +2 test hijau; `flutter analyze` 0/0.
+
+### Rename timestamp (AGENTS.md §2) — drift WIP
+
+Dua migrasi untracked bentrok timestamp (checker menolak):
+- `20261001000000_admin_chats_participant_genders.sql` → `20261001005000_...`
+  (bentrok `coin_engine_config`).
+- `20261001010000_admin_app_versions_sort_newest.sql` → `20261001015000_...`
+  (bentrok `disable_free_points`).
+
 ## 2026-10-04 — Gate onboarding (`needs_onboarding`) + fix test tertinggal
 
 **Alasan:** gate "wajib isi username" dulu (`nicknameSet` / migrasi

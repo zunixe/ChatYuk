@@ -212,6 +212,20 @@ select supabase_tests.check('authenticated boleh EXECUTE admin_set_privacy_bypas
 select supabase_tests.check('authenticated boleh EXECUTE admin_storage_stats',
   has_function_privilege('authenticated', 'public.admin_storage_stats()', 'EXECUTE'));
 
+-- ── Insight registrasi CEO (migrasi 20261005010000) ──
+select supabase_tests.check('admin_registration_kpis() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='admin_registration_kpis'));
+select supabase_tests.check('authenticated boleh EXECUTE admin_registration_kpis',
+  has_function_privilege('authenticated', 'public.admin_registration_kpis()', 'EXECUTE'));
+select supabase_tests.check('anon TIDAK boleh EXECUTE admin_registration_kpis',
+  not has_function_privilege('anon', 'public.admin_registration_kpis()', 'EXECUTE'));
+select supabase_tests.check('admin_registrations_monthly() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='admin_registrations_monthly'));
+select supabase_tests.check('authenticated boleh EXECUTE admin_registrations_monthly',
+  has_function_privilege('authenticated', 'public.admin_registrations_monthly(integer)', 'EXECUTE'));
+
 
 -- ── REGRESI 2026-09-29: cleanup_stale_anonymous gagal total (1.597 akun anon
 -- stale menumpuk) karena (a) hapus coin_ledger/point_events wajib matikan
