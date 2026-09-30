@@ -1,9 +1,33 @@
 /// Model + klasifikasi murni satu baris riwayat panggilan (halaman
-/// "Panggilan Terbaru").
+/// "Riwayat Panggilan").
 ///
 /// Sengaja BEBAS plugin & locale: parsing & penetapan arah/outcome dikunci
 /// unit test, sedangkan teks tampilan dipetakan dari `S` di lapisan screen.
 library;
+
+import 'package:intl/intl.dart';
+
+/// Stempel waktu gaya WhatsApp: "Hari ini, 10:50 AM" / "Kemarin, 8:21 PM" /
+/// "27 Sep, 9:48 PM". [today]/[yesterday] diisi dari `S` (bilingual) oleh
+/// pemanggil; jam selalu 12-jam + AM/PM.
+///
+/// Murni (tanpa widget/plugin) supaya bisa dikunci unit test.
+String callHistoryStamp(
+  DateTime when, {
+  required String today,
+  required String yesterday,
+  DateTime? now,
+}) {
+  final local = when.toLocal();
+  final ref = (now ?? DateTime.now()).toLocal();
+  final day = DateTime(local.year, local.month, local.day);
+  final todayStart = DateTime(ref.year, ref.month, ref.day);
+  final diff = todayStart.difference(day).inDays;
+  final time = DateFormat('h:mm a').format(local);
+  if (diff == 0) return '$today, $time';
+  if (diff == 1) return '$yesterday, $time';
+  return '${DateFormat('d MMM').format(local)}, $time';
+}
 
 /// Hasil akhir satu panggilan (untuk ikon & warna di daftar riwayat).
 enum CallOutcome {

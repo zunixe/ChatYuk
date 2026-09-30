@@ -261,74 +261,115 @@ class _CallHistoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = Provider.of<LocaleProvider>(context).s;
     final missed = entry.isMissedIncoming;
-    return ListTile(
+    // Ikon arah: hijau = keluar/terjawab, merah = masuk tak terjawab
+    // (gaya WhatsApp). Teks hari/bulan + jam ikut warna status supaya
+    // satu baris terbaca sebagai satu kesatuan.
+    final dirColor = missed
+        ? AppTheme.danger
+        : (entry.isOutgoing ? AppTheme.online : AppTheme.textSecondary);
+    // Baris kustom (bukan ListTile): avatar & tombol call TERPUSAT vertikal
+    // terhadap judul + 2 baris subtitle. ListTile isThreeLine menempelkan
+    // leading/trailing ke atas sehingga terlihat "terlalu atas".
+    return InkWell(
       onTap: onTap,
-      leading: ProfileAvatar(uid: entry.otherUid, name: name, size: 44),
-      title: Text(
-        name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppText.bodyStrong.copyWith(
-          color: missed ? AppTheme.danger : null,
-        ),
-      ),
-      subtitle: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            entry.isOutgoing
-                ? Icons.call_made_rounded
-                : Icons.call_received_rounded,
-            size: 14,
-            color: missed ? AppTheme.danger : AppTheme.textSecondary,
-          ),
-          const SizedBox(width: 4),
-          Icon(
-            entry.isVideo ? Icons.videocam_rounded : Icons.call_rounded,
-            size: 14,
-            color: AppTheme.textSecondary,
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              _subtitle(s),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ProfileAvatar(uid: entry.otherUid, name: name, size: 44),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.bodyStrong.copyWith(
+                      color: missed ? AppTheme.danger : null,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(
+                        entry.isOutgoing
+                            ? Icons.call_made_rounded
+                            : Icons.call_received_rounded,
+                        size: 14,
+                        color: dirColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        entry.isVideo
+                            ? Icons.videocam_rounded
+                            : Icons.call_rounded,
+                        size: 14,
+                        color: AppTheme.textSecondary,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          _line1(s),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              AppText.bodySmall.copyWith(color: dirColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    callHistoryStamp(
+                      entry.at,
+                      today: s.callHistoryToday,
+                      yesterday: s.callHistoryYesterday,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-      trailing: IconButton(
-        icon: Icon(
-          entry.isVideo ? Icons.videocam_rounded : Icons.call_rounded,
-          color: AppTheme.accent,
-          size: 22,
+            IconButton(
+              icon: Icon(
+                entry.isVideo ? Icons.videocam_rounded : Icons.call_rounded,
+                color: AppTheme.accent,
+                size: 22,
+              ),
+              tooltip: s.callRedial,
+              onPressed: onRedial,
+            ),
+          ],
         ),
-        tooltip: s.callRedial,
-        onPressed: onRedial,
       ),
     );
   }
 
-  String _subtitle(S s) {
-    final time = formatRelativeTime(entry.at, isId: s.isId);
+  /// Baris 1 subtitle: arah + durasi bicara (bila terjawab).
+  String _line1(S s) {
     final dir = entry.isOutgoing ? s.callDirOutgoing : s.callDirIncoming;
     switch (entry.outcome) {
       case CallOutcome.missed:
-        return '${s.msgCallMissed} · $time';
+        return s.msgCallMissed;
       case CallOutcome.declined:
-        return '${s.msgCallDeclined} · $time';
+        return s.msgCallDeclined;
       case CallOutcome.canceled:
-        return '${s.msgCallEnded} · $time';
+        return s.msgCallEnded;
       case CallOutcome.busy:
-        return '${s.msgCallBusy} · $time';
+        return s.msgCallBusy;
       case CallOutcome.ongoing:
-        return '$dir · $time';
+        return dir;
       case CallOutcome.completed:
         return entry.hasDuration
-            ? '$dir · $time · ${formatMmSs(entry.durationSec)}'
-            : '$dir · $time';
+            ? '$dir · ${formatMmSs(entry.durationSec)}'
+            : dir;
     }
   }
 }
