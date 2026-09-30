@@ -238,6 +238,10 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
   }
 
   Future<void> _post() async {
+    // Guard dobel-tap: flag diset SINKRON sebelum await apa pun. Tanpa ini,
+    // ketukan kedua selama `await _ensureRegistered()` lolos masuk karena
+    // tombol belum disabled (kasus nyata: 2 post "Destination" selisih 124ms).
+    if (_posting) return;
     final s = context.read<LocaleProvider>().s;
     final text = _textCtrl.text.trim();
     if (text.isEmpty && _images.isEmpty) {
@@ -248,9 +252,13 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       _toast(s.errPostTooLong);
       return;
     }
-    if (!await _ensureRegistered() || !mounted) return;
 
     setState(() => _posting = true);
+    if (!await _ensureRegistered() || !mounted) {
+      if (mounted) setState(() => _posting = false);
+      return;
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     try {
       final uid = context.read<AuthProvider>().uid;

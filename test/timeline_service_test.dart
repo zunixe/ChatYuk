@@ -118,6 +118,26 @@ void main() {
     });
   });
 
+  group('getPost', () {
+    test('kirim RPC get_post dengan p_id + unwrap map', () async {
+      handler.on('get_post', (_) => {'id': 'p1', 'text': 'halo'});
+      final out = await svc.getPost('p1');
+      expect(out?['id'], 'p1');
+      expect(rpcParamsOf(handler, 'get_post')['p_id'], 'p1');
+    });
+
+    test('res bukan map → null', () async {
+      handler.on('get_post', (_) => [
+            {'id': 'p1'}
+          ]);
+      expect(await svc.getPost('p1'), isNull);
+    });
+
+    test('postId kosong → null tanpa RPC', () async {
+      expect(await svc.getPost(''), isNull);
+    });
+  });
+
   group('comments', () {
     test('unwrap list komentar', () async {
       handler.on('list_post_comments', (_) => [
