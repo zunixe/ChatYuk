@@ -202,16 +202,25 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 
 ## 5. Poin / Ekonomi (koin, gift, quest)
 
+> **Overhaul 2026-10:** poin gratis DIHAPUS. Coin = satu saldo (`coin_ledger`,
+> cache `profiles.points`), masuk HANYA dari topup Google Play Billing +
+> welcome bonus + income call. Nelp = murni coin (audio 6 / video 20 per menit).
+
 | Lapis | Lokasi |
 |---|---|
-| UI | `lib/screens/leaderboard_screen.dart`, `missions_screen.dart`, `donate_screen.dart`, `point_history_screen.dart` |
+| UI | `lib/screens/point_history_screen.dart` (+ `point_history/widgets/*`: topup_sheet, yukcoin_header, history_tile), `donate_screen.dart` |
 | Provider | `lib/providers/points_provider.dart` |
-| Service | `lib/services/points_service.dart` |
-| SQL inti | `one_time_bonus()`, `send_coins()`, `send_gift()`, `room_read_bonus()`, `daily_login_bonus()`, `claim_weekly_quest()`, `points_leaderboard()` |
-| Test | `test/points_provider_test.dart`, `test/points_service_io_test.dart` (payload RPC via HTTP palsu), `supabase/tests/points_test.sql` |
+| Service | `lib/services/points_service.dart`, `lib/services/topup_service.dart` (Play Billing) |
+| Edge fn | `welcome-bonus` (klaim bonus, IP server-side), `play-topup-verify` (verifikasi pembelian Play) |
+| SQL engine | `charge_metered()` (potong+split generik), `call_billing_tick()` (tagih call/menit), `gate_feature()` (akses harian: filter gender, nearby), `credit_welcome_bonus()` (bonus anto-farming), `credit_play_topup()` (topup), `feature_enabled_for()`/`admin_set_feature_flag()` (publish) |
+| Fitur berbayar | call (`call_billing`), filter gender (`gender_filter_paid`), orang sekitar (`nearby_paid`), topup (`play_topup`) |
+| Test | `test/points_provider_test.dart`, `test/points_service_io_test.dart`, `test/flow_points_test.dart` |
 
-**Invariant:** klaim bonus idempoten (tidak bisa dobel); milestone online
-5/30/60/120 mnt; saldo = cache ledger `profiles.points`.
+**Invariant:** coin hanya dari topup/bonus/income (tidak ada faucet gratis);
+nelp ditagih server dari `calls.answered_at` (afford-guard → saldo tak minus);
+welcome bonus idempoten per `install_id` + limit IP/hari; `charge_metered`
+hanya `service_role` (user tak bisa mendebit orang lain); saldo = cache ledger
+`profiles.points`.
 
 ---
 
@@ -348,6 +357,7 @@ ke user asli). Dikunci: `supabase/tests/schema_sync_test.sql`.
 | `profiles.status`, `profiles.last_seen` | presence, chat list, nearby, online users, admin — **SELECT di-revoke** (2026-09-22); baca lewat `presence_for()` / `get_online_users()` |
 | `profiles.avatar` | avatar list/chat/feed — **SELECT di-revoke**; baca lewat `avatar_for()` / `avatars_for()` / `profile_public()` |
 | `profiles.share_location` | lokasi peta — **SELECT di-revoke**; admin lewat RPC admin |
+| `profiles.location_mocked` / `location_mock_reason` / `location_accuracy_m` / `location_flagged_at` | deteksi Fake GPS (2026-10-02) — **SELECT di-revoke**; ditulis `update_my_location()`, dibaca admin lewat `admin_stats_detail()` / `admin_user_detail()`. **Hanya MENANDAI** (badge merah di peta/detail) — tak memblokir |
 | `user_photos.photo` | galeri — **SELECT di-revoke** (paywall); baca lewat `get_user_photos_access()` / `my_photos()`; `photo_preview` tetap publik |
 | `dummy_accounts.ai_*` (enabled/always_online/no_sleep/wake/offline/mood/persona) | AI reply, presence tick, admin, daily-life, proaktif |
 | `app_settings.ai_global_enabled` | AI reply, admin toggle |

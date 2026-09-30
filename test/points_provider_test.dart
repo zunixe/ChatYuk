@@ -496,4 +496,86 @@ void main() {
       expect(provider.photoUnlockPerm, 25);
     });
   });
+
+  group('harga fitur berbayar (metered)', () {
+    test('callCostPerMin: audio/video dari server; default 6/20', () async {
+      // default sebelum fetch
+      expect(provider.callCostPerMin('audio'), 6);
+      expect(provider.callCostPerMin('video'), 20);
+      // setelah fetch dari server
+      when(() => service.meteredPricing()).thenAnswer((_) async => {
+            'call_audio_cost_per_min': 8,
+            'call_video_cost_per_min': 25,
+            'filter_gender_cost': 20,
+            'nearby_cost': 30,
+          });
+      when(() => service.featureFlags()).thenAnswer((_) async => {});
+      await provider.refreshMeteredPricing();
+      expect(provider.callCostPerMin('audio'), 8);
+      expect(provider.callCostPerMin('video'), 25);
+      expect(provider.filterGenderCost, 20);
+      expect(provider.nearbyCost, 30);
+    });
+
+    test('featurePublished dari flag server', () async {
+      when(() => service.meteredPricing())
+          .thenAnswer((_) async => <String, dynamic>{});
+      when(() => service.featureFlags()).thenAnswer((_) async => {
+            'call_billing': {'published': true},
+            'nearby_paid': {'published': false},
+          });
+      await provider.refreshMeteredPricing();
+      expect(provider.callBillingPublished, isTrue);
+      expect(provider.nearbyPaidPublished, isFalse);
+      expect(provider.genderFilterPublished, isFalse);
+    });
+
+    test('gateFeature sukses → true + refreshWallet', () async {
+      when(() => service.gateFeature(any(), priceFeature: any(named: 'priceFeature')))
+          .thenAnswer((_) async => {'ok': true});
+      when(() => service.getWallet()).thenAnswer(
+        (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 35},
+      );
+      final ok = await provider.gateFeature('nearby', priceFeature: 'nearby');
+      expect(ok, isTrue);
+      expect(provider.points, 35);
+    });
+
+    test('gateFeature error → rethrow', () async {
+      when(() => service.gateFeature(any(), priceFeature: any(named: 'priceFeature')))
+          .thenThrow(Exception('YukCoin tidak cukup'));
+      await expectLater(
+        provider.gateFeature('nearby'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('claimWelcomeBonus → coins + refreshWallet', () async {
+      when(() => service.claimWelcomeBonus(
+            installId: any(named: 'installId'),
+            kind: any(named: 'kind'),
+          )).thenAnswer((_) async => {'granted': true, 'coins': 100});
+      when(() => service.getWallet()).thenAnswer(
+        (_) async => <String, dynamic>{'bonus': 100, 'earned': 0, 'total': 100},
+      );
+      final coins = await provider.claimWelcomeBonus(
+        installId: 'drm-abc',
+        kind: 'anon',
+      );
+      expect(coins, 100);
+      expect(provider.points, 100);
+    });
+
+    test('claimWelcomeBonus sudah diklaim → 0', () async {
+      when(() => service.claimWelcomeBonus(
+            installId: any(named: 'installId'),
+            kind: any(named: 'kind'),
+          )).thenAnswer((_) async => {'granted': false, 'coins': 0});
+      final coins = await provider.claimWelcomeBonus(
+        installId: 'drm-abc',
+        kind: 'anon',
+      );
+      expect(coins, 0);
+    });
+  });
 }
