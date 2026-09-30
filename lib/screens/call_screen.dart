@@ -404,6 +404,12 @@ class _CallScreenState extends State<CallScreen> {
                           style: AppText.body.copyWith(color: Colors.white70),
                         ),
                       ),
+                      // Banner billing: sisa gratis / tarif per menit (caller).
+                      if (_session.phase == CallPhase.inCall &&
+                          _session.billingPerMinute > 0) ...[
+                        const SizedBox(height: 6),
+                        _BillingBanner(session: _session, isId: s.isId),
+                      ],
                     ],
                   ),
                 ),
@@ -550,3 +556,41 @@ class _RemoteFallback extends StatelessWidget {
   }
 }
 
+
+
+/// Banner billing call: sisa kuota gratis, atau tarif koin/menit setelahnya.
+class _BillingBanner extends StatelessWidget {
+  final CallSession session;
+  final bool isId;
+  const _BillingBanner({required this.session, required this.isId});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S(isId: isId);
+    final freeSec = session.billingFreeRemainingSec;
+    final free = freeSec > 0;
+    final label = free
+        ? s.callFreeRemaining(_mmss(freeSec))
+        : s.callCostPerMin(session.billingPerMinute);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: AppText.caption.copyWith(
+          color: free ? const Color(0xFF2ECC71) : Colors.amber,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  static String _mmss(int sec) {
+    final m = (sec ~/ 60).toString().padLeft(2, '0');
+    final r = (sec % 60).toString().padLeft(2, '0');
+    return '$m:$r';
+  }
+}

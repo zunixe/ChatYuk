@@ -28,7 +28,6 @@ import 'contact_screen.dart';
 import 'donate_screen.dart';
 import '../core/admin_gate.dart';
 import 'leaderboard_screen.dart';
-import 'missions_screen.dart';
 import 'point_history_screen.dart';
 import 'social_list_screen.dart';
 import 'friend_requests_screen.dart';
@@ -289,8 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ).showSnackBar(SnackBar(content: Text(s.errPhotoLoad)));
       return;
     }
-    // Slot = jumlah foto sebelum upload (0-based). Slot 1..5 dapat reward.
-    final slotIndex = _photos.length;
+    // Reward koin upload DIHAPUS (overhaul coin: tidak ada poin gratis).
     setState(() => _uploading = true);
     try {
       await context.read<AuthProvider>().uploadPhoto(
@@ -298,19 +296,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         preview: processed['preview'],
       );
       await _loadPhotos();
-      // Reward koin upload (slot 1..5) bila sistem koin aktif.
-      if (mounted) {
-        final pp = context.read<PointsProvider>();
-        if (pp.enabled && slotIndex >= 1 && slotIndex <= 5) {
-          final earned = await pp.rewardPhotoSlot(slotIndex);
-          if (earned > 0 && mounted) {
-            pp.showPointsToast(
-              context,
-              s.pointsGain(earned, s.reasonPhotoUpload),
-            );
-          }
-        }
-      }
+      // Reward koin upload DIHAPUS (overhaul coin: tidak ada poin gratis).
     } catch (e) {
       if (mounted)
         ScaffoldMessenger.of(
@@ -821,20 +807,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(content: Text(s.msgProfileSaved)),
                                   );
-                                  final pp = context.read<PointsProvider>();
-                                  pp.oneTimeBonus('completed_profile', 10).then(
-                                    (earned) {
-                                      if (earned && mounted) {
-                                        pp.showPointsToast(
-                                          context,
-                                          s.pointsGain(
-                                            10,
-                                            s.reasonProfileComplete,
-                                          ),
-                                        );
-                                      }
-                                    },
-                                  );
+                                  // Bonus profil DIHAPUS (tidak ada poin gratis).
                                 }
                               } catch (e) {
                                 if (sheetCtx.mounted) {
@@ -954,22 +927,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             pinned: true,
             // Keluar pindah ke Pengaturan › Akun.
             actions: [
-              // Tombol Misi — sembunyikan saat sistem poin OFF
-              if (pointsEnabled)
-                IconButton(
-                  padding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 40,
-                    height: 44,
-                  ),
-                  icon: const Icon(Icons.emoji_events_outlined, size: 20),
-                  tooltip: s.missionsTitle,
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MissionsScreen()),
-                  ),
-                ),
+              // Tombol Misi DISEMBUNYIKAN — misi/reward dihapus (overhaul coin).
               IconButton(
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -980,19 +938,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 icon: const Icon(Icons.share_outlined, size: 20),
                 tooltip: s.btnShareApp,
                 onPressed: () async {
-                  final pp = context.read<PointsProvider>();
-                  final result = await Share.share(s.msgShareApp);
-                  // Hanya beri bonus kalau benar-benar dibagikan (bukan sekadar
-                  // buka lalu tutup share sheet). Bonus invited_friend one-time —
-                  // kalau sudah pernah, earned=false → toast tidak muncul lagi.
-                  if (result.status != ShareResultStatus.success) return;
-                  final earned = await pp.oneTimeBonus('invited_friend', 30);
-                  if (earned && context.mounted) {
-                    pp.showPointsToast(
-                      context,
-                      s.pointsGain(30, s.reasonShare),
-                    );
-                  }
+                  // Bonus share DIHAPUS (overhaul coin: tidak ada poin gratis).
+                  await Share.share(s.msgShareApp);
                 },
               ),
               SizedBox(width: 4),

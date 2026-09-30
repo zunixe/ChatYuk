@@ -259,18 +259,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         context.read<LocaleProvider>().s.pointsDeduct(1),
       );
     }
-    _roomSendCount++;
-    if (_roomSendCount == 5) {
-      _pointsProv?.oneTimeBonus('first_room_chat', 5).then((earned) {
-        if (earned && mounted) {
-          final s = context.read<LocaleProvider>().s;
-          _pointsProv?.showPointsToast(
-            context,
-            s.pointsGain(5, s.reasonRoomChat),
-          );
-        }
-      });
-    }
+    // Bonus "first room chat" DIHAPUS (overhaul coin: tidak ada poin gratis).
     _scrollToBottom();
   }
   final _scrollCtrl = ScrollController();
@@ -279,8 +268,6 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   late AuthProvider _auth;
   late ChatProvider _chat;
   int _lastMsgCount = 0;
-  bool _readBonusClaimed = false;
-  int _roomSendCount = 0;
   PointsProvider? _pointsProv;
   Timer? _presenceTimer;
   String? _pendingPhotoBase64;
@@ -1496,19 +1483,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   void _onRoomScroll() {
-    if (_readBonusClaimed) return;
-    if (_scrollCtrl.hasClients && _scrollCtrl.position.pixels < 300) {
-      _readBonusClaimed = true;
-      _pointsProv?.roomReadBonus().then((_) {
-        if (mounted && _pointsProv?.enabled == true) {
-          final s = context.read<LocaleProvider>().s;
-          _pointsProv?.showPointsToast(
-            context,
-            s.pointsGain(2, s.reasonRoomRead),
-          );
-        }
-      });
-    }
+    // Bonus baca room DIHAPUS (overhaul coin: tidak ada poin gratis).
   }
 
   @override
@@ -1620,18 +1595,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   @override
   void outboxOnSent() {
-    _roomSendCount++;
-    if (_roomSendCount == 5) {
-      _pointsProv?.oneTimeBonus('first_room_chat', 5).then((earned) {
-        if (earned && mounted) {
-          final s = context.read<LocaleProvider>().s;
-          _pointsProv?.showPointsToast(
-            context,
-            s.pointsGain(5, s.reasonRoomChat),
-          );
-        }
-      });
-    }
+    // Bonus "first room chat" DIHAPUS (overhaul coin: tidak ada poin gratis).
   }
 
 

@@ -23,7 +23,6 @@ import '../core/cache/message_cache.dart';
 import '../core/media/image_cache_hygiene.dart';
 import '../services/realtime_hub.dart';
 import '../services/rt_resilient.dart';
-import '../services/points_service.dart';
 import '../core/screen_secure_service.dart';
 import '../services/storage_photo_service.dart';
 import '../services/notification_prefs_service.dart';
@@ -192,16 +191,7 @@ class AuthProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_referrerPrefKey);
     } catch (_) {}
-    if (referrer == uid) return;
-    try {
-      final ok = await _auth.bindReferrer(referrer);
-      if (ok) {
-        await PointsService().claimReferralReward();
-        dlog('[AUTH] referral bind+claim OK for $referrer');
-      }
-    } catch (e) {
-      dlog('[AUTH] referral bind error: $e');
-    }
+    // Faucet referral DIHAPUS (overhaul coin: tidak ada poin gratis).
   }
 
   /// Pantau event auth Supabase. Kalau session hilang TANPA logout manual
@@ -1008,36 +998,14 @@ class AuthProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// Daily-login bonus DIHAPUS (overhaul coin: tidak ada poin gratis). No-op.
   Future<void> _claimDailyPoints() async {
-    try {
-      final pointsService = PointsService();
-      final enabled = await pointsService.fetchEnabled();
-      if (!enabled) return;
-      final old = _profile?.points ?? 0;
-      final res = await pointsService.dailyLoginBonus();
-      final newPoints = (res['points'] as num?)?.toInt() ?? old;
-      _profile = _profile?.copyWith(points: newPoints);
-      dlog(
-        '[AUTH] dailyLoginBonus: $old -> $newPoints (streak ${res['streak']})',
-      );
-      // Toast akan ditampilkan oleh PointsProvider di screen yang aktif
-      // via checkAndShowOnlineToast / PointsProvider listener
-    } catch (e) {
-      dlog('[AUTH] dailyLoginBonus error: $e');
-    }
+    // Faucet dihapus — tidak ada bonus login. (lihat 20261001010000)
   }
 
+  /// Register bonus DIHAPUS (overhaul coin: tidak ada poin gratis). No-op.
   Future<void> _claimRegisterBonus() async {
-    try {
-      final pointsService = PointsService();
-      final enabled = await pointsService.fetchEnabled();
-      if (!enabled) return;
-      final newPoints = await pointsService.registerBonus();
-      _profile = _profile?.copyWith(points: newPoints);
-      dlog('[AUTH] registerBonus -> $newPoints');
-    } catch (e) {
-      dlog('[AUTH] registerBonus error: $e');
-    }
+    // Faucet dihapus — tidak ada bonus register.
   }
 
   /// Kirim ulang email verifikasi untuk user yang sudah signup tapi belum verify.

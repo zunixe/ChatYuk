@@ -19,6 +19,7 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/nav_provider.dart';
 import '../providers/online_users_provider.dart';
+import '../providers/points_provider.dart';
 import '../providers/room_provider.dart';
 import '../widgets/search_dropdown.dart';
 import '../widgets/skeleton_card.dart';
@@ -1667,7 +1668,34 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                             icon: Icons.person_outline,
                             items: const ['all', 'male', 'female'],
                             labels: [s.filterAll, s.filterMale, s.filterFemale],
-                            onChanged: (v) {
+                            onChanged: (v) async {
+                              // Filter gender berbayar (harian) — gate server
+                              // saat fitur sudah dipublish. Pilih 'all' = gratis.
+                              if (v != 'all') {
+                                final pp = context.read<PointsProvider>();
+                                if (pp.genderFilterPublished) {
+                                  try {
+                                    await pp.gateFeature(
+                                      'gender_filter',
+                                      priceFeature: 'filter_gender',
+                                    );
+                                  } on PostgrestException catch (e) {
+                                    if (!mounted) return;
+                                    if (e.message.contains('tidak cukup') ||
+                                        e.message.contains('Not enough')) {
+                                      pp.showOutOfPointsDialog(context, s.isId);
+                                    } else {
+                                      dlog('[ONLINE] gate gender error: $e');
+                                    }
+                                    return;
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    dlog('[ONLINE] gate gender error: $e');
+                                    return;
+                                  }
+                                }
+                              }
+                              if (!mounted) return;
                               setState(() {
                                 _gender = v;
                                 _page = 1;
