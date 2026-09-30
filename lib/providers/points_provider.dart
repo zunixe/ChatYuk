@@ -38,8 +38,6 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Flag server sudah terkonfirmasi (fetch/subscribe balik) — dipakai
   /// UI untuk memutuskan menampilkan fitur koin tanpa kilatan awal.
   bool get enabledConfirmed => _enabledConfirmed;
-  int get loginStreak => _loginStreak;
-  int _loginStreak = 0;
 
   // Wallet bucket (Fase 1). _points tetap = total (kompat UI lama).
   int _bonusBalance = 0;
