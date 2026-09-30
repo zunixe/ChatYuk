@@ -433,6 +433,62 @@ void main() {
     });
   });
 
+  group('tab Terhapus: total dari server (bukan yang ter-load)', () {
+    // BUG yang dicegah: chip filter menghitung dari `deleted.length`
+    // (hanya halaman-1 = 100) sehingga angka mentok 100 padahal server
+    // punya 1883. Sekarang angka WAJIB berasal dari respons server.
+    test('deletedTotal/deletedArchivedTotal/deletedPendingTotal dari server',
+        () async {
+      when(() => service.listDeleted(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            includePending: any(named: 'includePending'),
+          )).thenAnswer((_) async => {
+            'items': [
+              {'user_id': 'a1', 'pending': false},
+              {'user_id': 'a2', 'pending': false},
+              {'user_id': 'p1', 'pending': true},
+            ],
+            'total': 1883,
+            'total_archive': 1782,
+            'total_pending': 101,
+          });
+
+      await provider.fetchDeleted();
+
+      // Hanya 3 baris ter-load, tapi total harus 1883 — bukan 3.
+      expect(provider.deleted.length, 3);
+      expect(provider.deletedTotal, 1883);
+      expect(provider.deletedArchivedTotal, 1782);
+      expect(provider.deletedPendingTotal, 101);
+      // hasMore benar: 3 < 1883 → masih ada halaman berikutnya.
+      expect(provider.deletedHasMore, isTrue);
+    });
+
+    test('fallback ke hitungan ter-load bila server belum kirim rincian',
+        () async {
+      // Kompatibilitas DB lama: tanpa total_archive/total_pending.
+      when(() => service.listDeleted(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            includePending: any(named: 'includePending'),
+          )).thenAnswer((_) async => {
+            'items': [
+              {'user_id': 'a1', 'pending': false},
+              {'user_id': 'p1', 'pending': true},
+            ],
+            'total': 2,
+          });
+
+      await provider.fetchDeleted();
+
+      expect(provider.deletedTotal, 2);
+      expect(provider.deletedArchivedTotal, 1);
+      expect(provider.deletedPendingTotal, 1);
+      expect(provider.deletedHasMore, isFalse);
+    });
+  });
+
   group('pesan monitor per-chat (anti "pesan kecampur")', () {
     // ChatId UNIK per test: MessageCache singleton menyimpan snapshot
     // `admin_chatmsg_<id>` di memori antar-test; id unik menghindari bleed

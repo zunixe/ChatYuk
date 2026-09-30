@@ -170,6 +170,48 @@ void main() {
       expect(out['total'], 0);
     });
 
+    // Regresi: RPC sempat MENGABAIKAN p_limit/p_offset (aplikasi minta 100,
+    // server mengirim seluruh baris) dan hanya mengembalikan `total`
+    // gabungan, sehingga chip filter salah angka. Pastikan kontraknya:
+    // limit/offset benar-benar dikirim, dan rincian total diteruskan.
+    test('listDeleted → limit & offset diteruskan apa adanya', () async {
+      handler.on('admin_list_deleted', (_) => {
+            'items': [],
+            'total': 0,
+            'total_archive': 0,
+            'total_pending': 0,
+          });
+      await svc.listDeleted(limit: 5, offset: 200);
+      final p = rpcParamsOf(handler, 'admin_list_deleted');
+      expect(p['p_limit'], 5);
+      expect(p['p_offset'], 200);
+      expect(p['p_include_pending'], true);
+    });
+
+    test('listDeleted → includePending bisa dimatikan', () async {
+      handler.on('admin_list_deleted', (_) => {'items': [], 'total': 0});
+      await svc.listDeleted(includePending: false);
+      expect(rpcParamsOf(handler, 'admin_list_deleted')['p_include_pending'],
+          false);
+    });
+
+    test('listDeleted → rincian arsip/pending diteruskan ke pemanggil',
+        () async {
+      handler.on('admin_list_deleted', (_) => {
+            'items': [
+              {'user_id': 'u1', 'pending': false},
+            ],
+            'total': 1883,
+            'total_archive': 1782,
+            'total_pending': 101,
+          });
+      final out = await svc.listDeleted();
+      // UI memakai angka ini untuk label chip — wajib tidak hilang.
+      expect(out['total_archive'], 1782);
+      expect(out['total_pending'], 101);
+      expect(out['total'], 1883);
+    });
+
     test('getDeletedDeviceHistory → list', () async {
       handler.on('admin_deleted_device_history', (_) => [
             {'device': 'd1'}

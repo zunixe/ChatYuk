@@ -233,6 +233,10 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     context.watch<ThemeProvider>();
     final admin = context.watch<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
+    // Hitung sekali per build — dulu `_filtered()` dipanggil di dalam
+    // `itemBuilder` sehingga daftar difilter ulang untuk SETIAP baris (O(n²)
+    // pada 100+ item) dan hasilnya tidak stabil antar frame.
+    final filtered = _filtered(admin.deleted);
 
     return Column(
       children: [
@@ -330,20 +334,19 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                 _filterChip(
                   s.adminDeletedFilterAll,
                   'all',
-                  admin.deleted.where((r) => r['pending'] != true).length +
-                      admin.deleted.where((r) => r['pending'] == true).length,
+                  admin.deletedTotal,
                 ),
                 const SizedBox(width: 6),
                 _filterChip(
                   s.adminDeletedFilterDeleted,
                   'deleted',
-                  admin.deleted.where((r) => r['pending'] != true).length,
+                  admin.deletedArchivedTotal,
                 ),
                 const SizedBox(width: 6),
                 _filterChip(
                   s.adminDeletedFilterPending,
                   'pending',
-                  admin.deleted.where((r) => r['pending'] == true).length,
+                  admin.deletedPendingTotal,
                   highlight: true,
                 ),
               ],
@@ -396,7 +399,7 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                         ),
                       ),
                     Expanded(
-                      child: _filtered(admin.deleted).isEmpty
+                      child: filtered.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -427,10 +430,9 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                       MediaQuery.of(context).padding.bottom + 12,
                     ),
                     itemCount:
-                        _filtered(admin.deleted).length +
+                        filtered.length +
                         (admin.deletedHasMore ? 1 : 0),
                     itemBuilder: (_, i) {
-                      final filtered = _filtered(admin.deleted);
                       if (i >= filtered.length) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 16),
