@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -13,7 +14,6 @@ import '../models/active_call_model.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/profile_avatar.dart';
-import '../providers/avatar_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/cache/photo_cache.dart';
@@ -25,6 +25,7 @@ import '../widgets/private_chat_message.dart';
 import 'admin_chat/widgets/audio_listen_chip.dart';
 import '../providers/theme_provider.dart';
 import '../config/strings_admin.dart';
+import 'user_info_screen.dart';
 
 /// Sisi kiri (lawan bicara) monitor chat — fungsi MURNI agar prioritas
 /// terkunci test (`test/admin_chat_leftuid_test.dart`). Harus STABIL
@@ -860,7 +861,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   /// Dua avatar peserta DITUMPANG-TINDIH (bukan satu di kiri & satu di kanan)
   /// — gaya sama dengan kartu di daftar monitor agar header rapi. Tap salah
-  /// satu avatar tetap memperbesar fotonya.
+  /// satu avatar → buka PROFIL-nya (UserInfoScreen, sama seperti tap avatar
+  /// di private chat) — bukan zoom foto.
   Widget _headerAvatarPair() {
     final uids = widget.participantOrder
         .where((u) => u.isNotEmpty)
@@ -881,7 +883,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
           ),
         ),
         child: GestureDetector(
-          onTap: () => _zoomAvatar(uid, name),
+          onTap: () => _openProfile(uid, name),
           child: ProfileAvatar(
             uid: uid,
             name: name,
@@ -909,69 +911,29 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     );
   }
 
-  /// Tap avatar → dialog perbesar (InteractiveViewer). Ambil base64 via
-  /// AvatarProvider (uid); fallback inisial.
-  Future<void> _zoomAvatar(String uid, String name) async {
-    if (!mounted) return;
-    String b64 = '';
-    try {
-      b64 = await context.read<AvatarProvider>().get(uid);
-    } catch (_) {}
-    if (!mounted) return;
-    Uint8List? bytes;
-    if (b64.isNotEmpty) {
-      try {
-        bytes = base64Decode(b64);
-      } catch (_) {}
-    }
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Stack(
-          children: [
-            Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4,
-                child: bytes != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.memory(
-                          bytes,
-                          fit: BoxFit.contain,
-                          cacheWidth: 1080,
-                        ),
-                      )
-                    : CircleAvatar(
-                        radius: 90,
-                        backgroundColor: AppTheme.primary,
-                        child: Text(
-                          initial,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: AppGlyph.xl,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-          ],
-        ),
+  /// Tap avatar header → profil peserta (sama seperti private chat).
+  void _openProfile(String uid, String name) {
+    if (uid.isEmpty || !mounted) return;
+    final navKey = navKeyUser(uid);
+    if (!tryClaimNav(navKey)) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserInfoScreen(userId: uid, fallbackName: name),
       ),
-    );
+    ).then((_) => releaseNav(navKey));
+  }
+
+  /// Tahan bubble pesan → salin teks (sama seperti "salin" di private chat).
+  /// Monitor read-only: langsung salin + toast, tanpa mode seleksi.
+  Future<void> _copyMessage(MessageModel msg) async {
+    if (msg.text.isEmpty || !mounted) return;
+    await Clipboard.setData(ClipboardData(text: msg.text));
+    if (!mounted) return;
+    final s = context.read<LocaleProvider>().s;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(s.msgMessageCopied)));
   }
 
   @override
@@ -1116,6 +1078,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                               onRetryImage: isImageDeferred
                                   ? _retryImage
                                   : null,
+                              onLongPressMenu: (d, m, _) => _copyMessage(m),
                             );
                           },
                         ),
