@@ -220,4 +220,44 @@ void main() {
       });
     });
   });
+
+  // Grup ini di AKHIR file: emission-nya menyimpan snapshot disk/memori
+  // (`MessageCache._memRawList`) yang dibaca `_loadDisk` provider test
+  // berikutnya — di akhir tidak ada test yang bisa tercemar.
+  // Uid sengaja unik (hidA/hidB) + assertion pakai contains, supaya tahan
+  // terhadap stale user dari test sebelumnya (hold-grace bisa menahannya).
+  group('sembunyikan (benam ke kotak bawah)', () {
+    test('hide/unhide update in-memory langsung', () async {
+      expect(provider.isHidden('hidA'), isFalse);
+      await provider.hideUser('hidA');
+      expect(provider.isHidden('hidA'), isTrue);
+      expect(provider.hiddenCount, 1);
+      expect(provider.hiddenUids, contains('hidA'));
+      await provider.unhideUser('hidA');
+      expect(provider.isHidden('hidA'), isFalse);
+      expect(provider.hiddenCount, 0);
+    });
+
+    test('uid hidden yang online lagi tetap hidden', () async {
+      await _emit([_u('hidA', 'online'), _u('hidB', 'online')]);
+      await provider.hideUser('hidB');
+      expect(provider.isHidden('hidB'), isTrue);
+      // Tetap dikenal walau emission datang lagi (screen mempartisi
+      // ke kotak bawah, provider tidak membuangnya).
+      await _emit([_u('hidA', 'online'), _u('hidB', 'online')]);
+      expect(provider.isHidden('hidB'), isTrue);
+      final uids = provider.users.map((u) => u.uid).toSet();
+      expect(uids, containsAll(['hidA', 'hidB']));
+      await provider.unhideUser('hidB');
+      expect(provider.isHidden('hidB'), isFalse);
+    });
+
+    test('setOwner ganti akun mengosongkan daftar lama', () async {
+      provider.setHiddenForTest({'hidX'});
+      expect(provider.isHidden('hidX'), isTrue);
+      await provider.setOwner('owner1');
+      // Prefs mock kosong → daftar bersih, tidak bocor antar akun.
+      expect(provider.isHidden('hidX'), isFalse);
+    });
+  });
 }
