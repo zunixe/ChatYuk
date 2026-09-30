@@ -156,6 +156,34 @@ jalan (secret salah / pg_net gagal / LLM hang — cek log edge). Baris `edge`
 dengan `skipped:<alasan>` = cocokkan ke tabel §5. `enqueued` tanpa
 `trigger_msg_id` + `proactive=true` = sapaan proaktif.
 
+### 7.0 Noise filter (migrasi `20261004080000_ai_reply_log_noise_filter.sql`)
+
+**Dua decision TIDAK lagi dicatat** di `ai_reply_log` (denylist deterministik
+di penulis log, bukan sampling):
+
+| decision | path | kenapa dibuang |
+|---|---|---|
+| `skipped:dummy_disabled` | SQL/enqueue | dummy penerima sedang AI-off |
+| `skipped:ai_disabled` | edge | dummy penerima sedang AI-off |
+
+Keduanya = keadaan "dummy penerima mati AI", yang **sudah bisa dilihat
+langsung** di `dummy_accounts.ai_enabled`. Sebelum filter ini, 84% isi tabel
+adalah dua baris ini (~9.6k dari ~11.4k baris) padahal hanya ~39 `replied`
+per 7 hari — noise menenggelamkan kasus menarik. Semua decision LAIN
+(`enqueued`, `replied`, `error:*`, `skipped:rate_*`, `skipped:ai_ai_off`,
+`skipped:pause_newer_trigger`, dst.) tetap tercatat.
+
+Filter dipasang di **dua titik tulis** (satu-satunya dua jalur insert):
+`public.ai_log_reply()` (dipakai trigger/`ai_reply_post`) dan shadow `json()`
+di edge `ai-reply` (`index.ts`).
+
+**Dampak saat debug "dummy X kenapa diam":** jangan harap menemukan
+`dummy_disabled`/`ai_disabled` di log lagi. Cek langsung:
+```sql
+select uid, ai_enabled, ai_always_online from dummy_accounts where uid = '<DUMMY_UID>';
+```
+`ai_enabled = false` → itulah penyebabnya (bukan bug enqueue/edge).
+
 ### 7.1 Status penerapan (2026-09-14, sudah LIVE)
 
 Semua komponen berikut SUDAH aktif di project prod `fohcucyyejdryryoxitm`:
