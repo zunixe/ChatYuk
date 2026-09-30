@@ -82,4 +82,42 @@ void main() {
       expect(await NotificationPrefsService.isChatMuted(''), isFalse);
     });
   });
+
+  group('isOnlineHidden (gate notif "X online")', () {
+    test('uid ada di daftar sembunyi akun aktif → true', () async {
+      SharedPreferences.setMockInitialValues({
+        'current_uid': 'me',
+        'hidden_online_me': ['u1', 'u2'],
+      });
+      expect(await NotificationPrefsService.isOnlineHidden('u1'), isTrue);
+    });
+
+    test('uid TIDAK di daftar → false (notif tetap muncul)', () async {
+      SharedPreferences.setMockInitialValues({
+        'current_uid': 'me',
+        'hidden_online_me': ['u1'],
+      });
+      expect(await NotificationPrefsService.isOnlineHidden('u9'), isFalse);
+    });
+
+    test('daftar milik akun LAIN tidak bocor', () async {
+      SharedPreferences.setMockInitialValues({
+        'current_uid': 'me',
+        'hidden_online_other': ['u1'],
+      });
+      expect(await NotificationPrefsService.isOnlineHidden('u1'), isFalse);
+    });
+
+    test('tanpa sesi (current_uid kosong) → false', () async {
+      SharedPreferences.setMockInitialValues({
+        'hidden_online_me': ['u1'],
+      });
+      expect(await NotificationPrefsService.isOnlineHidden('u1'), isFalse);
+    });
+
+    test('uid kosong → false', () async {
+      SharedPreferences.setMockInitialValues({'current_uid': 'me'});
+      expect(await NotificationPrefsService.isOnlineHidden(''), isFalse);
+    });
+  });
 }
