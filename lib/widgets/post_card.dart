@@ -27,7 +27,13 @@ import '../screens/user_info_screen.dart';
 /// Kartu postingan timeline: header + foto + caption + like/comment/share.
 class PostCard extends StatefulWidget {
   final Map<String, dynamic> post;
-  const PostCard({super.key, required this.post});
+
+  /// Dipanggil setelah post berhasil dihapus. Di feed kartu hilang sendiri
+  /// via `removePost`; di layar detail (PostDetailScreen) callback ini dipakai
+  /// untuk pop kembali ke feed.
+  final VoidCallback? onDeleted;
+
+  const PostCard({super.key, required this.post, this.onDeleted});
 
   @override
   State<PostCard> createState() => _PostCardState();
@@ -1140,6 +1146,7 @@ class _PostCardState extends State<PostCard> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(s.postDeleted)));
+      widget.onDeleted?.call();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(

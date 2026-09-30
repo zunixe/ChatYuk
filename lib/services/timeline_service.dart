@@ -67,6 +67,19 @@ class TimelineService {
     await _sb.from('posts').delete().eq('id', postId);
   }
 
+  /// Satu post untuk layar detail (tap notifikasi). NULL bila tidak ada /
+  /// tidak boleh dilihat (RPC mengembalikan NULL).
+  Future<Map<String, dynamic>?> getPost(String postId) async {
+    if (postId.isEmpty) return null;
+    try {
+      final res = await _sb.rpc('get_post', params: {'p_id': postId});
+      if (res is Map) return Map<String, dynamic>.from(res);
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Daftar post. scope 'all' | 'following'.
   /// Cursor keyset: (is_boosted desc, created_at desc) → p_cursor_boosted +
   /// p_cursor. Konsisten dengan ORDER BY di RPC.

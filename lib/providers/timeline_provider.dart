@@ -94,11 +94,14 @@ class TimelineProvider extends ChangeNotifier {
     List<Map<String, int>> imageDims = const [],
     String visibility = 'public',
   }) =>
-      _service.createPost(
-        text: text,
-        imagePaths: imagePaths,
-        imageDims: imageDims,
-        visibility: visibility,
+      PerfProbe.timed(
+        'timeline.createPost',
+        () => _service.createPost(
+          text: text,
+          imagePaths: imagePaths,
+          imageDims: imageDims,
+          visibility: visibility,
+        ),
       );
 
   // ── Passthrough aksi post (dipakai PostCard — hindari instansiasi
@@ -121,6 +124,8 @@ class TimelineProvider extends ChangeNotifier {
   Future<Map<String, dynamic>> boostPost(String postId) =>
       _service.boostPost(postId);
   Future<void> deletePost(String postId) => _service.deletePost(postId);
+  Future<Map<String, dynamic>?> getPost(String postId) =>
+      PerfProbe.timed('timeline.getPost', () => _service.getPost(postId));
   Future<List<Map<String, dynamic>>> comments(String postId) =>
       PerfProbe.timed('timeline.comments', () => _service.comments(postId));
   Future<Map<String, dynamic>> toggleCommentLike(int commentId) =>
