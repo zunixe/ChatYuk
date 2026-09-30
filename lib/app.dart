@@ -317,9 +317,18 @@ class _AuthGateState extends State<_AuthGate> {
       dummySessionActive: dummySessionActive,
       isSignedIn: isSignedIn,
       hasProfile: p0 != null,
-      needsProfile: !isAnonymous &&
-          !dummySessionActive &&
-          (p0 == null || p0.nickname.trim().isEmpty || !p0.isRegistered),
+      // Dua jalur wajib isi profil:
+      //  (a) non-anon (login email/Google) yang belum lengkap — perilaku lama;
+      //  (b) `nicknameSet == false` — user (biasanya anon) yang belum PERNAH
+      //      memilih username. Dibuat oleh trigger `handle_new_user_profile`
+      //      (nickname 'AnonXXXXXX'), jadi tanpa cabang ini mereka langsung
+      //      masuk main tanpa pernah memilih username. User lama sudah
+      //      di-backfill `nickname_set = true` (migrasi 20261002060000)
+      //      sehingga TIDAK ikut ter-gate.
+      needsProfile: !dummySessionActive &&
+          ((!isAnonymous &&
+                (p0 == null || p0.nickname.trim().isEmpty || !p0.isRegistered)) ||
+              (p0 != null && !p0.nicknameSet)),
       banned: p0 != null &&
           !isAdminGate0 &&
           isBannedNickname(p0.nickname),
