@@ -10,11 +10,29 @@ mixin AdminDeletedMx on AdminBase {
   int _deletedTotal = 0;
   bool _deletedFetchingMore = false;
   AdminErrKind? _deletedError;
+  // Rincian total dari server (nullable: DB lama belum mengirim ini).
+  int? _archivedTotal;
+  int? _pendingTotal;
 
   List<Map<String, dynamic>> get deleted => _deleted;
   bool get deletedLoading => _deletedLoading;
   bool get deletedHasMore => _deletedHasMore;
   AdminErrKind? get deletedError => _deletedError;
+
+  /// Total dari SERVER (arsip + pending) — bukan jumlah baris yang sudah
+  /// ter-load. Chip filter & header WAJIB memakai ini, kalau tidak angkanya
+  /// mentok di ukuran halaman-1 (100) padahal data sebenarnya ribuan.
+  int get deletedTotal => _deletedTotal;
+
+  /// Jumlah arsip (user benar-benar terhapus) & pending (anon belum dihapus).
+  /// Dihitung dari `total_archive`/`total_pending` bila server menyediakan;
+  /// kalau tidak (DB lama), fallback ke hitungan baris ter-load.
+  int get deletedArchivedTotal =>
+      _archivedTotal ?? _loadedCount(pending: false);
+  int get deletedPendingTotal => _pendingTotal ?? _loadedCount(pending: true);
+
+  int _loadedCount({required bool pending}) =>
+      _deleted.where((r) => (r['pending'] == true) == pending).length;
 
   Future<void> fetchDeleted() async {
     _deletedLoading = true;
@@ -42,6 +60,8 @@ mixin AdminDeletedMx on AdminBase {
       if (fresh.isNotEmpty || _deleted.isEmpty) {
         _deleted = fresh;
         _deletedTotal = (res['total'] as num?)?.toInt() ?? 0;
+        _archivedTotal = (res['total_archive'] as num?)?.toInt();
+        _pendingTotal = (res['total_pending'] as num?)?.toInt();
         _deletedHasMore = _deleted.length < _deletedTotal;
       }
       if (_deleted.isNotEmpty) {
