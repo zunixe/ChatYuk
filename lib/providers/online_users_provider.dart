@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
@@ -50,6 +51,71 @@ class OnlineUsersProvider extends ChangeNotifier {
   List<UserModel> get users => _users;
   String? get error => _error;
   bool get hasLoaded => _loaded;
+
+  // ── Sembunyikan (benam) pengguna online — per akun, lokal saja ──
+  // Uid yang disembunyikan tetap di `_users` (supaya saat online lagi
+  // langsung jatuh ke kotak bawah, tidak pernah naik ke atas), tapi
+  // screen mempartisi: utama = !hidden, kotak bawah = hidden.
+  final Set<String> _hiddenUids = {};
+  String? _ownerUid;
+
+  bool isHidden(String uid) => _hiddenUids.contains(uid);
+  int get hiddenCount => _hiddenUids.length;
+  Set<String> get hiddenUids => Set.unmodifiable(_hiddenUids);
+
+  String _hiddenKeyFor(String owner) => 'hidden_online_$owner';
+
+  /// Ganti pemilik daftar sembunyi (dipanggil saat auth.uid berubah).
+  /// Memuat daftar dari SharedPreferences per akun.
+  Future<void> setOwner(String? uid) async {
+    if (_ownerUid == uid) return;
+    _ownerUid = uid;
+    _hiddenUids.clear();
+    if (uid == null || uid.isEmpty) {
+      if (!_disposed) notifyListeners();
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_hiddenKeyFor(uid)) ?? const [];
+      for (final id in list) {
+        if (id.isNotEmpty) _hiddenUids.add(id);
+      }
+    } catch (_) {}
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _saveHidden() async {
+    final owner = _ownerUid;
+    if (owner == null || owner.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_hiddenKeyFor(owner), _hiddenUids.toList());
+    } catch (_) {}
+  }
+
+  /// Sembunyikan uid (benam ke kotak bawah). In-memory langsung,
+  /// persist jalan di latar.
+  Future<void> hideUser(String uid) async {
+    if (uid.isEmpty || _hiddenUids.contains(uid)) return;
+    _hiddenUids.add(uid);
+    if (!_disposed) notifyListeners();
+    await _saveHidden();
+  }
+
+  /// Keluarkan dari kotak sembunyi (release).
+  Future<void> unhideUser(String uid) async {
+    if (!_hiddenUids.remove(uid)) return;
+    if (!_disposed) notifyListeners();
+    await _saveHidden();
+  }
+
+  @visibleForTesting
+  void setHiddenForTest(Set<String> uids) {
+    _hiddenUids
+      ..clear()
+      ..addAll(uids);
+  }
 
   /// Tunggu disk cache siap (SQLite + Keystore) — dipakai auth gate supaya
   /// skeleton tetap tampil sampai data hangat, tanpa blink abu skeleton.
