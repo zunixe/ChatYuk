@@ -136,6 +136,37 @@ mixin AdminStatsMx on AdminBase {
   Map<int, int> get regDaily => _regDaily;
   bool get regLoading => _regLoading;
 
+  // ── Insight registrasi (KPI + tren bulanan + sumber) ──
+  Map<String, dynamic> _regKpis = {};
+  List<Map<String, dynamic>> _regMonthly = [];
+  bool _regInsightLoading = false;
+  bool _regInsightLoaded = false;
+
+  Map<String, dynamic> get regKpis => _regKpis;
+  List<Map<String, dynamic>> get regMonthly => _regMonthly;
+  bool get regInsightLoading => _regInsightLoading;
+  bool get regInsightLoaded => _regInsightLoaded;
+
+  /// Muat KPI + tren bulanan sekali (dipanggil saat kartu dibuka).
+  Future<void> fetchRegistrationInsights({bool force = false}) async {
+    if (_regInsightLoaded && !force) return;
+    _regInsightLoading = true;
+    if (!_disposed) notifyListeners();
+    try {
+      final results = await Future.wait([
+        _service.fetchRegistrationKpis(),
+        _service.fetchRegistrationsMonthly(12),
+      ]);
+      _regKpis = results[0] as Map<String, dynamic>;
+      _regMonthly = results[1] as List<Map<String, dynamic>>;
+      _regInsightLoaded = true;
+    } catch (e) {
+      dlog('[ADMIN] fetchRegistrationInsights error: $e');
+    }
+    _regInsightLoading = false;
+    if (!_disposed) notifyListeners();
+  }
+
   Future<void> fetchRegistrationsDaily(int year, int month) async {
     final cacheKey = '${year}_$month';
     // Bulan lampau tidak berubah lagi → cache permanen; bulan berjalan

@@ -1250,3 +1250,26 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
 - **Verifikasi live:** `prosrc` `ai_log_reply` memuat filter; uji terarah
   noise=tidak insert, `skipped:rate_max`=insert (baris uji dibersihkan);
   `check_migrations.sh --all` OK bersih.
+
+## 2026-10-05 — 20261005010000_admin_registrations_insights (APPLY)
+
+- **Tujuan:** kartu "Registrasi Email" admin Ringkasan jadi informatif untuk
+  CEO (KPI + tren + konteks), bukan cuma bar per-hari satu bulan.
+- **Migrasi:** `admin_registration_kpis()` (jsonb KPI) +
+  `admin_registrations_monthly(p_months int)` (total/bulan, LEFT JOIN
+  generate_series). Apply Management API **6 statement** (2 create fn +
+  4 revoke/grant) — SUDAH TERAPPLIED di `fohcucyyejdryryoxitm`.
+- **Konsistensi:** KPI mengecualikan dummy + excluded uid (user nyata).
+- **Verifikasi live:** `select public.admin_registration_kpis()` →
+  registered_total 231, conversion 64.7%, new_this_month 230;
+  `admin_registrations_monthly(12)` → 12 baris (bulan kosong = 0).
+- **App:** AdminService + AdminProvider + kartu `registrationschart_card`
+  (KPI grid, tren 12 bulan CustomPaint, delta chip, bar harian highlight).
+- **Test:** pgTAP schema_sync 52/52 (+5), admin_service_test +2, analyze 0/0.
+
+## 2026-10-05 — Rename timestamp drift (admin_chats_participant_genders, admin_app_versions_sort_newest)
+
+- Dua migrasi untracked bentrok prefix timestamp → `check_migrations` menolak:
+  - `20261001000000_admin_chats_participant_genders` → `20261001005000`
+  - `20261001010000_admin_app_versions_sort_newest` → `20261001015000`
+- Tidak ada referensi ke nama lama; tidak affect DB (hanya nama file).

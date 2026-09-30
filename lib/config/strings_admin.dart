@@ -475,6 +475,35 @@ extension SAdminX on S {
   String get adminRegEmpty =>
       isId ? 'Tidak ada pendaftaran bulan ini' : 'No registrations this month';
 
+  // ── Insight registrasi (KPI CEO) ──
+  String get adminRegKpiTotal =>
+      isId ? 'Terdaftar' : 'Registered';
+  String get adminRegKpiNewMonth =>
+      isId ? 'Baru bulan ini' : 'New this month';
+  String get adminRegKpiToday => isId ? 'Hari ini' : 'Today';
+  String get adminRegKpiAvgDay =>
+      isId ? 'Rata-rata/hari' : 'Avg/day';
+  String get adminRegKpiConversion =>
+      isId ? 'Konversi anon' : 'Anon conversion';
+  String get adminRegKpiActiveToday =>
+      isId ? 'Aktif hari ini' : 'Active today';
+  String get adminRegKpiBestDay => isId ? 'Hari terbaik' : 'Best day';
+  String get adminRegTrendTitle =>
+      isId ? 'Tren 12 bulan' : '12-month trend';
+  String get adminRegTrendLoading =>
+      isId ? 'Memuat tren…' : 'Loading trend…';
+  String get adminRegDailyTitle =>
+      isId ? 'Harian (bulan terpilih)' : 'Daily (selected month)';
+  String get adminRegVsPrevMonth => isId ? 'vs bulan lalu' : 'vs last month';
+  String get adminRegInsightError => isId
+      ? 'Gagal memuat insight registrasi'
+      : 'Failed to load registration insight';
+  String get adminRegListTitleShort => isId ? 'Lihat daftar' : 'View list';
+  String get adminRegKpiAnonSuffix => isId ? 'anon' : 'anon';
+  String get adminRegKpiAvgDayShort => isId ? 'rata²' : 'avg';
+  String get adminRegUsersSuffix => isId ? 'user' : 'users';
+  String get adminRegTotalUsersSuffix => isId ? 'user (12 bln)' : 'users (12mo)';
+
   String get adminPointTab => isId ? 'Poin' : 'Points';
 
   String get adminChatMonitor => isId ? 'Monitor Chat' : 'Chat Monitor';

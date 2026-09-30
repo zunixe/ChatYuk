@@ -103,6 +103,27 @@ class AdminService {
     return map;
   }
 
+  /// KPI registrasi (total, konversi, baru bulan ini, avg/hari, hari terbaik,
+  /// aktif hari ini) untuk kartu Ringkasan CEO.
+  Future<Map<String, dynamic>> fetchRegistrationKpis() async {
+    final res = await _rpc('admin_registration_kpis');
+    return (res as Map<String, dynamic>?) ?? const {};
+  }
+
+  /// Total registrasi per bulan (tren N bulan terakhir) → map 'YYYY-MM' → n.
+  Future<List<Map<String, dynamic>>> fetchRegistrationsMonthly([
+    int months = 12,
+  ]) async {
+    final res = await _rpc(
+      'admin_registrations_monthly',
+      params: {'p_months': months},
+    );
+    return ((res as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
   Future<Map<String, dynamic>> massBonus(int bonus) async {
     final res = await _rpc('admin_mass_bonus', params: {'bonus': bonus});
     return res as Map<String, dynamic>;
