@@ -17,8 +17,8 @@
 -- ============================================================
 
 -- ── private_messages ──
-drop policy if exists private_messages_update_view_once on public.private_messages;
-create policy private_messages_update_view_once on public.private_messages
+drop policy if exists private_messages_update_view_once on public.private_messages; -- SAFE: tabel bersama private_messages; perluas WITH CHECK (view_once_expired + video_once_expired) — fitur terdampak: private chat view-once; qual peserta chat tak berubah
+create policy private_messages_update_view_once on public.private_messages -- SAFE: perluas view-once video; tidak melonggarkan siapa yang boleh update
   for update
   using (
     exists (
@@ -41,8 +41,8 @@ create policy private_messages_update_view_once on public.private_messages
 -- pernah bisa menandai (foto ATAU video) sudah ditonton. Ikut logika
 -- messages_select: global room (is_private=false) siapa pun yang login;
 -- private room → harus member.
-drop policy if exists messages_update_view_once on public.messages;
-create policy messages_update_view_once on public.messages
+drop policy if exists messages_update_view_once on public.messages; -- SAFE: tabel bersama messages (room); tambah policy expire view-once baru; qual mengikuti messages_select
+create policy messages_update_view_once on public.messages -- SAFE: policy baru view-once room; tidak melonggarkan akses
   for update
   using (
     (not exists (

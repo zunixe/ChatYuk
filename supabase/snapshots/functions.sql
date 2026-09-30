@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-27T12:39:40Z
+-- Timestamp: 2026-09-30T00:49:11Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -683,6 +683,7 @@ CREATE OR REPLACE FUNCTION public.handle_new_private_message()
  RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 declare
   receiver uuid;
@@ -948,36 +949,15 @@ begin
   return remaining;
 end; $function$
 
--- snapshot-fn: new_chat_bonus @ 20260816030000_coin_economy_v2.sql
+-- snapshot-fn: new_chat_bonus @ 20261001010000_disable_free_points.sql
 CREATE OR REPLACE FUNCTION public.new_chat_bonus(other_uid uuid)
  RETURNS integer
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare points_on boolean; tot int; ok boolean; nc int; lim int;
+declare tot int;
 begin
-  select points_enabled, bonus_new_chat, new_chats_daily_limit
-    into points_on, nc, lim from app_settings where id = 'global';
-  if points_on is false and coalesce(auth.email(), '') <> 'zunixe@gmail.com' then
-    select points into tot from profiles where id = auth.uid();
-    return coalesce(tot, 0);
-  end if;
-  if exists (select 1 from point_events where user_id = auth.uid()
-             and event = 'new_chat' and metadata->>'other_uid' = other_uid::text) then
-    select points into tot from profiles where id = auth.uid();
-    return coalesce(tot, 0);
-  end if;
-  update profiles set new_chats_today = new_chats_today + 1
-    where id = auth.uid() and new_chats_today < lim;
-  ok := found;
-  if ok then
-    tot := public.ledger_credit(auth.uid(), 'bonus', 'new_chat', nc,
-             null, jsonb_build_object('other_uid', other_uid));
-    insert into point_events (user_id, event, amount, metadata)
-      values (auth.uid(), 'new_chat', nc, jsonb_build_object('other_uid', other_uid));
-    return tot;
-  end if;
   select points into tot from profiles where id = auth.uid();
   return coalesce(tot, 0);
 end; $function$
@@ -989,58 +969,10 @@ CREATE OR REPLACE FUNCTION public.one_time_bonus(action_key text, bonus integer)
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare
-  valid_actions text[]; nominal int; tot int; points_on boolean;
+declare tot int;
 begin
-  select points_enabled into points_on from app_settings where id = 'global';
-  if points_on is false and coalesce(auth.email(), '') <> 'zunixe@gmail.com' then
-    select points into tot from profiles where id = auth.uid();
-    return coalesce(tot, 0);
-  end if;
-
-  valid_actions := array['registered','rated_app','completed_profile',
-    'shared_app','invited_friend','first_photo','first_room_chat',
-    'online_5min','online_30min','online_60min','online_120min',
-    'first_friend'];
-  if not (action_key = any(valid_actions)) then
-    raise exception 'Invalid action key: %', action_key;
-  end if;
-
-  -- Nominal dibaca dari server, bukan dari client (anti-farming).
-  select
-    case action_key
-      when 'registered'        then bonus_registered
-      when 'rated_app'         then bonus_rated
-      when 'completed_profile' then bonus_profile
-      when 'shared_app'        then bonus_shared
-      when 'invited_friend'    then bonus_invited
-      when 'first_photo'       then bonus_first_photo
-      when 'first_room_chat'   then bonus_first_room
-      when 'online_5min'       then bonus_online_5min
-      when 'online_30min'      then bonus_online_30min
-      when 'online_60min'      then bonus_online_60min
-      when 'online_120min'     then bonus_online_120min
-      when 'first_friend'      then bonus_first_friend
-      else 0
-    end
-  into nominal from app_settings where id = 'global';
-
-  if exists (select 1 from profiles where id = auth.uid()
-             and one_time_actions->>action_key = 'true') then
-    select points into tot from profiles where id = auth.uid();
-    return coalesce(tot, 0);
-  end if;
-
-  update profiles set one_time_actions = one_time_actions || jsonb_build_object(action_key, true)
-    where id = auth.uid();
-
-  tot := public.ledger_credit(auth.uid(), 'bonus', 'one_time', nominal,
-           null, jsonb_build_object('action', action_key));
-
-  insert into point_events (user_id, event, amount, metadata)
-    values (auth.uid(), 'bonus', nominal, jsonb_build_object('action', action_key));
-
-  return tot;
+  select points into tot from profiles where id = auth.uid();
+  return coalesce(tot, 0);
 end; $function$
 
 -- snapshot-fn: send_coins @ 20260816030000_coin_economy_v2.sql
@@ -1196,22 +1128,8 @@ CREATE OR REPLACE FUNCTION public.room_read_bonus()
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare points_on boolean; ok boolean; tot int; rr int; lim int;
+declare tot int;
 begin
-  select points_enabled, bonus_room_read, room_reads_daily_limit
-    into points_on, rr, lim from app_settings where id = 'global';
-  if points_on is false and coalesce(auth.email(), '') <> 'zunixe@gmail.com' then
-    select points into tot from profiles where id = auth.uid();
-    return coalesce(tot, 0);
-  end if;
-  update profiles set room_reads_today = room_reads_today + 1
-    where id = auth.uid() and room_reads_today < lim;
-  ok := found;
-  if ok then
-    tot := public.ledger_credit(auth.uid(), 'bonus', 'room_read', rr);
-    insert into point_events (user_id, event, amount) values (auth.uid(), 'room_read', rr);
-    return tot;
-  end if;
   select points into tot from profiles where id = auth.uid();
   return coalesce(tot, 0);
 end; $function$
@@ -1223,107 +1141,21 @@ CREATE OR REPLACE FUNCTION public.daily_login_bonus()
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare
-  today date; last_date date; cur_streak int; new_streak int; bonus int;
-  cur_points int; points_on boolean; tot int;
+declare cur_points int;
 begin
-  select points_enabled into points_on from app_settings where id = 'global';
-  if points_on is false and coalesce(auth.email(), '') <> 'zunixe@gmail.com' then
-    select points into cur_points from profiles where id = auth.uid();
-    return jsonb_build_object('points', coalesce(cur_points,0), 'streak', 0, 'bonus', 0);
-  end if;
-
-  today := (now() at time zone 'Asia/Jakarta')::date;
-  select last_login_date, login_streak, points
-    into last_date, cur_streak, cur_points
-    from profiles where id = auth.uid();
-
-  if last_date is not null and last_date >= today then
-    return jsonb_build_object('points', coalesce(cur_points,0),
-      'streak', coalesce(cur_streak,0), 'bonus', 0);
-  end if;
-
-  if last_date is not null and last_date = today - 1 then
-    new_streak := coalesce(cur_streak,0) + 1;
-    if new_streak > 7 then new_streak := 1; end if;
-  else
-    new_streak := 1;
-  end if;
-  bonus := public.streak_bonus_amount(new_streak);
-
-  update profiles set
-    login_streak = new_streak,
-    last_login_date = today,
-    login_at = now(),
-    room_reads_today = 0,
-    new_chats_today = 0,
-    one_time_actions = one_time_actions - array[
-      'online_5min','online_30min','online_60min','online_120min']
-  where id = auth.uid();
-
-  tot := public.ledger_credit(auth.uid(), 'bonus', 'daily_login', bonus,
-           null, jsonb_build_object('streak', new_streak));
-
-  insert into point_events (user_id, event, amount, metadata)
-    values (auth.uid(), 'daily_login', bonus, jsonb_build_object('streak', new_streak));
-
-  return jsonb_build_object('points', tot, 'streak', new_streak, 'bonus', bonus);
+  select points into cur_points from profiles where id = auth.uid();
+  return jsonb_build_object('points', coalesce(cur_points, 0), 'streak', 0, 'bonus', 0);
 end; $function$
 
--- snapshot-fn: claim_weekly_quest @ 20260815010000_points_admin_dev_bypass.sql
+-- snapshot-fn: claim_weekly_quest @ 20261001010000_disable_free_points.sql
 CREATE OR REPLACE FUNCTION public.claim_weekly_quest(quest_key text, tz_offset_minutes integer DEFAULT 0)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare wk_start timestamptz; wk text; progress int; target int; tot int; points_on boolean;
 begin
-  select points_enabled into points_on from app_settings where id = 'global';
-  if points_on is false and coalesce(auth.email(), '') <> 'zunixe@gmail.com' then
-    select points into tot from profiles where id = auth.uid();
-    return jsonb_build_object('points', coalesce(tot,0), 'claimed', false);
-  end if;
-
-  if quest_key not in ('w_login','w_social','w_active') then
-    raise exception 'Invalid quest key: %', quest_key;
-  end if;
-
-  wk_start := public.week_start_utc(tz_offset_minutes);
-  wk := public.week_label(tz_offset_minutes);
-
-  if exists (select 1 from point_events where user_id = auth.uid()
-    and event = 'weekly_quest' and metadata->>'key' = quest_key and metadata->>'week' = wk) then
-    select points into tot from profiles where id = auth.uid();
-    return jsonb_build_object('points', coalesce(tot,0), 'claimed', false);
-  end if;
-
-  if quest_key = 'w_login' then
-    select count(distinct (created_at + make_interval(mins => tz_offset_minutes))::date)
-      into progress from point_events
-      where user_id = auth.uid() and event = 'daily_login' and created_at >= wk_start;
-    target := 5;
-  elsif quest_key = 'w_social' then
-    select count(*) into progress from point_events
-      where user_id = auth.uid() and event = 'new_chat' and created_at >= wk_start;
-    target := 10;
-  else
-    select count(*) into progress from point_events
-      where user_id = auth.uid() and event = 'deduct' and created_at >= wk_start;
-    target := 100;
-  end if;
-
-  if progress < target then
-    raise exception 'Quest not completed: % (%/%)', quest_key, progress, target;
-  end if;
-
-  tot := public.ledger_credit(auth.uid(), 'bonus', 'weekly_quest', 50,
-           null, jsonb_build_object('key', quest_key, 'week', wk));
-
-  insert into point_events (user_id, event, amount, metadata)
-    values (auth.uid(), 'weekly_quest', 50, jsonb_build_object('key', quest_key, 'week', wk));
-
-  return jsonb_build_object('points', tot, 'claimed', true);
+  return jsonb_build_object('points', public.yukcoin_total(auth.uid()), 'claimed', false);
 end; $function$
 
 -- snapshot-fn: points_leaderboard @ 20260913000000_leaderboard_history_pagination.sql
@@ -1621,6 +1453,7 @@ CREATE OR REPLACE FUNCTION public.follow_count_sync()
  RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 begin
   update public.profiles p
@@ -1650,7 +1483,7 @@ begin
   return null; -- AFTER trigger, return value diabaikan
 end; $function$
 
--- snapshot-fn: nearby_users @ 20260922140000_nearby_privacy_blocks_share_gate.sql
+-- snapshot-fn: nearby_users @ 20261001040000_nearby_paid_gate.sql
 CREATE OR REPLACE FUNCTION public.nearby_users(p_radius_km double precision DEFAULT 10)
  RETURNS TABLE(uid uuid, nickname text, gender text, age integer, country text, city text, status text, avatar text, is_registered boolean, last_seen timestamp with time zone, distance_km double precision)
  LANGUAGE plpgsql
@@ -1661,22 +1494,35 @@ declare
   me uuid := auth.uid();
   my_lat double precision;
   my_lon double precision;
-  my_share boolean;
   radius_m double precision;
   v_excl uuid[];
+  v_published boolean;
+  v_admin boolean;
+  v_today date;
+  v_paid int;
 begin
   if me is null then raise exception 'Not authenticated'; end if;
+
+  -- Gate biaya (harian) — hanya bila fitur sudah dipublish.
+  v_admin := coalesce(auth.email(), '') = 'zunixe@gmail.com';
+  select (feature_flags -> 'nearby_paid' ->> 'published')::boolean
+    into v_published from app_settings where id = 'global';
+
+  if coalesce(v_published, false) and not v_admin then
+    v_today := (now() at time zone 'Asia/Jakarta')::date;
+    select count(*) into v_paid from public.yukcoin_consumptions
+      where user_id = me and feature = 'nearby'
+        and ref_id = 'nearby:' || v_today::text;
+    if v_paid = 0 then
+      perform public.gate_feature('nearby', 'nearby');
+    end if;
+  end if;
+
   radius_m := least(greatest(coalesce(p_radius_km, 10), 1), 500) * 1000.0;
 
-  select p.lat, p.lon, coalesce(p.share_location, false)
-    into my_lat, my_lon, my_share
+  select p.lat, p.lon
+    into my_lat, my_lon
   from public.profiles p where p.id = me;
-
-  -- Gate simetris: tidak boleh melihat orang lain bila tidak membagikan
-  -- lokasi sendiri. Diperiksa SEBELUM cek lokasi (pesan lebih tepat).
-  if not coalesce(my_share, false) then
-    raise exception 'Share required';
-  end if;
 
   if my_lat is null or my_lon is null then
     raise exception 'No location';
@@ -1702,7 +1548,6 @@ begin
   where p.id <> me
     and p.lat is not null
     and p.lon is not null
-    and coalesce(p.share_location, false) = true
     and p.status in ('online', 'idle')
     and p.last_seen >= now() - interval '30 minutes'
     and public.privacy_can_view(p.id, 'presence', me)

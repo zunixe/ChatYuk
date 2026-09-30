@@ -14,4 +14,4 @@
 -- Idempotent.
 -- ============================================================
 
-grant select on table public.rooms to anon, authenticated;
+grant select on table public.rooms to anon, authenticated; -- SAFE: selaraskan grant kolom rooms dengan prod; RLS rooms_select tetap penyaring baris — fitur: room list (baca)
