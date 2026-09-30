@@ -76,6 +76,7 @@ class NotificationPrefsService {
       case 'broadcast':
         return get('broadcast');
       case 'timeline_post':
+      case 'timeline':
       case 'room':
         return get('timeline');
       case 'follow':
