@@ -143,9 +143,15 @@ while IFS= read -r fn; do
   if [ "$v" \> "$CUTOFF" ] || [ "$v" = "$CUTOFF" ]; then
     # Kumpulkan token 'cabang' penting yang ada di snapshot untuk fn ini.
     if [ -f "$SNAP" ]; then
-      # baris-baris snapshot untuk fn ini
+      # baris-baris snapshot untuk fn ini. Berhenti pada akhir definisi:
+      # delimiter penutup ($function$ / $fn$ / $$ / $tag$) ATAU marker fungsi
+      # berikutnya ('-- snapshot-fn:'). Tanpa guard marker, fungsi ber-delimiter
+      # selain $function$ menyerap blok fungsi berikutnya → false-positive.
       snap_block=$(awk -v pat="snapshot-fn: $fn @" '
-        $0 ~ pat {p=1} p {print} p && /^\$function\$/ {exit}' "$SNAP")
+        $0 ~ pat {p=1; print; next}
+        p && /^-- snapshot-fn:/ {exit}
+        p && /^\$[A-Za-z0-9_]*\$/ {print; exit}
+        p {print}' "$SNAP")
       for tok in ai_always_online ai_wake_until ai_offline_until invisible; do
         if echo "$snap_block" | grep -q "$tok"; then
           if ! grep -q "$tok" "$last"; then

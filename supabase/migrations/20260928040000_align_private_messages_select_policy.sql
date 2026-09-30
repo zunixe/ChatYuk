@@ -19,8 +19,8 @@
 -- Migration ini menyamakan lokal dengan prod. Idempotent.
 -- ============================================================
 
-drop policy if exists private_messages_select on public.private_messages;
-create policy private_messages_select on public.private_messages
+drop policy if exists private_messages_select on public.private_messages; -- SAFE: tabel bersama private_messages; selaraskan SELECT dengan prod — fitur: private chat & realtime
+create policy private_messages_select on public.private_messages -- SAFE: kembalikan SELECT peserta chat (drift prod); baca pesan sendiri saja
   for select using (
     exists (
       select 1 from public.private_chats pc
