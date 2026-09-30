@@ -189,6 +189,7 @@ GateScreen decideGateScreen({
   required bool hasProfile,
   required bool needsProfile,
   required bool banned,
+  bool needsOnboarding = false,
 }) {
   if (signingOut) return GateScreen.entry;
   if (loading) return GateScreen.splash;
@@ -196,7 +197,15 @@ GateScreen decideGateScreen({
   if (needsProfile) {
     return isSignedIn ? GateScreen.profileGate : GateScreen.entry;
   }
-  if (!hasProfile && isAnonymous) return GateScreen.entry;
+  // Anon tanpa profil ATAU profil dibuat otomatis (belum isi nickname)
+  // → EntryScreen. Kolom `needs_onboarding` mencegah "login anon otomatis"
+  // yang muncul saat trigger membuat profil sebelum user memilih nama.
+  // Sesi dummy (admin menyamar) dikecualikan — bukan user anon sungguhan.
+  if (isAnonymous &&
+      !dummySessionActive &&
+      (!hasProfile || needsOnboarding)) {
+    return GateScreen.entry;
+  }
   if (banned) return GateScreen.banned;
   return GateScreen.main;
 }
@@ -317,9 +326,14 @@ class _AuthGateState extends State<_AuthGate> {
       dummySessionActive: dummySessionActive,
       isSignedIn: isSignedIn,
       hasProfile: p0 != null,
+      needsOnboarding: p0?.needsOnboarding ?? false,
       needsProfile: !isAnonymous &&
           !dummySessionActive &&
-          (p0 == null || p0.nickname.trim().isEmpty || !p0.isRegistered),
+          (p0 == null ||
+              p0.nickname.trim().isEmpty ||
+              !p0.isRegistered ||
+              // Profil dibuat trigger tapi user belum selesaikan isi nickname.
+              p0.needsOnboarding),
       banned: p0 != null &&
           !isAdminGate0 &&
           isBannedNickname(p0.nickname),

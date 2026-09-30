@@ -101,10 +101,10 @@ class ForceLogoutCard extends StatelessWidget {
                 // Await — forceLogout melempar saat gagal; tanpa await
                 // error jadi unhandled dan toast "sukses" tampil keliru.
                 await context.read<AdminProvider>().forceLogout(uid);
-                onToast('Force logout: ${uid.substring(0, 8)}...');
+                onToast(s.adminForceLogoutDone(uid.substring(0, 8)));
                 logoutCtrl.clear();
               } catch (e) {
-                onToast('Failed: $e');
+                onToast('${s.errGeneric}$e');
               }
             },
             icon: const Icon(Icons.logout, size: 16, color: Colors.orange),
@@ -193,7 +193,7 @@ class DangerZoneCard extends StatelessWidget {
                       onPressed: () async {
                         Navigator.pop(ctx);
                         final count = await admin.resetAllPoints();
-                        if (count != null) onToast('$count users reset');
+                        if (count != null) onToast(s.adminResetDone(count));
                       },
                       child: Text(
                         s.adminWipeAll,

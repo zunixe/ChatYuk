@@ -5,6 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/points_service.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
+import '../config/app_flavor.dart';
+import '../core/admin_gate.dart';
+import '../screens/point_history/widgets/topup_sheet.dart';
 import '../utils.dart';
 
 class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
@@ -111,6 +114,18 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get nearbyPaidPublished => featurePublished('nearby_paid');
   bool get playTopupPublished => featurePublished('play_topup');
 
+  /// Jalur topup YANG TERBUKA untuk user ini (satu sumber kebenaran untuk
+  /// seluruh UI topup). Topup terbuka bila salah satu terpenuhi:
+  ///   1. build `play` (Play Billing sungguhan) — diputus di pemanggil via
+  ///      `AppFlavor.topupEnabled` karena provider netral flavor.
+  ///   2. admin mem-publish fitur `play_topup` (flag server, tanpa rebuild).
+  ///   3. **toggle YukCoin v2 aktif** — admin menyalakan `yukcoin_v2_enabled`
+  ///      → jalur topup ikut terbuka (permintaan eksplisit: toggle v2 yang
+  ///      mengontrol topup).
+  /// Flag `available` (Play tersambung) tetap dicek TERPISAH di sheet; getter
+  /// ini hanya soal VISIBILITAS.
+  bool get topupPathOpen => playTopupPublished || yukcoinV2Active;
+
   /// Ambil harga fitur + feature flags dari server.
   Future<void> refreshMeteredPricing() async {
     try {
@@ -174,9 +189,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
           FilledButton.icon(
             onPressed: () {
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(s.yukcoinTopupSoon)),
-              );
+              _openTopupOrSoon(context, s);
             },
             icon: const Icon(Icons.add_circle_outline, size: 18),
             label: Text(s.yukcoinTopup),
@@ -185,6 +198,19 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       ),
     );
     return false;
+  }
+
+  /// Buka sheet paket topup bila jalur topup terbuka (build play / admin /
+  /// admin publish / toggle YukCoin v2 aktif); jika tidak, tampilkan pesan
+  /// "segera hadir". Dipakai seragam oleh dialog koin-kurang.
+  void _openTopupOrSoon(BuildContext context, S s) {
+    if (AppFlavor.topupEnabled || AdminGate.enabled || topupPathOpen) {
+      showTopupSheet(context, s);
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.yukcoinTopupSoon)));
+    }
   }
 
   /// Klaim welcome bonus (anon/register) via server. Return jumlah coin
@@ -828,9 +854,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
                 child: FilledButton.icon(
                   onPressed: () {
                     Navigator.of(ctx).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(s.yukcoinTopupSoon)),
-                    );
+                    _openTopupOrSoon(context, s);
                   },
                   icon: const Icon(Icons.add_circle_outline, size: 20),
                   label: Text(s.yukcoinTopup),

@@ -1110,15 +1110,20 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       // User anon lama bisa dihapus di server oleh cleanup_stale_anonymous
       // (akun stale > 7 hari). Session masih ada di device tapi user tidak
-      // lagi ada di auth.users → insert profile gagal foreign key.
+      // lagi ada di auth.users → insert profile gagal FOREIGN KEY.
       // Deteksi & buat user anon baru, lalu retry sekali.
+      //
+      // PENTING: HANYA 23503/FK yang menandakan "stale anon". JANGAN
+      // menganggap 42501 (permission denied) sebagai stale — dulu di sini,
+      // error izin (mis. grant SELECT dicabut dari ON CONFLICT) ikut
+      // tertangkap sebagai "stale" → app sign out + bikin user anon BARU
+      // padahal session valid → nickname user hilang / dianggap "sudah
+      // digunakan". (Insiden 2026-10-04.)
       final msg = e.toString().toLowerCase();
       final userInvalid =
           msg.contains('23503') ||
           msg.contains('foreign key') ||
-          msg.contains('violates') ||
-          msg.contains('row-level security') ||
-          msg.contains('42501');
+          msg.contains('profiles_id_fkey');
       if (userInvalid) {
         dlog(
           '[AUTH] registerProfile failed (stale anon), refreshing session: $e',
@@ -1677,6 +1682,11 @@ class AuthProvider extends ChangeNotifier {
       ),
       email: pick('email', event.email, cur.email),
       about: pick('about', event.about, cur.about),
+      // needsOnboarding TIDAK ada di payload realtime (kolom non-publik) →
+      // selalu pertahankan nilai state lokal. Tanpa ini, event profil apa
+      // pun (status/points) menimpa flag jadi default false → user anon
+      // yang baru dibuat trigger langsung lolos ke MainNav.
+      needsOnboarding: cur.needsOnboarding,
     );
   }
 

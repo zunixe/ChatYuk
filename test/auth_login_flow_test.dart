@@ -103,6 +103,81 @@ void main() {
     });
   });
 
+  // Regresi insiden 2026-10-04: error IZIN (42501 permission denied dari
+  // upsert ON CONFLICT) JANGAN dianggap "stale anon" — dulu memicu
+  // sign-out + signInAnonymously (bikin user baru) sehingga nickname user
+  // hilang dan terlihat seperti "nickname sudah digunakan".
+  group('registerProfile retry stale-anon', () {
+    test('42501 permission denied → TIDAK sign-out, error diteruskan',
+        () async {
+      when(() => auth.registerProfile(
+            nickname: any(named: 'nickname'),
+            gender: any(named: 'gender'),
+            age: any(named: 'age'),
+            country: any(named: 'country'),
+            city: any(named: 'city'),
+            ipAddress: any(named: 'ipAddress'),
+          )).thenThrow(
+        Exception('PostgrestException(42501): permission denied for table profiles'),
+      );
+      when(() => auth.signOut()).thenAnswer((_) async {});
+      when(() => auth.signInAnonymously()).thenAnswer((_) async {});
+
+      provider = await build();
+      await expectLater(
+        () => provider.registerProfile(
+          nickname: 'Tester',
+          gender: 'male',
+          age: 20,
+          country: 'Indonesia',
+          city: 'Jakarta',
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      // Error izin BUKAN stale → jangan sentuh sesi.
+      verifyNever(() => auth.signOut());
+      verifyNever(() => auth.signInAnonymously());
+    });
+
+    test('23503 foreign key (stale anon) → sign-out + signInAnonymously + retry',
+        () async {
+      var calls = 0;
+      when(() => auth.registerProfile(
+            nickname: any(named: 'nickname'),
+            gender: any(named: 'gender'),
+            age: any(named: 'age'),
+            country: any(named: 'country'),
+            city: any(named: 'city'),
+            ipAddress: any(named: 'ipAddress'),
+          )).thenAnswer((_) async {
+        calls++;
+        if (calls == 1) {
+          throw Exception(
+            'PostgrestException(23503): insert or update on profiles '
+            'violates foreign key constraint "profiles_id_fkey"',
+          );
+        }
+        return _profile('uid-1');
+      });
+      when(() => auth.signOut()).thenAnswer((_) async {});
+      when(() => auth.signInAnonymously()).thenAnswer((_) async {});
+
+      provider = await build();
+      await provider.registerProfile(
+        nickname: 'Tester',
+        gender: 'male',
+        age: 20,
+        country: 'Indonesia',
+        city: 'Jakarta',
+      );
+
+      verify(() => auth.signOut()).called(1);
+      verify(() => auth.signInAnonymously()).called(1);
+      expect(calls, 2); // retry sekali
+    });
+  });
+
   group('login email + password', () {
     test('panggil service + ambil profil', () async {
       when(() => auth.signInWithEmail(any(), any())).thenAnswer((_) async {});

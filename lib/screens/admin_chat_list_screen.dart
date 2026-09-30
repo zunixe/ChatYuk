@@ -14,7 +14,7 @@ import 'admin_chat_view_screen.dart';
 import '../providers/theme_provider.dart';
 import '../core/ui/scroll_pagination.dart';
 import '../core/nav_guard.dart';
-import '../widgets/profile_avatar.dart';
+import '../widgets/gender_avatar.dart';
 import 'user_info_screen.dart';
 
 /// Admin: daftar semua percakapan user (monitoring).
@@ -904,11 +904,17 @@ class _AdminChatCard extends StatelessWidget {
   /// Dua avatar peserta (kiri = nama pertama di judul) berdampingan sedikit
   /// tumpang-tindih. Tiap avatar BISA DIKETUK → buka profil user tsb.
   /// Bila tak ada uid (data aneh) → fallback ikon forum seperti dulu.
+  ///
+  /// [genders] = peta uid→gender (dari `participant_genders`). Untuk peserta
+  /// TANPA foto, avatar diberi ring warna gender (male=biru / female=pink /
+  /// lain=accent) — sama seperti daftar "Pengguna Online". Foto tetap tanpa
+  /// ring (lihat ProfileAvatar: ring hanya muncul di placeholder inisial).
   Widget _avatarPair(
     BuildContext context,
     List<String> uids,
-    Map<dynamic, dynamic> names,
-  ) {
+    Map<dynamic, dynamic> names, {
+    Map<dynamic, dynamic> genders = const {},
+  }) {
     final shown = uids.take(2).toList();
     if (shown.isEmpty) {
       return SizedBox(
@@ -952,13 +958,11 @@ class _AdminChatCard extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: Border.all(color: AppTheme.bgCard, width: 2),
                   ),
-                  child: ProfileAvatar(
+                  child: GenderAvatar(
                     uid: shown[i],
                     name: '${names[shown[i]] ?? ''}',
+                    gender: '${genders[shown[i]] ?? ''}',
                     size: size,
-                    borderRadius: 0,
-                    bgColor: AppTheme.avatarBg,
-                    textColor: AppTheme.textPrimary,
                   ),
                 ),
               ),
@@ -971,6 +975,8 @@ class _AdminChatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
+    final genders =
+        (chat['participant_genders'] as Map<dynamic, dynamic>?) ?? const {};
     final participants = (chat['participants'] as List<dynamic>?) ?? const [];
     final chatId = '${chat['chat_id'] ?? ''}';
     // Urutan uid DETERMINISTIK dari chatId (uid sorted, abadi) — bukan
@@ -1040,6 +1046,10 @@ class _AdminChatCard extends StatelessWidget {
                     for (final e in names.entries)
                       '${e.key}': '${e.value ?? ''}',
                   },
+                  participantGenders: {
+                    for (final e in genders.entries)
+                      '${e.key}': '${e.value ?? ''}',
+                  },
                 ),
               ),
             ).then((_) => releaseChatPush(id));
@@ -1054,7 +1064,7 @@ class _AdminChatCard extends StatelessWidget {
                     // Avatar peserta (menggantikan ikon forum) — tiap avatar
                     // bisa diketuk untuk melihat profil user, sama seperti
                     // dari private chat.
-                    _avatarPair(context, orderUids, names),
+                    _avatarPair(context, orderUids, names, genders: genders),
                     if (activeCall != null)
                       Positioned(
                         right: -4,

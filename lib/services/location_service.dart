@@ -20,6 +20,18 @@ class NearbyPlace {
   });
 }
 
+/// Hasil fix lokasi device + metadata anti-spoof.
+/// `mocked` = Android menandai lokasi dari mock provider (Fake GPS);
+/// `accuracy` = akurasi meter (0/negatif = khas mock). Keduanya
+/// diteruskan ke server (heuristik tambahan di `update_my_location`).
+class DeviceFix {
+  final double lat;
+  final double lon;
+  final bool mocked;
+  final int? accuracy;
+  const DeviceFix(this.lat, this.lon, {this.mocked = false, this.accuracy});
+}
+
 /// Ambil & simpan lokasi user dengan strategi dua sumber (Opsi B):
 /// - Kalau izin lokasi SUDAH diberikan → koordinat presisi dari device
 ///   (GPS/Wi-Fi/tower). Tidak pernah MEMICU dialog izin di sini —
@@ -35,7 +47,8 @@ class LocationService {
     // 1. Coba lokasi device jika izin SUDAH ada (tanpa memicu dialog).
     final gps = await _tryDevicePosition();
     if (gps != null) {
-      await _save(gps.$1, gps.$2, 'gps');
+      await _save(gps.lat, gps.lon, 'gps',
+          null, gps.mocked, gps.accuracy);
       return 'gps';
     }
     // 2. Fallback: perkiraan via IP.
@@ -55,7 +68,7 @@ class LocationService {
   /// Tidak memanggil requestPermission → tidak ada dialog paksaan.
   /// Prioritas: fix GPS fresh (akurasi tinggi); last-known hanya dipakai
   /// kalau masih segar (≤ 10 menit) — cache lama sering salah lokasi.
-  Future<(double, double)?> _tryDevicePosition() async {
+  Future<DeviceFix?> _tryDevicePosition() async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) return null;
       final perm = await Geolocator.checkPermission();
@@ -79,7 +92,14 @@ class LocationService {
                 timeLimit: const Duration(seconds: 20),
               ),
             );
-            return (pos.latitude, pos.longitude);
+            return DeviceFix(
+              pos.latitude,
+              pos.longitude,
+              // isMocked = Android menandai provider lokasi palsu (Fake GPS).
+              // Bisa dilewati sebagian app → server juga pakai heuristik.
+              mocked: pos.isMocked,
+              accuracy: pos.accuracy.isFinite ? pos.accuracy.round() : null,
+            );
           } catch (e) {
             dlog('[location] getCurrentPosition $acc error: $e');
           }
@@ -91,7 +111,12 @@ class LocationService {
         final last = await Geolocator.getLastKnownPosition();
         if (last != null &&
             DateTime.now().difference(last.timestamp).inMinutes <= 10) {
-          return (last.latitude, last.longitude);
+          return DeviceFix(
+            last.latitude,
+            last.longitude,
+            mocked: last.isMocked,
+            accuracy: last.accuracy.isFinite ? last.accuracy.round() : null,
+          );
         }
       } catch (e) {
         dlog('[location] last known error: $e');
@@ -104,8 +129,7 @@ class LocationService {
   }
 
   /// Variasi publik untuk register: ambil posisi device (tanpa dialog izin).
-  Future<(double, double)?> tryDevicePositionForRegister() =>
-      _tryDevicePosition();
+  Future<DeviceFix?> tryDevicePositionForRegister() => _tryDevicePosition();
 
   /// Ambil last-known position CEPAT (tanpa chain GPS yang bisa blokir
   /// puluhan detik). Return (lat, lon) bila izin ada & posisi masih segar
@@ -164,6 +188,8 @@ class LocationService {
     double lon,
     String source, [
     String? ip,
+    bool mocked = false,
+    int? accuracy,
   ]) async {
     try {
       await _sb.rpc(
@@ -172,9 +198,11 @@ class LocationService {
           'p_lat': lat,
           'p_lon': lon,
           'p_source': source,
-          // Selalu kirim 4 argumen — server punya dua overload RPC
-          // (3 & 4 arg), PostgREST error "ambiguous" kalau dipanggil 3.
+          // Selalu kirim argumen penuh — server punya overload RPC lain;
+          // PostgREST error "ambiguous" kalau argumen tak lengkap.
           'p_ip': ip ?? '',
+          'p_mocked': mocked,
+          'p_accuracy': accuracy,
         },
       );
     } catch (e) {

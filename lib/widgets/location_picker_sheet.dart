@@ -42,8 +42,8 @@ Future<ChatLocation?> pickChatLocation(
   if (lat == null) {
     final last = await loc.tryDevicePositionForRegister();
     if (last != null) {
-      lat = last.$1;
-      lng = last.$2;
+      lat = last.lat;
+      lng = last.lon;
     }
   }
   if (lat == null || lng == null) {

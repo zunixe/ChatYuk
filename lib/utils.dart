@@ -64,6 +64,13 @@ bool isValidNickname(String nickname) {
   return RegExp(r'^[\p{L}\p{N} _\-]+$', unicode: true).hasMatch(trimmed);
 }
 
+/// Escape karakter wildcard pattern (ILIKE) di input nickname supaya
+/// PostgREST `.ilike(pattern)` memperlakukan `%`, `_`, dan `\` sebagai
+/// karakter literal — bukan wildcard. Dipakai [AuthService.isNicknameAvailable]
+/// untuk cek ketersediaan nickname secara case-insensitive.
+String escapeIlikePattern(String s) =>
+    s.replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');
+
 int colorHashForUid(String uid) {
   int hash = 0;
   for (int i = 0; i < uid.length; i++) {

@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../core/screen_secure_service.dart';
+import 'attribution_service.dart';
 
 /// Kumpulkan identitas perangkat (brand/model/OS/versi app) + install ID
 /// unik per-install, lalu sync ke server (RPC upsert_device).
@@ -215,6 +216,13 @@ class DeviceInfoService {
       // sekarang bila berbeda (mis. baru pindah ke MediaDrm).
       if (legacy.isNotEmpty && legacy != id) 'p_legacy_install_id': legacy,
     };
+    // Atribusi sumber (FB/IG/Google/TikTok/referral/organik) — server
+    // 'tulis sekali', jadi resume berkala tidak menimpa kanal asli.
+    try {
+      params.addAll(await AttributionService.instance.attributionParams());
+    } catch (e) {
+      dlog('[DEVICE] attribution params gagal: $e');
+    }
     // Uji coba 3× dengan jeda singkat — jaringan HP sering gagal sesaat.
     Object? lastErr;
     for (var attempt = 0; attempt < 3; attempt++) {

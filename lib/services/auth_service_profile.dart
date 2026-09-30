@@ -52,15 +52,19 @@ mixin AuthServiceProfileMx on AuthBase {
       lastSeen: now,
     );
 
-    // Upsert TANPA butuh SELECT: PostgREST `ON CONFLICT DO UPDATE` butuh
-    // SELECT di SEMUA kolom yang ditulis, sedangkan kolom status/avatar/
-    // last_seen (dan email/ip/fcm/lat/lon) sengaja di-revoke dari
-    // anon/authenticated untuk hardening privasi (baca lewat RPC
-    // profile_public/avatar_for). Upsert biasa selalu gagal 42501
-    // "permission denied for table profiles".
-    // Pola: INSERT ... ON CONFLICT DO NOTHING (`ignoreDuplicates`, tidak
-    // butuh SELECT) + UPDATE terpisah untuk baris yang sudah ada. Keduanya
-    // hanya butuh grant INSERT/UPDATE + RLS own (auth.uid() = id).
+    // INSERT polos TANPA `on_conflict` — bukan `upsert(onConflict:'id')`.
+    //
+    // Mengapa: PostgREST menerjemahkan `upsert(onConflict:)` menjadi
+    // `INSERT ... ON CONFLICT (id) ...`, dan Postgres MEWAJIBKAN role punya
+    // SELECT pada tabel yang dipakai ON CONFLICT. Kolom profiles sengaja
+    // di-revoke SELECT dari anon/authenticated (hardening privasi) → request
+    // SELALU gagal 42501 "permission denied for table profiles" (HTTP 403).
+    // Terbukti live 2026-10-04. INSERT polos (HTTP 201) TIDAK butuh SELECT.
+    //
+    // Karena trigger `handle_new_user_profile` (bila ada) atau baris lama
+    // bisa sudah membuat baris dengan id ini, INSERT bisa balas 409
+    // (duplicate key `profiles_pkey`). Itu berarti baris sudah ada → cukup
+    // lanjut ke UPDATE. Error selain itu dilempar apa adanya.
     final row = <String, dynamic>{
       'id': user.id,
       'nickname': nickname,
@@ -71,13 +75,21 @@ mixin AuthServiceProfileMx on AuthBase {
       'status': 'online',
       'avatar': '',
       'is_registered': hasEmail,
+      // User menyelesaikan isi profil → tandai onboarding selesai (gerbang
+      // root tak lagi mengarahkan ke EntryScreen untuk sesi anon ini).
+      'needs_onboarding': false,
       'login_at': now.toUtc().toIso8601String(),
       'created_at': now.toUtc().toIso8601String(),
       'last_seen': now.toUtc().toIso8601String(),
     };
-    await _sb
-        .from('profiles')
-        .upsert(row, onConflict: 'id', ignoreDuplicates: true);
+    try {
+      await _sb.from('profiles').insert(row);
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      // 23505 = duplicate key (baris sudah ada) → lanjut UPDATE di bawah.
+      // Selain itu (mis. 42501 izin, 23503 FK) → lempar ke pemanggil.
+      if (!msg.contains('23505') && !msg.contains('duplicate')) rethrow;
+    }
     final existing = Map<String, dynamic>.from(row)..remove('id');
     await _sb.from('profiles').update(existing).eq('id', user.id);
 

@@ -62,7 +62,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       final gps = await context.read<LocationProvider>().tryDevicePositionForRegister();
       if (gps != null) {
-        info = await _geo.detectByCoordinates(gps.$1, gps.$2);
+        info = await _geo.detectByCoordinates(gps.lat, gps.lon);
       }
     } catch (_) {}
     // 2. Fallback: IP geolocation.

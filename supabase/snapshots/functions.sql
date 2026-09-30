@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-30T00:49:11Z
+-- Timestamp: 2026-09-30T12:43:59Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -1615,7 +1615,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: admin_stats_detail @ 20260928070000_admin_show_excluded_with_flag.sql
+-- snapshot-fn: admin_stats_detail @ 20261002060000_fake_gps_detect.sql
 CREATE OR REPLACE FUNCTION public.admin_stats_detail()
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1645,6 +1645,7 @@ begin
         'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source,
+        'location_mocked', location_mocked, 'mock_reason', location_mock_reason,
         'excluded', (id = any(v_excl))
       ) order by last_seen desc nulls last)
       from profiles where not (id = any(v_dummy))), '[]'::jsonb),
@@ -1656,6 +1657,7 @@ begin
         'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source,
+        'location_mocked', location_mocked, 'mock_reason', location_mock_reason,
         'excluded', (id = any(v_excl))
       ) order by last_seen desc nulls last)
       from profiles
@@ -1669,6 +1671,7 @@ begin
         'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source,
+        'location_mocked', location_mocked, 'mock_reason', location_mock_reason,
         'excluded', (id = any(v_excl))
       ) order by created_at desc nulls last)
       from profiles where is_registered = true
@@ -1681,6 +1684,7 @@ begin
         'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source,
+        'location_mocked', location_mocked, 'mock_reason', location_mock_reason,
         'excluded', (id = any(v_excl))
       ) order by last_seen desc nulls last)
       from profiles where is_registered = false

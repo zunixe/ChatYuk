@@ -288,6 +288,33 @@ class AdminService {
     return (res as Map<String, dynamic>?) ?? {};
   }
 
+  /// Ringkasan atribusi: jumlah user per kanal (FB/IG/Google/TikTok/
+  /// referral/organik) + kampanye teratas. [days] 0 = semua waktu.
+  Future<Map<String, dynamic>> getAttributionSummary({int days = 0}) async {
+    final res = await _rpc(
+      'admin_attribution_summary',
+      params: {'p_days': days},
+    ).timeout(_openTimeout);
+    return (res as Map<String, dynamic>?) ?? {'sources': const [], 'total': 0};
+  }
+
+  /// Daftar user per kanal atribusi. [source] kosong = semua kanal.
+  Future<Map<String, dynamic>> listAttributionUsers({
+    String source = '',
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final res = await _rpc(
+      'admin_attribution_users_page',
+      params: {
+        'p_source': source,
+        'p_limit': limit,
+        'p_offset': offset,
+      },
+    ).timeout(_openTimeout);
+    return (res as Map<String, dynamic>?) ?? {'items': const [], 'total': 0};
+  }
+
   /// Daftar arsip user yang sudah dihapus. Bila [includePending] true,
   /// sertakan juga user ANON yang BELUM dihapus (nickname masih terpakai)
   /// sebagai item `pending` — admin bisa menghapusnya supaya nickname bebas.
