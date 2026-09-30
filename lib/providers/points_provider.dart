@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/points_service.dart';
@@ -12,12 +11,10 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   final PointsService _service;
   int _points = 50;
   bool _disposed = false;
+  // Tracking durasi online dipertahankan untuk metrik internal sesi.
+  // Bonus online DIHAPUS (overhaul coin) — tak ada klaim milestone lagi.
   int _todayOnlineSeconds = 0;
   DateTime? _sessionStart;
-  bool _claimed5min = false;
-  bool _claimed30min = false;
-  bool _claimed60min = false;
-  bool _claimed120min = false;
   Timer? _onlineTickTimer;
   bool _onboardingShown = false;
   // Default TRUE TAPI _enabledConfirmed=false: UI fitur koin (gift dsb.)
@@ -43,7 +40,6 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get enabledConfirmed => _enabledConfirmed;
   int get loginStreak => _loginStreak;
   int _loginStreak = 0;
-  int _lastStreakBonus = 0;
 
   // Wallet bucket (Fase 1). _points tetap = total (kompat UI lama).
   int _bonusBalance = 0;
@@ -92,6 +88,65 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int get roomJoinPaid => _roomJoinPaid;
   int get roomExtendPaid => _roomExtendPaid;
   int get bonusMultiplier => _bonusMultiplier;
+
+  // ── Harga fitur berbayar (call per menit, filter, nearby) ──
+  int _callAudioCostPerMin = 6;
+  int _callVideoCostPerMin = 20;
+  int _callFreeMinutesDaily = 5;
+  int _filterGenderCost = 15;
+  int _nearbyCost = 25;
+  int get callAudioCostPerMin => _callAudioCostPerMin;
+  int get callVideoCostPerMin => _callVideoCostPerMin;
+  int get callFreeMinutesDaily => _callFreeMinutesDaily;
+  int get filterGenderCost => _filterGenderCost;
+  int get nearbyCost => _nearbyCost;
+
+  /// Harga per menit sesuai tipe call.
+  int callCostPerMin(String callType) =>
+      callType == 'audio' ? _callAudioCostPerMin : _callVideoCostPerMin;
+
+  /// Feature flags yang sudah "published" (gate UI). {} bila belum dimuat.
+  Map<String, dynamic> _featureFlags = {};
+  bool featurePublished(String feature) =>
+      (_featureFlags[feature] is Map) &&
+      ((_featureFlags[feature] as Map)['published'] == true);
+  bool get callBillingPublished => featurePublished('call_billing');
+  bool get genderFilterPublished => featurePublished('gender_filter_paid');
+  bool get nearbyPaidPublished => featurePublished('nearby_paid');
+  bool get playTopupPublished => featurePublished('play_topup');
+
+  /// Ambil harga fitur + feature flags dari server.
+  Future<void> refreshMeteredPricing() async {
+    try {
+      final p = await _service.meteredPricing();
+      _callAudioCostPerMin =
+          (p['call_audio_cost_per_min'] as num?)?.toInt() ?? _callAudioCostPerMin;
+      _callVideoCostPerMin =
+          (p['call_video_cost_per_min'] as num?)?.toInt() ?? _callVideoCostPerMin;
+      _callFreeMinutesDaily =
+          (p['call_free_minutes_daily'] as num?)?.toInt() ?? _callFreeMinutesDaily;
+      _filterGenderCost =
+          (p['filter_gender_cost'] as num?)?.toInt() ?? _filterGenderCost;
+      _nearbyCost = (p['nearby_cost'] as num?)?.toInt() ?? _nearbyCost;
+      _featureFlags = await _service.featureFlags();
+      if (!_disposed) notifyListeners();
+    } catch (e) {
+      dlog('[POINTS] refreshMeteredPricing error: $e');
+    }
+  }
+
+  /// Potong akses harian (filter gender / nearby). Return true bila boleh
+  /// lanjut. Melempar 'YukCoin tidak cukup' bila saldo kurang.
+  Future<bool> gateFeature(String feature, {String? priceFeature}) async {
+    try {
+      await _service.gateFeature(feature, priceFeature: priceFeature);
+      await refreshWallet();
+      return true;
+    } catch (e) {
+      dlog('[POINTS] gateFeature($feature) error: $e');
+      rethrow;
+    }
+  }
 
   /// Ambil harga room dari server (dipanggil saat buka lobby).
   Future<void> refreshRoomPricing() async {
@@ -188,6 +243,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     // Sinkron saldo koin via realtime profiles — koin masuk (transfer) &
     // keluar (belanja) langsung tampil tanpa reload.
     subscribeOwnPoints();
+    // Harga fitur berbayar (call/filter/nearby) + feature flags untuk UI.
+    unawaited(refreshMeteredPricing());
     // Saat user berganti (login/logout), stream poin harus di-resubscribe
     // supaya menunjuk ke row profiles yang benar.
     try {
@@ -355,13 +412,10 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Email +100 — paling atas (di bawah header).
-                  _onboardItem('📧', s.pointsOnboardEmail, highlight: true),
-                  _onboardItem('💬', s.pointsOnboardChat),
-                  _onboardItem('📅', s.pointsOnboardDaily),
-                  _onboardItem('⏱️', s.pointsOnboardOnline),
-                  if (_yukcoinV2Active)
-                    _onboardItem('✨', s.pointsOnboardSpend),
+                  // Overhaul coin: tidak ada poin gratis — coin dari topup.
+                  _onboardItem('🪙', s.pointsOnboardCoinTitle, highlight: true),
+                  _onboardItem('💬', s.pointsOnboardCoinBody),
+                  _onboardItem('📞', s.pointsOnboardCallFree),
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -433,18 +487,6 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
               ),
             ),
           ),
-          if (highlight)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2ECC71),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '+100',
-                style: AppText.label.copyWith(color: Colors.white),
-              ),
-            ),
         ],
       ),
     );
@@ -490,82 +532,24 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _tryClaimOnlineBonus() async {
-    if (_disposed) return;
-    // Note: toast dipanggil oleh caller/dialog — bonus online diketahui via
-    // pengecekan poin sebelum/sesudah. Online bonus diklaim diam-diam,
-    // user lihat poin naik di AppBar.
-    if (!_claimed5min && _todayOnlineSeconds >= 300) {
-      _claimed5min = true;
-      if (await oneTimeBonus('online_5min', 5)) {
-        _lastToastMsg = 'online_5min';
-      }
-    }
-    if (!_claimed30min && _todayOnlineSeconds >= 1800) {
-      _claimed30min = true;
-      if (await oneTimeBonus('online_30min', 10)) {
-        _lastToastMsg = 'online_30min';
-      }
-    }
-    if (!_claimed60min && _todayOnlineSeconds >= 3600) {
-      _claimed60min = true;
-      if (await oneTimeBonus('online_60min', 15)) {
-        _lastToastMsg = 'online_60min';
-      }
-    }
-    if (!_claimed120min && _todayOnlineSeconds >= 7200) {
-      _claimed120min = true;
-      if (await oneTimeBonus('online_120min', 15)) {
-        _lastToastMsg = 'online_120min';
-      }
-    }
+    // Faucet dihapus — tidak ada bonus online. (lihat 20261001010000)
   }
-
-  String? _lastToastMsg;
-
-  static const Map<String, int> _onlineBonusPoints = {
-    'online_5min': 5,
-    'online_30min': 10,
-    'online_60min': 15,
-    'online_120min': 15,
-  };
 
   void checkAndShowOnlineToast(BuildContext context, bool isId) {
-    // Jangan tampilkan sisa antrean toast saat sistem OFF (mis. bonus
-    // diklaim sebelum admin mematikan) — buang antreannya.
-    if (!enabled) {
-      _lastToastMsg = null;
-      return;
-    }
-    if (_lastToastMsg == null) return;
-    final s = S(isId: isId);
-    final labels = {
-      'online_5min': s.onlineMilestone(5),
-      'online_30min': s.onlineMilestone(30),
-      'online_60min': s.onlineMilestone(60),
-      'online_120min': s.onlineMilestone(120),
-    };
-    final msg = _lastToastMsg;
-    _lastToastMsg = null;
-    if (msg == null) return;
-    final label = labels[msg] ?? '';
-    if (label.isNotEmpty) {
-      final p = _onlineBonusPoints[msg] ?? 0;
-      showPointsToast(
-        context,
-        isId ? '+$p Poin — $label' : '+$p Points — $label',
-      );
-    }
+    // Bonus online DIHAPUS — tidak ada toast. (lihat 20261001010000)
   }
 
+  /// Reset tracker durasi online (dipakai saat daily-login / ganti sesi).
   void resetOnlineTrackers() {
     _todayOnlineSeconds = 0;
-    _claimed5min = false;
-    _claimed30min = false;
-    _claimed60min = false;
-    _claimed120min = false;
+    _sessionStart = DateTime.now();
   }
 
-  /// Hook test: set detik online + picu klaim milestone tanpa menunggu timer.
+  /// Detik online hari ini (metrik internal, tanpa bonus).
+  @visibleForTesting
+  int get onlineSecondsForTest => _todayOnlineSeconds;
+
+  /// Hook test: set detik online (kompat lama; tanpa klaim bonus).
   @visibleForTesting
   void setOnlineSecondsForTest(int v) => _todayOnlineSeconds = v;
 
@@ -573,41 +557,13 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> debugClaimOnlineBonus() => _tryClaimOnlineBonus();
 
   Future<void> claimDailyLogin() async {
-    if (!enabled) return;
-    try {
-      final old = _points;
-      final res = await _service.dailyLoginBonus();
-      _points = (res['points'] as num?)?.toInt() ?? _points;
-      _loginStreak = (res['streak'] as num?)?.toInt() ?? _loginStreak;
-      _lastStreakBonus = (res['bonus'] as num?)?.toInt() ?? 0;
-      resetOnlineTrackers();
-      if (!_disposed) notifyListeners();
-      if (_points > old) {
-        dlog(
-          '[POINTS] dailyLoginBonus +${_points - old} streak=$_loginStreak -> $_points',
-        );
-      }
-    } catch (e) {
-      dlog('[POINTS] dailyLoginBonus error: $e');
-    }
+    // Faucet daily-login DIHAPUS (overhaul coin: tidak ada poin gratis).
+    resetOnlineTrackers();
   }
 
-  /// Tampilkan toast streak setelah daily login (dipanggil dari UI yang punya context).
+  /// Toast streak DIHAPUS — tidak ada bonus streak lagi.
   void checkAndShowStreakToast(BuildContext context, bool isId) {
-    if (!enabled) {
-      _lastStreakBonus = 0;
-      return;
-    }
-    if (_lastStreakBonus <= 0) return;
-    final bonus = _lastStreakBonus;
-    final streak = _loginStreak;
-    _lastStreakBonus = 0;
-    showPointsToast(
-      context,
-      isId
-          ? '🔥 Streak $streak hari — +$bonus Poin'
-          : '🔥 $streak-day streak — +$bonus Points',
-    );
+    // Tidak ada bonus streak.
   }
 
   /// Bonus chat orang baru (harian ber-limit, dikelola server).
@@ -790,12 +746,13 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     // Saat sistem OFF tidak ada biaya kirim — dialog "koin habis" tidak
     // relevan. Cegah muncul dari jalur basi (flag lama / antrean offline).
     if (!enabled) return;
+    final s = S(isId: isId);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E2E),
         title: Text(
-        S(isId: isId).outOfPointsTitle,
+          s.outOfPointsTitle,
           style: const TextStyle(color: Colors.white),
         ),
         content: SingleChildScrollView(
@@ -804,121 +761,26 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isId
-                    ? 'Akun anonim: poin bisa hilang kapan saja!'
-                    : 'Anonymous account: points can be lost!',
-                style: AppText.bodySmall.copyWith(color: Colors.orange),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isId ? 'Dapatkan sekarang:' : 'Get now:',
+                s.pointsOutOfCoinBody,
                 style: AppText.bodySmall.copyWith(color: Colors.white70),
               ),
-              const SizedBox(height: 6),
-              _dialogBtn(
-                ctx,
-                isId,
-                '📧 ${isId ? "Daftar Email" : "Register Email"}',
-                '+100',
-                Colors.green,
-                () {
-                  Navigator.of(ctx).pop();
-                },
-              ),
-              _dialogBtn(
-                ctx,
-                isId,
-                '⭐ ${isId ? "Rate ChatYuk" : "Rate ChatYuk"}',
-                '+20',
-                Colors.blue,
-                () async {
-                  Navigator.of(ctx).pop();
-                  final earned = await oneTimeBonus('rated_app', 20);
-                  if (earned && context.mounted) {
-                    showPointsToast(
-                      context,
-                      isId ? '+20 Poin — Rate app!' : '+20 Points — Rate app!',
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(s.yukcoinTopupSoon)),
                     );
-                  }
-                },
-              ),
-              _dialogBtn(
-                ctx,
-                isId,
-                '📢 ${isId ? "Share ke Teman" : "Share App"}',
-                '+10',
-                Colors.teal,
-                () async {
-                  Navigator.of(ctx).pop();
-                  await Share.share(
-                    isId
-                        ? 'Ayo chat bareng di ChatYuk! Download di Play Store: https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk'
-                        : 'Chat freely on ChatYuk! Download on Play Store: https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk',
-                  );
-                  final earned = await oneTimeBonus('shared_app', 10);
-                  if (earned && context.mounted) {
-                    showPointsToast(
-                      context,
-                      isId
-                          ? '+10 Poin — Share app!'
-                          : '+10 Points — Share app!',
-                    );
-                  }
-                },
-              ),
-              _dialogBtn(
-                ctx,
-                isId,
-                '📝 ${isId ? "Lengkapi Profil" : "Complete Profile"}',
-                '+10',
-                Colors.orange,
-                () async {
-                  Navigator.of(ctx).pop();
-                  final earned = await oneTimeBonus('completed_profile', 10);
-                  if (earned && context.mounted) {
-                    showPointsToast(
-                      context,
-                      isId ? '+10 Poin — Profil!' : '+10 Points — Profile!',
-                    );
-                  }
-                },
-              ),
-              _dialogBtn(
-                ctx,
-                isId,
-                '📸 ${isId ? "Kirim Foto Pertama" : "Send First Photo"}',
-                '+10',
-                Colors.pink,
-                () async {
-                  Navigator.of(ctx).pop();
-                  final earned = await oneTimeBonus('first_photo', 10);
-                  if (earned && context.mounted) {
-                    showPointsToast(
-                      context,
-                      isId
-                          ? '+10 Poin — Foto pertama!'
-                          : '+10 Points — First photo!',
-                    );
-                  }
-                },
-              ),
-              const Divider(color: Colors.white24),
-              Text(
-                isId ? 'Gratis besok:' : 'Free tomorrow:',
-                style: AppText.bodySmall.copyWith(color: Colors.white70),
-              ),
-              const SizedBox(height: 4),
-              _dialogAction(
-                isId,
-                '📅 ${isId ? "Login Besok" : "Login Tomorrow"}',
-                '+25',
-                Colors.amber,
-              ),
-              _dialogAction(
-                isId,
-                '📖 ${isId ? "Baca Room" : "Read Room"}',
-                '+2',
-                Colors.grey,
+                  },
+                  icon: const Icon(Icons.add_circle_outline, size: 20),
+                  label: Text(s.yukcoinTopup),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
               ),
             ],
           ),
@@ -936,84 +798,6 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  Widget _dialogBtn(
-    BuildContext ctx,
-    bool isId,
-    String label,
-    String pts,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: AppText.bodySmall.copyWith(color: Colors.white),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  pts,
-                  style: AppText.label.copyWith(
-                    color: color,
-                    letterSpacing: 0,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _dialogAction(bool isId, String label, String pts, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppText.bodySmall.copyWith(color: Colors.white),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              pts,
-              style: AppText.label.copyWith(
-                color: color,
-                letterSpacing: 0,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   void dispose() {

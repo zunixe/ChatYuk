@@ -488,6 +488,13 @@ class S {
   String get msgUnmuted =>
       isId ? 'Notifikasi chat dinyalakan' : 'Chat notifications unmuted';
   String labelArchived(int n) => isId ? 'Diarsipkan ($n)' : 'Archived ($n)';
+  String get btnHide => isId ? 'Sembunyikan' : 'Hide';
+  String get btnUnhide => isId ? 'Tampilkan' : 'Unhide';
+  String get btnUndo => isId ? 'Urungkan' : 'Undo';
+  String get msgHidden => isId ? 'Pengguna disembunyikan' : 'User hidden';
+  String get msgUnhidden =>
+      isId ? 'Pengguna ditampilkan lagi' : 'User unhidden';
+  String labelHidden(int n) => isId ? 'Disembunyikan ($n)' : 'Hidden ($n)';
 
   // ── Filter daftar chat (Semua / Belum dibaca / Teman / Anon / Terdaftar) ──
   // `filterAll` sudah ada di atas (dipakai filter lain) — dipakai ulang.
@@ -826,13 +833,15 @@ class S {
   String get msgCallMissed => isId ? 'Panggilan tidak dijawab' : 'Missed call';
   String get msgCallError =>
       isId ? 'Panggilan gagal terhubung' : 'Call failed to connect';
-  // ── Panggilan Terbaru (riwayat call, menu titik-3 tab Pesan) ──
-  String get menuRecentCalls => isId ? 'Panggilan Terbaru' : 'Recent calls';
+  // ── Riwayat Panggilan (menu titik-3 tab Pesan) ──
+  String get menuRecentCalls => isId ? 'Riwayat Panggilan' : 'Call History';
   String get callHistoryEmpty =>
       isId ? 'Belum ada riwayat panggilan' : 'No call history yet';
   String get callHistoryEmptyHint => isId
       ? 'Panggilan masuk dan keluar akan muncul di sini'
       : 'Incoming and outgoing calls will appear here';
+  String get callHistoryToday => isId ? 'Hari ini' : 'Today';
+  String get callHistoryYesterday => isId ? 'Kemarin' : 'Yesterday';
   String get callDirOutgoing => isId ? 'Keluar' : 'Outgoing';
   String get callDirIncoming => isId ? 'Masuk' : 'Incoming';
   String get callRedial => isId ? 'Panggil ulang' : 'Call back';
@@ -1459,6 +1468,29 @@ class S {
   String get yukcoinHowToSpend =>
       isId ? 'Cara pakai YukCoin' : 'How to spend YukCoin';
   String get yukcoinTopup => isId ? 'Isi YukCoin' : 'Top up YukCoin';
+  String get yukcoinPickPackage =>
+      isId ? 'Pilih paket koin' : 'Pick a coin package';
+  // Overhaul coin (2026-10): tidak ada poin gratis — coin hanya dari topup.
+  String get pointsOutOfCoinBody => isId
+      ? 'Koinmu habis. Isi koin lewat top-up untuk lanjut menelepon & memakai fitur.'
+      : 'You are out of coins. Top up to keep calling and using features.';
+  String get pointsOnboardCoinTitle =>
+      isId ? 'Koin untuk menelepon' : 'Coins for calling';
+  String get pointsOnboardCoinBody => isId
+      ? 'Isi koin lewat top-up. Pakai koin untuk menelepon (audio/video), filter, dan cari orang sekitar.'
+      : 'Top up to get coins. Use them for calls (audio/video), filters, and finding people nearby.';
+  String get pointsOnboardCallFree => isId
+      ? 'Gratis 5 menit telepon tiap hari'
+      : 'First 5 minutes of calls free every day';
+  String callFreeRemaining(String mmss) => isId
+      ? '🎁 Gratis $mmss lagi'
+      : '🎁 Free $mmss left';
+  String callCostPerMin(int coins) => isId
+      ? '🪙 $coins koin/menit'
+      : '🪙 $coins coins/min';
+  String get callEndedNoCoin => isId
+      ? 'Koin habis — panggilan diakhiri'
+      : 'Out of coins — call ended';
   String get yukcoinTopupSoon =>
       isId ? 'Top-up segera hadir' : 'Top-up coming soon';
   String get yukcoinEarnLogin => isId ? 'Login harian' : 'Daily login';
@@ -1797,6 +1829,10 @@ class S {
   String get tabGroups => isId ? 'Grup' : 'Groups';
   String get tabRooms => isId ? 'Global Room' : 'Global Room';
   String get titleTimeline => isId ? 'Timeline' : 'Timeline';
+  String get titlePostDetail => isId ? 'Postingan' : 'Post';
+  String get postDetailGone => isId
+      ? 'Postingan sudah dihapus atau tidak bisa dilihat.'
+      : 'This post was deleted or is unavailable.';
   String get hintWritePost =>
       isId ? 'Tulis sesuatu...' : "Share what's on your mind...";
   String get btnPost => isId ? 'Posting' : 'Post';

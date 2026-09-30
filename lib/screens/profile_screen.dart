@@ -926,7 +926,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // = email DUMMY (bukan zunixe) → isRealAdmin false → "klik untuk
     // kembali ke admin" hilang.
     final dummyActive = auth.dummySessionActive;
-    final pp = context.watch<PointsProvider>();
+    // `select` (bukan `watch`): PointsProvider di-refresh beberapa kali saat
+    // buka halaman (get_points_enabled/get_wallet/yukcoin_v2_status). `watch`
+    // membuat SELURUH halaman Profil (CustomScrollView + slivers) rebuild tiap
+    // refresh selesai — sering menabrak frame tap tab → jank (diukur 2026-09-30:
+    // tab3 = tab paling sering jank, max 21ms). Aturan §2.3: halaman penuh WAJIB
+    // `select` per field untuk provider yang sering berubah.
+    final pointsEnabled = context.select<PointsProvider, bool>(
+      (p) => p.enabled,
+    );
+    final pointsValue = context.select<PointsProvider, int>((p) => p.points);
+    final extraPhotoSlots = context.select<PointsProvider, int>(
+      (p) => p.extraPhotoSlots,
+    );
+    final yukcoinV2Active = context.select<PointsProvider, bool>(
+      (p) => p.yukcoinV2Active,
+    );
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -940,7 +955,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             // Keluar pindah ke Pengaturan › Akun.
             actions: [
               // Tombol Misi — sembunyikan saat sistem poin OFF
-              if (context.watch<PointsProvider>().enabled)
+              if (pointsEnabled)
                 IconButton(
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
@@ -1583,12 +1598,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       visualDensity: VisualDensity.compact,
                                     ),
                                   ),
-                                if (_photos.length >=
-                                        6 +
-                                            context
-                                                .watch<PointsProvider>()
-                                                .extraPhotoSlots &&
-                                    context.watch<PointsProvider>().yukcoinV2Active)
+                                if (_photos.length >= 6 + extraPhotoSlots &&
+                                    yukcoinV2Active)
                                   TextButton.icon(
                                     onPressed: _uploading ? null : _buyExtraSlots,
                                     icon: Icon(Icons.add_circle_outline, size: 16),
@@ -1809,7 +1820,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         // Subscribe hanya relevan saat sistem poin aktif —
                         // sembunyikan menu langganan & harga subscribe saat OFF.
-                        if (pp.enabled) ...[
+                        if (pointsEnabled) ...[
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             dense: true,
@@ -1860,7 +1871,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
 
                   // Poin ChatYuk — diletakkan di antara My Photos dan Pengaturan
-                  if (pp.enabled) ...[
+                  if (pointsEnabled) ...[
                     SizedBox(height: 12),
                     ProfileSectionLabel(label: s.pointsTitle),
                     SizedBox(height: 6),
@@ -1910,7 +1921,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                     ),
                                     Text(
-                                      formatPoints(pp.points),
+                                      formatPoints(pointsValue),
                                       style: AppText.display.copyWith(
                                         color: Colors.white,
                                       ),

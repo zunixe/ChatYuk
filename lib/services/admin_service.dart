@@ -137,6 +137,33 @@ class AdminService {
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
+  /// Feature flags (published per fitur) — untuk kartu Publish di panel admin.
+  Future<Map<String, dynamic>> getFeatureFlags() async {
+    final res = await _rpc('get_feature_flags').timeout(_openTimeout);
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Set flag publish satu fitur (tombol Publish). Return semua flags.
+  Future<Map<String, dynamic>> setFeatureFlag(
+    String feature,
+    bool published,
+  ) async {
+    final res = await _rpc('admin_set_feature_flag', params: {
+      'p_feature': feature,
+      'p_published': published,
+    });
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Katalog paket topup (admin) — untuk kelola harga/koin.
+  Future<List<Map<String, dynamic>>> adminListTopupPackages() async {
+    final res = await _rpc('list_topup_packages').timeout(_openTimeout);
+    if (res is List) {
+      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return const [];
+  }
+
   /// Bypass privasi (toggle admin): bila ON, akun admin melihat semua
   /// field profil user tanpa filter visibility. Baca via getPointSettings
   /// (full app_settings). User biasa tidak terdampak (server cek email).
