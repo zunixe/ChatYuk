@@ -1386,10 +1386,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         toolbarHeight: 56,
         // Tombol search di KIRI ATAS (leading). Ikon Admin Panel pindah
         // ke actions kanan (hanya tampil untuk admin sungguhan).
-        // Di samping search: ikon "Top Aktif" — pola & JARAK SAMA PERSIS
-        // dengan pasangan Story ↔ Orang Sekitar di `actions` (Tooltip +
-        // GestureDetector + Padding(horizontal: 3) + Icon, tanpa IconButton
-        // yang memaksa min 48px). Gap antar ikon = 2 × 3 = 6px.
+        // Di samping search: ikon "Top Aktif" — pola Tooltip + GestureDetector
+        // + Padding(horizontal: 3) + Icon (tanpa IconButton yang memaksa
+        // 48px). Rapatkan kembali ke ikon search (tanpa jarak ekstra).
         leadingWidth: 76,
         leading: Row(
           mainAxisSize: MainAxisSize.min,
