@@ -1,4 +1,23 @@
 ﻿
+## 2026-10-05 — Leaderboard "Top Aktif" (keaktifan: pesan + reaksi)
+
+- **Migrasi** `20261005030000_activity_leaderboard.sql`:
+  `activity_leaderboard(p_scope, p_limit, p_offset)` → jsonb
+  `{scope, entries[], me}`. Skor = pesan private + pesan room + reaksi
+  (`weekly`=7 hari, `alltime`=seumur hidup). Kecualikan dummy + excluded;
+  hanya user nyata (registered atau status <> offline) — pola
+  `points_leaderboard`. Entri + `msg_count` & `reaction_count`.
+- **App:** `PointsService.activityLeaderboard` + passthrough provider;
+  `ActivityLeaderboardScreen` (tab Mingguan/Sepanjang Masa, kartu rank +
+  sub-label "N pesan · N reaksi", bar peringkat sendiri).
+- **Ikon:** `Icons.emoji_events_rounded` di `leading` AppBar menu Online,
+  tepat di samping ikon Search (`leadingWidth: 96`). Semua user boleh lihat.
+- **Catatan:** `profiles.login_streak`/`last_login_date` TIDAK dipakai
+  (cuma 3 baris — fitur daily-login mati). "Sering online" diproksikan via
+  keaktifan chat (label "Top Aktif", bukan klaim presence).
+- **Verifikasi:** `check_migrations` OK; pgTAP `schema_sync` 55/55;
+  `points_service_io_test` +2 hijau; `flutter analyze` 0/0.
+
 ## 2026-10-05 — Laporan admin: nickname pelapor & terlapor + fix filter bulan
 
 - **Migrasi** `20261005020000_admin_reported_users_nickname.sql`:

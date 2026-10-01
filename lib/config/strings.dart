@@ -1574,6 +1574,25 @@ class S {
       isId ? 'Poin didapat 7 hari terakhir' : 'Points earned in last 7 days';
   String get lbAllTimeHint =>
       isId ? 'Total saldo poin' : 'Total points balance';
+  // ── Top Aktif (leaderboard keaktifan: pesan + reaksi) ──
+  String get topActiveTitle => isId ? 'Top Aktif' : 'Top Active';
+  String get topActiveTooltip =>
+      isId ? 'Top Aktif — paling sering chat' : 'Top Active — most chatty';
+  String get topActiveTabWeekly => isId ? 'Mingguan' : 'Weekly';
+  String get topActiveTabAllTime => isId ? 'Sepanjang Masa' : 'All-Time';
+  String get topActiveHintWeekly => isId
+      ? 'Pesan + reaksi 7 hari terakhir'
+      : 'Messages + reactions in last 7 days';
+  String get topActiveHintAllTime =>
+      isId ? 'Pesan + reaksi sepanjang masa' : 'Messages + reactions all-time';
+  String get topActiveEmpty =>
+      isId ? 'Belum ada data keaktifan' : 'No activity data yet';
+  String get topActiveUnranked =>
+      isId ? 'Belum masuk peringkat' : 'Not ranked yet';
+  String get topActiveYourRank => isId ? 'Peringkat kamu' : 'Your rank';
+  String get topActiveMsgs => isId ? 'pesan' : 'messages';
+  String get topActiveReactions => isId ? 'reaksi' : 'reactions';
+
   // ── Misi Point ──
   String get missionsTitle => isId ? 'Misi Point' : 'Point Missions';
   String get missionsDaily => isId ? 'Harian' : 'Daily';

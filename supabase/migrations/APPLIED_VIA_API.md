@@ -1294,3 +1294,23 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   "bang sayur" (2x).
 - **App:** `ReportedUsersCard` menampilkan nickname terlapor + baris
   "Dilaporkan oleh: …" (jelas pelapor ≠ terlapor).
+
+## 2026-10-05 — 20261005030000_activity_leaderboard (APPLY)
+
+- **Tujuan:** leaderboard "Top Aktif" (keaktifan: pesan + reaksi) di menu
+  Online, ikon di samping Search. (Leaderboard lama `points_leaderboard`
+  berbasis POIN, dibuka dari Profil — berbeda.)
+- **Migrasi:** `public.activity_leaderboard(p_scope text, p_limit int,
+  p_offset int)` — SECURITY DEFINER, pola `points_leaderboard`. Skor =
+  jumlah pesan private + pesan room + reaksi (scope weekly=7 hari / alltime).
+  Kecualikan dummy + excluded; hanya user nyata (registered atau status
+  <> offline). Return `{scope, entries[], me}`; tiap entri + `msg_count`
+  & `reaction_count`. Apply Management API **3 statement** (create + revoke
+  + grant) — SUDAH TERAPPLIED `fohcucyyejdryryoxitm`.
+- **Index:** sudah ada (`idx_privmsgs_created_at`, `idx_msgs_created_at`,
+  `idx_msg_reactions_user`) — tidak perlu index baru.
+- **Verifikasi live:** weekly top: anggi 557, novikoh 479; alltime top:
+  novikoh 627. Grant: authenticated + service_role (anon tidak).
+- **App:** `PointsService.activityLeaderboard` + `PointsProvider` passthrough;
+  `ActivityLeaderboardScreen` (2 tab) + ikon `Icons.emoji_events_rounded`
+  di `leading` AppBar Online (samping search).

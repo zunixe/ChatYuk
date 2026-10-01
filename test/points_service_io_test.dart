@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:chatyuk/services/points_service.dart';
 
@@ -133,6 +134,49 @@ void main() {
       await svc.quests(420);
 
       expect(rpcParamsOf(handler, 'points_quests')['tz_offset_minutes'], 420);
+    });
+
+    test('activityLeaderboard: RPC + params p_scope/p_limit + parsing', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on(
+        '/rest/v1/rpc/activity_leaderboard',
+        (_) => {
+          'scope': 'weekly',
+          'entries': [
+            {
+              'rank': 1,
+              'uid': 'u1',
+              'nickname': 'anggi',
+              'score': 557,
+              'msg_count': 557,
+              'reaction_count': 0,
+            },
+          ],
+          'me': {'rank': 4, 'score': 289},
+        },
+      );
+      final svc = PointsService(fakeSupabaseClient(handler: handler));
+
+      final res = await svc.activityLeaderboard('weekly', limit: 20);
+
+      final params = rpcParamsOf(handler, 'activity_leaderboard');
+      expect(params['p_scope'], 'weekly');
+      expect(params['p_limit'], 20);
+      expect((res['entries'] as List).first['nickname'], 'anggi');
+      expect((res['me'] as Map)['rank'], 4);
+    });
+
+    test('activityLeaderboard: fallback aman saat return null', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on(
+        '/rest/v1/rpc/activity_leaderboard',
+        (req) => http.Response('null', 200, request: req),
+      );
+      final svc = PointsService(fakeSupabaseClient(handler: handler));
+
+      final res = await svc.activityLeaderboard('alltime');
+      expect(res['entries'], isEmpty);
+      expect(res['me'], isNull);
     });
   });
 }

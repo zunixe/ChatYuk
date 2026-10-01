@@ -34,6 +34,7 @@ import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
+import 'activity_leaderboard_screen.dart';
 import 'room_chat_screen.dart';
 import 'lobby_screen.dart';
 import 'story_composer_screen.dart';
@@ -1385,22 +1386,42 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         toolbarHeight: 56,
         // Tombol search di KIRI ATAS (leading). Ikon Admin Panel pindah
         // ke actions kanan (hanya tampil untuk admin sungguhan).
-        leading: IconButton(
-          tooltip: s.searchHint,
-          icon: Icon(
-            _isSearching ? Icons.close : Icons.search_rounded,
-            color: AppTheme.textPrimary,
-          ),
-          onPressed: () {
-            setState(() {
-              _isSearching = !_isSearching;
-              if (!_isSearching) {
-                _searchCtrl.clear();
-                _search = '';
-                _page = 1;
-              }
-            });
-          },
+        // Di samping search: ikon "Top Aktif" (leaderboard keaktifan).
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: s.searchHint,
+              icon: Icon(
+                _isSearching ? Icons.close : Icons.search_rounded,
+                color: AppTheme.textPrimary,
+              ),
+              onPressed: () {
+                setState(() {
+                  _isSearching = !_isSearching;
+                  if (!_isSearching) {
+                    _searchCtrl.clear();
+                    _search = '';
+                    _page = 1;
+                  }
+                });
+              },
+            ),
+            IconButton(
+              tooltip: s.topActiveTooltip,
+              icon: Icon(
+                Icons.emoji_events_rounded,
+                color: AppTheme.textPrimary,
+              ),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ActivityLeaderboardScreen(),
+                ),
+              ),
+            ),
+          ],
         ),
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
