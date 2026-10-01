@@ -1596,8 +1596,10 @@ class S {
   String get topActiveScore => isId ? 'Skor' : 'Score';
   String get topActivePosts => isId ? 'postingan' : 'posts';
   String get topActiveStories => isId ? 'story' : 'stories';
-  String get topActiveTopLabel =>
+  String get topActiveTopLabelWeekly =>
       isId ? 'Paling aktif minggu ini' : 'Most active this week';
+  String get topActiveTopLabelAllTime =>
+      isId ? 'Paling aktif sepanjang masa' : 'Most active all-time';
   String get topActiveGuestLabel => isId ? 'Aktif berkontribusi' : 'Active member';
   String get topActiveSubHint => isId
       ? 'Peringkat berdasarkan keaktifan — tanpa angka'
