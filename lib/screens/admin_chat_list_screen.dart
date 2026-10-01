@@ -954,10 +954,18 @@ class _AdminChatCard extends StatelessWidget {
                   '${names[shown[i]] ?? ''}',
                 ),
                 child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.bgCard, width: 2),
-                  ),
+                  // Ring pemisah HANYA saat avatar tumpang-tindih (≥2 peserta)
+                  // supaya batas antar-avatar rapi. Avatar TUNGGAL tampil polos
+                  // (tanpa border) — persis gaya daftar "Pengguna Online".
+                  decoration: shown.length > 1
+                      ? BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppTheme.bgCard,
+                            width: 2,
+                          ),
+                        )
+                      : null,
                   child: GenderAvatar(
                     uid: shown[i],
                     name: '${names[shown[i]] ?? ''}',

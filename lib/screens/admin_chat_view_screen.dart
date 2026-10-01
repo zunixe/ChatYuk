@@ -877,17 +877,21 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     const size = 34.0;
     const overlap = 12.0;
 
-    Widget avatarOf(String uid, int i) {
+    Widget avatarOf(String uid, int i, {required bool withRing}) {
       final name = widget.participantNames[uid] ?? '';
       return Container(
-        // Ring warna header supaya tumpang-tindih terlihat rapi.
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: AppTheme.headerGradient.colors.first,
-            width: 2,
-          ),
-        ),
+        // Ring pemisah HANYA saat avatar tumpang-tindih (2 peserta) supaya
+        // batas antar-avatar terlihat rapi. Avatar TUNGGAL tampil polos
+        // (tanpa border) — persis gaya daftar "Pengguna Online".
+        decoration: withRing
+            ? BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppTheme.headerGradient.colors.first,
+                  width: 2,
+                ),
+              )
+            : null,
         child: GestureDetector(
           onTap: () => _openProfile(uid, name),
           // Gaya SAMA PERSIS dengan daftar "Pengguna Online": lingkaran latar
@@ -902,7 +906,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       );
     }
 
-    if (uids.length == 1) return avatarOf(uids[0], 0);
+    if (uids.length == 1) return avatarOf(uids[0], 0, withRing: false);
     return SizedBox(
       width: size * 2 - overlap,
       height: size,
@@ -910,7 +914,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         clipBehavior: Clip.none,
         children: [
           for (var i = 0; i < 2; i++)
-            Positioned(left: i * (size - overlap), child: avatarOf(uids[i], i)),
+            Positioned(
+              left: i * (size - overlap),
+              child: avatarOf(uids[i], i, withRing: true),
+            ),
         ],
       ),
     );
