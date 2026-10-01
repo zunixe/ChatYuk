@@ -203,6 +203,7 @@ class _LeaderboardSheetState extends State<LeaderboardSheet> {
                         itemBuilder: (_, i) => LeaderboardRow(
                           entry: Map<String, dynamic>.from(_entries[i] as Map),
                           s: s,
+                          scope: _scope,
                         ),
                       ),
           ),
@@ -273,7 +274,14 @@ class _SegmentedScope extends StatelessWidget {
 class LeaderboardRow extends StatelessWidget {
   final Map<String, dynamic> entry;
   final S s;
-  const LeaderboardRow({super.key, required this.entry, required this.s});
+  /// 'weekly' | 'alltime' — supaya label top-3 sesuai tab yang aktif.
+  final String scope;
+  const LeaderboardRow({
+    super.key,
+    required this.entry,
+    required this.s,
+    this.scope = 'weekly',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -345,7 +353,11 @@ class LeaderboardRow extends StatelessWidget {
                   ],
                 ),
                 Text(
-                  isTop3 ? s.topActiveTopLabel : s.topActiveGuestLabel,
+                  isTop3
+                      ? (scope == 'alltime'
+                          ? s.topActiveTopLabelAllTime
+                          : s.topActiveTopLabelWeekly)
+                      : s.topActiveGuestLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppText.caption.copyWith(
