@@ -1,4 +1,17 @@
 ﻿
+## 2026-10-05 — Laporan admin: nickname pelapor & terlapor + fix filter bulan
+
+- **Migrasi** `20261005020000_admin_reported_users_nickname.sql`:
+  `admin_stats_compute()` blok `reported_users` diperkaya → `reported_nickname`,
+  `reported_registered`, `reporters` [{id, nickname}]. Admin kini tahu SIAPA
+  yang dilaporkan (dulu cuma uid terpotong). Non-FROZEN, sisa fungsi persis
+  live.
+- **App:** `ReportedUsersCard` tampilkan nama terlapor + "Dilaporkan oleh: …"
+  (pelapor ≠ terlapor jelas).
+- **Fix filter bulan** (`registrationschart_card`): dropdown bulan 12 terakhir
+  diurutkan eksplisit descending (terbaru di atas) via `_monthOptions()`.
+- Verifikasi: `check_migrations` OK; analyze 0/0; admin tests hijau.
+
 ## 2026-10-05 — Insight registrasi CEO (panel admin Ringkasan)
 
 **Alasan:** kartu "Registrasi Email" hanya menampilkan bar per-hari satu bulan.

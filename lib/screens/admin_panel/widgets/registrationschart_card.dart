@@ -383,13 +383,22 @@ class AdminRegistrationsChartCardState extends State<AdminRegistrationsChartCard
     );
   }
 
+  /// Opsi dropdown bulan: 12 bulan terakhir, **TERBARU di atas**
+  /// (descending). Diurutkan eksplisit supaya tidak bergantung pada perilaku
+  /// normalisasi `DateTime`.
+  List<DateTime> _monthOptions() {
+    final now = DateTime.now();
+    final list = [
+      for (var i = 0; i < 12; i++) DateTime(now.year, now.month - i),
+    ];
+    list.sort((a, b) => b.compareTo(a)); // terbaru → terlama
+    return list;
+  }
+
   // ── Bar harian (bulan terpilih) ──
   Widget _dailySection(S s, AdminProvider admin) {
     final data = admin.regDaily;
-    final now = DateTime.now();
-    final months = [
-      for (var i = 0; i < 12; i++) DateTime(now.year, now.month - i),
-    ];
+    final months = _monthOptions();
     final days = DateTime(_month.year, _month.month + 1, 0).day;
     final maxCount =
         data.isEmpty ? 1 : data.values.reduce((a, b) => a > b ? a : b);

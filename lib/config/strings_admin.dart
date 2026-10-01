@@ -419,6 +419,8 @@ extension SAdminX on S {
 
   String get adminNoReports => isId ? 'Tidak ada laporan' : 'No reports';
 
+  String get adminReportedBy => isId ? 'Dilaporkan oleh' : 'Reported by';
+
   String get adminDangerZone => isId ? 'Zona Bahaya' : 'Danger Zone';
 
   String get adminResetAllPoints => isId
