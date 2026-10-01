@@ -34,7 +34,7 @@ import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
-import 'activity_leaderboard_screen.dart';
+import '../widgets/leaderboard_sheet.dart';
 import 'room_chat_screen.dart';
 import 'lobby_screen.dart';
 import 'story_composer_screen.dart';
@@ -1386,38 +1386,47 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         toolbarHeight: 56,
         // Tombol search di KIRI ATAS (leading). Ikon Admin Panel pindah
         // ke actions kanan (hanya tampil untuk admin sungguhan).
-        // Di samping search: ikon "Top Aktif" (leaderboard keaktifan).
-        leadingWidth: 96,
+        // Di samping search: ikon "Top Aktif" — pola & JARAK SAMA PERSIS
+        // dengan pasangan Story ↔ Orang Sekitar di `actions` (Tooltip +
+        // GestureDetector + Padding(horizontal: 3) + Icon, tanpa IconButton
+        // yang memaksa min 48px). Gap antar ikon = 2 × 3 = 6px.
+        leadingWidth: 76,
         leading: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              tooltip: s.searchHint,
-              icon: Icon(
-                _isSearching ? Icons.close : Icons.search_rounded,
-                color: AppTheme.textPrimary,
+            Tooltip(
+              message: s.searchHint,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    _isSearching = !_isSearching;
+                    if (!_isSearching) {
+                      _searchCtrl.clear();
+                      _search = '';
+                      _page = 1;
+                    }
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: Icon(
+                    _isSearching ? Icons.close : Icons.search_rounded,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
               ),
-              onPressed: () {
-                setState(() {
-                  _isSearching = !_isSearching;
-                  if (!_isSearching) {
-                    _searchCtrl.clear();
-                    _search = '';
-                    _page = 1;
-                  }
-                });
-              },
             ),
-            IconButton(
-              tooltip: s.topActiveTooltip,
-              icon: Icon(
-                Icons.emoji_events_rounded,
-                color: AppTheme.textPrimary,
-              ),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ActivityLeaderboardScreen(),
+            Tooltip(
+              message: s.topActiveTooltip,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                // Tampil LANGSUNG di halaman ini sebagai bottom sheet
+                // (bukan push halaman baru) — sama seperti aksi titik-3.
+                onTap: () => LeaderboardSheet.show(context),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 3),
+                  child: Icon(Icons.emoji_events_rounded),
                 ),
               ),
             ),
