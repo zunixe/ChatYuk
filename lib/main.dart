@@ -1535,8 +1535,17 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
         // (default: enabled in release, disabled in debug).
         await FirebaseCrashlytics.instance
             .setCrashlyticsCollectionEnabled(kReleaseMode);
-        FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+        FlutterError.onError = (details) {
+          // dlog dulu (logcat/profile terlihat) — lalu kirim ke Crashlytics.
+          // Tanpa dlog, error framework SETELAH Firebase init hilang dari
+          // logcat (recordFlutterFatalError tak menulis apa pun ke log) →
+          // sulit melacak crash "app menciut sendiri".
+          dlog('[FLUTTER-ERROR] ${details.exception}');
+          dlog('[FLUTTER-ERROR] ${details.stack}');
+          FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+        };
         PlatformDispatcher.instance.onError = (error, stack) {
+          dlog('[PLATFORM-ERROR] $error\n$stack');
           FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
           return true;
         };

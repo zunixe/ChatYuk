@@ -60,10 +60,10 @@ class _ViewerBody extends StatefulWidget {
 }
 
 class _ViewerBodyState extends State<_ViewerBody> {
-  late final PageController _page = PageController(
-    initialPage: widget.initialIndex,
-  );
-  late int _index = widget.initialIndex;
+  late final int _safeInitial =
+      widget.paths.isEmpty ? 0 : widget.initialIndex.clamp(0, widget.paths.length - 1);
+  late final PageController _page = PageController(initialPage: _safeInitial);
+  late int _index = _safeInitial;
 
   @override
   void dispose() {
@@ -85,7 +85,7 @@ class _ViewerBodyState extends State<_ViewerBody> {
               onPageChanged: (i) => setState(() => _index = i),
               itemBuilder: (_, i) => _ViewerPage(
                 path: widget.paths[i],
-                thumb: widget.thumbs[i],
+                thumb: i < widget.thumbs.length ? widget.thumbs[i] : Uint8List(0),
                 aspect: i < widget.aspects.length ? widget.aspects[i] : null,
               ),
             ),
