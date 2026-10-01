@@ -1,26 +1,30 @@
 -- ============================================================
--- "Top Aktif" — leaderboard keaktifan (pesan + reaksi).
+-- "Top Aktif" — leaderboard keaktifan (SKOR).
 --
 -- LATAR: leaderboard yang ada (`points_leaderboard`) berbasis POIN. User
---   ingin leaderboard berbasis KEAKTIFAN: siapa yang paling banyak
---   berinteraksi (kirim pesan & reaksi), diakses dari menu Online.
+--   ingin leaderboard berbasis KEAKTIFAN di menu Online, dengan angka
+--   sebagai SKOR (bukan "pesan") yang dihitung dari kontribusi user:
+--   bikin timeline post + bikin story + chat private + chat global room.
 --
--- SUMBER DATA (dicek live): `private_messages` (7528 baris, 5523/7 hari),
---   `messages` room (kecil), `message_reactions` (jarang tapi tumbuh).
+-- SUMBER DATA (dicek live): posts (22/7hari), stories (3/7hari),
+--   private_messages (5523/7hari), messages room (kecil).
 --   `profiles.login_streak`/`last_login_date` TIDAK dipakai (cuma 3 baris
 --   terisi — fitur daily-login sudah mati) → tidak reliabel.
 --
 -- SKOR (per user):
---   score = jumlah pesan private + jumlah pesan room + jumlah reaksi
+--   score = jumlah posts + jumlah stories + pesan private + pesan room
 --   scope 'weekly'  = 7 hari terakhir
 --   scope 'alltime' = seumur hidup
+--   (reaksi TIDAK dihitung — sesuai permintaan; hanya konten + chat)
 --
--- KONSISTENSI: mengecualikan dummy + excluded uid. Hanya menampilkan user
---   "nyata" (registered, atau status <> offline) — sama seperti
---   `points_leaderboard`. Entri boleh dilihat semua user (read-only).
+-- OUTPUT per entri: rank, uid, nickname, avatar, country, is_registered,
+--   score, post_count, story_count, msg_private, msg_room.
 --
--- Bukan FROZEN. Apply via Management API (lihat APPLIED_VIA_API.md):
---   1 create function + 2 grant. Butuh 1 statement per request.
+-- KONSISTENSI: mengecualikan dummy + excluded uid. Hanya user "nyata"
+--   (registered, atau status <> offline) — sama `points_leaderboard`.
+--
+-- Bukan FROZEN. Apply via Management API: 1 create + 2 grant (1 statement
+-- masing-masing).
 -- ============================================================
 
 create or replace function public.activity_leaderboard(
@@ -53,49 +57,44 @@ begin
     from public.admin_dummy_uids() du;
 
   with raw as (
+    -- Timeline post dibuat user.
+    select p.author_id as uid, count(*)::int as posts, 0::int as stories, 0::int as priv, 0::int as room
+      from public.posts p
+     where p.author_id is not null and (v_since is null or p.created_at >= v_since)
+     group by p.author_id
+    union all
+    -- Story dibuat user.
+    select s.author_id, 0, count(*)::int, 0, 0
+      from public.stories s
+     where s.author_id is not null and (v_since is null or s.created_at >= v_since)
+     group by s.author_id
+    union all
     -- Pesan private dikirim user.
-    select m.sender_id as uid,
-           count(*)::int as msg_private,
-           0::int as msg_room,
-           0::int as reactions
+    select m.sender_id, 0, 0, count(*)::int, 0
       from public.private_messages m
-     where m.sender_id is not null
-       and (v_since is null or m.created_at >= v_since)
+     where m.sender_id is not null and (v_since is null or m.created_at >= v_since)
      group by m.sender_id
     union all
-    -- Pesan room dikirim user.
-    select m.sender_id,
-           0,
-           count(*)::int,
-           0
+    -- Pesan room (global) dikirim user.
+    select m.sender_id, 0, 0, 0, count(*)::int
       from public.messages m
-     where m.sender_id is not null
-       and (v_since is null or m.created_at >= v_since)
+     where m.sender_id is not null and (v_since is null or m.created_at >= v_since)
      group by m.sender_id
-    union all
-    -- Reaksi yang user berikan.
-    select r.user_id,
-           0,
-           0,
-           count(*)::int
-      from public.message_reactions r
-     where r.user_id is not null
-       and (v_since is null or r.created_at >= v_since)
-     group by r.user_id
   ),
   agg as (
     select uid,
-           sum(msg_private)::int as msg_private,
-           sum(msg_room)::int as msg_room,
-           sum(reactions)::int as reactions,
-           (sum(msg_private) + sum(msg_room) + sum(reactions))::int as score
+           sum(posts)::int as posts,
+           sum(stories)::int as stories,
+           sum(priv)::int as priv,
+           sum(room)::int as room,
+           (sum(posts) + sum(stories) + sum(priv) + sum(room))::int as score
       from raw
      group by uid
   ),
   final as (
     select
       p.id, p.nickname, p.avatar, p.country, p.is_registered,
-      a.msg_private, a.msg_room, a.reactions, a.score,
+      a.posts, a.stories, a.priv, a.room, a.score,
       row_number() over (order by a.score desc, p.created_at asc) as rank
     from agg a
     join public.profiles p on p.id = a.uid
@@ -113,8 +112,10 @@ begin
       'country', f.country,
       'is_registered', f.is_registered,
       'score', f.score,
-      'msg_count', f.msg_private + f.msg_room,
-      'reaction_count', f.reactions
+      'post_count', f.posts,
+      'story_count', f.stories,
+      'msg_private', f.priv,
+      'msg_room', f.room
     ) order by f.rank), '[]'::jsonb)
     into result
     from final f
@@ -122,24 +123,27 @@ begin
 
   -- Peringkat user pemanggil (lintas halaman).
   with raw as (
-    select m.sender_id as uid, count(*)::int s, 0::int r
+    select p.author_id as uid, count(*)::int s
+      from public.posts p
+     where p.author_id is not null and (v_since is null or p.created_at >= v_since)
+     group by p.author_id
+    union all
+    select s.author_id, count(*)::int
+      from public.stories s
+     where s.author_id is not null and (v_since is null or s.created_at >= v_since)
+     group by s.author_id
+    union all
+    select m.sender_id, count(*)::int
       from public.private_messages m
      where m.sender_id is not null and (v_since is null or m.created_at >= v_since)
      group by m.sender_id
     union all
-    select m.sender_id, 0, count(*)::int
+    select m.sender_id, count(*)::int
       from public.messages m
      where m.sender_id is not null and (v_since is null or m.created_at >= v_since)
      group by m.sender_id
-    union all
-    select r.user_id, 0, count(*)::int
-      from public.message_reactions r
-     where r.user_id is not null and (v_since is null or r.created_at >= v_since)
-     group by r.user_id
   ),
-  agg as (
-    select uid, (sum(s) + sum(r))::int as score from raw group by uid
-  ),
+  agg as ( select uid, sum(s)::int as score from raw group by uid ),
   final as (
     select p.id, a.score,
       row_number() over (order by a.score desc, p.created_at asc) as rank
