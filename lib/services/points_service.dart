@@ -393,6 +393,23 @@ class PointsService {
     return {'scope': scope, 'entries': [], 'me': null};
   }
 
+  /// "Top Aktif" — leaderboard keaktifan (pesan + reaksi).
+  /// scope: 'weekly' (7 hari) | 'alltime'. Return {scope, entries[], me}.
+  Future<Map<String, dynamic>> activityLeaderboard(
+    String scope, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final params = <String, dynamic>{
+      'p_scope': scope,
+      'p_limit': limit,
+      if (offset > 0) 'p_offset': offset,
+    };
+    final res = await measuredRpc(_sb, 'activity_leaderboard', params: params);
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'scope': scope, 'entries': [], 'me': null};
+  }
+
   /// Status semua misi (harian/mingguan/sekali). tzOffset = menit offset lokal.
   Future<Map<String, dynamic>> quests(int tzOffsetMinutes) async {
     final res = await measuredRpc(_sb, 

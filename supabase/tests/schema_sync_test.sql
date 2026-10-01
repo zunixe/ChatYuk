@@ -226,6 +226,15 @@ select supabase_tests.check('admin_registrations_monthly() ada',
 select supabase_tests.check('authenticated boleh EXECUTE admin_registrations_monthly',
   has_function_privilege('authenticated', 'public.admin_registrations_monthly(integer)', 'EXECUTE'));
 
+-- ── Top Aktif (leaderboard keaktifan, migrasi 20261005030000) ──
+select supabase_tests.check('activity_leaderboard() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='activity_leaderboard'));
+select supabase_tests.check('authenticated boleh EXECUTE activity_leaderboard',
+  has_function_privilege('authenticated', 'public.activity_leaderboard(text,integer,integer)', 'EXECUTE'));
+select supabase_tests.check('anon TIDAK boleh EXECUTE activity_leaderboard',
+  not has_function_privilege('anon', 'public.activity_leaderboard(text,integer,integer)', 'EXECUTE'));
+
 
 -- ── REGRESI 2026-09-29: cleanup_stale_anonymous gagal total (1.597 akun anon
 -- stale menumpuk) karena (a) hapus coin_ledger/point_events wajib matikan

@@ -228,14 +228,21 @@ hanya `service_role` (user tak bisa mendebit orang lain); saldo = cache ledger
 
 | Lapis | Lokasi |
 |---|---|
-| UI | `lib/screens/timeline_screen.dart`, `story_*.dart`, `social_list_screen.dart`, `nearby_screen.dart` |
-| Provider | `lib/providers/timeline_provider.dart`, `story_provider.dart`, `social_provider.dart` |
-| SQL inti | `list_posts()`, `get_post()`, `create_story()`, `story_slides()`, `follow_count_sync()`, `nearby_users()`, `notify_post_followers()` |
+| UI | `lib/screens/timeline_screen.dart`, `story_*.dart`, `social_list_screen.dart`, `nearby_screen.dart`, `activity_leaderboard_screen.dart` (Top Aktif) |
+| Provider | `lib/providers/timeline_provider.dart`, `story_provider.dart`, `social_provider.dart`, `points_provider.dart` (activityLeaderboard) |
+| SQL inti | `list_posts()`, `get_post()`, `create_story()`, `story_slides()`, `follow_count_sync()`, `nearby_users()`, `notify_post_followers()`, `activity_leaderboard()` (Top Aktif) |
 | Cron | `purge-stories` (17:00), `purge_inactive_90d` |
-| Test | `test/story_provider_test.dart`, `test/timeline_provider_test.dart`, `test/story_social_io_test.dart` (payload RPC story/social via HTTP palsu) |
+| Test | `test/story_provider_test.dart`, `test/timeline_provider_test.dart`, `test/story_social_io_test.dart` (payload RPC story/social via HTTP palsu), `test/points_service_io_test.dart` (activity_leaderboard) |
 
 **Invariant:** visibility story ikut follower; counter sosial konsisten
 (`follow_count_sync`); timeline hanya user terdaftar.
+
+**Top Aktif (2026-10-05) — leaderboard keaktifan:** `activity_leaderboard()`
+menghitung **pesan private + pesan room + reaksi** (weekly=7 hari / alltime).
+Beda dari `points_leaderboard` (berbasis POIN, dibuka dari Profil). Dibuka
+dari ikon `emoji_events_rounded` di AppBar menu Online (samping Search).
+Kecualikan dummy + excluded; hanya user nyata. `login_streak`/`last_login_date`
+TIDAK dipakai (tak terisi) — "sering online" diproksikan via keaktifan chat.
 
 **Notif post baru (2026-09-29) — sesuai visibilitas post:**
 - `public` → SEMUA user (registered, non-dummy, non-exclude, tanpa blokir);
