@@ -9,17 +9,21 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/points_provider.dart';
 import '../providers/avatar_provider.dart';
+import '../providers/auth_provider.dart';
+import '../providers/social_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/storage_provider.dart';
 import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
+import '../screens/user_info_screen.dart';
 import 'profile_avatar.dart';
 
 /// "Top Aktif" versi COMPACT untuk ditampilkan sebagai bottom sheet —
 /// langsung di halaman Pengguna Online (bukan halaman baru). Ringkas:
 /// tab Mingguan/Sepanjang Masa, highlight top-3, daftar padat, bar
-/// peringkat-diri di bawah. Read-only.
+/// peringkat-diri di bawah. Tap nama → profil user; ada tombol
+/// Ikuti/Tambah Teman cepat di tiap baris.
 class LeaderboardSheet extends StatefulWidget {
   const LeaderboardSheet({super.key});
 
@@ -287,7 +291,10 @@ class LeaderboardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final rank = (entry['rank'] as num?)?.toInt() ?? 0;
     final nickname = entry['nickname']?.toString() ?? '—';
+    final uid = entry['uid']?.toString() ?? '';
     final registered = entry['is_registered'] == true;
+    final myUid = context.select<AuthProvider, String?>((a) => a.uid);
+    final isSelf = uid.isNotEmpty && uid == myUid;
 
     // TANPA ANGKA: skor/jumlah pesan TIDAK ditampilkan. Angka besar (mis.
     // "557") bikin orang malas menyapa (terkesan "tukang chat"). Peringkat
@@ -312,12 +319,12 @@ class LeaderboardRow extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             onTap: () => _zoomAvatar(
               context,
-              uid: entry['uid']?.toString() ?? '',
+              uid: uid,
               name: nickname,
               ring: topColor,
             ),
             child: ProfileAvatar(
-              uid: entry['uid']?.toString() ?? '',
+              uid: uid,
               name: nickname,
               size: 32,
               borderColor: topColor,
@@ -330,27 +337,35 @@ class LeaderboardRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        nickname,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.bodyStrong.copyWith(
-                          fontWeight: isTop3 ? FontWeight.w800 : FontWeight.w600,
+                // Nama bisa di-tap → buka PROFIL user (ada fotonya).
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: uid.isEmpty
+                      ? null
+                      : () => _openProfile(context, uid, nickname),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          nickname,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.bodyStrong.copyWith(
+                            fontWeight:
+                                isTop3 ? FontWeight.w800 : FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
-                    if (registered) ...[
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.verified,
-                        size: 13,
-                        color: AppTheme.primary,
-                      ),
+                      if (registered) ...[
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.verified,
+                          size: 13,
+                          color: AppTheme.primary,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
                 Text(
                   isTop3
@@ -367,7 +382,21 @@ class LeaderboardRow extends StatelessWidget {
               ],
             ),
           ),
+          // Aksi cepat (bukan diri sendiri): Follow = TEKS, Tambah Teman = IKON.
+          if (uid.isNotEmpty && !isSelf) ...[
+            const SizedBox(width: 6),
+            _FollowTextButton(uid: uid, s: s),
+            _AddFriendIconButton(uid: uid, s: s),
+          ],
         ],
+      ),
+    );
+  }
+
+  void _openProfile(BuildContext context, String uid, String name) {
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => UserInfoScreen(userId: uid, fallbackName: name),
       ),
     );
   }
@@ -473,6 +502,113 @@ class LeaderboardRow extends StatelessWidget {
         } catch (_) {}
       }
     });
+  }
+}
+
+
+/// Tombol FOLLOW berbentuk TEKS ("Ikuti"/"Mengikuti") — hangat, tidak dingin.
+class _FollowTextButton extends StatelessWidget {
+  final String uid;
+  final S s;
+  const _FollowTextButton({required this.uid, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<SocialProvider>(
+      builder: (ctx, sp, _) {
+        final following = sp.isFollowing(uid);
+        return Tooltip(
+          message: following ? s.btnUnfollow : s.btnFollow,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () async {
+                if (following) {
+                  await sp.unfollow(uid);
+                } else {
+                  await sp.follow(uid);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: following
+                      ? Colors.transparent
+                      : AppTheme.primary.withValues(alpha: 0.12),
+                  border: Border.all(
+                    color: AppTheme.primary.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  following ? s.socialFollowing : s.btnFollow,
+                  style: AppText.label.copyWith(
+                    color: following ? AppTheme.textSecondary : AppTheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Tombol TAMBAH TEMAN berbentuk IKON. Status ikut SocialProvider.
+class _AddFriendIconButton extends StatelessWidget {
+  final String uid;
+  final S s;
+  const _AddFriendIconButton({required this.uid, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<SocialProvider>(
+      builder: (ctx, sp, _) {
+        final isFriend = sp.isFriend(uid);
+        final pending = sp.isPendingFriendRequest(uid);
+        final done = isFriend || pending;
+        final tip = isFriend
+            ? s.btnFriends
+            : (pending ? s.btnFriendRequested : s.btnAddFriend);
+        return Tooltip(
+          message: tip,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: done
+                  ? null
+                  : () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      final res = await sp.sendFriendRequest(uid);
+                      if (res != 'rejected') {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text(s.friendRequestSent)),
+                        );
+                      }
+                    },
+              child: SizedBox(
+                width: 34,
+                height: 34,
+                child: Icon(
+                  isFriend
+                      ? Icons.how_to_reg_rounded
+                      : (pending
+                            ? Icons.schedule_rounded
+                            : Icons.person_add_alt_rounded),
+                  size: 22,
+                  color: done ? AppTheme.textSecondary : AppTheme.primary,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
