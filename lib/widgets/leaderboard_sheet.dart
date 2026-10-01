@@ -1,0 +1,551 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../config/theme.dart';
+import '../config/strings.dart';
+import '../providers/points_provider.dart';
+import '../providers/avatar_provider.dart';
+import '../providers/locale_provider.dart';
+import '../providers/theme_provider.dart';
+import '../providers/storage_provider.dart';
+import '../services/avatar_service.dart';
+import '../core/cache/media_disk_cache.dart';
+import 'profile_avatar.dart';
+
+/// "Top Aktif" versi COMPACT untuk ditampilkan sebagai bottom sheet —
+/// langsung di halaman Pengguna Online (bukan halaman baru). Ringkas:
+/// tab Mingguan/Sepanjang Masa, highlight top-3, daftar padat, bar
+/// peringkat-diri di bawah. Read-only.
+class LeaderboardSheet extends StatefulWidget {
+  const LeaderboardSheet({super.key});
+
+  /// Tampilkan sebagai bottom sheet melengkung dari halaman pemanggil.
+  static Future<void> show(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const LeaderboardSheet(),
+    );
+  }
+
+  @override
+  State<LeaderboardSheet> createState() => _LeaderboardSheetState();
+}
+
+class _LeaderboardSheetState extends State<LeaderboardSheet> {
+  PointsProvider get _service => context.read<PointsProvider>();
+  String _scope = 'weekly';
+  bool _loading = true;
+  List<dynamic> _entries = [];
+  Map<String, dynamic>? _me;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final res = await _service.activityLeaderboard(_scope);
+      if (!mounted) return;
+      setState(() {
+        _entries = (res['entries'] as List?) ?? [];
+        _me = res['me'] is Map ? Map<String, dynamic>.from(res['me']) : null;
+        _loading = false;
+      });
+      unawaited(
+        context.read<AvatarProvider>().prefetch(
+          _entries
+              .map((e) => '${(e as Map)['uid'] ?? ''}')
+              .where((u) => u.isNotEmpty)
+              .toList(),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _entries = [];
+        _me = null;
+        _loading = false;
+      });
+    }
+  }
+
+  void _switchScope(String scope) {
+    if (scope == _scope) return;
+    setState(() {
+      _scope = scope;
+      _entries = [];
+    });
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
+    final s = context.watch<LocaleProvider>().s;
+    final media = MediaQuery.of(context);
+    final maxH = media.size.height * 0.82;
+
+    return Container(
+      constraints: BoxConstraints(maxHeight: maxH),
+      decoration: BoxDecoration(
+        color: AppTheme.bgScreen,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Grip
+          const SizedBox(height: 10),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppTheme.divider,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Header: judul + tab segmented compact
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.emoji_events_rounded,
+                    size: 18,
+                    color: AppTheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    s.topActiveTitle,
+                    style: AppText.titleEmphasis,
+                  ),
+                ),                _SegmentedScope(
+                  scope: _scope,
+                  onChanged: _switchScope,
+                  weeklyLabel: s.topActiveTabWeekly,
+                  allTimeLabel: s.topActiveTabAllTime,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 13,
+                  color: AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _scope == 'weekly'
+                        ? s.topActiveHintWeekly
+                        : s.topActiveHintAllTime,
+                    style: AppText.caption.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // Isi
+          Flexible(
+            child: _loading
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: CircularProgressIndicator(color: AppTheme.primary),
+                    ),
+                  )
+                : _entries.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 40),
+                        child: Text(
+                          s.topActiveEmpty,
+                          style: AppText.body.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: EdgeInsets.only(
+                          top: 6,
+                          bottom:
+                              12 + MediaQuery.of(context).padding.bottom + (_me == null ? 0 : 8),
+                        ),
+                        itemCount: _entries.length,
+                        separatorBuilder: (_, _) => Divider(
+                          height: 1,
+                          indent: 60,
+                          color: AppTheme.divider.withValues(alpha: 0.5),
+                        ),
+                        itemBuilder: (_, i) => LeaderboardRow(
+                          entry: Map<String, dynamic>.from(_entries[i] as Map),
+                          s: s,
+                        ),
+                      ),
+          ),
+          // Bar peringkat sendiri
+          if (_me != null && !_loading)
+            _MyRankBar(
+              rank: (_me!['rank'] as num?)?.toInt(),
+              bottomInset: media.padding.bottom,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Toggle Mingguan / Sepanjang Masa bergaya segmented pill (compact).
+class _SegmentedScope extends StatelessWidget {
+  final String scope;
+  final ValueChanged<String> onChanged;
+  final String weeklyLabel;
+  final String allTimeLabel;
+  const _SegmentedScope({
+    required this.scope,
+    required this.onChanged,
+    required this.weeklyLabel,
+    required this.allTimeLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget seg(String value, String label) {
+      final active = scope == value;
+      return GestureDetector(
+        onTap: () => onChanged(value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: active ? AppTheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Text(
+            label,
+            style: AppText.caption.copyWith(
+              color: active ? Colors.white : AppTheme.textSecondary,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppTheme.bgInput,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [seg('weekly', weeklyLabel), seg('alltime', allTimeLabel)],
+      ),
+    );
+  }
+}
+
+/// Satu baris peringkat (compact). Top-3 di-highlight dengan medali + tint.
+class LeaderboardRow extends StatelessWidget {
+  final Map<String, dynamic> entry;
+  final S s;
+  const LeaderboardRow({super.key, required this.entry, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    final rank = (entry['rank'] as num?)?.toInt() ?? 0;
+    final nickname = entry['nickname']?.toString() ?? '—';
+    final registered = entry['is_registered'] == true;
+
+    // TANPA ANGKA: skor/jumlah pesan TIDAK ditampilkan. Angka besar (mis.
+    // "557") bikin orang malas menyapa (terkesan "tukang chat"). Peringkat
+    // cukup ditandai medali/badge + label netral.
+    final topColor = _rankAccent(rank);
+    final isTop3 = rank >= 1 && rank <= 3;
+
+    return Container(
+      color: isTop3
+          ? topColor.withValues(alpha: 0.08)
+          : Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(width: 30, child: _RankBadge(rank: rank)),
+          const SizedBox(width: 8),
+          // Foto profil diselesaikan lewat ProfileAvatar(uid) — `entry['avatar']`
+          // dari RPC adalah PATH storage ("avatars/xxx.jpg"), BUKAN base64,
+          // jadi decode base64 selalu gagal (dulu foto tak pernah tampil).
+          // Tap avatar → buka foto (zoom) ala layar Online.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _zoomAvatar(
+              context,
+              uid: entry['uid']?.toString() ?? '',
+              name: nickname,
+              ring: topColor,
+            ),
+            child: ProfileAvatar(
+              uid: entry['uid']?.toString() ?? '',
+              name: nickname,
+              size: 32,
+              borderColor: topColor,
+              borderWidth: 1.6,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        nickname,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.bodyStrong.copyWith(
+                          fontWeight: isTop3 ? FontWeight.w800 : FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (registered) ...[
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.verified,
+                        size: 13,
+                        color: AppTheme.primary,
+                      ),
+                    ],
+                  ],
+                ),
+                Text(
+                  isTop3 ? s.topActiveTopLabel : s.topActiveGuestLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.caption.copyWith(
+                    color: isTop3 ? topColor : AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Buka foto avatar user (fullscreen zoom) — resolve dari cache RAM → disk
+  /// → network (pola sama `_zoomUserAvatar` di layar Online). Tap avatar.
+  Future<void> _zoomAvatar(
+    BuildContext context, {
+    required String uid,
+    required String name,
+    required Color ring,
+  }) async {
+    Uint8List? bytes;
+    if (uid.isNotEmpty) {
+      final b64 =
+          AvatarB64Service.instance.cachedSync(uid) ??
+          AvatarB64Service.instance.cachedSyncIncludeDisk(uid);
+      if (b64 != null && b64.isNotEmpty) {
+        try {
+          bytes = base64Decode(b64);
+        } catch (_) {}
+      }
+      if (bytes == null) {
+        try {
+          bytes = MediaDiskCache.instance.readSync('avatars/$uid.jpg');
+        } catch (_) {}
+      }
+      if (bytes == null) {
+        try {
+          bytes = await context.read<StorageProvider>().downloadBytes(
+            'avatars/$uid.jpg',
+          );
+        } catch (_) {}
+      }
+    }
+    if (!context.mounted) return;
+    _showAvatarZoom(
+      context,
+      bytes: bytes,
+      ring: ring,
+      initial: name.isNotEmpty ? name[0].toUpperCase() : '?',
+    );
+  }
+
+  void _showAvatarZoom(
+    BuildContext context, {
+    required Uint8List? bytes,
+    required Color ring,
+    required String initial,
+  }) {
+    if (bytes == null && initial.isEmpty) return;
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: bytes != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(
+                          bytes,
+                          fit: BoxFit.contain,
+                          cacheWidth: 1080,
+                          gaplessPlayback: true,
+                        ),
+                      )
+                    : CircleAvatar(
+                        radius: 90,
+                        backgroundColor: AppTheme.avatarBg,
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: AppGlyph.xl,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) {
+      if (bytes != null && bytes.isNotEmpty) {
+        try {
+          PaintingBinding.instance.imageCache.evict(MemoryImage(bytes));
+        } catch (_) {}
+      }
+    });
+  }
+}
+
+Color _rankAccent(int rank) {
+  switch (rank) {
+    case 1:
+      return const Color(0xFFFFC107); // emas
+    case 2:
+      return const Color(0xFF9E9E9E); // perak
+    case 3:
+      return const Color(0xFFCD7F32); // perunggu
+    default:
+      return AppTheme.primary;
+  }
+}
+
+/// Badge peringkat: medali utk 1-3, angka utk lainnya.
+class _RankBadge extends StatelessWidget {
+  final int rank;
+  const _RankBadge({required this.rank});
+
+  @override
+  Widget build(BuildContext context) {
+    if (rank >= 1 && rank <= 3) {
+      return Text(
+        rank == 1 ? '🥇' : rank == 2 ? '🥈' : '🥉',
+        style: const TextStyle(fontSize: AppGlyph.md),
+        textAlign: TextAlign.center,
+      );
+    }
+    return Text(
+      '$rank',
+      textAlign: TextAlign.center,
+      style: AppText.bodySmall.copyWith(
+        color: AppTheme.textSecondary,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+}
+
+/// Bar peringkat-pribadi yang menempel di bawah sheet.
+class _MyRankBar extends StatelessWidget {
+  final int? rank;
+  final double bottomInset;
+  const _MyRankBar({
+    required this.rank,
+    this.bottomInset = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    return Container(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 12,
+        bottom: 12 + bottomInset,
+      ),
+      decoration: const BoxDecoration(
+        color: AppTheme.primary,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 8,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.person_pin_circle_outlined, color: Colors.white),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              rank == null
+                  ? s.topActiveUnranked
+                  : '${s.topActiveYourRank}: #$rank',
+              style: AppText.bodyStrong.copyWith(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1581,10 +1581,11 @@ class S {
   String get topActiveTabWeekly => isId ? 'Mingguan' : 'Weekly';
   String get topActiveTabAllTime => isId ? 'Sepanjang Masa' : 'All-Time';
   String get topActiveHintWeekly => isId
-      ? 'Pesan + reaksi 7 hari terakhir'
-      : 'Messages + reactions in last 7 days';
-  String get topActiveHintAllTime =>
-      isId ? 'Pesan + reaksi sepanjang masa' : 'Messages + reactions all-time';
+      ? 'Peringkat keaktifan 7 hari terakhir'
+      : 'Activity ranking — last 7 days';
+  String get topActiveHintAllTime => isId
+      ? 'Peringkat keaktifan sepanjang masa'
+      : 'Activity ranking — all-time';
   String get topActiveEmpty =>
       isId ? 'Belum ada data keaktifan' : 'No activity data yet';
   String get topActiveUnranked =>
@@ -1592,6 +1593,15 @@ class S {
   String get topActiveYourRank => isId ? 'Peringkat kamu' : 'Your rank';
   String get topActiveMsgs => isId ? 'pesan' : 'messages';
   String get topActiveReactions => isId ? 'reaksi' : 'reactions';
+  String get topActiveScore => isId ? 'Skor' : 'Score';
+  String get topActivePosts => isId ? 'postingan' : 'posts';
+  String get topActiveStories => isId ? 'story' : 'stories';
+  String get topActiveTopLabel =>
+      isId ? 'Paling aktif minggu ini' : 'Most active this week';
+  String get topActiveGuestLabel => isId ? 'Aktif berkontribusi' : 'Active member';
+  String get topActiveSubHint => isId
+      ? 'Peringkat berdasarkan keaktifan — tanpa angka'
+      : 'Ranked by activity — no numbers';
 
   // ── Misi Point ──
   String get missionsTitle => isId ? 'Misi Point' : 'Point Missions';
