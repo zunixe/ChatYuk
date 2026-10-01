@@ -81,6 +81,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   // tampilkan UI coba-lagi, bukan "belum ada story".
   bool _loadError = false;
   bool _paused = false;
+  // True selagi user menggeser PageView antar-person (horizontal). Dipakai
+  // untuk menahan auto-advance slide supaya tidak bertabrakan dengan swipe.
+  bool _pageDragging = false;
+  // Path gambar pembuka tiap person (index → path) — hasil preload tetangga.
+  // Dipakai agar halaman tetangga tidak tampil hitam saat swipe: kalau path-nya
+  // sudah punya byte di `_localImg`, render sebagai latar halaman tetangga.
+  final Map<int, String> _neighborFirstPath = {};
   final Map<String, Uint8List?> _localImg = {};
 
   // Video pendek: satu controller aktif (slide aktif saja — hemat memori).
@@ -393,6 +400,38 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     // Retry tetangga yang gagal tanpa mengganggu gambar aktif.
     await Future<void>.delayed(const Duration(seconds: 3));
     if (mounted) await _preloadWindow(includeActive: false);
+    await _preloadNeighborPersons();
+  }
+
+  /// Preload slide PERTAMA person tetangga (kiri/kanan di PageView) supaya
+  /// saat user swipe antar-author, halaman tujuan tidak tampil HITAM kosong —
+  /// gambar pembuka sudah ada di `_slideBytesCache` global. `slidesFor`
+  /// memakai cache internal provider, jadi ini murah (tak selalu hit DB).
+  Future<void> _preloadNeighborPersons() async {
+    final prov = _storyProv;
+    if (prov == null || widget.items.isEmpty) return;
+    final neighbors = <int>{
+      if (_person - 1 >= 0) _person - 1,
+      if (_person + 1 < widget.items.length) _person + 1,
+    };
+    for (final idx in neighbors) {
+      try {
+        final item = widget.items[idx];
+        final slides = await prov.slidesFor(
+          item.authorId,
+          expectedCount: item.slideCount,
+        );
+        if (!mounted || slides.isEmpty) continue;
+        // Hanya gambar pembuka (bukan video) — cukup untuk first-paint halus.
+        final first = slides.first;
+        if (first.isVideo || first.imagePath.isEmpty) continue;
+        final b = await _bytes(first.imagePath);
+        if (b != null && b.isNotEmpty) {
+          _localImg[first.imagePath] = b;
+          _neighborFirstPath[idx] = first.imagePath;
+        }
+      } catch (_) {}
+    }
   }
 
   /// Muat byte untuk slide di window aktif yang belum ada. Paralel agar
@@ -469,6 +508,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   void _startTimer({Duration? duration}) {
     _progress.stop();
+    // Saat user masih menggeser PageView, jangan mulai timer — biar ScrollEnd
+    // / onPageChanged yang menyalakannya. Mencegah auto-advance di tengah swipe.
+    if (_pageDragging) return;
     _paused = false;
     _progress.duration = duration ?? _slideDuration;
     _progress.forward(from: 0);
@@ -729,14 +771,34 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     PerfProbe.buildCount('StoryViewer');
     return Scaffold(
       backgroundColor: Colors.black,
-      body: PageView.builder(
-        controller: _pageCtrl,
-        itemCount: widget.items.length,
-        onPageChanged: (i) {
-          _person = i;
-          _loadPerson();
+      // Jeda auto-advance SELAMA drag horizontal antar-person. Tanpa ini,
+      // timer slide terus berjalan saat user menggeser PageView → bisa
+      // memicu `_next()`/pindah slide di TENGAH swipe → transisi terasa
+      // tersendat / "tabrakan dengan timer".
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          if (n is ScrollStartNotification) {
+            _pageDragging = true;
+            _progress.stop();
+          } else if (n is ScrollEndNotification) {
+            _pageDragging = false;
+            // Resume HANYA jika tidak sedang berpindah halaman (kalau pindah,
+            // _onPageChanged → _loadPerson yang mengatur timer baru).
+            if (mounted && _person == _pageCtrl.page?.round() && _slides.isNotEmpty) {
+              _startTimerIfImage();
+            }
+          }
+          return false;
         },
-        itemBuilder: (_, i) => _buildPerson(i),
+        child: PageView.builder(
+          controller: _pageCtrl,
+          itemCount: widget.items.length,
+          onPageChanged: (i) {
+            _person = i;
+            _loadPerson();
+          },
+          itemBuilder: (_, i) => _buildPerson(i),
+        ),
       ),
     );
   }
@@ -757,7 +819,31 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   Widget _buildPerson(int index) {
     if (index != _person) {
-      // Halaman tetangga — render ringan (background saja).
+      // Halaman tetangga — render ringan. Kalau gambar pembukanya sudah
+      // ter-preload, tampilkan langsung (bukan hitam polos) agar transisi
+      // swipe antar-author terasa mulus, bukan "kosong lalu muncul".
+      final path = _neighborFirstPath[index];
+      final bytes = path != null ? _localImg[path] : null;
+      if (bytes != null && bytes.isNotEmpty) {
+        final rectNeighbor = _storyRect(context);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            const ColoredBox(color: Colors.black),
+            Positioned.fromRect(
+              rect: rectNeighbor,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Image.memory(
+                  bytes,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                ),
+              ),
+            ),
+          ],
+        );
+      }
       return Container(color: Colors.black);
     }
     final s = context.watch<LocaleProvider>().s;
@@ -1115,6 +1201,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               icon: liked ? Icons.favorite : Icons.favorite_border,
               color: liked ? AppTheme.danger : Colors.white24,
               onTap: _toggleLike,
+              popOnTap: true,
             ),
             const SizedBox(width: 8),
             _CircleBtn(
@@ -1132,6 +1219,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   Future<void> _toggleLike() async {
     final slide = _current;
     if (slide == null) return;
+    // Jeda sebentar saat memproses like supaya slide tidak lompat.
     _pause();
     final authorId = _item.authorId;
     final sp = context.read<StoryProvider>();
@@ -1141,7 +1229,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final pending = sp.toggleLike(slide.id, authorId);
     if (mounted) setState(() {});
     await pending;
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      // Lanjutkan story setelah like — JANGAN biarkan timer mati "diam".
+      // Kecuali user sedang menulis balasan (reply field fokus) → biarkan jeda.
+      if (!_replyFocus.hasFocus) _resume();
+    }
   }
 
   Future<void> _shareStory() async {
@@ -1368,48 +1461,132 @@ class _VisibilityBadge extends StatelessWidget {
 
 /// Tombol bulat kecil di dalam foto (like / share / kirim) — GestureDetector
 /// murni 40px supaya rapat dan tidak menambah padding Material.
-class _CircleBtn extends StatelessWidget {
+///
+/// [popOnTap]: beri animasi "pop" singkat saat ditekan (scale naik-turun +
+/// hati kecil terbang ke atas). Dipakai untuk tombol LIKE supaya feedback-nya
+/// terasa halus, bukan "kaku lalu diam".
+class _CircleBtn extends StatefulWidget {
   final IconData icon;
   final Color color;
   final bool busy;
   final VoidCallback? onTap;
+  final bool popOnTap;
 
   const _CircleBtn({
     required this.icon,
     required this.color,
     this.busy = false,
     required this.onTap,
+    this.popOnTap = false,
   });
 
   @override
+  State<_CircleBtn> createState() => _CircleBtnState();
+}
+
+class _CircleBtnState extends State<_CircleBtn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pop;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pop = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    // Scale: 1.0 → 1.35 (cepat) → 1.0 (elastis).
+    _scale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.35)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.35, end: 1.0)
+            .chain(CurveTween(curve: Curves.elasticOut)),
+        weight: 65,
+      ),
+    ]).animate(_pop);
+  }
+
+  @override
+  void dispose() {
+    _pop.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    if (widget.popOnTap) _pop.forward(from: 0);
+    widget.onTap?.call();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final circle = Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: widget.color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withValues(alpha: 0.3),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: widget.busy
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Icon(widget.icon, size: 20, color: Colors.white),
+    );
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
+      onTap: _handleTap,
+      child: SizedBox(
         width: 40,
         height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.primary.withValues(alpha: 0.3),
-              blurRadius: 10,
-            ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            // Hati kecil terbang ke atas saat pop (feedback like) — hanya saat
+            // popOnTap agar tombol lain tak menampilkannya.
+            if (widget.popOnTap)
+              AnimatedBuilder(
+                animation: _pop,
+                builder: (context, child) {
+                  if (_pop.value == 0) return const SizedBox.shrink();
+                  final t = _pop.value;
+                  // Muncul lalu memudar; naik sedikit ke atas.
+                  final opacity = (1 - t).clamp(0.0, 1.0);
+                  final dy = -18 * Curves.easeOut.transform(t);
+                  return Positioned(
+                    top: dy,
+                    child: Opacity(
+                      opacity: opacity,
+                      child: const Icon(
+                        Icons.favorite,
+                        size: 16,
+                        color: AppTheme.danger,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ScaleTransition(scale: _scale, child: circle),
           ],
         ),
-        child: busy
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : Icon(icon, size: 20, color: Colors.white),
       ),
     );
   }
