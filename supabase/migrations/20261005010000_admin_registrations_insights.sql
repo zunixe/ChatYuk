@@ -40,6 +40,9 @@ declare
   v_days_elapsed int;
   v_avg numeric;
   v_active_today int;
+  v_male int;
+  v_female int;
+  v_other int;
 begin
   if coalesce(auth.email(),'') != 'zunixe@gmail.com' and auth.role() <> 'service_role' then
     raise exception 'Unauthorized';
@@ -56,6 +59,17 @@ begin
      and not (p.id = any(v_excl)) and not (p.id = any(v_dummy));
   select count(*) into v_anon from public.profiles p
    where p.is_registered = false
+     and not (p.id = any(v_excl)) and not (p.id = any(v_dummy));
+
+  -- Distribusi gender user TERDAFTAR (nyata).
+  select
+    count(*) filter (where p.gender = 'male'),
+    count(*) filter (where p.gender = 'female'),
+    count(*) filter (where p.gender is distinct from 'male'
+                        and p.gender is distinct from 'female')
+    into v_male, v_female, v_other
+    from public.profiles p
+   where p.is_registered = true
      and not (p.id = any(v_excl)) and not (p.id = any(v_dummy));
 
   -- Baru bulan ini & bulan lalu.
@@ -113,6 +127,9 @@ begin
     'best_day', v_best_day,
     'best_day_count', coalesce(v_best_count, 0),
     'active_today', v_active_today,
+    'male_total', v_male,
+    'female_total', v_female,
+    'other_gender_total', v_other,
     'days_elapsed', v_days_elapsed
   );
 end;

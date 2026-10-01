@@ -65,11 +65,96 @@ class AdminRegistrationsChartCardState extends State<AdminRegistrationsChartCard
           const SizedBox(height: 12),
           _kpiGrid(s, admin),
           const SizedBox(height: 16),
+          _genderBreakdown(s, admin),
+          const SizedBox(height: 16),
           _monthlyTrend(s, admin),
           const SizedBox(height: 16),
           _dailySection(s, admin),
         ],
       ),
+    );
+  }
+
+  // ── Gender breakdown (bar horizontal bertumpuk + legend) ──
+  Widget _genderBreakdown(S s, AdminProvider admin) {
+    final k = admin.regKpis;
+    if (k.isEmpty) return const SizedBox.shrink();
+    final male = _i(k['male_total']);
+    final female = _i(k['female_total']);
+    final other = _i(k['other_gender_total']);
+    final total = male + female + other;
+    if (total <= 0) return const SizedBox.shrink();
+
+    final rows = <_GenderRow>[
+      _GenderRow(s.adminRegGenderMale, male, AppTheme.male),
+      _GenderRow(s.adminRegGenderFemale, female, AppTheme.female),
+      if (other > 0) _GenderRow(s.adminRegGenderOther, other, AppTheme.idle),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.people_alt_rounded,
+                size: 14, color: AppTheme.primary),
+            const SizedBox(width: 6),
+            Text(s.adminRegGenderTitle,
+                style: AppText.caption.copyWith(
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w800,
+                )),
+            const Spacer(),
+            Text('$total', style: AppText.bodyStrong),
+          ],
+        ),
+        const SizedBox(height: 10),
+        // Bar bertumpuk proporsional.
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 10,
+            child: Row(
+              children: [
+                for (final r in rows)
+                  if (r.value > 0)
+                    Expanded(
+                      flex: r.value,
+                      child: ColoredBox(color: r.color),
+                    ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (final r in rows) ...[
+          _genderLegend(r, total),
+          const SizedBox(height: 6),
+        ],
+      ],
+    );
+  }
+
+  Widget _genderLegend(_GenderRow r, int total) {
+    final pct = total > 0 ? (r.value * 100 / total) : 0.0;
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: r.color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Text(r.label, style: AppText.bodySmall)),
+        Text('${r.value}', style: AppText.bodyStrong),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 44,
+          child: Text('${pct.toStringAsFixed(0)}%',
+              textAlign: TextAlign.right,
+              style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
+        ),
+      ],
     );
   }
 
@@ -181,11 +266,26 @@ class AdminRegistrationsChartCardState extends State<AdminRegistrationsChartCard
         return Wrap(
           spacing: gap,
           runSpacing: gap,
-          children: [for (final t in tiles) SizedBox(width: w, child: t)],
+          children: [
+            for (final t in tiles) SizedBox(width: w, height: _kpiH, child: t),
+          ],
         );
       },
     );
   }
+
+  /// Tinggi kartu KPI DIPAKU supaya semua kartu merata (6 kartu grid 2 kolom).
+  /// Dihitung dari token: padding(10*2) + baris label(caption) + jarak + nilai
+  /// (titleEmphasis) + jarak + baris sub(micro) + sedikit buffer (line-box
+  /// Flutter bisa sedikit lebih tinggi dari fontSize*height).
+  static final double _kpiH =
+      20 + // padding vertikal atas+bawah
+      AppText.caption.fontSize! * 1.35 + // baris label
+      6 +
+      AppText.titleEmphasis.fontSize! * 1.25 + // nilai
+      2 +
+      AppText.micro.fontSize! * 1.2 + // baris sub
+      6; // buffer aman (anti overflow RenderFlex)
 
   Widget _kpi({
     required IconData icon,
@@ -203,6 +303,7 @@ class AdminRegistrationsChartCardState extends State<AdminRegistrationsChartCard
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -220,17 +321,20 @@ class AdminRegistrationsChartCardState extends State<AdminRegistrationsChartCard
           ),
           const SizedBox(height: 6),
           Text(value, style: AppText.titleEmphasis.copyWith(color: color)),
-          if (sub != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              sub,
+          // Slot sub SELALU direservasi (walau kosong) supaya semua kartu
+          // sama tinggi — kalau sub null, `Text('')` tetap memakan satu baris.
+          const SizedBox(height: 2),
+          SizedBox(
+            height: AppText.micro.fontSize! * 1.2,
+            child: Text(
+              sub ?? '',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppText.micro.copyWith(
                 color: subColor ?? AppTheme.textSecondary,
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -599,4 +703,12 @@ class _TrendPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _TrendPainter old) =>
       old.counts != counts || old.maxCount != maxCount;
+}
+
+/// Satu baris data gender untuk bar bertumpuk + legend.
+class _GenderRow {
+  final String label;
+  final int value;
+  final Color color;
+  const _GenderRow(this.label, this.value, this.color);
 }

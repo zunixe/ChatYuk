@@ -1273,3 +1273,10 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   - `20261001000000_admin_chats_participant_genders` → `20261001005000`
   - `20261001010000_admin_app_versions_sort_newest` → `20261001015000`
 - Tidak ada referensi ke nama lama; tidak affect DB (hanya nama file).
+
+### 2026-10-05 (lanjutan) — gender breakdown di KPI registrasi
+- `admin_registration_kpis()` diperluas: `male_total`, `female_total`,
+  `other_gender_total` (user TERDAFTAR nyata, dummy+excluded dibuang).
+  Re-apply via Management API (1 statement create fn). Live: male 211, female 20.
+- App: kartu registrasi menambah section "Gender (terdaftar)" — bar bertumpuk
+  proporsional + legend (warna male/female/other). Font token, tanpa dependency.

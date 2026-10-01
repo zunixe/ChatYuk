@@ -503,6 +503,11 @@ extension SAdminX on S {
   String get adminRegKpiAvgDayShort => isId ? 'rata²' : 'avg';
   String get adminRegUsersSuffix => isId ? 'user' : 'users';
   String get adminRegTotalUsersSuffix => isId ? 'user (12 bln)' : 'users (12mo)';
+  String get adminRegGenderTitle =>
+      isId ? 'Gender (terdaftar)' : 'Gender (registered)';
+  String get adminRegGenderMale => isId ? 'Laki-laki' : 'Male';
+  String get adminRegGenderFemale => isId ? 'Perempuan' : 'Female';
+  String get adminRegGenderOther => isId ? 'Lainnya' : 'Other';
 
   String get adminPointTab => isId ? 'Poin' : 'Points';
 
