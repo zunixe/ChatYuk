@@ -212,7 +212,7 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
       p.connected && p.hasVideoTrack && p.cameraOn;
 
   String _placeholderText(S s, WatchSession sess, WatchParticipant p) {
-    if (sess.call.status == 'ringing') return s.adminCallRinging;
+    if (sess.status == 'ringing') return s.adminCallRinging;
     if (!p.connected || p.connecting) return s.adminWatchConnecting;
     if (!p.hasVideoTrack && sess.isVideo) return s.adminWaitingVideo;
     if (!p.cameraOn) return s.adminCameraOff;
@@ -581,7 +581,7 @@ class _AdminCallWatchFullScreenState extends State<AdminCallWatchFullScreen> {
       p.connected && p.hasVideoTrack && p.cameraOn;
 
   String _placeholderText(S s, WatchSession sess, WatchParticipant p) {
-    if (sess.call.status == 'ringing') return s.adminCallRinging;
+    if (sess.status == 'ringing') return s.adminCallRinging;
     if (!p.connected || p.connecting) return s.adminWatchConnecting;
     if (!p.hasVideoTrack && sess.isVideo) return s.adminWaitingVideo;
     if (!p.cameraOn) return s.adminCameraOff;

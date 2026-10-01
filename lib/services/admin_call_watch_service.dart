@@ -27,7 +27,8 @@ class WatchSession extends ChangeNotifier {
     : participants = [
         WatchParticipant(uid: call.callerId, name: call.callerName),
         WatchParticipant(uid: call.calleeId, name: call.calleeName),
-      ];
+      ],
+      status = call.status;
 
   final List<WatchParticipant> participants;
   final CallService _service = CallService.instance;
@@ -36,6 +37,14 @@ class WatchSession extends ChangeNotifier {
   Timer? _statusTimer;
   bool _stopped = false;
   final Map<String, List<Map<String, dynamic>>> _pendingCands = {};
+
+  /// Status call TERKINI ('ringing' | 'answered' | ...). `call.status` di
+  /// [ActiveCallInfo] bersifat beku (diambil sekali saat sesi dibuka), jadi
+  /// admin yang membuka monitor saat masih 'ringing' akan melihat "Ringing"
+  /// SELAMANYA walau call sudah dijawab. Field ini di-refresh oleh
+  /// [_statusTimer] (polling `getCall` tiap 12 dtk) sehingga status di UI
+  /// ikut berubah (ringing → answered).
+  String status;
 
   bool get isVideo => call.callType == 'video';
   bool get stopped => _stopped;
@@ -91,6 +100,12 @@ class WatchSession extends ChangeNotifier {
             st == 'missed' ||
             st == 'busy') {
           await stop();
+          notifyListeners();
+          return;
+        }
+        // Segarkan status (ringing → answered) supaya UI tidak "Ringing terus".
+        if (st != null && st != status) {
+          status = st;
           notifyListeners();
         }
       } catch (_) {}

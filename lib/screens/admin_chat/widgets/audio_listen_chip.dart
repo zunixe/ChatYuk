@@ -144,7 +144,7 @@ class _AudioListenChipState extends State<AudioListenChip>
     final String status;
     final Color color;
     final IconData icon;
-    if (sess.call.status == 'ringing') {
+    if (sess.status == 'ringing') {
       status = s.adminCallRinging;
       color = AppTheme.textSecondary;
       icon = Icons.ring_volume;
