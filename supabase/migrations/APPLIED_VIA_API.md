@@ -1280,3 +1280,17 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   Re-apply via Management API (1 statement create fn). Live: male 211, female 20.
 - App: kartu registrasi menambah section "Gender (terdaftar)" — bar bertumpuk
   proporsional + legend (warna male/female/other). Font token, tanpa dependency.
+
+## 2026-10-05 — 20261005020000_admin_reported_users_nickname (APPLY)
+
+- **Tujuan:** kartu "Laporan" admin hanya tampil `reported_id` (uid terpotong) →
+  admin tak tahu USER MANA yang dilaporkan (dan tak bisa bedakan pelapor vs
+  terlapor).
+- **Migrasi:** `admin_stats_compute()` — HANYA blok `reported_users` diubah:
+  tiap entri + `reported_nickname`, `reported_registered`, `reporters`
+  (daftar pelapor {id, nickname}). Sisa fungsi SALIN PERSIS versi live. Tidak
+  FROZEN. Apply Management API (1 statement).
+- **Verifikasi live:** reported "anggi" (registered) dilaporkan oleh
+  "bang sayur" (2x).
+- **App:** `ReportedUsersCard` menampilkan nickname terlapor + baris
+  "Dilaporkan oleh: …" (jelas pelapor ≠ terlapor).

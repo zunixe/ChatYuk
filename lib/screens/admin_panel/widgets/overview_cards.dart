@@ -22,26 +22,62 @@ class ReportedUsersCard extends StatelessWidget {
           style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
         ),
       for (var i = 0; i < reports.length && i < 8; i++)
-        Padding(
-          padding: EdgeInsets.only(bottom: 3),
-          child: Row(
+        _reportRow(reports[i]),
+    ]);
+  }
+
+  Widget _reportRow(dynamic raw) {
+    final r = (raw as Map?) ?? const {};
+    final reportedId = r['reported_id']?.toString() ?? '';
+    final nickname = (r['reported_nickname'] ?? '').toString();
+    final registered = r['reported_registered'] == true;
+    final count = r['report_count'];
+    // Label terlapor: nickname kalau ada, kalau tidak uid terpotong.
+    final who = nickname.isNotEmpty
+        ? nickname
+        : (reportedId.length >= 8 ? '${reportedId.substring(0, 8)}…' : '?');
+
+    final reporters = (r['reporters'] as List?) ?? const [];
+    final reporterNames = reporters
+        .map((e) {
+          final m = (e as Map?) ?? const {};
+          final n = (m['nickname'] ?? '').toString();
+          final id = m['id']?.toString() ?? '';
+          if (n.isNotEmpty) return n;
+          return id.length >= 8 ? '${id.substring(0, 8)}…' : '?';
+        })
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
+              Icon(
+                registered ? Icons.person : Icons.person_outline,
+                size: 16,
+                color: AppTheme.danger,
+              ),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  '${reports[i]['reported_id']?.toString().substring(0, 8) ?? '?'}...',
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textPrimary,
-                  ),
+                  who,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
+                  color: Colors.orange.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${reports[i]['report_count']}x',
+                  '${count}x',
                   style: AppText.caption.copyWith(
                     color: Colors.orange.shade700,
                     fontWeight: FontWeight.w800,
@@ -50,8 +86,19 @@ class ReportedUsersCard extends StatelessWidget {
               ),
             ],
           ),
-        ),
-    ]);
+          const SizedBox(height: 2),
+          // Baris "Dilaporkan oleh: …" supaya jelas pelapor ≠ terlapor.
+          Text(
+            reporterNames.isEmpty
+                ? '${s.adminReportedBy}: —'
+                : '${s.adminReportedBy}: ${reporterNames.join(', ')}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.micro.copyWith(color: AppTheme.textSecondary),
+          ),
+        ],
+      ),
+    );
   }
 }
 
