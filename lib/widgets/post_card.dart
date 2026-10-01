@@ -1012,12 +1012,29 @@ class _PostCardState extends State<PostCard> {
       }
     }
     if (thumbs.isEmpty) return;
+    // PENTING: `index` = indeks di `_imageThumbs` (semua foto), tapi
+    // `loadedPaths`/`thumbs` sudah DIFILTER (foto gagal-load dibuang) →
+    // panjangnya bisa lebih kecil. Kalau `index` diteruskan apa adanya,
+    // `PageController(initialPage:)` bisa di luar rentang → RangeError saat
+    // viewer membangun halaman (crash "aplikasi mati saat buka timeline").
+    // Petakan: index foto pertama yang berhasil ≥ index asli, kalau tidak
+    // jatuh ke elemen terakhir.
+    var mapped = -1;
+    for (var i = 0; i < loadedPaths.length; i++) {
+      if (loadedPaths[i] == paths[index.clamp(0, paths.length - 1)]) {
+        mapped = i;
+        break;
+      }
+    }
+    if (mapped < 0) {
+      mapped = (index < loadedPaths.length) ? index : loadedPaths.length - 1;
+    }
     PostPhotoViewer.show(
       context,
       paths: loadedPaths,
       thumbs: thumbs,
       aspects: aspects,
-      initialIndex: index,
+      initialIndex: mapped.clamp(0, loadedPaths.length - 1),
     );
   }
 

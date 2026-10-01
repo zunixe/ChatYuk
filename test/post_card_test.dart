@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +18,7 @@ import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/social_service.dart';
 import 'package:chatyuk/services/timeline_service.dart';
+import 'package:chatyuk/core/cache/post_photo_cache.dart';
 import 'package:chatyuk/widgets/post_card.dart';
 
 import 'supabase_test_client.dart';
@@ -67,6 +70,9 @@ Map<String, dynamic> _post({
 /// PNG 1×1 transparan (base64) untuk uji thumb foto.
 const _pngBase64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+/// Bytes PNG 1×1 (untuk downloader palsu di test gagal-load).
+final Uint8List _pngBytes = base64Decode(_pngBase64);
 
 void main() {
   late MockTimelineService timeline;
@@ -220,6 +226,40 @@ void main() {
     await pump(tester, _post(images: [_pngBase64]));
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
+  });
+
+  // REGRESI: "aplikasi mati saat buka timeline". Post multi-foto dengan
+  // foto di TENGAH gagal-load → thumb difilter sehingga list viewer lebih
+  // pendek dari jumlah foto. Tap foto terakhir memakai index asli (di luar
+  // rentang list terfilter) → PageController(initialPage: outOfRange) +
+  // paths[i] → RangeError. Viewer WAJIB tidak melempar exception.
+  testWidgets('multi-foto: buka viewer walau ada foto gagal-load (anti RangeError)',
+      (tester) async {
+    mockPathProvider();
+    // 3 foto; foto ke-2 (index 1) GAGAL (downloader → null) → thumb-nya
+    // tak terisi → loadedPaths di viewer jadi lebih pendek.
+    const paths = ['posts/regresi/ok0.jpg', 'posts/regresi/gagal1.jpg', 'posts/regresi/ok2.jpg'];
+    PostPhotoCache.downloader = (p) async =>
+        p.contains('gagal1') ? null : _pngBytes;
+    addTearDown(() => PostPhotoCache.downloader = null);
+
+    await pump(
+      tester,
+      _post(images: paths, imageW: 1200, imageH: 2670),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.takeException(), isNull, reason: 'render awal aman');
+
+    // Tap foto terakhir (index 2) — inilah yang dulu crash karena list
+    // terfilter hanya berisi [ok0, ok2] (length 2).
+    final photos = find.byType(GestureDetector);
+    if (photos.evaluate().isNotEmpty) {
+      await tester.tap(photos.last, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(tester.takeException(), isNull,
+        reason: 'buka viewer tidak boleh crash karena index di luar rentang');
   });
 
   testWidgets('author id == uid sendiri dirender (isAuthor)', (tester) async {
