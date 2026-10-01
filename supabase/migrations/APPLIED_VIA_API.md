@@ -1314,3 +1314,21 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
 - **App:** `PointsService.activityLeaderboard` + `PointsProvider` passthrough;
   `ActivityLeaderboardScreen` (2 tab) + ikon `Icons.emoji_events_rounded`
   di `leading` AppBar Online (samping search).
+
+## 2026-10-05 — 20261005040000_fake_gps_shared_coord (APPLY)
+
+- **Temuan audit:** 77/348 user ber-GPS duduk di 19 koordinat dipakai >1 orang
+  — 2 cluster besar: (-6.9097,107.5649) 35 akun & (37.4220,-122.0841) 10 akun
+  = **default Android Emulator**. Semua lolos `location_mocked=false`.
+- **Migrasi:** `update_my_location` +heuristik baru (source gps):
+  `static_coord` (3 update GPS terakhir identik <8 m), `known_emulator`
+  (≈37.4220,-122.0841 / 0,0 radius 100 m), `shared_coord` (koordinat <25 m
+  dipakai ≥3 user). + helper `admin_flag_shared_locations(p_min_users)`
+  untuk backfill. Apply Management API (**2 create fn + 4 grant**) — TERAPPLIED.
+- **Backfill:** `select public.admin_flag_shared_locations(3)` → **44 user**
+  ter-flag `shared_coord` (total mocked 2 → 46). Cluster emulator kena;
+  Kartika (koordinat unik) TIDAK ter-flag.
+- **App (A):** riwayat lokasi admin (`user_detail_sheet`) kini chip sumber
+  **GPS (biru)** vs **IP (amber, perkiraan)** + reason mock diperjelas →
+  tak lagi tertukar "beda lokasi" padahal beda sumber. Strings
+  fakeReasonStatic/Emulator/Shared + locSrcGps/Ip.

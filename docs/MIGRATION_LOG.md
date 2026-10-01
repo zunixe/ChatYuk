@@ -1,4 +1,20 @@
 ﻿
+## 2026-10-05 — Fake GPS lanjutan (shared/static/emulator) + badge sumber IP/GPS
+
+- **Temuan (audit Kartika/live):** 77/348 user ber-GPS di 19 koordinat dipakai
+  >1 orang. Cluster besar (-6.9097,107.5649)=35 akun & (37.4220,-122.0841)=10
+  akun (default Android Emulator) — LOLOS deteksi lama.
+- **Migrasi** `20261005040000_fake_gps_shared_coord.sql`: `update_my_location`
+  +heuristik `static_coord`, `known_emulator`, `shared_coord` (khusus gps);
+  + helper `admin_flag_shared_locations(p_min_users)`.
+- **Backfill:** 44 user ter-flag `shared_coord` (mocked 2→46). Kartika (unik)
+  aman.
+- **A (penyebab "GPS beda"):** profil `lat_gps` = GPS asli, tapi baris history
+  terbaru bisa `ip` (perkiraan kasar). UI admin kini **chip sumber GPS/IP** di
+  riwayat lokasi + reason mock diperjelas → tidak lagi tertukar.
+- **Verifikasi:** `check_migrations` OK; pgTAP schema_sync 58/58 (+3);
+  `flutter analyze` 0/0 (kecuali 1 warning TikTok paralel).
+
 ## 2026-10-05 — Leaderboard "Top Aktif" (keaktifan: pesan + reaksi)
 
 - **Migrasi** `20261005030000_activity_leaderboard.sql`:
