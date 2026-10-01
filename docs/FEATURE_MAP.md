@@ -264,6 +264,13 @@ hanya `service_role` (user tak bisa mendebit orang lain); saldo = cache ledger
 
 **Invariant:** 1 call aktif per user; notif missed 1×; `activeCallId` cocok.
 
+**Monitor call (watch) — status TIDAK beku:** `WatchSession.call.status`
+(`ActiveCallInfo`) diambil SEKALI saat sesi dibuat. Jangan pakai itu untuk UI —
+`WatchSession.status` (mutable) di-refresh `_statusTimer` tiap 12 dtk
+(`getCall`), supaya chip/overlay tidak menampilkan "Ringing" terus setelah call
+dijawab. Konsumen WAJIB baca `sess.status`, bukan `sess.call.status`
+(`audio_listen_chip.dart`, `admin_call_watch_overlay.dart`).
+
 ### 7b. Voice stage global room (audio-only, max 6 mic) — 2026-09-26
 
 | Lapis | Lokasi |

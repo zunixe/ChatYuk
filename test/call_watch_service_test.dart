@@ -80,6 +80,32 @@ void main() {
       // Sinyal "speaker gagal" belum tentu — default false sampai start().
       expect(s.speakerFailed, isFalse);
     });
+
+    // REGRESI: "monitor kaya ringing terus". `call.status` di ActiveCallInfo
+    // beku (diambil sekali saat sesi dibuat). `sess.status` harus bisa
+    // berubah (ringing → answered) supaya chip/overlay tidak "Ringing" terus.
+    test('status awal = call.status', () {
+      final s = WatchSession(call()); // call() status = 'answered'
+      expect(s.status, 'answered');
+    });
+
+    test('status bisa diubah (ringing → answered) — anti "ringing terus"', () {
+      final ringing = ActiveCallInfo(
+        id: 'c',
+        chatId: 'ch',
+        callerId: 'a',
+        calleeId: 'b',
+        callerName: 'A',
+        calleeName: 'B',
+        callType: 'video',
+        status: 'ringing',
+        createdAt: DateTime.now(),
+      );
+      final s = WatchSession(ringing);
+      expect(s.status, 'ringing');
+      s.status = 'answered'; // ditulis _statusTimer saat poll getCall()
+      expect(s.status, 'answered');
+    });
   });
 
   group('ActiveCallInfo — model sisi monitor', () {
