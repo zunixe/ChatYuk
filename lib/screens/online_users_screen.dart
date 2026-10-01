@@ -1388,8 +1388,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         // ke actions kanan (hanya tampil untuk admin sungguhan).
         // Di samping search: ikon "Top Aktif" — pola Tooltip + GestureDetector
         // + Padding(horizontal: 3) + Icon (tanpa IconButton yang memaksa
-        // 48px). Rapatkan kembali ke ikon search (tanpa jarak ekstra).
-        leadingWidth: 76,
+        // 48px). Saat MODE SEARCH aktif, ikon Top Aktif disembunyikan — kalau
+        // tidak, field search (title) menutupi/menumpuk ikon tsb.
+        leadingWidth: _isSearching ? 56 : 76,
         leading: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1416,19 +1417,20 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                 ),
               ),
             ),
-            Tooltip(
-              message: s.topActiveTooltip,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                // Tampil LANGSUNG di halaman ini sebagai bottom sheet
-                // (bukan push halaman baru) — sama seperti aksi titik-3.
-                onTap: () => LeaderboardSheet.show(context),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 3),
-                  child: Icon(Icons.emoji_events_rounded),
+            if (!_isSearching)
+              Tooltip(
+                message: s.topActiveTooltip,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  // Tampil LANGSUNG di halaman ini sebagai bottom sheet
+                  // (bukan push halaman baru) — sama seperti aksi titik-3.
+                  onTap: () => LeaderboardSheet.show(context),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 3),
+                    child: Icon(Icons.emoji_events_rounded),
+                  ),
                 ),
               ),
-            ),
           ],
         ),
         title: AnimatedSwitcher(
