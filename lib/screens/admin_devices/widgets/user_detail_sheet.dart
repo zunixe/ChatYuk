@@ -401,6 +401,13 @@ class _UserDetailSheetState extends State<UserDetailSheet> {
     final lon = '${l['lon'] ?? ''}';
     final source = '${l['source'] ?? ''}';
     final mocked = l['mocked'] == true;
+    final reason = '${l['reason'] ?? ''}';
+    // IP = perkiraan kasar (bisa meleset ratusan km) — beda jenis dgn GPS
+    // asli. Diberi chip warna agar admin TIDAK menyimpulkan "lokasi berbeda"
+    // padahal cuma beda sumber (kasus: profil GPS ≠ baris terbaru yg IP).
+    final isIp = source == 'ip';
+    final srcLabel = isIp ? widget.s.locSrcIp : widget.s.locSrcGps;
+    final srcColor = isIp ? AppTheme.idle : AppTheme.accent;
     final at = l['at'] != null
         ? formatRelativeTime(
             DateTime.tryParse('${l['at']}') ?? DateTime.now(),
@@ -408,51 +415,61 @@ class _UserDetailSheetState extends State<UserDetailSheet> {
           )
         : '';
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            mocked ? Icons.gpp_bad : Icons.place_outlined,
-            size: 14,
-            color: mocked ? AppTheme.danger : AppTheme.accent,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '$lat, $lon',
-            style: AppText.caption.copyWith(
-              color: mocked ? AppTheme.danger : AppTheme.textSecondary,
-            ),
-          ),
-          if (mocked) ...[
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: AppTheme.danger.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
+          Row(
+            children: [
+              Icon(
+                mocked ? Icons.gpp_bad : Icons.place_outlined,
+                size: 14,
+                color: mocked ? AppTheme.danger : srcColor,
               ),
-              child: Text(
-                widget.s.mapFakeGps,
-                style: AppText.micro.copyWith(
-                  color: AppTheme.danger,
-                  fontWeight: FontWeight.w700,
+              const SizedBox(width: 6),
+              // Chip sumber: GPS (biru) vs IP (amber, perkiraan).
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: srcColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  srcLabel,
+                  style: AppText.micro.copyWith(
+                    color: srcColor,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '$lat, $lon',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.caption.copyWith(
+                    color: mocked ? AppTheme.danger : AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+              if (at.isNotEmpty)
+                Text(
+                  at,
+                  style: AppText.micro.copyWith(color: AppTheme.textSecondary),
+                ),
+            ],
+          ),
+          if (mocked && reason.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 20, top: 1),
+              child: Text(
+                widget.s.fakeReasonLabel(reason),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.micro.copyWith(color: AppTheme.danger),
+              ),
             ),
-          ],
-          const Spacer(),
-          if (source.isNotEmpty)
-            Text(
-              source,
-              style: AppText.micro.copyWith(color: AppTheme.textSecondary),
-            ),
-          if (at.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Text(
-              at,
-              style: AppText.micro.copyWith(color: AppTheme.textSecondary),
-            ),
-          ],
         ],
       ),
     );

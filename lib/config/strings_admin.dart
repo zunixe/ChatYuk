@@ -604,6 +604,21 @@ extension SAdminX on S {
       isId ? 'Akurasi lokasi 0' : 'Location accuracy is 0';
   String get fakeReasonDelta =>
       isId ? 'Jarak GPS vs IP terlalu jauh' : 'GPS vs IP distance too far';
+  String get fakeReasonStatic =>
+      isId ? 'Koordinat beku (tak berpindah)' : 'Frozen coordinate (never moves)';
+  String get fakeReasonEmulator =>
+      isId ? 'Lokasi default emulator' : 'Emulator default location';
+  String get fakeReasonShared =>
+      isId ? 'Koordinat sama dgn banyak user' : 'Same coordinate as many users';
+
+  // Label sumber koordinat (riwayat lokasi).
+  String get locSrcGps => 'GPS';
+  String get locSrcIp => 'IP';
+  String get locSrcGpsHint =>
+      isId ? 'GPS asli dari HP (akurat)' : 'Real device GPS (accurate)';
+  String get locSrcIpHint => isId
+      ? 'Perkiraan dari IP (kasar, bisa meleset)'
+      : 'IP estimate (rough, can be off)';
 
   /// Terjemahkan reason koma-terpisah → label ringkas.
   String fakeReasonLabel(String reason) {
@@ -619,6 +634,12 @@ extension SAdminX on S {
         labels.add(fakeReasonAccuracy);
       } else if (t == 'spoof_delta') {
         labels.add(fakeReasonDelta);
+      } else if (t == 'static_coord') {
+        labels.add(fakeReasonStatic);
+      } else if (t == 'known_emulator') {
+        labels.add(fakeReasonEmulator);
+      } else if (t == 'shared_coord') {
+        labels.add(fakeReasonShared);
       } else if (t.isNotEmpty) {
         labels.add(t);
       }

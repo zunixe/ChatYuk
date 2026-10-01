@@ -235,6 +235,20 @@ select supabase_tests.check('authenticated boleh EXECUTE activity_leaderboard',
 select supabase_tests.check('anon TIDAK boleh EXECUTE activity_leaderboard',
   not has_function_privilege('anon', 'public.activity_leaderboard(text,integer,integer)', 'EXECUTE'));
 
+-- ── Fake GPS lanjutan (migrasi 20261005040000) ──
+select supabase_tests.check('admin_flag_shared_locations() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='admin_flag_shared_locations'));
+select supabase_tests.check('anon TIDAK boleh EXECUTE admin_flag_shared_locations',
+  not has_function_privilege('anon', 'public.admin_flag_shared_locations(integer)', 'EXECUTE'));
+select supabase_tests.check('update_my_location punya heuristik shared_coord',
+  (select pg_get_functiondef(p.oid) like '%shared_coord%'
+     and pg_get_functiondef(p.oid) like '%static_coord%'
+     and pg_get_functiondef(p.oid) like '%known_emulator%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='update_my_location'
+   limit 1));
+
 
 -- ── REGRESI 2026-09-29: cleanup_stale_anonymous gagal total (1.597 akun anon
 -- stale menumpuk) karena (a) hapus coin_ledger/point_events wajib matikan
