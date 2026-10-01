@@ -58,26 +58,17 @@ class GenderAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = colorFor(gender);
-    final isCircle = borderRadius == 0;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
-        borderRadius: isCircle ? null : BorderRadius.circular(borderRadius),
-        color: color.withValues(alpha: 0.15),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: ProfileAvatar(
-        uid: uid,
-        name: name,
-        size: size,
-        borderRadius: borderRadius,
-        bgColor: color.withValues(alpha: 0.15),
-        textColor: color,
-        borderColor: color,
-        borderWidth: borderWidth,
-      ),
+    return ProfileAvatar(
+      uid: uid,
+      name: name,
+      size: size,
+      borderRadius: borderRadius,
+      // Placeholder inisial: latar + huruf + ring warna gender (sama persis
+      // dengan daftar "Pengguna Online"). Ring digambar DI DALAM bounds.
+      bgColor: color.withValues(alpha: 0.15),
+      textColor: color,
+      borderColor: color,
+      borderWidth: borderWidth,
     );
   }
 }

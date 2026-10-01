@@ -156,24 +156,37 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
         ),
       );
     }
-    if (widget.borderColor != null) {
-      // Ring warna HANYA untuk placeholder inisial. Kalau foto sudah
-      // tampil, ring disamarkan (transparan, bukan dihapus) supaya ukuran
-      // tidak berubah dan tidak kedip saat foto masuk. Tanpa ini, ring
-      // (mis. biru gender male) terlihat seperti cacat di foto gelap.
+    if (widget.borderColor != null && _bytes == null) {
+      // Ring warna HANYA untuk placeholder inisial (tanpa foto). Digambar
+      // DI DALAM bounds (foregroundDecoration) supaya ukuran total tetap
+      // `size` — sama persis dengan daftar "Pengguna Online" (_AsyncAvatar).
+      //
+      // Dulu ring memakai container `size + borderWidth*2` (membesar 3px)
+      // → ring tampak "beda/kurang rapi" dibanding online dan bisa terpotong
+      // bila dibungkus container ukuran tetap. Sekarang ring di dalam.
       child = Container(
-        width: widget.size + widget.borderWidth * 2,
-        height: widget.size + widget.borderWidth * 2,
-        padding: EdgeInsets.all(widget.borderWidth),
+        width: widget.size,
+        height: widget.size,
         decoration: BoxDecoration(
+          color: widget.bgColor ?? AppTheme.avatarBg,
           shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
           borderRadius: isCircle ? null : shape,
-          border: Border.all(
-            color: _bytes != null ? Colors.transparent : widget.borderColor!,
-            width: widget.borderWidth,
+        ),
+        foregroundDecoration: BoxDecoration(
+          shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+          borderRadius: isCircle ? null : shape,
+          border: Border.all(color: widget.borderColor!, width: widget.borderWidth),
+        ),
+        child: Center(
+          child: Text(
+            widget.name.isNotEmpty ? widget.name[0].toUpperCase() : '?',
+            style: TextStyle(
+              color: widget.textColor ?? AppTheme.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: AppGlyph.avatarInitial(widget.size),
+            ),
           ),
         ),
-        child: child,
       );
     }
     if (widget.badge == null) return child;

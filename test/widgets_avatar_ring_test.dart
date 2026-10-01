@@ -8,7 +8,9 @@ import 'test_helper.dart';
 
 /// Ring warna HANYA untuk placeholder inisial — foto tampil bersih tanpa
 /// ring (regresi foto gelap terlihat bercacat biru).
-/// Mengunci `profile_avatar.dart`: `_bytes != null → transparent`.
+/// Mengunci `profile_avatar.dart`: ring digambar DI DALAM bounds via
+/// `foregroundDecoration` (ukuran tetap `size`, sama seperti daftar online),
+/// dan TIDAK ditambahkan saat foto sudah tampil.
 /// Pola: uid '' (get instan, tanpa network) + pump 2s untuk habiskan retry
 /// 3×300ms (lihat widgets_session_changes_test.dart).
 void main() {
@@ -23,11 +25,12 @@ void main() {
     AvatarB64Service.instance.clearForUid('u-photo-ring');
   });
 
+  /// Border ring (foregroundDecoration) pada container placeholder.
   Border? ringOf(WidgetTester tester) {
     final borders = tester
         .widgetList<Container>(find.byType(Container))
-        .where((c) => c.decoration is BoxDecoration)
-        .map((c) => c.decoration! as BoxDecoration)
+        .where((c) => c.foregroundDecoration is BoxDecoration)
+        .map((c) => c.foregroundDecoration! as BoxDecoration)
         .where((d) => d.border is Border)
         .map((d) => d.border! as Border)
         .toList();
@@ -55,7 +58,7 @@ void main() {
     expect(border!.top.color, Colors.blue);
   });
 
-  testWidgets('foto tampil → ring transparan (ukuran tetap)', (tester) async {
+  testWidgets('foto tampil → TANPA ring (ukuran tetap)', (tester) async {
     const png1px =
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
     AvatarB64Service.instance.setForUid('u-photo-ring', png1px);
@@ -79,9 +82,8 @@ void main() {
     });
 
     final border = ringOf(tester);
-    expect(border, isNotNull, reason: 'ring disamarkan, bukan dihapus');
-    expect(border!.top.color, Colors.transparent,
-        reason: 'foto tidak boleh kena ring warna');
+    expect(border, isNull,
+        reason: 'foto tampil → tidak ada ring gender sama sekali');
   });
 
   testWidgets('ganti uid → foto uid lama TIDAK tertinggal', (tester) async {
