@@ -1384,6 +1384,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         // 56 (isi judul ±38 / field cari 40) — dulu 72, ruang kosong
         // 16px antara judul dan tray story terpangkas.
         toolbarHeight: 56,
+        // titleSpacing 0 saat searching: field cari menempel ke tombol
+        // search (leading) & mengisi lebar sampai tempat ikon Top Aktif.
+        // Saat tidak searching, biarkan default agar judul tidak mepet.
+        titleSpacing: _isSearching ? 0 : null,
         // Tombol search di KIRI ATAS (leading). Ikon Admin Panel pindah
         // ke actions kanan (hanya tampil untuk admin sungguhan).
         // Di samping search: ikon "Top Aktif" — pola Tooltip + GestureDetector
@@ -1448,6 +1452,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               ? SizedBox(
                   key: const ValueKey('search'),
                   height: 40,
+                  width: double.infinity,
                   child: TextField(
                     controller: _searchCtrl,
                     autofocus: true,
