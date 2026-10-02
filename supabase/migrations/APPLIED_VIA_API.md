@@ -2,6 +2,47 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-05 — Fix avatar admin bypass di daftar Online (get_online_users)
+
+- **Status:** SUDAH TERAPPLIED via Management API (version 20261005070000,
+  20261005080000).
+- **Masalah:** foto user ber-privat (mis. "Tya", `profile_photo_visibility =
+  'friends'`) TIDAK muncul di menu "Pengguna Online" walau admin sudah
+  menyalakan toggle Bypass Privasi — padahal di private chat & monitor chat
+  admin foto-nya muncul.
+- **Akar:** `get_online_users` menulis ulang logika privasi SECARA INLINE
+  (`photo_ok`/`seen_ok`/`presence_ok`/`about_ok`) dan TIDAK memanggil
+  `public.privacy_can_view()` → flag `privacy_bypass_enabled` + email admin
+  (yang ditangani DI DALAM `privacy_can_view`) diabaikan. Semua RPC lain
+  (`avatar_for`, `presence_for`, `nearby_users`) sudah pakai `privacy_can_view`
+  → konsisten & bypass jalan; hanya `get_online_users` yang menyimpang.
+  Beberapa RPC lain (`points_leaderboard`, `social_list`, `friend_request_inbox/
+  outbox`, `my_subscriptions`) juga bocorkan `avatar` mentah.
+- **File:**
+  - `20261005070000_get_online_users_admin_bypass.sql` — rewrite
+    `get_online_users(text,int)` → `photo_ok/seen_ok/presence_ok/about_ok`
+    lewat `public.privacy_can_view(p.id, <field>, v_me)`; filter presence di
+    WHERE juga lewat `privacy_can_view`.
+  - `20261005080000_avatar_privacy_consistency.sql` — rewrite `points_leaderboard
+    (text,int,int)`, `social_list(text,uuid,int)`, `friend_request_inbox()`,
+    `friend_request_outbox()`, `my_subscriptions()` → avatar lewat
+    `privacy_can_view`.
+- **Verifikasi live (Management API):**
+  - `pg_get_functiondef`: `get_online_users`/`points_leaderboard`/`social_list`
+    memuat `privacy_can_view(p.id, 'profile_photo'` = true.
+  - Data: `Tya` avatar = `avatars/d541f861-...` (ADA),
+    `profile_photo_visibility='friends'`.
+  - Sebagai admin (claim `zunixe@gmail.com` + bypass ON): `get_online_users`
+    → Tya `avatar_kosong=false` (foto muncul).
+  - Sebagai user biasa (bukan teman): Tya `avatar_kosong=true` (privasi
+    terjaga — tidak bocor).
+- **Catatan klien:** `OnlineUsersProvider` cache avatar per-uid ke disk
+  (`avatar:<uid>`). Setelah fix, WAJIB force-close app sekali supaya cache
+  `''` lama TIDAK dipakai lagi.
+- **Rollback (bila perlu):** re-apply `get_online_users` @20260926020000 +
+  `points_leaderboard` @20260913000000 + `social_list`/`friend_request_*`/
+  `my_subscriptions` @20260816040000.
+
 ## 2026-10-02 — Sembunyikan & bersihkan placeholder onboarding (AnonXXXXXXXX)
 
 - **Status:** SUDAH TERAPPLIED via `supabase db query --linked` (Windows).
