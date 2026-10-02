@@ -197,13 +197,16 @@ GateScreen decideGateScreen({
   if (needsProfile) {
     return isSignedIn ? GateScreen.profileGate : GateScreen.entry;
   }
-  // Anon tanpa profil ATAU profil dibuat otomatis (belum isi nickname)
-  // → EntryScreen. Kolom `needs_onboarding` mencegah "login anon otomatis"
-  // yang muncul saat trigger membuat profil sebelum user memilih nama.
-  // Sesi dummy (admin menyamar) dikecualikan — bukan user anon sungguhan.
-  if (isAnonymous &&
-      !dummySessionActive &&
-      (!hasProfile || needsOnboarding)) {
+  // Profil dibuat otomatis oleh trigger (nickname placeholder 'AnonXXXX',
+  // `needs_onboarding=true`) dan user BELUM memilih nama → EntryScreen.
+  // BERLAKU untuk anon MAUPUN yang sudah registered (email/OTP): kalau user
+  // menutup app sebelum menyelesaikan langkah isi-nama, flag ini mencegah
+  // mereka berkeliaran dengan nickname "AnonXXXX" selamanya.
+  // Sesi dummy (admin menyamar) dikecualikan — bukan user sungguhan.
+  if (!dummySessionActive && (!hasProfile || needsOnboarding)) {
+    return GateScreen.entry;
+  }
+  if (isAnonymous && !dummySessionActive && !hasProfile) {
     return GateScreen.entry;
   }
   if (banned) return GateScreen.banned;

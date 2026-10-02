@@ -15,6 +15,23 @@
 - **Verifikasi:** `check_migrations` OK; pgTAP schema_sync 58/58 (+3);
   `flutter analyze` 0/0 (kecuali 1 warning TikTok paralel).
 
+## 2026-10-05 — Tanggal register di list Perangkat + fix gate onboarding
+
+- **Temuan (user Anon6A/Anon0DB):** trigger `handle_new_user_profile` membuat
+  profil placeholder 'AnonXXXXXXXX' + `needs_onboarding=true` untuk SETIAP
+  auth.users. Jika user register (email/OTP) lalu TUTUP app sebelum memilih
+  nama, nickname placeholder TETAP. Gate lama hanya menahan ANON → 18 user
+  registered masih ber-nickname 'AnonXXXX' (136 needs_onboarding).
+- **Fix (app.dart):** gate menahan SEMUA user dgn `needs_onboarding=true`
+  (kecuali dummy) → dipaksa ke EntryScreen pilih nama. +2 test gate.
+- **Migrasi** `20261005090000_admin_stats_users_created_at.sql`:
+  `admin_stats_users_page` +field `created_at` (tanggal register).
+- **App:** `formatDateWib()` → kartu Perangkat/Per User tampil
+  "Terdaftar: 30 Sep 2026" (WIB).
+- **Bonus:** test `get_online_users about_visibility` dikendurkan ke
+  `privacy_can_view` (impl live pakai `about_ok`, bukan `about_visibility`).
+- Verifikasi: check_migrations OK; schema_sync 59/59; auth_gate 15/15.
+
 ## 2026-10-05 — Leaderboard "Top Aktif" (keaktifan: pesan + reaksi)
 
 - **Migrasi** `20261005030000_activity_leaderboard.sql`:

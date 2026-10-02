@@ -140,6 +140,19 @@ String formatRelativeTime(DateTime dt, {bool isId = false}) {
   return DateFormat('d MMM').format(dt.toLocal());
 }
 
+/// Tanggal register akun dalam WIB (Asia/Jakarta), format '30 Sep 2026'.
+/// Dipakai list Perangkat (Per User) supaya admin tahu kapan akun dibuat —
+/// konsisten WIB (bukan zona HP admin yang bisa beda).
+String formatDateWib(DateTime? dt) {
+  if (dt == null) return '';
+  final wib = dt.toUtc().add(const Duration(hours: 7));
+  const bulan = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+  ];
+  return '${wib.day} ${bulan[wib.month - 1]} ${wib.year}';
+}
+
 /// Waktu ala kartu explore: 'Baru', '2 mnt', '14 mnt', '1 jam'.
 String formatExploreTime(DateTime dt, {bool isId = false}) {
   final diff = DateTime.now().difference(dt.toLocal());

@@ -1397,3 +1397,19 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   **GPS (biru)** vs **IP (amber, perkiraan)** + reason mock diperjelas →
   tak lagi tertukar "beda lokasi" padahal beda sumber. Strings
   fakeReasonStatic/Emulator/Shared + locSrcGps/Ip.
+
+## 2026-10-05 — 20261005090000_admin_stats_users_created_at (APPLY)
+
+- **Tujuan:** admin lihat TANGGAL REGISTER tiap user di list Perangkat
+  (Per User). Item RPC sebelumnya hanya `last_seen`.
+- **Migrasi:** `admin_stats_users_page` +1 field `'created_at'`.
+  Sisa fungsi persis live (bukan FROZEN). Apply Management API (create fn
+  + revoke/grant) — TERAPPLIED.
+- **App:** `formatDateWib()` (utils) → tampil "Terdaftar: 30 Sep 2026" (WIB)
+  di DeviceCard + _userOnlyCard. `mergeUsersWithDevices` teruskan
+  profile.created_at ke baris ber-device.
+- **Bonus fix (sesi ini):** gate `app.dart` kini menahan SEMUA user dgn
+  `needs_onboarding=true` (bukan hanya anon) → user registered yang tutup app
+  sebelum memilih nama tidak lagi berkeliaran dgn nickname 'AnonXXXX'.
+- **Test:** schema_sync +1 assert (created_at); auth_gate_decision +2
+  (registered+onboarding → entry). schema_sync 59/59.

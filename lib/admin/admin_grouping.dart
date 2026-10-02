@@ -81,13 +81,20 @@ List<Map<String, dynamic>> mergeUsersWithDevices(
     if (uid.isEmpty || !seen.add(uid)) continue;
     final dev = byUser[uid];
     if (dev != null) {
-      out.add({...dev, '_nick': '${u['nickname'] ?? dev['nickname'] ?? '?'}', '_hasDevice': true});
+      out.add({
+        ...dev,
+        '_nick': '${u['nickname'] ?? dev['nickname'] ?? '?'}',
+        '_hasDevice': true,
+        // Tanggal register (dari profil) — device row tak punya created_at.
+        'created_at': u['created_at'] ?? dev['created_at'],
+      });
     } else {
       out.add({
         'user_id': uid,
         'nickname': u['nickname'],
         'is_registered': u['is_registered'] == true,
         'last_seen_at': u['last_seen'],
+        'created_at': u['created_at'],
         '_nick': '${u['nickname'] ?? '?'}',
         '_hasDevice': false,
       });
