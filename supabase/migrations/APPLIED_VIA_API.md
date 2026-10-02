@@ -2,6 +2,30 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-02 — Sembunyikan & bersihkan placeholder onboarding (AnonXXXXXXXX)
+
+- **Status:** SUDAH TERAPPLIED via `supabase db query --linked` (Windows).
+  Versi dicatat: 20261005050000, 20261005060000.
+- **File:**
+  - `20261005050000_exclude_onboarding_placeholder_from_stats.sql` — rewrite
+    `admin_stats_compute` (`anonymous_users`/`total_users`/`active_today`
+    tidak lagi hitung `needs_onboarding=true`) + `admin_stats_users_page`
+    (kind `all`/`anonymous` sembunyikan placeholder; `registered` tetap).
+    `admin_stats_detail` (FROZEN) TIDAK disentuh.
+  - `20261005060000_purge_onboarding_placeholders.sql` — fungsi
+    `purge_onboarding_placeholders(min_age_hours=24, dry_run=true)`:
+    hapus HANYA `profiles` placeholder trigger (`^Anon[0-9A-F]+$` +
+    `needs_onboarding` + `is_registered=false` + `last_seen=created_at` +
+    tanpa jejak apa pun). Cron harian 05:20 (jobid 36). Hanya service_role.
+- **Alasan:** trigger `handle_new_user_profile` membuat profil "AnonXXXXXXXX"
+  untuk tiap sesi anon (boot app). Placeholder sisa ikut terhitung di
+  Overview sebagai "user anon" (mis. Anon0172D432) → membingungkan.
+- **Verifikasi live:** `admin_stats_compute`/`admin_stats_users_page` ada
+  `needs_onboarding` (true); `admin_stats_detail` tak berubah (false);
+  cron ada. Angka anon Overview turun 192 → 104. Dry-run purge = 1 kandidat
+  (konservatif/fail-safe). Snapshot FROZEN tidak perlu regen (0 frozen
+  tersentuh).
+
 ## 2026-10-03 — stuck_users: hanya user terdaftar
 
 - **Status:** SUDAH TERAPPLIED via Management API (version 20261003000300).
