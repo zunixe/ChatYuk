@@ -418,6 +418,10 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   Widget _userOnlyCard(S s, Map<String, dynamic> u, VoidCallback onTap) {
     final nick = '${u['_nick'] ?? u['nickname'] ?? '?'}';
     final uid = '${u['user_id'] ?? ''}';
+    // Tanggal register (WIB) — dari created_at (diisi provider user row).
+    final regDate = formatDateWib(
+      u['created_at'] != null ? DateTime.tryParse('${u['created_at']}') : null,
+    );
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
       color: AppTheme.bgCard,
@@ -458,11 +462,37 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      s.adminDeviceNoDevice,
-                      style: AppText.caption.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          s.adminDeviceNoDevice,
+                          style: AppText.caption.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        // Tanggal register akun (WIB) — di sini join, bukan
+                        // tanggal (kadang kosong).
+                        if (regDate.isNotEmpty) ...[
+                          Text(
+                            ' · ',
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          Icon(
+                            Icons.event_available_outlined,
+                            size: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            regDate,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),

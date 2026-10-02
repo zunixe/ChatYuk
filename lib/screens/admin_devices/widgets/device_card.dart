@@ -33,6 +33,12 @@ class DeviceCard extends StatelessWidget {
             isId: s.isId,
           )
         : '';
+    // Tanggal register (WIB) dari profil (bukan device row).
+    final regDate = formatDateWib(
+      device['created_at'] != null
+          ? DateTime.tryParse('${device['created_at']}')
+          : null,
+    );
 
     final deviceLabel = [
       if (brand.isNotEmpty) brand,
@@ -162,6 +168,13 @@ class DeviceCard extends StatelessWidget {
                     if (lastSeen.isNotEmpty)
                       Text(
                         '${s.adminDeviceLastSeen}: $lastSeen',
+                        style: AppText.micro.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    if (regDate.isNotEmpty)
+                      Text(
+                        '${s.adminDeviceRegistered}: $regDate',
                         style: AppText.micro.copyWith(
                           color: AppTheme.textSecondary,
                         ),

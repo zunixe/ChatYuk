@@ -91,6 +91,34 @@ void main() {
     );
   });
 
+  // REGRESI 2026-10-05: user REGISTERED (email/OTP) yang menutup app sebelum
+  // memilih nickname tetap punya needs_onboarding=true + nickname 'AnonXXXX'.
+  // Gate lama hanya menahan ANON → user registered berkeliaran 'AnonXXXX'
+  // selamanya. Kini needs_onboarding menahan SEMUA (kecuali dummy).
+  test('registered + needsOnboarding → entry (bukan main)', () {
+    expect(
+      decide(
+        isAnonymous: false,
+        isSignedIn: true,
+        hasProfile: true,
+        needsOnboarding: true,
+      ),
+      GateScreen.entry,
+    );
+  });
+
+  test('registered + tidak onboarding → main', () {
+    expect(
+      decide(
+        isAnonymous: false,
+        isSignedIn: true,
+        hasProfile: true,
+        needsOnboarding: false,
+      ),
+      GateScreen.main,
+    );
+  });
+
   test('dummy (admin jadi anon) + onboarding → tetap main (bypass)', () {
     // needsProfile sudah mengecualikan dummy; needsOnboarding TIDAK boleh
     // memaksa dummy ke entry.
