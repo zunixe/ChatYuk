@@ -1651,21 +1651,70 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
 /// Hangatkan koneksi RPC Supabase dengan satu panggilan paling ringan yang
 /// tersedia. Dijalankan setelah UI tampil (tidak menahan TTI) dan hasilnya
 /// sengaja diabaikan — tujuannya hanya memanaskan koneksi/TLS.
+///
+/// PENTING (perf): dipanggil juga saat app RESUME dari idle. Koneksi HTTP
+/// keep-alive Supabase menjadi BASI setelah idle → request pertama user
+/// (get_wallet, online.rpc) menggantung sampai OS TCP timeout (~13 detik,
+/// terukur di PerfProbe). Warm-up ini "membuang" koneksi basi lebih dulu
+/// sehingga request nyata berikutnya memakai koneksi segar.
 Future<void> _warmupRpcConnection() async {
   try {
     // Beri jeda sangat singkat supaya frame pertama + warm-gate (cap 400ms)
     // selesai dulu; warm-up tidak boleh berebut dengan render awal.
     await Future<void>.delayed(const Duration(milliseconds: 600));
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    if (uid == null || uid.isEmpty) return;
-    await Supabase.instance.client
-        .from('app_settings')
-        .select('id')
-        .eq('id', 'global')
-        .maybeSingle()
-        .timeout(const Duration(seconds: 8));
-    dlog('[WARMUP] koneksi RPC siap');
+    await warmupRpcConnection();
   } catch (e) {
     dlog('[WARMUP] dilewati: $e');
+  }
+}
+
+/// Inti warm-up (tanpa jeda) — dipanggil saat boot & saat resume.
+/// Timeout PENDEK (2s): kalau koneksi basi menggantung, kita lepaskan cepat
+/// dan biarkan retry/permintaan berikutnya memakai koneksi baru, alih-alih
+/// menunggu timeout TCP ~13 detik.
+///
+/// SINGLETON IN-FLIGHT: banyak pemanggil saat resume (app.dart + tiap tab
+/// admin yang menembak RPC dari timer resume-nya) berbagi SATU warm-up yang
+/// sama. Tanpa ini, tiap pemanggil menembak query sendiri ke koneksi basi →
+/// banjir request yang semuanya menggantung.
+Future<void>? _warmupInflight;
+
+Future<void> warmupRpcConnection() {
+  final running = _warmupInflight;
+  if (running != null) return running;
+  final fut = _warmupRpcConnectionImpl();
+  _warmupInflight = fut;
+  fut.whenComplete(() {
+    if (identical(_warmupInflight, fut)) _warmupInflight = null;
+  });
+  return fut;
+}
+
+Future<void> _warmupRpcConnectionImpl() async {
+  final uid = Supabase.instance.client.auth.currentUser?.id;
+  if (uid == null || uid.isEmpty) return;
+  await Supabase.instance.client
+      .from('app_settings')
+      .select('id')
+      .eq('id', 'global')
+      .maybeSingle()
+      .timeout(const Duration(seconds: 2));
+  dlog('[WARMUP] koneksi RPC siap');
+}
+
+/// Dipanggil dari handler resume layar (mis. tab admin) SEBELUM menembak RPC.
+/// Menunggu warm-up singleton selesai supaya RPC berikutnya memakai koneksi
+/// segar — bukan koneksi basi yang menggantung ~13 detik. Aman dipanggil
+/// berkali-kali & dari banyak layar (berbagi warm-up yang sama).
+///
+/// Batas tunggu 2,5s: kalau warm-up sendiri tersendat, jangan menahan UI
+/// selamanya — lanjut saja (koneksi baru akan dipakai request berikutnya).
+Future<void> resumeWarmup() async {
+  try {
+    await warmupRpcConnection().timeout(
+      const Duration(milliseconds: 2500),
+    );
+  } catch (_) {
+    // Lewati — lebih baik mencoba fetch daripada menahan UI.
   }
 }

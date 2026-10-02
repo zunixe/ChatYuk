@@ -701,6 +701,11 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // App di-kill/force-close → set idle (offline otomatis setelah threshold).
       auth.goIdle();
     } else if (state == AppLifecycleState.resumed) {
+      // PERF: hangatkan koneksi HTTP Supabase DULUAN (fire-and-forget).
+      // Setelah idle, koneksi keep-alive basi → request pertama user
+      // menggantung ~13 detik (terukur). Warm-up ini membuang koneksi basi
+      // lebih awal supaya aksi user terasa ringan begitu kembali.
+      unawaited(warmupRpcConnection());
       // Re-sync invisible dulu (multi-device) supaya device kedua tidak
       // menimpa balik status admin yang sudah di-toggle invisible.
       auth.resyncInvisible();

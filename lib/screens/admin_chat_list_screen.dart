@@ -10,6 +10,7 @@ import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/admin_err.dart';
 import '../utils.dart';
+import '../main.dart' show resumeWarmup;
 import 'admin_chat_view_screen.dart';
 import '../providers/theme_provider.dart';
 import '../core/ui/scroll_pagination.dart';
@@ -81,7 +82,11 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
       _callTimer = null;
     } else if (state == AppLifecycleState.resumed && mounted) {
       if (_refreshTimer == null) {
-        context.read<AdminProvider>().fetchActiveCalls();
+        unawaited(
+          resumeWarmup().then((_) {
+            if (mounted) context.read<AdminProvider>().fetchActiveCalls();
+          }),
+        );
         _startTimers();
       }
     }

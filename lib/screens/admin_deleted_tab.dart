@@ -10,6 +10,7 @@ import '../config/strings_admin.dart';
 import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
+import '../main.dart' show resumeWarmup;
 import '../providers/theme_provider.dart';
 import '../utils.dart';
 import '../core/ui/scroll_pagination.dart';
@@ -77,7 +78,11 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
       _refreshTimer = null;
     } else if (state == AppLifecycleState.resumed) {
       if (mounted && _refreshTimer == null) {
-        context.read<AdminProvider>().fetchDeleted();
+        unawaited(
+          resumeWarmup().then((_) {
+            if (mounted) context.read<AdminProvider>().fetchDeleted();
+          }),
+        );
         _startRefreshTimer();
       }
     }

@@ -18,6 +18,8 @@
 --
 -- FIX: ganti `p.avatar` → `case when public.privacy_can_view(p.id,
 -- 'profile_photo', <viewer>) then p.avatar else '' end`.
+--
+-- menyentuh: points_leaderboard
 -- privacy_can_view sudah menangani privasi user biasa + bypass admin
 -- (lihat 20260924230000_admin_privacy_bypass.sql) → admin tetap melihat.
 --

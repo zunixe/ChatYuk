@@ -26,7 +26,7 @@ import 'admin_panel/widgets/point_tab_cards.dart';
 import 'admin_panel/widgets/overview_cards.dart';
 import 'admin_panel/widgets/app_stats_card.dart';
 import '../providers/theme_provider.dart';
-import '../main.dart' show localNotifications;
+import '../main.dart' show localNotifications, resumeWarmup;
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -149,7 +149,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       _notifyTimer = null;
     } else if (state == AppLifecycleState.resumed) {
       if (mounted && _statsTimer == null) {
-        unawaited(_pollStats());
+        // Warm-up koneksi dulu (koneksi basi setelah idle) supaya RPC admin
+        // tak menggantung ~13 dtk. Fire-and-forget, lalu refetch.
+        unawaited(
+          resumeWarmup().then((_) {
+            if (mounted) _pollStats();
+          }),
+        );
         _statsTimer = Timer.periodic(
           const Duration(seconds: 60),
           (_) => _pollStats(),
