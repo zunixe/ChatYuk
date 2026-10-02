@@ -16,8 +16,6 @@ Future<void> showStatDetailSheet(
 ) async {
   final admin = context.read<AdminProvider>();
   final s = context.read<LocaleProvider>().s;
-  final detail = await admin.fetchStatsDetail();
-  if (!context.mounted) return;
 
   final key = item.$5;
   // 4 kunci user dimuat ber-paginasi (RPC admin_stats_users_page) supaya
@@ -34,12 +32,20 @@ Future<void> showStatDetailSheet(
   var list = <dynamic>[];
   var total = 0;
   var loadingMore = false;
+
+  // PENTING (perf): untuk 4 kartu USER, JANGAN panggil fetchStatsDetail()
+  // yang menarik SELURUH daftar (profil/pesan dll) — itu penyebab sheet
+  // terasa lambat saat dibuka ("datanya kebanyakan"). Cukup satu query
+  // ber-paginasi kecil (items + total). Detail penuh HANYA untuk kunci
+  // non-user (rooms/messages) yang memang butuh agregat dari sana.
   if (userKind != null) {
     final first = await admin.listStatsUsers(userKind, limit: pageSize);
     if (!context.mounted) return;
     list = (first['items'] as List<dynamic>?) ?? const [];
     total = (first['total'] as num?)?.toInt() ?? list.length;
   } else {
+    final detail = await admin.fetchStatsDetail();
+    if (!context.mounted) return;
     list = (detail[key] as List<dynamic>?) ?? const [];
     total = list.length;
   }
