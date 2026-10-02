@@ -58,10 +58,23 @@ final _avatarCache = BoundedCache<String, Uint8List>(80);
 final Map<String, Uint8List> _avatarBytesByUid = {};
 final Map<String, String> _avatarLastSrcByUid = {};
 
-// MemoryImage instance STABIL per-UID — dipisahkan total dari data
+// ImageProvider instance STABIL per-UID — dipisahkan total dari data
 // pengguna online yang berganti-ganti tiap event presence. Bitmap di-decode
 // SEKALI per foto; rebuild list berapapun tidak menyentuh bitmap.
-final Map<String, MemoryImage> _avatarImageByUid = {};
+//
+// Di-CAP via ResizeImage (≤ [_avatarDecodePx]) — avatar di list hanya ~40px;
+// tanpa cap, JPEG 1080px di-decode penuh (~4.6MB bitmap) padahal butuh 40px
+// (~0.01MB). 20 kartu = ~92MB terbuang → penyebab utama memory spike/lag.
+final Map<String, ImageProvider> _avatarImageByUid = {};
+
+/// Lebar decode maksimum avatar di list (px). 96 = cukup untuk avatar 40px
+/// di layar 2-3× DPI tanpa blur, ~25× lebih kecil dari decode full-res.
+const int _avatarDecodePx = 96;
+
+/// Bungkus MemoryImage dengan cap decode. Provider STABIL per-uid (instance
+/// sama dipakai teruz) supaya ImageCache hit & tidak kedip.
+ImageProvider _cappedAvatarImage(Uint8List bytes) =>
+    ResizeImage(MemoryImage(bytes), width: _avatarDecodePx);
 
 void clearAllAvatarCaches() {
   _avatarCache.clear();
@@ -73,7 +86,11 @@ void clearAllAvatarCaches() {
 // Batas ukuran map avatar global — tanpa ini, 3 map tumbuh seumur sesi
 // (1 entry per user yang pernah terlihat) → risiko memori besar di HP
 // low-end saat sesi panjang. Evict FIFO (urutan insert) kalau lewat cap.
-const _avatarMapCap = 200;
+//
+// 120 (dulu 200): bitmap sudah di-cap render via [_cappedAvatarImage], tapi
+// `_avatarBytesByUid` menyimpan bytes MENTAH base64-decoded (ratusan KB/uid)
+// untuk zoom. 120 × ~200KB ≈ 24MB — cukup untuk list & tetap ringan.
+const _avatarMapCap = 120;
 
 void _boundAvatarMap(Map<String, Object?> m) {
   while (m.length > _avatarMapCap) {
@@ -135,7 +152,7 @@ Uint8List? _decodeAvatarB64Iso(String b64) {
 }
 
 class _AsyncAvatarState extends State<_AsyncAvatar> {
-  MemoryImage? _provider;
+  ImageProvider? _provider;
   String? _asyncResolvingFor;
 
   /// UID pendek untuk log — aman untuk uid kosong/pendek.
@@ -205,7 +222,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
         _avatarBytesByUid[widget.uid] ??= disk;
         _provider = _avatarImageByUid.putIfAbsent(
           widget.uid,
-          () => MemoryImage(_avatarBytesByUid[widget.uid]!),
+          () => _cappedAvatarImage(_avatarBytesByUid[widget.uid]!),
         );
         _boundAvatarMap(_avatarBytesByUid);
         _boundAvatarMap(_avatarImageByUid);
@@ -252,7 +269,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
           _avatarBytesByUid[widget.uid] ??= decoded;
           _avatarImageByUid.putIfAbsent(
             widget.uid,
-            () => MemoryImage(_avatarBytesByUid[widget.uid]!),
+            () => _cappedAvatarImage(_avatarBytesByUid[widget.uid]!),
           );
           _boundAvatarMap(_avatarBytesByUid);
           _boundAvatarMap(_avatarImageByUid);
@@ -288,7 +305,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     }
     _provider = _avatarImageByUid.putIfAbsent(
       widget.uid,
-      () => MemoryImage(_avatarBytesByUid[widget.uid]!),
+      () => _cappedAvatarImage(_avatarBytesByUid[widget.uid]!),
     );
     _boundAvatarMap(_avatarBytesByUid);
     _boundAvatarMap(_avatarImageByUid);
@@ -827,8 +844,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                           backgroundColor: AppTheme.primary.withValues(
                             alpha: 0.15,
                           ),
+                          // Di-cap (54px fisik) — jangan decode avatar
+                          // full-res untuk lingkaran kecil.
                           backgroundImage: bytes != null
-                              ? MemoryImage(bytes)
+                              ? _cappedAvatarImage(bytes)
                               : null,
                           child: showInitial
                               ? Text(

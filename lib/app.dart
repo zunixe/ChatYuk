@@ -687,6 +687,16 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // App di-background → set idle, bukan offline.
       // User tetap tampil di menu online sebagai idle.
       auth.goIdle();
+      // Lepaskan cache bitmap (native heap) saat background: OS gencar
+      // menuntut RAM dari app background, dan bitmap besar di-hold percuma
+      // (layar tidak terlihat). Saat resume, gambar yang tampil di-decode
+      // ulang dari disk cache (murah). Ini yang membuat RSS turun drastis
+      // & mencegah app dibunuh OS saat user buka app lain.
+      try {
+        PaintingBinding.instance.imageCache
+          ..clear()
+          ..clearLiveImages();
+      } catch (_) {}
     } else if (state == AppLifecycleState.detached) {
       // App di-kill/force-close → set idle (offline otomatis setelah threshold).
       auth.goIdle();
