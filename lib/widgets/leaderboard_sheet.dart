@@ -18,6 +18,7 @@ import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../screens/user_info_screen.dart';
 import 'profile_avatar.dart';
+import 'gender_avatar.dart';
 
 /// "Top Aktif" versi COMPACT untuk ditampilkan sebagai bottom sheet —
 /// langsung di halaman Pengguna Online (bukan halaman baru). Ringkas:
@@ -292,6 +293,7 @@ class LeaderboardRow extends StatelessWidget {
     final rank = (entry['rank'] as num?)?.toInt() ?? 0;
     final nickname = entry['nickname']?.toString() ?? '—';
     final uid = entry['uid']?.toString() ?? '';
+    final gender = entry['gender']?.toString() ?? '';
     final registered = entry['is_registered'] == true;
     final myUid = context.select<AuthProvider, String?>((a) => a.uid);
     final isSelf = uid.isNotEmpty && uid == myUid;
@@ -301,6 +303,9 @@ class LeaderboardRow extends StatelessWidget {
     // cukup ditandai medali/badge + label netral.
     final topColor = _rankAccent(rank);
     final isTop3 = rank >= 1 && rank <= 3;
+    // Border avatar: top-3 pakai warna medali (emas/perak/perunggu); sisanya
+    // ikut GENDER (male=biru, female=pink) — sama seperti list Pengguna Online.
+    final borderColor = isTop3 ? topColor : GenderAvatar.colorFor(gender);
 
     return Container(
       color: isTop3
@@ -321,13 +326,13 @@ class LeaderboardRow extends StatelessWidget {
               context,
               uid: uid,
               name: nickname,
-              ring: topColor,
+              ring: borderColor,
             ),
             child: ProfileAvatar(
               uid: uid,
               name: nickname,
               size: 32,
-              borderColor: topColor,
+              borderColor: borderColor,
               borderWidth: 1.6,
             ),
           ),

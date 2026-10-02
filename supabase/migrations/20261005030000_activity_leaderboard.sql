@@ -93,7 +93,7 @@ begin
   ),
   final as (
     select
-      p.id, p.nickname, p.avatar, p.country, p.is_registered,
+      p.id, p.nickname, p.avatar, p.country, p.is_registered, p.gender,
       a.posts, a.stories, a.priv, a.room, a.score,
       row_number() over (order by a.score desc, p.created_at asc) as rank
     from agg a
@@ -110,6 +110,7 @@ begin
       'nickname', f.nickname,
       'avatar', f.avatar,
       'country', f.country,
+      'gender', f.gender,
       'is_registered', f.is_registered,
       'score', f.score,
       'post_count', f.posts,
