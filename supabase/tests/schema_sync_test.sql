@@ -82,6 +82,14 @@ select supabase_tests.check('admin_stats_users_page() sertakan created_at (tangg
   exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='admin_stats_users_page'
            and pg_get_functiondef(p.oid) like '%''created_at'', created_at%'));
+-- Trigger penjaga: nickname placeholder 'AnonXXXXXXXX' WAJIB needs_onboarding=true.
+select supabase_tests.check('trigger enforce_onboarding_placeholder terpasang',
+  exists(select 1 from pg_trigger t
+         join pg_class c on c.oid=t.tgrelid
+         join pg_namespace n on n.oid=c.relnamespace
+         where n.nspname='public' and c.relname='profiles'
+           and not t.tgisinternal
+           and t.tgname='trg_enforce_onboarding_placeholder'));
 
 -- ── FROZEN: feed / sosial ──
 select supabase_tests.check('create_story() ada',

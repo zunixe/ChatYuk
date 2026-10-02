@@ -18,16 +18,19 @@ Aplikasi chat gratis, bebas iklan, dan aman untuk semua.
 - 🔐 **Auth multi-metode** — Anonymous, Email, dan Google Sign-In
 - 🔔 **Push Notification** — via Firebase Cloud Messaging, bisa diatur per kategori
 - 📵 **Anti-screenshot** — kontrol admin untuk mengaktifkan/menonaktifkan screenshot
-- 🪙 **Koin & Gift** — kirim koin & hadiah sebagai digital goods (fitur finansial topup/KYC/withdraw sudah dihapus dari app)
+- 🪙 **Koin & Gift** — kirim koin & hadiah sebagai digital goods
+- 💳 **Top Up YukCoin** — top up koin via Google Play Billing (hanya build flavor `play`; kebijakan Play untuk digital goods). Fitur finansial lama (KYC/withdraw/Midtrans/iPaymu) TIDAK dipakai di app
+- 🛡️ **Admin Panel** (build internal) — statistik, monitoring chat, peta user (termasuk layar penuh), perangkat, atribusi sumber user, kelola dummy & poin
 
 ## Tech Stack
 
 | Teknologi | Digunakan untuk |
 |-----------|----------------|
 | Flutter | Cross-platform UI |
-| Supabase | Database (PostgreSQL), Auth, Realtime |
-| Firebase | Push notification (FCM) |
+| Supabase | Database (PostgreSQL), Auth, Realtime, Edge Functions |
+| Firebase | Push notification (FCM) & Analytics |
 | Google Sign-In | Autentikasi Google SSO |
+| in_app_purchase | Top up YukCoin via Google Play Billing (flavor `play`) |
 | Provider | State management |
 
 ## Struktur Project
@@ -35,10 +38,15 @@ Aplikasi chat gratis, bebas iklan, dan aman untuk semua.
 ```
 lib/
 ├── config/        # Theme, strings (i18n), supabase config, regions, app flavor
+├── core/          # Cache (SQLite terenkripsi), media, perf probe, nav guard
 ├── models/        # Data models (User, Room, Message, dll)
 ├── providers/     # State management (ChangeNotifier)
-├── screens/       # UI screens
-└── services/      # Supabase API calls, geo, screen secure
+├── screens/       # UI screens (termasuk panel admin & widget-nya)
+└── services/      # Supabase API calls, geo, screen secure, topup
+
+supabase/
+├── functions/     # Edge Functions (play-topup-verify, welcome-bonus, dll)
+└── migrations/    # Skema & RPC (SQL)
 ```
 
 ## Cara Menjalankan
@@ -61,8 +69,10 @@ lib/
 ## Build Release
 
 Build WAJIB memakai flavor + obfuscation. Build tanpa `--flavor` akan gagal
-(two flavor dimensions: store × env). Fitur finansial (topup/KYC/withdraw)
-SUDAH DIHAPUS TOTAL — flavor hanya membedakan appId & google-services.
+(two flavor dimensions: store × env). Fitur finansial lama (KYC/withdraw/
+Midtrans/iPaymu) tidak diaktifkan; **top up YukCoin memakai Google Play
+Billing** dan hanya tampil di build flavor `play` (kebijakan Play untuk
+digital goods). Build `apkpure`/`admin` tidak menampilkan jalur top up.
 
 ### Flavor apkpureProd (default — APKPure & install HP; appId `com.chatyuk.chatyuk`)
 
@@ -131,6 +141,35 @@ Aturan wajib:
 ## Konfigurasi
 
 Semua konfigurasi penting (Supabase, OAuth, keystore, Play Console) ada di [`CONFIG.md`](CONFIG.md).
+
+## Arsitektur & Dokumentasi Teknis
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — ikhtisar arsitektur (lapisan client, backend Supabase, realtime, flavor).
+- [`docs/FEATURE_MAP.md`](docs/FEATURE_MAP.md) — peta fitur → kode → SQL → test.
+- [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) — metodologi & hasil pengukuran performa.
+- [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) — audit keamanan (RLS, ACL, secret).
+
+## Performa (PerfProbe)
+
+Ada alat ukur internal untuk mendiagnosa lag (frame build/raster, tap tab →
+frame pertama, dan latensi tiap RPC). Nyalakan **tanpa mengubah kode**:
+
+```bash
+flutter build apk --release --flavor adminProd -t lib/main_admin.dart \
+  --dart-define=APP_FLAVOR=apkpure --dart-define=PERF_PROBE=true \
+  --obfuscate --split-debug-info=build/app/symbols
+# lalu: adb logcat | grep '\[PERF\]'
+```
+
+Saat `PERF_PROBE` tidak diset, probe = no-op (nol overhead). Ringkasan
+dicetak otomatis saat app di-background.
+
+**Catatan penting (koneksi basi):** koneksi HTTP keep-alive Supabase menjadi
+basi setelah app idle, sehingga request pertama setelah resume bisa
+menggantung lama bila tidak dibatasi. Karena itu `SupabaseConfig.init()`
+memasang `HttpClient` dengan `connectionTimeout` 5s + `idleTimeout` 15s, dan
+app melakukan warm-up koneksi saat resume. Jangan hapus tanpa menggantinya —
+gejalanya "app ngelag setelah didiamkan".
 
 ## Aturan Pengembangan
 
