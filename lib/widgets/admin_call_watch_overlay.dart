@@ -86,6 +86,7 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
     return SizedBox.expand(
       child: Stack(
         children: [
+          _audioMixView(sess),
           AnimatedPositioned(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,
@@ -140,6 +141,25 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
           ),
           _bubble(other, pos, bubbleW, bubbleH, maxW, bodyH),
         ],
+      ),
+    );
+  }
+
+  /// Renderer audio MIX kedua peserta. WAJIB ter-mount (walau ukuran 0) agar
+  /// Android memutar audio dari stream ini — tanpa mount, audio mix diam.
+  Widget _audioMixView(WatchSession sess) {
+    final r = sess.audioRenderer;
+    if (r == null) return const SizedBox.shrink();
+    return Positioned(
+      left: 0,
+      bottom: 0,
+      width: 1,
+      height: 1,
+      child: IgnorePointer(
+        child: RTCVideoView(
+          r,
+          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+        ),
       ),
     );
   }
@@ -399,6 +419,21 @@ class _AdminCallWatchFullScreenState extends State<AdminCallWatchFullScreen> {
       body: SafeArea(
         child: Stack(
           children: [
+            // Audio MIX kedua peserta (wajib ter-mount agar diputar).
+            if (sess.audioRenderer != null)
+              Positioned(
+                left: 0,
+                bottom: 0,
+                width: 1,
+                height: 1,
+                child: IgnorePointer(
+                  child: RTCVideoView(
+                    sess.audioRenderer!,
+                    objectFit:
+                        RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  ),
+                ),
+              ),
             Positioned.fill(
               child: RTCVideoView(
                 main.renderer,
