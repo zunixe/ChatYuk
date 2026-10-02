@@ -838,6 +838,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   bytes,
                   fit: BoxFit.cover,
                   gaplessPlayback: true,
+                  // Halaman tetangga hanya tampil SEBAGIAN (di-clip rect) &
+                  // tidak di-zoom → cap 720px cukup. Tanpa cap, slide story
+                  // (~5MB full-res) di-decode penuh untuk tiap tetangga yang
+                  // di-preload → spike memory saat swipe antar-author.
+                  cacheWidth: 720,
                 ),
               ),
             ),
