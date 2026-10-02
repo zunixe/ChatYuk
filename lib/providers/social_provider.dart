@@ -240,6 +240,23 @@ class SocialProvider extends ChangeNotifier {
       _service.unsubscribeCreator(uid);
   Future<Map<String, dynamic>> respondFriendRequest(int id, bool accept) =>
       _service.respondFriendRequest(id, accept);
+
+  /// Batalkan friend request yang sudah dikirim ke [targetUid]. Hapus dari
+  /// set pending supaya tombol di layar lain langsung kembali "Tambah".
+  Future<bool> cancelFriendRequest(int id, {String targetUid = ''}) async {
+    try {
+      final res = await _service.cancelFriendRequest(id);
+      if (res['ok'] == true) {
+        if (targetUid.isNotEmpty) _pendingFriendRequests.remove(targetUid);
+        if (!_disposed) notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      dlog('[SocialProvider] cancelFriendRequest error: $e');
+      return false;
+    }
+  }
   Future<List<Map<String, dynamic>>> friendRequestInbox({int limit = 50, int offset = 0}) =>
       _service.friendRequestInbox(limit: limit, offset: offset);
   Future<List<Map<String, dynamic>>> friendRequestOutbox({int limit = 50, int offset = 0}) =>

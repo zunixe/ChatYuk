@@ -43,6 +43,15 @@ class SocialService {
     return _map(res);
   }
 
+  /// Batalkan friend request yang SUDAH dikirim (hanya pengirim).
+  Future<Map<String, dynamic>> cancelFriendRequest(int requestId) async {
+    final res = await measuredRpc(_sb, 
+      'cancel_friend_request',
+      params: {'p_request_id': requestId},
+    );
+    return _map(res);
+  }
+
   Future<Map<String, dynamic>> subscribeCreator(
     String creatorUid, {
     int periods = 1,
