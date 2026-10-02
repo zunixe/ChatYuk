@@ -59,6 +59,15 @@ abstract class ChatBase {
   final Map<String, DateTime> _lastChatListEventAt = {};
   final Map<String, Timer> _chatListReloadDebounce = {};
   final Map<String, Timer> _chatListSaveTimers = {};
+  // Debounce EMISSION list chat (bukan snapshot). Snapshot
+  // `_privateChatsLast` tetap update instan; hanya `controller.add` ke UI yang
+  // ditahan ~180ms supaya burst event realtime (markAsRead saat buka chat,
+  // centang baca, pesan baru) digabung jadi SATU emission. Tanpa ini, event
+  // yang mendarat tepat saat animasi back (buka chat → balik) memicu rebuild
+  // list sinkron di tengah transisi → animasi tersendat (gejala "kadang
+  // ngelag"). Flag `…Pending` menandai ada emission tertunda per-uid.
+  final Map<String, Timer> _chatListEmitDebounce = {};
+  final Set<String> _chatListEmitPending = {};
   final Map<String, RealtimeChannel> _typingChannels = {};
   final Map<String, int> _typingRefs = {};
   final Map<String, Set<StreamController<(String, int)>>> _typingSubs = {};
