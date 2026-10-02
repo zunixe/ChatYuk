@@ -57,23 +57,25 @@ void main() {
   });
 
   group('PostPhotoCache.genPostThumb — thumbnail post 1024px', () {
-    test('gambar besar → 1024px JPEG', () {
-      final out = genPostThumb(_jpeg(3000, 2000));
+    test('gambar besar → 1024px JPEG', () async {
+      final out = await genPostThumb(_jpeg(3000, 2000));
       expect(out, isNotNull);
       final decoded = img.decodeImage(out!)!;
       expect(decoded.width, 1024);
-      expect(decoded.height, 683); // ~3:2
+      // 3000×2000 (3:2) → tinggi ±683. Skia targetWidth floor → 682;
+      // toleransi 1px agar tidak rapuh terhadap pembulatan codec.
+      expect(decoded.height, inInclusiveRange(682, 683));
     });
 
-    test('gambar kecil → tetap berhasil (diperbesar ke 1024)', () {
-      final out = genPostThumb(_jpeg(100, 100));
+    test('gambar kecil → tetap berhasil (diperbesar ke 1024)', () async {
+      final out = await genPostThumb(_jpeg(100, 100));
       expect(out, isNotNull);
       expect(img.decodeImage(out!)!.width, 1024);
     });
 
-    test('bytes bukan gambar → null, tidak crash', () {
-      expect(genPostThumb(Uint8List.fromList([0, 1, 2])), isNull);
-      expect(genPostThumb(Uint8List(0)), isNull);
+    test('bytes bukan gambar → null, tidak crash', () async {
+      expect(await genPostThumb(Uint8List.fromList([0, 1, 2])), isNull);
+      expect(await genPostThumb(Uint8List(0)), isNull);
     });
 
     test('lruShouldEvict: di batas → tidak, lewat → ya', () {

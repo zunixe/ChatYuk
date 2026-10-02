@@ -33,18 +33,19 @@ _ProcessedStory _readAndProcessStory(String path) {
   return _ProcessedStory(bytes, _processStoryImage(bytes));
 }
 
-/// Kompres foto story di isolate (pola post composer): resize 1080px,
-/// JPEG q85 — cukup tajam untuk fullscreen tanpa boros kuota.
+/// Kompres foto story di isolate (pola post composer): resize sisi terpanjang
+/// 1080px, JPEG q82 — cukup tajam untuk fullscreen tanpa boros kuota.
 String _processStoryImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return '';
-  // Resize sisi TERPANJANG ke 1440 — foto portrait maupun landscape tetap
-  // tajam satu layar HP saat ditampilkan fit di viewer (tanpa crop).
+  // 1080 (dulu 1440→1280) q82 (dulu 85) — layar HP tipikal ~1080px, jadi 1080
+  // sudah pas satu layar saat ditampilkan fit di viewer. File ~40% lebih kecil
+  // dari 1440 semula: hemat storage, bandwidth upload/download, dan disk cache.
   final isPortrait = decoded.height >= decoded.width;
   final resized = isPortrait
-      ? img.copyResize(decoded, height: 1440)
-      : img.copyResize(decoded, width: 1440);
-  final jpg = img.encodeJpg(resized, quality: 85);
+      ? img.copyResize(decoded, height: 1080)
+      : img.copyResize(decoded, width: 1080);
+  final jpg = img.encodeJpg(resized, quality: 82);
   return base64Encode(jpg);
 }
 

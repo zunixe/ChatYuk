@@ -101,13 +101,16 @@ void _boundAvatarMap(Map<String, Object?> m) {
 String? _processAvatarImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
+  // 640px (dulu 1024) + q85 (dulu 90): avatar tampil maksimal ~108px fisik,
+  // 640 sudah >5× resolusi tampil (tajam di semua DPI) tapi file ~50% lebih
+  // kecil — hemat storage & bandwidth upload/tampil di list online.
   final resized = img.copyResize(
     decoded,
-    width: 1024,
-    height: 1024,
+    width: 640,
+    height: 640,
     interpolation: img.Interpolation.cubic,
   );
-  return base64Encode(img.encodeJpg(resized, quality: 90));
+  return base64Encode(img.encodeJpg(resized, quality: 85));
 }
 
 // Avatar SELALU JPEG (sama seperti profile_screen & foto chat). Dulu memakai

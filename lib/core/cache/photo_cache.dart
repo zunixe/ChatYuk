@@ -1,27 +1,54 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import '../../utils.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'message_cache.dart';
 
-// Top-level untuk compute() — buat thumbnail JPEG kecil (~512px) dari base64.
+/// Turunkan gambar ke lebar [targetWidth] TANPA decode full-res.
+///
+/// Sama seperti `_jpegDownscaled` di post_photo_cache: Skia `instantiateImageCodec`
+/// men-downscale SAAT decode (targetWidth) sehingga alokasi RGBA hanya seukuran
+/// target, bukan full-res (12MP ≈ 48MB). Bug lama `img.decodeImage` + `copyResize`
+/// men-decode penuh dulu → spike memori + lag saat foto masuk chat.
+Future<String?> _jpegDownscaledB64(Uint8List bytes, int targetWidth, int quality) async {
+  ui.Codec? codec;
+  ui.Image? image;
+  try {
+    codec = await ui.instantiateImageCodec(bytes, targetWidth: targetWidth);
+    final frame = await codec.getNextFrame();
+    image = frame.image;
+    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (data == null) return null;
+    final img.Image converted = img.Image.fromBytes(
+      width: image.width,
+      height: image.height,
+      bytes: data.buffer,
+      numChannels: 4,
+      order: img.ChannelOrder.rgba,
+    );
+    return base64Encode(img.encodeJpg(converted, quality: quality));
+  } catch (_) {
+    return null;
+  } finally {
+    image?.dispose();
+    codec?.dispose();
+  }
+}
+
+// Thumbnail JPEG kecil (~512px) dari base64. Bukan di compute isolate —
+// decode via Skia targetWidth (lihat _jpegDownscaledB64).
+// CATATAN: decode via Skia targetWidth (bukan img.decodeImage) supaya tidak
+// men-decode full-res — lihat _jpegDownscaledB64.
 @visibleForTesting
 Future<String?> genThumb(Map<String, dynamic> args) async {
   try {
     final b64 = args['b64'] as String;
     final bytes = base64Decode(b64);
-    final image = img.decodeImage(bytes);
-    if (image == null) return null;
-    final thumb = img.copyResize(
-      image,
-      width: 512,
-      interpolation: img.Interpolation.linear,
-    );
-    final jpg = img.encodeJpg(thumb, quality: 75);
-    return base64Encode(jpg);
+    return await _jpegDownscaledB64(bytes, 512, 75);
   } catch (_) {
     return null;
   }
@@ -145,7 +172,7 @@ class PhotoCache {
         await f.readAsString(),
       );
       if (full == null) return null;
-      final thumb = await compute(genThumb, {'b64': full});
+      final thumb = await genThumb({'b64': full});
       if (thumb != null) {
         _thumbPut(messageId, thumb);
         _writeThumbFileAsync(chatKey, messageId, thumb);
@@ -158,7 +185,7 @@ class PhotoCache {
   }
 
   /// Baca BANYAK thumbnail sekaligus untuk bubble — batch decrypt 1 isolate
-  /// per batch. Hasil Map<messageId, thumbB64>; yang belum ada → tidak masuk.
+  /// per batch. Hasil `Map<messageId, thumbB64>`; yang belum ada → tidak masuk.
   /// Foto lama (tanpa thumb) otomatis dibuatkan thumbnail-nya di sini.
   Future<Map<String, String>> loadMany(
     String chatKey,
@@ -218,7 +245,9 @@ class PhotoCache {
     return result;
   }
 
-  /// Generate thumbnail dari banyak foto — paralel (maks 5 isolate sekaligus).
+  /// Generate thumbnail dari banyak foto — paralel (maks 5 sekaligus).
+  /// Decode via Skia targetWidth (bukan compute isolate): ui.instantiateImageCodec
+  /// butuh root isolate engine, dan downscale saat decode sudah cepat di native.
   Future<Map<String, String>> _genThumbsLimited(
     Map<String, String> images,
   ) async {
@@ -229,7 +258,7 @@ class PhotoCache {
       while (true) {
         final idx = next++;
         if (idx >= entries.length) return;
-        final thumb = await compute(genThumb, {'b64': entries[idx].value});
+        final thumb = await genThumb({'b64': entries[idx].value});
         if (thumb != null) result[entries[idx].key] = thumb;
       }
     }
@@ -264,7 +293,7 @@ class PhotoCache {
     final enc = await MessageCache.instance.encryptString(base64Image);
     await f.writeAsString(enc, flush: true);
     _memPut(messageId, base64Image);
-    final thumb = await compute(genThumb, {'b64': base64Image});
+    final thumb = await genThumb({'b64': base64Image});
     if (thumb != null) {
       _thumbPut(messageId, thumb);
       _writeThumbFileAsync(chatKey, messageId, thumb);

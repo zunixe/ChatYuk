@@ -1,27 +1,52 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import '../../utils.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 
-// Top-level untuk compute() — buat thumbnail JPEG (~1024px) dari bytes asli.
-// 512px terlihat blur saat foto single di-upscale selebar layar (1080px fisik).
-@visibleForTesting
-Uint8List? genPostThumb(Uint8List bytes) {
+/// Turunkan gambar ke lebar [targetWidth] TANPA decode full-res.
+///
+/// `img.decodeImage(bytes)` lama men-decode foto full-res (12MP ≈ 48MB RGBA)
+/// ke memori DULU baru di-resize — itu penyebab spike ~470MB Native Heap saat
+/// scroll feed (terukur: 36MB ↔ 504MB per scroll). Skia `instantiateImageCodec`
+/// men-downscale SAAT decode (targetWidth) sehingga alokasi RGBA hanya seukuran
+/// target (~1024px ≈ 3.7MB), bukan full-res.
+///
+/// Return bytes JPEG q82, atau null bila bytes bukan gambar. Selalu diperbesar
+/// bila sumber lebih kecil (semantik sama dengan copyResize lama).
+Future<Uint8List?> _jpegDownscaled(Uint8List bytes, int targetWidth, int quality) async {
+  ui.Codec? codec;
+  ui.Image? image;
   try {
-    final image = img.decodeImage(bytes);
-    if (image == null) return null;
-    final thumb = img.copyResize(
-      image,
-      width: 1024,
-      interpolation: img.Interpolation.linear,
+    codec = await ui.instantiateImageCodec(bytes, targetWidth: targetWidth);
+    final frame = await codec.getNextFrame();
+    image = frame.image;
+    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (data == null) return null;
+    final img.Image converted = img.Image.fromBytes(
+      width: image.width,
+      height: image.height,
+      bytes: data.buffer,
+      numChannels: 4,
+      order: img.ChannelOrder.rgba,
     );
-    return img.encodeJpg(thumb, quality: 82);
+    return img.encodeJpg(converted, quality: quality);
   } catch (_) {
     return null;
+  } finally {
+    image?.dispose();
+    codec?.dispose();
   }
 }
+
+// Thumbnail JPEG (~1024px) dari bytes asli. Bukan di compute isolate —
+// decode via Skia targetWidth (lihat _jpegDownscaled).
+// 512px terlihat blur saat foto single di-upscale selebar layar (1080px fisik).
+@visibleForTesting
+Future<Uint8List?> genPostThumb(Uint8List bytes) =>
+    _jpegDownscaled(bytes, 1024, 82);
 
 /// Apakah total byte LRU melebihi cap (harus buang yang tertua)? Murni &
 /// top-level supaya kontrak cap bisa dikunci tanpa filesystem/plugin.
@@ -120,7 +145,10 @@ class PostPhotoCache {
       }
       final full = await (downloader?.call(path) ?? Future<Uint8List?>.value());
       if (full == null) return null;
-      final thumb = await compute(genPostThumb, full);
+      // Decode+downscale via Skia (targetWidth) — TIDAK di compute isolate:
+      // ui.instantiateImageCodec butuh root isolate engine. Downscale saat
+      // decode = alokasi RGBA ~3.7MB, bukan full-res ~48MB.
+      final thumb = await genPostThumb(full);
       if (thumb != null) {
         _memPut(path, thumb);
         _writeFileAsync(folder, f, thumb);
@@ -205,7 +233,7 @@ class PostPhotoCache {
   /// re-download dari Storage. Pola sama dengan PhotoCache.save (chat).
   Future<Uint8List?> save(String path, Uint8List fullBytes) async {
     try {
-      final thumb = await compute(genPostThumb, fullBytes);
+      final thumb = await genPostThumb(fullBytes);
       if (thumb == null) return null;
       _memPut(path, thumb);
       final folder = await _folder();
