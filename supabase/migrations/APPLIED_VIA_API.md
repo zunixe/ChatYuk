@@ -1426,3 +1426,19 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   Placeholder rows w/ onboarding=false = 0.
 - **App:** gate app.dart sudah menahan SEMUA needs_onboarding (bukan hanya anon).
 - **Test:** schema_sync +1 (trigger). 60/60.
+
+## 2026-10-05 — 20261005110000 + 20261005120000 (APPLY)
+
+- **20261005110000_registered_no_anon_placeholder:** trigger
+  `handle_new_user_profile` — user REGISTERED (email ada) dapat placeholder
+  `'Pengguna'+6hex` (BUKAN 'AnonXXXX'). Anon tetap 'Anon'+8hex. Verified live:
+  insert auth.users ber-email → 'Pengguna000000'; anon → 'Anon00000000'.
+  Backfill: 18 baris registered 'AnonXXXX' → 'PenggunaXXXX' (DIBATALKAN lalu
+  DIKEMBALIKAN ke AnonXXXX atas permintaan user; lihat catatan).
+- **20261005120000_purge_deleted_users_90d:** fungsi `purge_deleted_users_90d()`
+  + cron `purge-deleted-users-90d` (04:30 harian) — arsip `deleted_users` >90
+  hari dibuang. TERAPPLIED (jobid 37). Jalankan manual: 0 baris (semua <90h).
+- **App (auth):** `AuthProvider._init` TIDAK lagi auto `signInAnonymously()`
+  saat tak ada sesi → user TIDAK dibuat otomatis; gate tampilkan EntryScreen,
+  sesi anon + profil dibuat saat user menekan "Mulai" (nickname PILIHAN user).
+- Verifikasi: schema_sync 62/62; auth_gate 15/15; auth_login_flow 41/41.

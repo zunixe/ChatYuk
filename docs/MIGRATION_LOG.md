@@ -32,6 +32,21 @@
   `privacy_can_view` (impl live pakai `about_ok`, bukan `about_visibility`).
 - Verifikasi: check_migrations OK; schema_sync 59/59; auth_gate 15/15.
 
+## 2026-10-05 — Tanpa auto-anon + placeholder registered bukan "Anon"
+
+- **Akar:** `AuthProvider._init` auto `signInAnonymously()` saat tanpa sesi →
+  tiap buka app membuat user anon + profil 'AnonXXXX'. Trigger membuat
+  placeholder 'AnonXXXX' untuk SEMUA (termasuk registered).
+- **Fix app (auth_provider.dart):** `_init` TIDAK auto signInAnonymously →
+  tanpa sesi langsung EntryScreen; user HANYA dibuat saat user menekan
+  "Mulai" (registerProfile bikin anon + profil dgn nickname PILIHAN user).
+- **Fix DB (20261005110000):** trigger `handle_new_user_profile` — registered
+  (email) dapat 'Pengguna'+6hex (bukan 'AnonXXXX'); anon tetap 'Anon'+8hex.
+- **20261005120000:** retensi arsip `deleted_users` >90 hari + cron 04:30
+  (jobid 37) — arsip tidak tumbuh abadi lagi.
+- **Verifikasi:** schema_sync 62/62; auth tests 15/15 + 41/41; trigger diuji
+  live (registered→Pengguna, anon→Anon).
+
 ## 2026-10-05 — Cegah user stuck "AnonXXXXXXXX" (guard trigger + gate)
 
 - **Trigger** `trg_enforce_onboarding_placeholder`: nickname placeholder

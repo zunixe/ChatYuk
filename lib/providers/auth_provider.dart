@@ -343,8 +343,25 @@ class AuthProvider extends ChangeNotifier {
         dlog(
           '[AUTH] _init attempt $attempt/$maxAttempts hasSession=$hasSession',
         );
-        if (!hasSession) await _auth.signInAnonymously();
-        dlog('[AUTH] signInAnonymously OK');
+        // TANPA auto signInAnonymously: user TIDAK dibuat otomatis. Bila belum
+        // ada sesi, gate menampilkan EntryScreen — sesi anon + profil baru
+        // dibuat SAAT user menekan "Mulai" (registerProfile membuat anon
+        // session dgn nickname PILIHAN user, bukan 'AnonXXXX').
+        // Ini mencegah baris 'AnonXXXX' hantu untuk user yang cuma buka app.
+        if (!hasSession) {
+          _profile = null;
+          _loading = false;
+          if (!_disposed) notifyListeners();
+          // EntryScreen butuh setting global (mis. require_registration) —
+          // muat tanpa sesi (fire-and-forget, tak menahan UI).
+          _loadGlobalSettings().catchError(
+            (e) => dlog('[AUTH] globalSettings (no-session) error: $e'),
+          );
+          _listenAppSettings();
+          safeUnawaited(_loadExcludedDevices());
+          _initInProgress = false;
+          return;
+        }
         // Satu fetch saja (tanpa avatar) → langsung notify, UI tidak nunggu
         // foto. Dulu ada SELECT ke-2 (full avatar) — kini avatar di-resolve
         // lazy dari cache disk/RAM via AvatarB64Service, tanpa SELECT ulang.
