@@ -1413,3 +1413,16 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   sebelum memilih nama tidak lagi berkeliaran dgn nickname 'AnonXXXX'.
 - **Test:** schema_sync +1 assert (created_at); auth_gate_decision +2
   (registered+onboarding → entry). schema_sync 59/59.
+
+## 2026-10-05 — 20261005100000_enforce_onboarding_placeholder (APPLY)
+
+- **Tujuan:** cegah user tampil selamanya sebagai 'AnonXXXXXXXX' (placeholder
+  dari trigger handle_new_user_profile).
+- **Migrasi:** trigger `trg_enforce_onboarding_placeholder` (BEFORE INSERT/UPDATE
+  on profiles) → bila nickname cocok `^Anon[0-9A-F]{8}[0-9]*$` maka
+  `needs_onboarding` DIPAKSA true. Backfill sekali jalan.
+- **Verifikasi live:** paksa onboarding=false pada placeholder → tetap true;
+  nickname asli + onboarding=false → tetap false (tak ada false-positive).
+  Placeholder rows w/ onboarding=false = 0.
+- **App:** gate app.dart sudah menahan SEMUA needs_onboarding (bukan hanya anon).
+- **Test:** schema_sync +1 (trigger). 60/60.

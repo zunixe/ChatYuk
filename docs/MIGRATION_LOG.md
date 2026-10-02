@@ -32,6 +32,14 @@
   `privacy_can_view` (impl live pakai `about_ok`, bukan `about_visibility`).
 - Verifikasi: check_migrations OK; schema_sync 59/59; auth_gate 15/15.
 
+## 2026-10-05 — Cegah user stuck "AnonXXXXXXXX" (guard trigger + gate)
+
+- **Trigger** `trg_enforce_onboarding_placeholder`: nickname placeholder
+  `^Anon[0-9A-F]{8}$` WAJIB needs_onboarding=true (cegah recurrence).
+  Dipaksa `true` walau ada jalur men-set false. Backfill diterapkan.
+- **Gate** app.dart menahan SEMUA needs_onboarding (registered juga).
+- Verifikasi: schema_sync 60/60.
+
 ## 2026-10-05 — Leaderboard "Top Aktif" (keaktifan: pesan + reaksi)
 
 - **Migrasi** `20261005030000_activity_leaderboard.sql`:
