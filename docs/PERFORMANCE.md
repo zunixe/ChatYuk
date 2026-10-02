@@ -1807,3 +1807,47 @@ migrasi `20260929020000_reduce_presence_write_load.sql`:
   tiap `ai_presence_tick` → `net.http_post` + outbox spam; 94 chat dummy).
 - `housekeeping_tick` memangkas `cron.job_run_details` > 7 hari (44 MB / 137k
   baris tumbuh tanpa batas).
+
+---
+
+## 23. Regresi bitmap full-res di list Online + trim saat background (2026-10-02)
+
+**Gejala (laporan user):** "aplikasi serasa ngelag saat pindah antar tab."
+
+**Ukur HP (Xiaomi 24129PN74G, RAM 11 GB, swap 12 GB) via `adb` wireless:**
+
+| Momen | VmRSS | Native Heap Alloc | Swap |
+|---|---|---|---|
+| Idle (app background) | ~298 MB | ~32 MB | ~250 MB |
+| Begitu interaksi / pindah tab | **~765 MB** (spike ≤1,5 dtk) | ~490 MB | ~240 MB |
+
+Kedua build (user **dan** admin) menunjukkan pola sama → **bukan** bug khas
+satu fitur, tapi bitmap. Memory turun lagi saat idle (bukan leak permanen),
+tapi spike ratusan MB saat membuka tab = GC berat + paging ke swap = lag.
+
+**Akar:** melanggar aturan §13 ("jangan `Image.memory` tanpa `cacheWidth`").
+`lib/screens/online_users_screen.dart` — `_AsyncAvatar` menyimpan
+`MemoryImage(bytes)` **tanpa cap**: avatar di list hanya **40px fisik**, tapi
+bitmap di-decode **full-res** (JPEG 1080px ≈ 4,6 MB/bitmap). 20 kartu = ~92 MB.
+4 titik: `_avatarImageByUid` (3× `putIfAbsent`) + `CircleAvatar.backgroundImage`.
+
+**Fix (client saja):**
+- `_cappedAvatarImage()` → bungkus `ResizeImage(MemoryImage(b), width: 96)`;
+  avatar list render ≤96px (cukup untuk 40px @2-3× DPI), ~25× lebih kecil.
+- `_avatarImageByUid` berubah tipe `Map<String, MemoryImage>` →
+  `Map<String, ImageProvider>` (provider stabil per-uid tetap → anti-kedip).
+- `_avatarMapCap` 200 → **120** (bytes mentah disimpan untuk zoom).
+- `imageCache` global `main.dart` 120/64MB → **80/48MB** (prioritas ringan;
+  foto di-decode ulang dari disk cache saat scroll — murah).
+- **Trim saat background:** `_MainNav.didChangeAppLifecycleState(paused)` →
+  `imageCache.clear() + clearLiveImages()`. OS gencar menuntut RAM app
+  background; bitmap di-hold percuma (layar tak terlihat). Resume → decode
+  ulang dari disk.
+
+**Aturan turunan (JANGAN dibalik):** lihat
+[`docs/MEMORY_BEST_PRACTICES.md`](MEMORY_BEST_PRACTICES.md) — ringkasan
+aturan memory untuk kontributor berikutnya.
+
+**Test:** `flutter test` (image_cache_hygiene, image_cap_widgets,
+online_users_provider, online_visibility) hijau.
+

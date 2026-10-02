@@ -1478,13 +1478,14 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Batasi cache bitmap Flutter: default 1000 gambar/100MB terlalu longgar
   // untuk chat penuh foto — bitmap 12MP (~48MB) menumpuk di native heap
   // sampai ratusan MB (pernah 500MB → ngetik & buka halaman ngelag).
-  // Bubble chat decode max 720–1080px (lihat private_chat_message.dart),
-  // jadi 200 entri / 100MB lebih dari cukup.
-  // HP 4-6GB (Redmi) sering kehabisan RAM — swap penuh → app freeze/ANR.
-  // Turunkan ke 120 entri / 64MB: bitmap bubble tetap cukup (decode di-cap
-  // 1080px ≈ 4.4MB/entri), sisanya dibuang & di-decode ulang saat scroll.
-  PaintingBinding.instance.imageCache.maximumSize = 120;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 64 << 20;
+  //
+  // Bubble chat & foto post SUDAH di-cap decode (ResizeImage/cacheWidth ≤1080px
+  // ≈ 4.4MB/bitmap). 80 entri / 48MB: cukup untuk viewport + 1 layar di atas;
+  // sisanya dibuang & di-decode ulang saat scroll (murah, dari disk cache).
+  // Angka ini sengaja konservatif — prioritas "ringan" > "nol re-decode".
+  // Kalau ada laporan "foto kedip saat scroll", naikkan bertahap 96/64.
+  PaintingBinding.instance.imageCache.maximumSize = 80;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 48 << 20;
   kFirebaseOptionsOverride = firebaseOptions;
   // Crashlytics butuh Firebase ter-init dulu — aktifkan pasca-init di bawah.
   // Handler di sini hanya dlog; setelah FlutterError.crashlytics disambung,

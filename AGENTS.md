@@ -251,6 +251,10 @@ yang ditambahkan orang/migrasi lain. Kasus nyata: `ai_presence_tick` di-replace
       di sana. Jangan membalik optimasi yang sudah ada (mis. mengembalikan
       `context.watch` yang sudah jadi `select`, menghapus `TickerMode` /
       `RepaintBoundary`, atau memindahkan komputasi berat kembali ke `build()`).
+- [ ] Kalau menampilkan gambar/foto/video atau menambah cache/list panjang:
+      baca `docs/MEMORY_BEST_PRACTICES.md` DULU. **Setiap `Image.memory` WAJIB
+      `cacheWidth`/`ResizeImage`** (kecuali viewer full-screen, lalu di-evict
+      saat tutup); cache baru WAJIB bounded; jangan decode di `build()`.
 
 ## Struktur Project
 
