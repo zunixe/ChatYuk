@@ -63,6 +63,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     registerFallbackValue(PostgresChangeEvent.insert);
     registerFallbackValue((PostgresChangePayload _) {});
+    // Dipakai sb.removeChannel(any()) — mocktail butuh fallback RealtimeChannel.
+    registerFallbackValue(MockChannel());
   });
 
   setUp(() {
@@ -81,6 +83,9 @@ void main() {
     ).thenReturn(channel);
     when(() => channel.subscribe(any())).thenReturn(channel);
     when(() => channel.unsubscribe()).thenAnswer((_) async => 'ok');
+    // dispose() memakai removeChannel (buang channel sepenuhnya) — WAJIB
+    // di-stub, kalau tidak Mock mengembalikan null → TypeError di teardown.
+    when(() => sb.removeChannel(any())).thenAnswer((_) async => 'ok');
 
     when(
       () => service.getChatMessages(

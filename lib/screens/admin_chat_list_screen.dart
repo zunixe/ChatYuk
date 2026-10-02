@@ -128,7 +128,46 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     }).toList();
   }
 
+  // ── Memoize hasil filter+sort ──────────────────────────────────────────
+  // List screen di-rebuild tiap AdminProvider.notifyListeners (poll chat 30s,
+  // call 10s, presence, dsb). Tanpa memoize, `_sortedFiltered` (duplikasi
+  // list + sort) jalan tiap rebuild → makin berat saat chat banyak / bolak-
+  // balik buka-tutup. Cache di-invalidate via signature input yang murah.
+  List<Map<String, dynamic>>? _sortedCache;
+  String? _sortedCacheSig;
+
   List<Map<String, dynamic>> _sortedFiltered(
+    List<Map<String, dynamic>> chats,
+    Map<String, ActiveCallInfo> activeByChat, {
+    required bool Function(String) isPinned,
+    required String? Function(String) categoryOf,
+    required String? activeCategory,
+  }) {
+    // Signature: identitas list chats + ukuran pin/kategori/call + query +
+    // filter kategori. Perubahan pin/kategori mengganti ukuran set-nya, jadi
+    // signature ikut berubah → cache invalid. Perubahan ISI satu chat (mis.
+    // last_message baru) datang dengan list `chats` BARU (identitas beda).
+    final sig = '${identityHashCode(chats)}|${activeByChat.length}|'
+        '$_pinnedCount|$_catMapCount|${activeCategory ?? "\u0000"}|$_query';
+    if (_sortedCache != null && _sortedCacheSig == sig) return _sortedCache!;
+    final out = _sortedFilteredCompute(
+      chats,
+      activeByChat,
+      isPinned: isPinned,
+      categoryOf: categoryOf,
+      activeCategory: activeCategory,
+    );
+    _sortedCache = out;
+    _sortedCacheSig = sig;
+    return out;
+  }
+
+  /// Jumlah pin/kategori — dipakai sebagai bagian signature memoize.
+  /// Di-set dari build (dari provider) supaya cache tahu kapan invalid.
+  int _pinnedCount = 0;
+  int _catMapCount = 0;
+
+  List<Map<String, dynamic>> _sortedFilteredCompute(
     List<Map<String, dynamic>> chats,
     Map<String, ActiveCallInfo> activeByChat, {
     required bool Function(String) isPinned,
@@ -263,6 +302,10 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     // Hitung SEKALI per build: dulu `_sortedFiltered()` (filter+sort)
     // dipanggil di empty-check + itemCount + di dalam itemBuilder per baris
     // (O(n²) saat scroll). Hasilnya dipakai ulang di bawah.
+    // Set jumlah pin/kategori untuk signature memoize (invalid saat organisasi
+    // berubah walau identitas `chats` tetap).
+    _pinnedCount = admin.chatPinnedCount;
+    _catMapCount = admin.chatCategoryMapCount;
     final visibleChats = _sortedFiltered(
       admin.chats,
       admin.activeCallsByChat,
