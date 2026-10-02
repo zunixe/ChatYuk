@@ -1449,8 +1449,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             ),
           ),
           child: _isSearching
-              ? SizedBox(
+              ? Padding(
                   key: const ValueKey('search'),
+                  padding: const EdgeInsets.only(right: 14),
+                  child: SizedBox(
                   height: 40,
                   width: double.infinity,
                   child: TextField(
@@ -1503,6 +1505,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                         borderSide: BorderSide.none,
                       ),
                     ),
+                  ),
                   ),
                 )
               : Consumer<OnlineUsersProvider>(
