@@ -18,9 +18,11 @@ class MainActivity : FlutterActivity() {
     private val channel = "com.chatyuk.chatyuk/window"
     private val callUiChannel = "com.chatyuk.chatyuk/call_ui"
     private val updateChannel = "com.chatyuk.chatyuk/update"
+    private val tiktokChannel = TikTokBridge.CHANNEL
     private var bootOverlay: FrameLayout? = null
     private var wasSecureAtPause = false
     private var callUiBridge: CallUiBridge? = null
+    private var tiktokBridge: TikTokBridge? = null
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -149,6 +151,15 @@ class MainActivity : FlutterActivity() {
                     }
                     else -> result.notImplemented()
                 }
+            }
+
+        // Jembatan TikTok App Events (Business) SDK — init/identify/track/
+        // purchase. Best-effort: semua error ditelan di bridge (pelacakan
+        // iklan tidak boleh menggagalkan app).
+        tiktokBridge = TikTokBridge(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, tiktokChannel)
+            .setMethodCallHandler { call, result ->
+                tiktokBridge?.handle(call, result) ?: result.success(false)
             }
 
         handleCallIntent(intent)

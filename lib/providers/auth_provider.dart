@@ -17,6 +17,7 @@ import '../services/auth_service.dart';
 export '../services/auth_service.dart'
     show EmailNotRegisteredException, EmailAlreadyRegisteredException;
 import '../services/chat_service.dart';
+import '../services/tiktok_service.dart';
 import '../services/device_info_service.dart';
 import '../services/points_service.dart';
 import '../services/location_service.dart';
@@ -193,6 +194,27 @@ class AuthProvider extends ChangeNotifier {
       await prefs.remove(_referrerPrefKey);
     } catch (_) {}
     // Faucet referral DIHAPUS (overhaul coin: tidak ada poin gratis).
+  }
+
+  /// Sinkron identitas user ke TikTok App Events (identify) + kirim event.
+  /// Best-effort: tidak pernah menggagalkan alur auth. Dipanggil tiap
+  /// login/daftar & saat profil berubah (panduan TikTok: identify saat
+  /// info user berubah).
+  void _syncTikTok({TikTokEvent? event}) {
+    final p = _profile;
+    final id = p?.uid.isNotEmpty == true ? p!.uid : (_auth.uid ?? '');
+    if (id.isEmpty) return;
+    safeUnawaited(() async {
+      try {
+        await TikTokService.instance.identify(
+          externalId: id,
+          externalUserName: p?.nickname ?? '',
+          phoneNumber: p?.phone ?? '',
+          email: p?.email ?? '',
+        );
+        if (event != null) await TikTokService.instance.track(event);
+      } catch (_) {}
+    }());
   }
 
   /// Pantau event auth Supabase. Kalau session hilang TANPA logout manual
@@ -493,6 +515,8 @@ class AuthProvider extends ChangeNotifier {
     _restartPresenceTimers();
     safeUnawaited(DeviceInfoService.instance.syncToServer());
     safeUnawaited(updateFcmToken());
+    // User Google yang sudah punya profil = login ulang → event LOGIN.
+    if (_profile != null) _syncTikTok(event: TikTokEvent.LOGIN);
     if (!_disposed) notifyListeners();
     if (_profile != null) return 'exists';
     return 'new';
@@ -990,6 +1014,7 @@ class AuthProvider extends ChangeNotifier {
     _listenProfile();
     _restartPresenceTimers();
     if (_profile != null) await updateFcmToken();
+    _syncTikTok(event: TikTokEvent.LOGIN);
     if (!_disposed) notifyListeners();
   }
 
@@ -1161,6 +1186,8 @@ class AuthProvider extends ChangeNotifier {
     safeUnawaited(updateFcmToken());
     // Ikat referrer (bila ada) — sekali saja, setelah profil terdaftar.
     _bindAndClaimReferrer();
+    // TikTok Ads: identify + event REGISTRATION (user menyelesaikan daftar).
+    _syncTikTok(event: TikTokEvent.REGISTRATION);
   }
 
   // ── Passthrough agar screen tidak import AuthService (Fase 9b) ──
@@ -1248,6 +1275,9 @@ class AuthProvider extends ChangeNotifier {
     _signingOut = true;
     _loading = true;
     if (!_disposed) notifyListeners();
+    // TikTok Ads: reset identitas sebelum sesi dihapus (panduan TikTok —
+    // logout dulu, identify ulang saat login berikutnya).
+    safeUnawaited(TikTokService.instance.logout());
     try {
       _idleTimer?.cancel();
       _heartbeatTimer?.cancel();

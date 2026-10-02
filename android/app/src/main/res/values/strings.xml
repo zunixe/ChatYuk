@@ -4,4 +4,8 @@
          Settings -> Advanced. Lihat docs/META_APP.md. -->
     <string name="facebook_app_id">4699753480345190</string>
     <string name="facebook_client_token">782f99654ddbf22be6b59900e08da2ab</string>
+    <!-- TikTok App Events (Business) SDK — dari TikTok Events Manager.
+         app_id = package name app; tt_app_id = TikTok App ID. -->
+    <string name="tiktok_app_id">com.chatyuk.chatyuk</string>
+    <string name="tiktok_tt_app_id">7691692882021187602</string>
 </resources>
