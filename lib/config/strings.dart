@@ -1800,8 +1800,7 @@ class S {
       ? 'Akun ini belum terdaftar, tidak bisa diikuti'
       : 'This account is not registered and cannot be followed';
   String get btnAddFriend => isId ? 'Tambah Teman' : 'Add Friend';
-  String get btnFriendRequested => isId ? 'Terkirim' : 'Sent';
-  String get btnFriendPending => isId ? 'Terima Permintaan' : 'Accept Request';
+  String get btnFriendRequested => isId ? 'Terkirim' : 'Sent';  String get btnFriendPending => isId ? 'Terima Permintaan' : 'Accept Request';
   String get btnFriends => isId ? 'Teman' : 'Friends';
   String get btnSubscribe => isId ? 'Subscribe' : 'Subscribe';
   String get btnSubscribed => isId ? 'Berlangganan' : 'Subscribed';
@@ -1815,6 +1814,8 @@ class S {
       isId ? 'Permintaan teman terkirim' : 'Friend request sent';
   String get friendRequestAccepted =>
       isId ? 'Permintaan teman diterima' : 'Friend request accepted';
+  String get friendRequestCancelled =>
+      isId ? 'Permintaan teman dibatalkan' : 'Friend request cancelled';
   String get subscriptionsTitle => isId ? 'Langganan' : 'Subscriptions';
   String get subscriptionsEmpty =>
       isId ? 'Belum ada langganan' : 'No subscriptions yet';

@@ -58,6 +58,27 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
     }
   }
 
+  /// Batalkan friend request milik sendiri (baris di Outbox).
+  Future<void> _cancel(Map<String, dynamic> req) async {
+    final id = (req['id'] as num?)?.toInt() ?? 0;
+    final targetUid = '${req['uid'] ?? ''}';
+    final s = context.read<LocaleProvider>().s;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final ok = await _service.cancelFriendRequest(id, targetUid: targetUid);
+      if (ok) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(s.friendRequestCancelled)),
+        );
+        await _load();
+      } else {
+        messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
@@ -125,7 +146,13 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
                     );
                     rows.add(const SizedBox(height: 6));
                     for (final r in _outbox) {
-                      rows.add(_RequestTile(entry: r, pending: false));
+                      rows.add(
+                        _RequestTile(
+                          entry: r,
+                          pending: false,
+                          onCancel: () => _cancel(r),
+                        ),
+                      );
                     }
                   }
                   return ListView.builder(
@@ -150,11 +177,13 @@ class _RequestTile extends StatelessWidget {
   final bool pending;
   final VoidCallback? onAccept;
   final VoidCallback? onReject;
+  final VoidCallback? onCancel;
   const _RequestTile({
     required this.entry,
     required this.pending,
     this.onAccept,
     this.onReject,
+    this.onCancel,
   });
 
   @override
@@ -203,11 +232,20 @@ class _RequestTile extends StatelessWidget {
               onPressed: onAccept,
               child: Text(s.btnConfirm, style: TextStyle(color: Colors.white)),
             ),
-          ] else
+          ] else ...[
             Text(
               s.btnFriendRequested,
               style: AppText.caption.copyWith(color: AppTheme.textSecondary),
             ),
+            const SizedBox(width: 4),
+            TextButton(
+              onPressed: onCancel,
+              child: Text(
+                s.btnCancel,
+                style: TextStyle(color: AppTheme.danger),
+              ),
+            ),
+          ],
         ],
       ),
     );

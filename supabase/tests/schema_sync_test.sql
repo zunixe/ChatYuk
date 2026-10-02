@@ -74,11 +74,10 @@ select supabase_tests.check('admin_stats_detail() tandai excluded (bukan buang)'
          where n.nspname='public' and p.proname='admin_stats_detail'
            and pg_get_functiondef(p.oid) like '%''excluded'', (id = any(v_excl))%'
            and pg_get_functiondef(p.oid) not like '%not (id = any(v_excl))%'));
-select supabase_tests.check('admin_stats_users_page() tandai excluded (bukan buang)',
+select supabase_tests.check('admin_stats_users_page() BUANG excluded (kebijakan 2026-10-01)',
   exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='admin_stats_users_page'
-           and pg_get_functiondef(p.oid) like '%''excluded'', (id = any(v_excl))%'
-           and pg_get_functiondef(p.oid) not like '%not (p.id = any(v_excl))%'));
+           and pg_get_functiondef(p.oid) like '%not (p.id = any(v_excl))%'));
 
 -- ── FROZEN: feed / sosial ──
 select supabase_tests.check('create_story() ada',
