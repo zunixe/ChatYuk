@@ -29,6 +29,12 @@ mixin AdminChatOrgMx on AdminBase {
   bool get chatOrgLoaded => _chatOrgLoaded;
   bool isChatPinned(String chatId) => _pinnedChatIds.contains(chatId);
   String? chatCategoryOf(String chatId) => _chatCategory[chatId];
+
+  /// Jumlah pin & entri kategori — dipakai UI (list monitor) sebagai bagian
+  /// signature memoize hasil filter+sort, supaya cache invalid saat organisasi
+  /// berubah walau daftar `chats` (identitas) sama.
+  int get chatPinnedCount => _pinnedChatIds.length;
+  int get chatCategoryMapCount => _chatCategory.length;
   List<String> get chatCategories {
     final list = _categories.toList()..sort();
     return list;

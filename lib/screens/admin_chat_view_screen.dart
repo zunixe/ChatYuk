@@ -140,6 +140,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   Map<String, DateTime> _lastRead = {};
   late Timer _pollTimer;
   RealtimeChannel? _channel;
+  /// Client pemilik [\_channel] — untuk `removeChannel` saat dispose (buang
+  /// channel sepenuhnya, cegah bocor saat buka-tutup chat berulang).
+  SupabaseClient? _channelClient;
   final _photoLoading = <String>{};
   // Antrean foto: maks 3 unduhan bersamaan + cooldown 10 dtk per id
   // (pola sama seperti private chat). Tanpa ini tiap foto menembak RPC +
@@ -287,7 +290,21 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   void dispose() {
     _pollTimer.cancel();
     _callTimer?.cancel();
-    _channel?.unsubscribe();
+    // Buang channel SEPENUHNYA (bukan hanya unsubscribe). `unsubscribe()`
+    // saja meninggalkan channel di client Supabase → menumpuk tiap
+    // buka-tutup chat → makin lambat saat bolak-balik (bocor socket).
+    // Pola benar (sama seperti chat_service_private): removeChannel.
+    final ch = _channel;
+    _channel = null;
+    if (ch != null) {
+      final sb = _channelClient;
+      if (sb != null) {
+        unawaited(sb.removeChannel(ch));
+      } else {
+        unawaited(ch.unsubscribe());
+      }
+    }
+    _channelClient = null;
     _scrollCtrl.dispose();
     unawaited(_stopWatch());
     super.dispose();
@@ -793,6 +810,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     // Lewat provider (bukan Supabase.instance langsung) supaya test bisa
     // menyuntik client mock — perilaku produksi identik.
     final sb = context.read<AdminProvider>().realtimeClient;
+    _channelClient = sb;
     _channel = sb.channel('admin-${widget.chatId.hashCode}');
     // FILTER chat_id — tanpa ini SETIAP pesan di seluruh app memicu _poll
     // (fetch+setState) → blink/berat. Hanya perubahan chat INI yang reaksi.

@@ -65,7 +65,13 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
   @override
   void dispose() {
     _notifyDebounce?.cancel();
-    _channel?.unsubscribe();
+    // Buang channel sepenuhnya (bukan hanya unsubscribe) — cegah bocor
+    // socket saat kartu peta dibangun ulang berkali-kali.
+    final ch = _channel;
+    _channel = null;
+    if (ch != null) {
+      unawaited(Supabase.instance.client.removeChannel(ch));
+    }
     super.dispose();
   }
 
