@@ -42,6 +42,30 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     });
   }
 
+  /// Emit list chat ke UI dengan DEBOUNCE ~180ms — menggabungkan burst event
+  /// realtime (markAsRead saat buka chat, centang baca, pesan baru) jadi SATU
+  /// emission. Snapshot `_privateChatsLast` sudah update instan di pemanggil;
+  /// fungsi ini hanya menunda `controller.add` supaya rebuild list tidak
+  /// mendarat di tengah animasi back (penyebab "kadang ngelag" saat balik
+  /// dari private chat). Selalu emit NILAI TERBARU saat timer habis (bukan
+  /// yang lama), jadi tidak ada update yang hilang.
+  void _emitChatListDebounced(String myUid) {
+    final controller = _privateChatsStreams[myUid];
+    if (controller == null || controller.isClosed) return;
+    _chatListEmitPending.add(myUid);
+    _chatListEmitDebounce[myUid]?.cancel();
+    _chatListEmitDebounce[myUid] = Timer(
+      const Duration(milliseconds: 180),
+      () {
+        _chatListEmitDebounce.remove(myUid);
+        _chatListEmitPending.remove(myUid);
+        if (controller.isClosed) return;
+        final latest = _privateChatsLast[myUid] ?? const [];
+        controller.add(latest);
+      },
+    );
+  }
+
   /// Update unread/lastRead di snapshot lokal list chat — UI instan tanpa
   /// refetch. Snapshot tetap akurat karena realtime mengirim row lengkap.
   void _applyLocalRead(String myUid, String chatId) {
@@ -59,8 +83,9 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     _privateChatsLast[myUid] = list;
     _lastChatReloadAt[myUid] = DateTime.now();
     _scheduleChatListSave(myUid);
-    final controller = _privateChatsStreams[myUid];
-    if (controller != null && !controller.isClosed) controller.add(list);
+    // Emit ter-debounce: read-receipt lokal digabung dgn event realtime
+    // menyusul → satu emission, tidak bentrok dgn animasi back.
+    _emitChatListDebounced(myUid);
   }
 
   /// Refetch list ter-debounce (500ms) — dipakai saat event realtime
@@ -122,8 +147,8 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     _privateChatsLast[myUid] = list;
     _lastChatReloadAt[myUid] = DateTime.now();
     _scheduleChatListSave(myUid);
-    final controller = _privateChatsStreams[myUid];
-    if (controller != null && !controller.isClosed) controller.add(list);
+    // Emit ter-debounce: burst event realtime → satu emission ke UI.
+    _emitChatListDebounced(myUid);
     // Pesan baru dari lawan → prefetch fotonya di background (best-effort).
     // Saat chat dibuka, foto sudah di PhotoCache → bubble langsung tampil.
     _prefetchLatestPhoto(myUid, chat);
@@ -200,8 +225,8 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     _privateChatsLast[myUid] = list;
     _lastChatReloadAt[myUid] = DateTime.now();
     _scheduleChatListSave(myUid);
-    final controller = _privateChatsStreams[myUid];
-    if (controller != null && !controller.isClosed) controller.add(list);
+    // Delete chat admin → emit ter-debounce (konsisten dgn _applyChatEvent).
+    _emitChatListDebounced(myUid);
   }
 
   void _refreshChatStreams(String myUid) {
@@ -219,6 +244,11 @@ mixin ChatServicePrivateChatListMx on ChatBase {
 
   void clearCachedStreams() {
     _chatReloaders.clear();
+    for (final t in _chatListEmitDebounce.values) {
+      t.cancel();
+    }
+    _chatListEmitDebounce.clear();
+    _chatListEmitPending.clear();
     for (final c in _privateChatsStreams.values) {
       if (!c.isClosed) c.close();
     }
@@ -437,6 +467,10 @@ mixin ChatServicePrivateChatListMx on ChatBase {
         dlog(
           '[getMyPrivateChats] fetched ${rows.length} chats for $myUid',
         );
+        // Refetch penuh = data paling baru → batalkan emission ter-debounce
+        // yang tertunda supaya tidak ada emission dobel sesudah ini.
+        _chatListEmitDebounce.remove(myUid)?.cancel();
+        _chatListEmitPending.remove(myUid);
         if (!controller.isClosed) controller.add(rows);
         if (rows.isNotEmpty) {
           MessageCache.instance
