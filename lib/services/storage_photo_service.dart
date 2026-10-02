@@ -190,7 +190,10 @@ class StoragePhotoService {
         quality: VideoQuality.Res1280x720Quality,
         deleteOrigin: false,
         includeAudio: true,
-        frameRate: 30,
+        // 24fps (dulu 30): story adalah tontonan singkat, mata tak bedakan
+        // 24 vs 30 di konten pendek — bitrate & ukuran file turun ~20% tanpa
+        // terlihat lebih patah. Resolusi tetap 720p (tajam).
+        frameRate: 24,
         // Potong segmen (video galeri panjang → beberapa story 15 dtk).
         startTime: startMs,
         duration: durationMs,

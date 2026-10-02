@@ -28,13 +28,18 @@ class _ProcessedPhoto {
 /// Proses foto (resize + JPEG) di isolate sebelum upload — sekaligus
 /// kembalikan dimensi supaya composer bisa kirim `image_dims` ke server
 /// (rasio feed asli ala Threads, tanpa layout shift).
+///
+/// 1080px (dulu 1200) = lebar layar HP tipikal (~1080 fisik) → tidak ada
+/// detail yang hilang di feed, tapi file ~30% lebih kecil. q78 (dulu 82)
+/// juga sedikit lebih ringan tanpa beda terlihat. Hemat storage, bandwidth
+/// upload/download, dan disk cache di HP penerima.
 _ProcessedPhoto? _processPostImageDim(List<int> bytes) {
   try {
     final decoded = img.decodeImage(Uint8List.fromList(bytes));
     if (decoded == null) return null;
-    final resized = img.copyResize(decoded, width: 1200);
+    final resized = img.copyResize(decoded, width: 1080);
     return _ProcessedPhoto(
-      Uint8List.fromList(img.encodeJpg(resized, quality: 82)),
+      Uint8List.fromList(img.encodeJpg(resized, quality: 78)),
       resized.width,
       resized.height,
     );

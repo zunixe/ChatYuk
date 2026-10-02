@@ -44,13 +44,15 @@ Future<String?> _processAvatar(Uint8List bytes) async {
   // menentukan area 1:1, jadi cukup resize + encode.
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
+  // 640px (dulu 1024) + q85 (dulu 90): avatar tampil maksimal ~108px fisik,
+  // 640 sudah >5× resolusi tampil (tajam) tapi file ~50% lebih kecil.
   final resized = img.copyResize(
     decoded,
-    width: 1024,
-    height: 1024,
+    width: 640,
+    height: 640,
     interpolation: img.Interpolation.cubic,
   );
-  return base64Encode(img.encodeJpg(resized, quality: 90));
+  return base64Encode(img.encodeJpg(resized, quality: 85));
 }
 
 // Galeri foto + preview blur. Return {full, preview}.
