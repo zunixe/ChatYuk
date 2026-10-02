@@ -1851,3 +1851,44 @@ aturan memory untuk kontributor berikutnya.
 **Test:** `flutter test` (image_cache_hygiene, image_cap_widgets,
 online_users_provider, online_visibility) hijau.
 
+---
+
+## 24. Audit menyeluruh `Image.memory`/`MemoryImage` — user + admin (2026-10-02)
+
+Lanjutan §23: audit SEMUA titik render gambar di app (23 file) untuk pola
+"decode tanpa cap" yang sama. Hasil: **hampir semua sudah benar** (aturan §13
+sudah tertanam) — **admin panel bersih total**; app user tinggal 1 titik.
+
+**Titik yang diperbaiki:** `story_viewer_screen.dart` — halaman **tetangga**
+(neighbor person, di-preload untuk transisi swipe mulus) render
+`Image.memory(bytes)` **tanpa `cacheWidth`**. Kareni ini slide story (bisa
+~5MB full-res) yang hanya tampil SEBAGIAN & tidak di-zoom → dibor untuk
+decode penuh tiap tetangga. Fix: `cacheWidth: 720`.
+
+**Hasil audit (semua ✅ kecuali 1 di atas):**
+
+| Area | Titik | Cap |
+|---|---|---|
+| online_users avatar/zoom | 5 | 96 / 1080 |
+| user_info carousel/zoom | 3 | 720 / 1080 |
+| profile zoom | 1 | 1080 |
+| private_chat bubble/thumb/zoom | 6 | 720-1600 + evict |
+| post_card feed/avatar/zoom | 4 | 1080 / size×2 |
+| post_photo_viewer | 2 | 128 / 1600 |
+| async_photo thumb/viewer | 1 | 256 + ResizeImage |
+| group_media grid | 1 | 256 |
+| story composer/picker | 2 | 1080 / 300 |
+| chat composer/video poster | 3 | 450 / 400 |
+| room_icon / create_room_sheet | 2 | size×3 / 144 |
+| leaderboard screen/sheet | 2 | ResizeImage 72 / 1080 |
+| nearby_card / profile_avatar / story_viewer_avatar | 3 | ResizeImage |
+| **admin** `avatar_circle` (list/zoom) | 2 | 96 / 1080 + evict |
+
+**Aturan penegasan (lihat `MEMORY_BEST_PRACTICES.md`):** setiap `Image.memory`
+WAJIB `cacheWidth` — termasuk **render yang cuma tampil sebagian** (neighbor /
+preview). Kalau ragu: cap = `lebar_px_tampil × 2`, lalu evict bila full-screen.
+
+**Test:** `flutter test` story (preload_window, slides_cache, viewer_model,
+viewer_avatar) hijau.
+
+

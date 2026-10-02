@@ -240,6 +240,7 @@ adb shell dumpsys SurfaceFlinger --latency '<nama-layer>'
 | 2026-09-26 | 864MB→225MB | foto chat full-res semua bubble + viewer | `cacheWidth` + evict (§13) |
 | 2026-09-26 | celah bitmap sisa | 4 `Image.memory` tanpa cap | cap + hygiene logout (§14) |
 | 2026-10-02 | lag pindah tab, spike 765MB | avatar list online full-res (40px decode 1080px) | `ResizeImage` 96 + trim background (§23) |
+| 2026-10-02 | audit menyeluruh (23 file) | 1 titik: story neighbor tanpa cap | `cacheWidth: 720` (§24); admin bersih |
 
 **Pola berulang:** `Image.memory` tanpa cap di permukaan persisten. Kalau
 menemukan lagi, langsung cap sesuai ukuran tampil.
