@@ -12,6 +12,7 @@ import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../main.dart' show resumeWarmup;
 import '../admin/admin_grouping.dart';
 import '../utils.dart';
 import '../core/ui/scroll_pagination.dart';
@@ -36,12 +37,13 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   Timer? _refreshTimer;
   Timer? _searchDebounce;
   bool _byDevice = true;
-  // Per-User: daftar SEMUA user (dari profiles) — termasuk yang TIDAK punya
-  // baris user_devices (mis. anggi). Tanpa ini, user tanpa device tak pernah
-  // muncul di "Per User".
+  // Per-User: daftar user (dari profiles) BER-PAGINASI — termasuk yang TIDAK
+  // punya baris user_devices. Dulu muat SEMUA user sekaligus (loop while) →
+  // berat/ngelag. Kini 100/halaman, sisipkan saat scroll, total dari server.
   List<Map<String, dynamic>>? _allUsers;
+  int _usersTotal = 0;
   bool _usersLoading = false;
-  static const int _usersPageSize = 500;
+  static const int _usersPageSize = 100;
 
   @override
   void initState() {
@@ -69,35 +71,37 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
     );
   }
 
-  /// Muat SEMUA user (profiles) untuk tampilan "Per User" — agar user tanpa
-  /// baris device tetap muncul. Paginasi 500/halaman sampai habis.
-  Future<void> _loadAllUsers() async {
+  /// Muat SATU halaman user "Per User" (paginasi 100). Halaman berikutnya
+  /// di-append saat scroll (dipanggil dari ScrollPagination). Total dari
+  /// server dipakai untuk header + berhenti saat habis.
+  Future<void> _loadAllUsers({bool refresh = false}) async {
     if (_usersLoading) return;
+    // Sudah termuat semua → tidak ada lagi (kecuali refresh paksa).
+    if (!refresh &&
+        _allUsers != null &&
+        _allUsers!.length >= _usersTotal &&
+        _usersTotal > 0) {
+      return;
+    }
     _usersLoading = true;
     final admin = context.read<AdminProvider>();
-    var offset = 0;
-    final acc = <Map<String, dynamic>>[...?_allUsers];
     try {
-      while (true) {
-        final res = await admin.listStatsUsers(
-          'all',
-          limit: _usersPageSize,
-          offset: offset,
-        );
-        final items = (res['items'] as List<dynamic>? ?? const [])
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-        if (items.isEmpty) break;
-        acc.addAll(items);
-        offset += items.length;
-        final total = (res['total'] as num?)?.toInt() ?? 0;
-        if (offset >= total) break;
-      }
+      final offset = refresh ? 0 : (_allUsers?.length ?? 0);
+      final res = await admin.listStatsUsers(
+        'all',
+        limit: _usersPageSize,
+        offset: offset,
+      );
+      final items = (res['items'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      _usersTotal = (res['total'] as num?)?.toInt() ?? _usersTotal;
+      final base = refresh ? <Map<String, dynamic>>[] : [...?_allUsers];
+      _allUsers = _mergeById([...base, ...items]);
     } catch (e) {
       dlog('[ADMIN] loadAllUsers error: $e');
     }
-    _allUsers = _mergeById(acc);
     _usersLoading = false;
     if (mounted) setState(() {});
   }
@@ -113,6 +117,38 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
     return out;
   }
 
+  // Cache hasil merge+filter "Per User" — hindari O(n) tiap build.
+  List<Map<String, dynamic>>? _mergedCache;
+  int _mergedUsersLen = -1;
+  int _mergedDevicesLen = -1;
+  String _mergedQuery = '\u0000';
+
+  List<Map<String, dynamic>> _mergedUsers(List<Map<String, dynamic>> devices) {
+    final all = _allUsers ?? const [];
+    // Kunci cache: panjang user, panjang device, query.
+    if (_mergedCache != null &&
+        _mergedUsersLen == all.length &&
+        _mergedDevicesLen == devices.length &&
+        _mergedQuery == _query) {
+      return _mergedCache!;
+    }
+    var users = mergeUsersWithDevices(List.of(all), devices);
+    final q = _query.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      users = users.where((u) {
+        final hay = '${u['_nick'] ?? ''} ${u['email'] ?? ''} ${u['city'] ?? ''} '
+                '${u['brand'] ?? ''} ${u['model'] ?? ''} ${u['user_id'] ?? ''}'
+            .toLowerCase();
+        return hay.contains(q);
+      }).toList();
+    }
+    _mergedCache = users;
+    _mergedUsersLen = all.length;
+    _mergedDevicesLen = devices.length;
+    _mergedQuery = _query;
+    return users;
+  }
+
 
 
   /// App di-background → stop polling.
@@ -123,7 +159,11 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
       _refreshTimer = null;
     } else if (state == AppLifecycleState.resumed && mounted) {
       if (_refreshTimer == null) {
-        context.read<AdminProvider>().refreshDevicesSilent();
+        unawaited(
+          resumeWarmup().then((_) {
+            if (mounted) context.read<AdminProvider>().refreshDevicesSilent();
+          }),
+        );
         _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
           if (!mounted) return;
           final admin = context.read<AdminProvider>();
@@ -288,18 +328,10 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
         child: CircularProgressIndicator(color: AppTheme.primary),
       );
     }
-    // Gabungkan semua user + device (user tanpa device tetap tampil).
-    var users = mergeUsersWithDevices(allUsers, admin.devices);
-    // Filter pencarian.
-    final q = _query.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      users = users.where((u) {
-        final hay = '${u['_nick'] ?? ''} ${u['email'] ?? ''} ${u['city'] ?? ''} '
-                '${u['brand'] ?? ''} ${u['model'] ?? ''} ${u['user_id'] ?? ''}'
-            .toLowerCase();
-        return hay.contains(q);
-      }).toList();
-    }
+    // Gabungkan user + device (user tanpa device tetap tampil). Hasil
+    // di-CACHE: merge O(n) dulu jalan tiap build → lag saat scroll/ketik.
+    // Sekarang hanya dihitung ulang bila list user/device atau query berubah.
+    final users = _mergedUsers(admin.devices);
     if (users.isEmpty) {
       return Center(
         child: Column(
@@ -319,10 +351,12 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
         ),
       );
     }
+    // Footer: total + status muat-halaman-berikut (paginasi 100).
+    final hasMore = _usersTotal > 0 && users.length < _usersTotal;
     return RefreshIndicator(
       onRefresh: () async {
         await admin.fetchDevices();
-        await _loadAllUsers();
+        await _loadAllUsers(refresh: true);
       },
       child: ListView.builder(
         controller: _scrollCtrl,
@@ -332,8 +366,40 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
           12,
           MediaQuery.of(context).padding.bottom + 12,
         ),
-        itemCount: users.length,
+        // +1 footer (total / memuat).
+        itemCount: users.length + 1,
         itemBuilder: (_, i) {
+          if (i >= users.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Center(
+                child: hasMore
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${users.length}/$_usersTotal',
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        '$_usersTotal ${s.adminDeviceByUser}',
+                        style: AppText.caption.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+              ),
+            );
+          }
           final u = users[i];
           final onTap = () => _showUserDetail(context, u);
           // Punya device → kartu device biasa (info device lengkap).
