@@ -15,11 +15,19 @@ class AppEnv {
   static const String _kEnv = String.fromEnvironment('APP_ENV');
   static const String _kUrl = String.fromEnvironment('SUPABASE_URL');
   static const String _kKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  static const String _kTikTokToken =
+      String.fromEnvironment('TIKTOK_ACCESS_TOKEN');
 
   // ── PROD (JANGAN DIUBAH TANPA REVIEW) ──
   static const String prodUrl = 'https://fohcucyyejdryryoxitm.supabase.co';
   static const String prodAnonKey =
       'sb_publishable_aFQQbXscy1mqVq5jHX7p2w_wzs2GAKg';
+
+  /// Access Token TikTok App Events SDK (rahasia). Disuntik saat build:
+  ///   --dart-define=TIKTOK_ACCESS_TOKEN=...
+  /// Tidak di-hardcode di repo. Kosong → SDK tetap init (App ID dari
+  /// manifest) tapi tanpa access token (pelacakan mungkin terbatas).
+  static String get tiktokAccessToken => _kTikTokToken;
 
   static bool get isDev => _kEnv == 'dev';
 

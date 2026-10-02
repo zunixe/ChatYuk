@@ -120,6 +120,12 @@
         <meta-data
             android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled"
             android:value="true" />
+        <!-- ── TikTok App Events (Business) SDK ──
+             App ID & TikTok App ID TIDAK via manifest — SDK v1.7 membacanya
+             dari TTConfig (di-set di TikTokBridge.kt dari res/values/
+             strings.xml: tiktok_app_id / tiktok_tt_app_id). Access Token
+             (rahasia) di-set runtime dari BuildConfig/Dart. AutoInit tetap
+             dipanggil eksplisit dari Dart lewat MethodChannel. -->
         <!-- Jangan ubah nama service ini (syarat flutter_foreground_task) -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"

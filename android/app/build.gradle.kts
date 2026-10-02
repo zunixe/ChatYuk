@@ -181,4 +181,13 @@ dependencies {
     // Versi mengikuti BOM yang dipakai plugin firebase_core (33.16.0).
     implementation(platform("com.google.firebase:firebase-bom:33.16.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // ── TikTok App Events (Business) SDK ──
+    // Melacak event in-app (install/login/register/purchase) untuk iklan
+    // TikTok. Native Android saja → dijembatani ke Dart lewat MethodChannel
+    // `com.chatyuk.chatyuk/tiktok` (lihat TikTokBridge.kt & TikTokService.dart).
+    implementation("com.github.tiktok:tiktok-business-android-sdk:1.7.1")
+    // Dibutuhkan SDK: lifecycle (deteksi app foreground) + Install Referrer.
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-common-java8:2.8.7")
+    implementation("com.android.installreferrer:installreferrer:2.2")
 }
