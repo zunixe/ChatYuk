@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-30T12:43:59Z
+-- Timestamp: 2026-10-02T16:14:16Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -1158,7 +1158,7 @@ begin
   return jsonb_build_object('points', public.yukcoin_total(auth.uid()), 'claimed', false);
 end; $function$
 
--- snapshot-fn: points_leaderboard @ 20260913000000_leaderboard_history_pagination.sql
+-- snapshot-fn: points_leaderboard @ 20261005080000_avatar_privacy_consistency.sql
 CREATE OR REPLACE FUNCTION public.points_leaderboard(scope text DEFAULT 'weekly'::text, row_limit integer DEFAULT 50, row_offset integer DEFAULT 0)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1170,6 +1170,7 @@ declare
   me jsonb;
   lim int;
   off int;
+  v_me uuid := auth.uid();
 begin
   lim := least(greatest(coalesce(row_limit, 50), 1), 100);
   off := greatest(coalesce(row_offset, 0), 0);
@@ -1177,7 +1178,10 @@ begin
   if scope = 'alltime' then
     with ranked as (
       select
-        p.id, p.nickname, p.avatar, p.country, p.points as score, p.is_registered,
+        p.id, p.nickname,
+        case when public.privacy_can_view(p.id, 'profile_photo', v_me)
+             then p.avatar else '' end as avatar,
+        p.country, p.points as score, p.is_registered,
         row_number() over (order by p.points desc, p.created_at asc) as rank
       from profiles p
       where p.status <> 'invisible' and (p.is_registered = true or p.status <> 'offline')
@@ -1196,7 +1200,7 @@ begin
       where p.status <> 'invisible' and (p.is_registered = true or p.status <> 'offline')
     )
     select jsonb_build_object('rank', rank, 'score', score)
-    into me from ranked where id = auth.uid();
+    into me from ranked where id = v_me;
   else
     with earned as (
       select e.user_id, sum(e.amount)::int as score
@@ -1205,7 +1209,10 @@ begin
       group by e.user_id
     ), ranked as (
       select
-        p.id, p.nickname, p.avatar, p.country, en.score, p.is_registered,
+        p.id, p.nickname,
+        case when public.privacy_can_view(p.id, 'profile_photo', v_me)
+             then p.avatar else '' end as avatar,
+        p.country, en.score, p.is_registered,
         row_number() over (order by en.score desc, p.created_at asc) as rank
       from earned en
       join profiles p on p.id = en.user_id
@@ -1231,7 +1238,7 @@ begin
       where p.status <> 'invisible' and (p.is_registered = true or p.status <> 'offline')
     )
     select jsonb_build_object('rank', rank, 'score', score)
-    into me from ranked where id = auth.uid();
+    into me from ranked where id = v_me;
   end if;
 
   return jsonb_build_object(

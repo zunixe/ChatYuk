@@ -56,7 +56,10 @@ class AdminService {
   // Timeout jalur buka panel: tanpa ini, koneksi stall membuat future
   // tidak pernah selesai → spinner selamanya (panel "blank"/"hang").
   // Gagal-timeout ditangkap provider → tampil error/stale, bukan blank.
-  static const _openTimeout = Duration(seconds: 30);
+  // 10 dtk (dulu 30): koneksi basi setelah idle bisa menggantung; timeout
+  // lebih pendek membuat kegagalan cepat & bisa di-retry, bukan menunggu
+  // 30 dtk terasa "hang". RPC admin normal terukur < 500ms.
+  static const _openTimeout = Duration(seconds: 10);
 
   Future<Map<String, dynamic>> getStats() async {
     final res = await _rpc('admin_stats').timeout(_openTimeout);
@@ -275,7 +278,7 @@ class AdminService {
   /// Daftar call 1:1 yang sedang aktif (audio/video) — untuk badge monitor
   /// dan fitur pantau call di admin panel.
   Future<List<ActiveCallInfo>> getActiveCalls() async {
-    final res = await _rpc('admin_active_calls');
+    final res = await _rpc('admin_active_calls').timeout(_openTimeout);
     final list = res is List ? res : <dynamic>[];
     return list
         .map(
@@ -348,7 +351,7 @@ class AdminService {
       'p_limit': limit,
       'p_offset': offset,
       'p_include_pending': includePending,
-    });
+    }).timeout(_openTimeout);
     return (res as Map<String, dynamic>?) ?? {'items': const [], 'total': 0};
   }
 
@@ -761,7 +764,7 @@ class AdminService {
     final res = await _rpc(
       'admin_contact_messages_page',
       params: {'p_limit': limit, 'p_offset': offset},
-    );
+    ).timeout(_openTimeout);
     return (res as Map<String, dynamic>?) ?? {};
   }
 

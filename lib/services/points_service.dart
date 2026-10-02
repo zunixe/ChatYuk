@@ -9,36 +9,74 @@ class PointsService {
 
   PointsService([SupabaseClient? sb]) : _sb = sb ?? Supabase.instance.client;
 
-  Future<bool> fetchEnabled() async {
-    final res = await measuredRpc(_sb, 'get_points_enabled');
-    return res == true;
+  /// Dedupe RPC idempoten: bila panggilan untuk [key] sedang berjalan,
+  /// panggilan berikutnya MENUNGGU future yang sama (bukan menembak RPC
+  /// baru). Terukur: `get_points_enabled` sampai 5× + `get_wallet` 3×
+  /// ditembak bersamaan saat boot → membanjiri koneksi & bikin lag. Hasil
+  /// di-cache singkat (TTL) supaya burst dalam window singkat = 0 RPC.
+  final Map<String, Future<Object?>> _inflight = {};
+  final Map<String, ({Object? value, DateTime at})> _ttlCache = {};
+  static const _ttl = Duration(seconds: 3);
+
+  Future<T> _coalesce<T>(String key, Future<T> Function() fn, {bool ttl = false}) {
+    if (ttl) {
+      final c = _ttlCache[key];
+      if (c != null && DateTime.now().difference(c.at) < _ttl) {
+        return Future<T>.value(c.value as T);
+      }
+    }
+    final running = _inflight[key];
+    if (running != null) return running.then((v) => v as T);
+    final fut = fn();
+    _inflight[key] = fut;
+    fut.whenComplete(() {
+      if (identical(_inflight[key], fut)) _inflight.remove(key);
+    });
+    if (ttl) {
+      fut.then((v) {
+        _ttlCache[key] = (value: v, at: DateTime.now());
+      }).catchError((_) {});
+    }
+    return fut;
+  }
+
+  Future<bool> fetchEnabled() {
+    // TTL 3s: banyak screen memanggil saat boot → cukup 1 RPC.
+    return _coalesce<bool>('get_points_enabled', () async {
+      final res = await measuredRpc(_sb, 'get_points_enabled');
+      return res == true;
+    }, ttl: true);
   }
 
   /// Harga fitur berbayar (call per menit, filter, nearby) untuk UI.
-  Future<Map<String, dynamic>> meteredPricing() async {
-    try {
-      final res = await measuredRpc(_sb, 'metered_pricing_public');
-      if (res is Map) return Map<String, dynamic>.from(res);
-    } catch (e) {
-      dlog('[PointsService] meteredPricing error: $e');
-    }
-    return {
-      'call_audio_cost_per_min': 6,
-      'call_video_cost_per_min': 20,
-      'filter_gender_cost': 15,
-      'nearby_cost': 25,
-    };
+  Future<Map<String, dynamic>> meteredPricing() {
+    return _coalesce<Map<String, dynamic>>('metered_pricing_public', () async {
+      try {
+        final res = await measuredRpc(_sb, 'metered_pricing_public');
+        if (res is Map) return Map<String, dynamic>.from(res);
+      } catch (e) {
+        dlog('[PointsService] meteredPricing error: $e');
+      }
+      return {
+        'call_audio_cost_per_min': 6,
+        'call_video_cost_per_min': 20,
+        'filter_gender_cost': 15,
+        'nearby_cost': 25,
+      };
+    }, ttl: true);
   }
 
   /// Feature flags (published per fitur) untuk gate UI.
-  Future<Map<String, dynamic>> featureFlags() async {
-    try {
-      final res = await measuredRpc(_sb, 'get_feature_flags');
-      if (res is Map) return Map<String, dynamic>.from(res);
-    } catch (e) {
-      dlog('[PointsService] featureFlags error: $e');
-    }
-    return {};
+  Future<Map<String, dynamic>> featureFlags() {
+    return _coalesce<Map<String, dynamic>>('get_feature_flags', () async {
+      try {
+        final res = await measuredRpc(_sb, 'get_feature_flags');
+        if (res is Map) return Map<String, dynamic>.from(res);
+      } catch (e) {
+        dlog('[PointsService] featureFlags error: $e');
+      }
+      return {};
+    }, ttl: true);
   }
 
   /// Katalog paket topup (id, coins, price_idr, bonus_label, play_product_id).
@@ -146,20 +184,32 @@ class PointsService {
   String? get uid => _sb.auth.currentUser?.id;
 
   /// Saldo wallet 3 bucket: {bonus, topup, earned, total, withdrawable}.
-  Future<Map<String, dynamic>> getWallet() async {
-    final res = await measuredRpc(_sb, 'get_wallet');
-    if (res is Map) return Map<String, dynamic>.from(res);
-    return {'bonus': 0, 'topup': 0, 'earned': 0, 'total': 0, 'withdrawable': 0};
+  Future<Map<String, dynamic>> getWallet() {
+    // Dedupe in-flight (tanpa TTL): saldo harus fresh setelah transaksi,
+    // tapi burst panggilan bersamaan (boot: 3×) cukup 1 RPC.
+    return _coalesce<Map<String, dynamic>>('get_wallet', () async {
+      final res = await measuredRpc(_sb, 'get_wallet');
+      if (res is Map) return Map<String, dynamic>.from(res);
+      return {
+        'bonus': 0,
+        'topup': 0,
+        'earned': 0,
+        'total': 0,
+        'withdrawable': 0,
+      };
+    });
   }
 
   // ── YukCoin v2 ──────────────────────────────────────────────
   // Satu saldo (total) untuk UI, dipotong earned→bonus lewat spend_yukcoin.
 
   /// Saldo YukCoin terpadu: {total, bonus, earned}.
-  Future<Map<String, dynamic>> getYukcoin() async {
-    final res = await measuredRpc(_sb, 'get_yukcoin');
-    if (res is Map) return Map<String, dynamic>.from(res);
-    return {'total': 0, 'bonus': 0, 'earned': 0};
+  Future<Map<String, dynamic>> getYukcoin() {
+    return _coalesce<Map<String, dynamic>>('get_yukcoin', () async {
+      final res = await measuredRpc(_sb, 'get_yukcoin');
+      if (res is Map) return Map<String, dynamic>.from(res);
+      return {'total': 0, 'bonus': 0, 'earned': 0};
+    });
   }
 
   /// Apakah fitur YukCoin v2 aktif untuk user ini (flag server / admin).
@@ -174,21 +224,23 @@ class PointsService {
   }
 
   /// Status ringkas YukCoin v2: {active, total, bonus, earned, ghost, extra_slots}.
-  Future<Map<String, dynamic>> yukcoinV2Status() async {
-    try {
-      final res = await measuredRpc(_sb, 'yukcoin_v2_status');
-      if (res is Map) return Map<String, dynamic>.from(res);
-    } catch (e) {
-      dlog('[PointsService] yukcoinV2Status error: $e');
-    }
-    return {
-      'active': false,
-      'total': 0,
-      'bonus': 0,
-      'earned': 0,
-      'ghost': false,
-      'extra_slots': 0,
-    };
+  Future<Map<String, dynamic>> yukcoinV2Status() {
+    return _coalesce<Map<String, dynamic>>('yukcoin_v2_status', () async {
+      try {
+        final res = await measuredRpc(_sb, 'yukcoin_v2_status');
+        if (res is Map) return Map<String, dynamic>.from(res);
+      } catch (e) {
+        dlog('[PointsService] yukcoinV2Status error: $e');
+      }
+      return {
+        'active': false,
+        'total': 0,
+        'bonus': 0,
+        'earned': 0,
+        'ghost': false,
+        'extra_slots': 0,
+      };
+    }, ttl: true);
   }
 
   /// Slot foto tambahan milik user.

@@ -7,6 +7,7 @@ import '../config/supabase_config.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
+import '../main.dart' show resumeWarmup;
 import '../core/admin_gate.dart';
 import '../core/admin_err.dart';
 import '../core/cache/message_cache.dart';
@@ -145,7 +146,11 @@ class _AdminDummyTabState extends State<AdminDummyTab>
       _refreshTimer = null;
     } else if (state == AppLifecycleState.resumed && mounted) {
       if (_refreshTimer == null) {
-        _load(silent: true);
+        unawaited(
+          resumeWarmup().then((_) {
+            if (mounted) _load(silent: true);
+          }),
+        );
         _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
           if (!mounted) return;
           if (_items.length > _pageSize) return;

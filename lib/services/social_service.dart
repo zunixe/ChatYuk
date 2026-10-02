@@ -11,6 +11,21 @@ class SocialService {
 
   String? get uid => _sb.auth.currentUser?.id;
 
+  /// Dedupe RPC read idempoten (in-flight coalescing) — boot menembak
+  /// social_list ×4, inbox/outbox ×2, subscriptions ×2 bersamaan. Cukup 1
+  /// RPC per key dalam satu window singkat; sisanya menunggu future sama.
+  final Map<String, Future<Object?>> _inflight = {};
+  Future<T> _coalesce<T>(String key, Future<T> Function() fn) {
+    final running = _inflight[key];
+    if (running != null) return running.then((v) => v as T);
+    final fut = fn();
+    _inflight[key] = fut;
+    fut.whenComplete(() {
+      if (identical(_inflight[key], fut)) _inflight.remove(key);
+    });
+    return fut;
+  }
+
   Future<Map<String, dynamic>> followUser(String targetUid) async {
     final res = await measuredRpc(_sb, 'follow_user', params: {'p_followee': targetUid});
     return _map(res);
@@ -87,59 +102,76 @@ class SocialService {
     String kind,
     String userUid, {
     int limit = 50,
-  }) async {
-    try {
-      final res = await measuredRpc(_sb, 
-        'social_list',
-        params: {'p_kind': kind, 'p_user': userUid, 'p_limit': limit},
-      );
-      return _list(res);
-    } catch (e) {
-      dlog('[SocialService] socialList error: $e');
-      return [];
-    }
+  }) {
+    return _coalesce<List<Map<String, dynamic>>>(
+      'social_list:$kind:$userUid',
+      () async {
+        try {
+          final res = await measuredRpc(_sb, 
+            'social_list',
+            params: {'p_kind': kind, 'p_user': userUid, 'p_limit': limit},
+          );
+          return _list(res);
+        } catch (e) {
+          dlog('[SocialService] socialList error: $e');
+          return [];
+        }
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> friendRequestInbox({
     int limit = 50,
     int offset = 0,
-  }) async {
-    try {
-      final res = await measuredRpc(_sb, 
-        'friend_request_inbox_page',
-        params: {'p_limit': limit, 'p_offset': offset},
-      );
-      return _list(res);
-    } catch (e) {
-      dlog('[SocialService] inbox error: $e');
-      return [];
-    }
+  }) {
+    return _coalesce<List<Map<String, dynamic>>>(
+      'fr_inbox:$limit:$offset',
+      () async {
+        try {
+          final res = await measuredRpc(_sb, 
+            'friend_request_inbox_page',
+            params: {'p_limit': limit, 'p_offset': offset},
+          );
+          return _list(res);
+        } catch (e) {
+          dlog('[SocialService] inbox error: $e');
+          return [];
+        }
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> friendRequestOutbox({
     int limit = 50,
     int offset = 0,
-  }) async {
-    try {
-      final res = await measuredRpc(_sb, 
-        'friend_request_outbox_page',
-        params: {'p_limit': limit, 'p_offset': offset},
-      );
-      return _list(res);
-    } catch (e) {
-      dlog('[SocialService] outbox error: $e');
-      return [];
-    }
+  }) {
+    return _coalesce<List<Map<String, dynamic>>>(
+      'fr_outbox:$limit:$offset',
+      () async {
+        try {
+          final res = await measuredRpc(_sb, 
+            'friend_request_outbox_page',
+            params: {'p_limit': limit, 'p_offset': offset},
+          );
+          return _list(res);
+        } catch (e) {
+          dlog('[SocialService] outbox error: $e');
+          return [];
+        }
+      },
+    );
   }
 
-  Future<List<Map<String, dynamic>>> mySubscriptions() async {
-    try {
-      final res = await measuredRpc(_sb, 'my_subscriptions');
-      return _list(res);
-    } catch (e) {
-      dlog('[SocialService] mySubscriptions error: $e');
-      return [];
-    }
+  Future<List<Map<String, dynamic>>> mySubscriptions() {
+    return _coalesce<List<Map<String, dynamic>>>('my_subscriptions', () async {
+      try {
+        final res = await measuredRpc(_sb, 'my_subscriptions');
+        return _list(res);
+      } catch (e) {
+        dlog('[SocialService] mySubscriptions error: $e');
+        return [];
+      }
+    });
   }
 
   /// Hapus semua relasi sosial (follow, subscribe, friend request) milik

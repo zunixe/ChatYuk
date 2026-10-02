@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -135,6 +139,12 @@ class SupabaseConfig {
     await Supabase.initialize(
       url: url,
       anonKey: publishableKey,
+      // PERF (kunci perbaikan "ngelag setelah idle"): koneksi HTTP keep-alive
+      // jadi BASI setelah app idle. Tanpa batas, request berikutnya
+      // menggantung sampai TCP timeout OS (~13-36 detik, terukur PerfProbe).
+      // Client ini membuang koneksi diam >15s & membatasi connect 5s, sehingga
+      // request basi gagal cepat lalu retry memakai koneksi segar.
+      httpClient: _buildHttpClient(),
       authOptions: FlutterAuthClientOptions(
         authFlowType: AuthFlowType.implicit,
         // Sesi disimpan terenkripsi (bukan SharedPreferences plaintext).
@@ -144,6 +154,18 @@ class SupabaseConfig {
         ),
       ),
     );
+  }
+
+  /// HTTP client dengan idle-timeout koneksi. `idleTimeout` = berapa lama
+  /// koneksi keep-alive menganggur sebelum ditutup Dart (mencegah koneksi
+  /// basi dipakai ulang). `connectionTimeout` = batas waktu handshake TCP.
+  static http.Client _buildHttpClient() {
+    final inner = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 5)
+      ..idleTimeout = const Duration(seconds: 15)
+      // Keep-alive tetap aktif (untuk performa request beruntun normal).
+      ..maxConnectionsPerHost = 8;
+    return IOClient(inner);
   }
 
   static SupabaseClient get client => Supabase.instance.client;
