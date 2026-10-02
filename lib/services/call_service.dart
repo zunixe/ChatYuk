@@ -150,6 +150,11 @@ class CallService {
         .catchError((_) {});
   }
 
+  /// Buat MediaStream lokal kosong (untuk menampung track remote — mis. mix
+  /// audio 2 peserta di monitor admin). Dipakai WatchSession.
+  Future<MediaStream> createLocalStream([String label = 'mix']) =>
+      createLocalMediaStream(label);
+
   Future<String?> getNickname(String uid) async {
     final row = await _sb
         .from('profiles')
@@ -815,8 +820,25 @@ class CallSession extends ChangeNotifier {
         // user yang pegang kendali (tombol sambung-ulang / akhiri).
         if (_iceRestarted || _iceReconnectFailed) return;
         final cur = _pc?.connectionState;
-        if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected)
+        final ice = _pc?.iceConnectionState;
+        // PENTING: sebagian device tidak memanggil onConnectionState/
+        // onIceConnectionState walau media sudah mengalir → `_phase` tetap
+        // "connecting" → dulu timer ini MENUTUP call yang sebenarnya
+        // tersambung ("call mati sendiri" setelah ~15-20 dtk). Cek state PC
+        // LANGSUNG; kalau sudah Connected → set inCall (jangan putus).
+        if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected ||
+            ice == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+            ice == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+          if (_phase != CallPhase.inCall) {
+            dlog('[ICE] 15s check: pc/ice Connected -> SET inCall (anti putus)');
+            _phase = CallPhase.inCall;
+            _connectedAt = _connectedAt ?? DateTime.now();
+            _recordConnected('timeout15Check');
+            _startBilling();
+            notifyListeners();
+          }
           return;
+        }
         // Relay-only belum tersambung & fallback belum dicoba → jangan
         // menyerah; coba all-candidates (P2P) dulu sebelum menyatakan gagal.
         if (_relayOnly && !_iceAllCandidatesTried) {

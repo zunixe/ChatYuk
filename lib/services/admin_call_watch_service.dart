@@ -38,6 +38,21 @@ class WatchSession extends ChangeNotifier {
   bool _stopped = false;
   final Map<String, List<Map<String, dynamic>>> _pendingCands = {};
 
+  /// Stream AUDIO gabungan (mix) kedua peserta — di-mount ke satu renderer
+  /// supaya Android memainkan audio KEDUA peserta sekaligus.
+  ///
+  /// Masalah nyata: admin punya 2 peer connection (caller + callee) → 2
+  /// remote audio track. WebRTC Android hanya memutar audio dari SATU
+  /// stream/sink (yang terakhir attach) → hanya 1 suara terdengar. Solusi:
+  /// kumpulkan audio track kedua peserta ke SATU MediaStream → di-mix oleh
+  /// audio device module → dua suara terdengar bersamaan.
+  MediaStream? _mixedAudioStream;
+
+  /// Renderer khusus audio mix (view tersembunyi di UI).
+  RTCVideoRenderer? get audioRenderer => _audioRenderer;
+  RTCVideoRenderer? _audioRenderer;
+  MediaStream? get mixedAudioStream => _mixedAudioStream;
+
   /// Status call TERKINI ('ringing' | 'answered' | ...). `call.status` di
   /// [ActiveCallInfo] bersifat beku (diambil sekali saat sesi dibuka), jadi
   /// admin yang membuka monitor saat masih 'ringing' akan melihat "Ringing"
@@ -76,6 +91,15 @@ class WatchSession extends ChangeNotifier {
       try {
         await p.renderer.initialize();
       } catch (_) {}
+    }
+    // Renderer + stream khusus audio MIX kedua peserta (lihat [_mixedAudioStream]).
+    try {
+      _audioRenderer = RTCVideoRenderer();
+      await _audioRenderer!.initialize();
+      _mixedAudioStream = await _service.createLocalStream(); // helper di bawah
+    } catch (e) {
+      dlog('[ADMIN-WATCH] audio mix init gagal (fallback 2-renderer): $e');
+      _mixedAudioStream = null;
     }
     // Sinyal call ini — semua sinyal peserta diterima admin karena
     // from_uid != uid admin.
@@ -214,6 +238,9 @@ class WatchSession extends ChangeNotifier {
           }
         }
         pp.renderer.srcObject = stream;
+        // Tambahkan audio peserta ini ke stream MIX (agar dua suara
+        // terdengar bersamaan — lihat [_mixedAudioStream]).
+        unawaited(_addAudioToMix(stream.getAudioTracks()));
         notifyListeners();
       };
       pc.onIceCandidate = (c) {
@@ -427,6 +454,28 @@ class WatchSession extends ChangeNotifier {
     return null;
   }
 
+  /// Tambahkan audio track peserta ke stream MIX (di-dedupe per track id).
+  /// Di-mount lewat [audioRenderer] di UI supaya Android memutar KEDUA suara.
+  Future<void> _addAudioToMix(List<MediaStreamTrack> tracks) async {
+    final mix = _mixedAudioStream;
+    final rend = _audioRenderer;
+    if (mix == null || rend == null || _stopped) return;
+    try {
+      final have = mix.getAudioTracks().map((t) => t.id).toSet();
+      for (final t in tracks) {
+        if (!have.contains(t.id)) {
+          await mix.addTrack(t);
+          dlog('[ADMIN-WATCH] audio track ${t.id} → mix (total '
+              '${mix.getAudioTracks().length})');
+        }
+      }
+      if (rend.srcObject != mix) rend.srcObject = mix;
+      notifyListeners();
+    } catch (e) {
+      dlog('[ADMIN-WATCH] addAudioToMix gagal: $e');
+    }
+  }
+
   /// Tutup semua koneksi + renderer. Setelah ini admin tidak lagi
   /// menerima audio/video dari peserta.
   Future<void> stop() async {
@@ -454,6 +503,16 @@ class WatchSession extends ChangeNotifier {
         await p.renderer.dispose();
       } catch (_) {}
     }
+    // Lepas stream + renderer audio mix.
+    try {
+      _audioRenderer?.srcObject = null;
+      await _audioRenderer?.dispose();
+    } catch (_) {}
+    _audioRenderer = null;
+    try {
+      await _mixedAudioStream?.dispose();
+    } catch (_) {}
+    _mixedAudioStream = null;
     _pendingCands.clear();
   }
 }
