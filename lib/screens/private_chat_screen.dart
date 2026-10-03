@@ -1085,6 +1085,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     _statusSub?.cancel();
     _typingSub?.cancel();
     _typingClearTimer?.cancel();
+    _typingState.dispose();
     _openWorkTimer?.cancel();
     _liveTimer?.cancel();
     _imgQueue.clear();
@@ -1278,8 +1279,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   // di dispose agar kotak buka-tutup cepat tak menyisakan subscribe nyangkut.
   Timer? _openWorkTimer;
   DateTime _lastTypingSent = DateTime(2000);
-  bool _showTyping = false;
-  bool _showRecording = false;
+  /// Status bubble typing/recording lawan — 0=off, 1=typing, 2=recording.
+  /// ValueNotifier (bukan setState) supaya perubahan typing TIDAK me-rebuild
+  /// SELURUH layar chat (dulu tiap pulse typing → setState → rebuild list
+  /// pesan O(n) + semua UserAvatar → jank "ngetik ngelag"). Hanya
+  /// ValueListenableBuilder di area list yang rebuild.
+  final ValueNotifier<int> _typingState = ValueNotifier<int>(0);
+  bool get _showTyping => _typingState.value == 1;
+  bool get _showRecording => _typingState.value == 2;
   // Id + waktu pesan terakhir dari lawan bicara — dipakai mematikan
   // bubble typing begitu balasan masuk (otoritatif, anti stuck) dan
   // mengabaikan pulse basi dari invokasi lama.
@@ -1315,22 +1322,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           }
           dlog('[TYPING] stream got kind=$kind -> bubble on');
           if (!mounted) return;
-          setState(() {
-            if (kind == 'recording') {
-              _showRecording = true;
-              _showTyping = false;
-            } else {
-              _showTyping = true;
-              _showRecording = false;
-            }
-          });
+          // Tidak setState: hanya notifier typing (rebuild terbatas).
+          _typingState.value = kind == 'recording' ? 2 : 1;
           _typingClearTimer?.cancel();
           _typingClearTimer = Timer(const Duration(seconds: 3), () {
             if (!mounted) return;
-            setState(() {
-              _showTyping = false;
-              _showRecording = false;
-            });
+            _typingState.value = 0;
           });
         }, onError: (e) {
           // OFFLINE: stream typing error → jangan tak tertangkap.
@@ -1344,12 +1341,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   void _hideTyping() {
     _typingClearTimer?.cancel();
     if (!mounted) return;
-    if (_showTyping || _showRecording) {
-      setState(() {
-        _showTyping = false;
-        _showRecording = false;
-      });
-    }
+    if (_typingState.value != 0) _typingState.value = 0;
   }
 
   void _sendTypingSignal() {
@@ -2177,7 +2169,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                 Expanded(
                   child: Stack(
                     children: [
-                      StreamBuilder<List<MessageModel>>(
+                      // Typing/recording bubble di-drive ValueNotifier →
+                      // hanya subtree list ini yang rebuild saat typing
+                      // berubah, BUKAN seluruh layar (cegah jank "ngetik").
+                      ValueListenableBuilder<int>(
+                        valueListenable: _typingState,
+                        builder: (context, _, __) =>
+                            StreamBuilder<List<MessageModel>>(
                         stream: _msgsStream,
                         // FRAME PERTAMA LANGSUNG: data awal dari cache memori
                         // (sinkron) → pesan "nempel" sejak frame pertama
@@ -2349,6 +2347,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           );
                         },
                       ),
+                      ), // ValueListenableBuilder _typingState
                       if (pointsEnabled)
                         Positioned(
                           top: 8,

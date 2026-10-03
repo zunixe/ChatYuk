@@ -2360,3 +2360,25 @@ Dua bug mic dari uji 3 device:
 
 **Verifikasi:** analyze bersih; 19 test room lulus; build `--profile` +
 install 3 device (Redmi/Xiaomi/Huawei).
+
+### 27h. Private chat — perbaiki jank "ngetik & buka" (typing setState storm) 2026-10-05
+
+Diukur via PerfProbe (build `--profile --dart-define=PERF_PROBE=true`): log
+`[CHAT-BUILD]` muncul BERUNTUN (~4× dalam 50ms) tiap kali typing berubah —
+bukti REBUILD-STORM seluruh layar.
+
+**Akar:** `getTypingPulseStream` mengirim pulse tiap perubahan typing lawan;
+handler `setState()` → **rebuild SELURUH `PrivateChatScreen`** → termasuk
+rebuild `items` list pesan O(n) + SEMUA `UserAvatar` bubble (`[AVATAR]` log
+beruntun) → jank saat mengetik / lawan mengetik.
+
+**Fix:** typing di-drive `ValueNotifier<int> _typingState` (0=off/1=typing/
+2=recording) + `ValueListenableBuilder` yang membungkus HANYA subtree list
+pesan. Perubahan typing tidak lagi men-rebuild appbar/composer/overlay/
+avatar di luar list. Pola sama dengan `_elapsed` di CallScreen.
+
+**Catatan:** jank "buka" private chat sebelumnya sudah ditangani `bb817e7`
+(defer 220ms kerja reaksi/starred/status). Jank "ngetik" ini terpisah.
+
+**Verifikasi:** analyze bersih (hanya lint lama use_build_context_sync);
+test private chat + typing lulus; build+install 2 device untuk uji.
