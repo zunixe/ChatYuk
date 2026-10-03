@@ -2462,3 +2462,100 @@ Dilaporkan: saat mengetik komentar terasa ngelag; saat menekan tombol
 `test/post_card_test.dart` 17 lulus (2 regresi baru: "balas komentar → kirim
 memakai parentId" & "mengetik tidak menghapus baris komentar"); suite
 timeline/detail/functional 82 lulus.
+
+### 27l. Admin panel — jank "kadang lancar kadang ngelag" saat buka tab (2026-10-06)
+
+Dilaporkan: saat buka Admin Panel kadang ngelag, kadang lancar — tidak stabil.
+
+**Akar:** `AdminProvider` adalah SATU `ChangeNotifier` yang menggabungkan 8
+domain (stats, devices, chats, chat-org, deleted, contact, attribution, calls)
+dengan **60 titik `notifyListeners()`**. Setiap tab memakai
+`context.watch<AdminProvider>()` → **setiap** notify dari domain MANA PUN
+me-rebuild **SEMUA** tab yang sudah dibangun sekaligus. Pemicu tak terkait:
+- `refreshStats` (polling 60 dtk) → rebuild Perangkat/Terhapus/Monitor/Atribusi/Kontak
+- `fetchDevices` (polling 60 dtk) → rebuild semua tab lagi
+- realtime `fetchActiveCalls` → rebuild semua tab
+
+"Kadang lancar kadang ngelag" karena: saat polling/realtime kebetulan menyala
+TEPAT saat membuka tab berat (Perangkat `_groupByDevice` ratusan baris,
+Terhapus, Monitor Chat), tab itu di-rebuild berulang → jank. Kalau tidak
+berbarengan, lancar. Ini yang membuat gejalanya tak stabil/periodik.
+
+**Fix — revision counter per-domain (granular rebuild):**
+- `AdminBase` menambah counter `_revStats/_revDevices/_revChats/_revDeleted/
+  _revContact/_revAttribution/_revChatOrg/_revCalls` + getter publik
+  (`revStats` dst) + helper `_notifyStats()/_notifyDevices()/…` yang menaikkan
+  counter domain lalu `notifyListeners()` (tetap satu notifier — interface
+  publik & mock test TIDAK berubah).
+- Semua `notifyListeners()` domain diganti `_notifyXxx()` sesuai domainnya
+  (stats 17, devices 5, deleted 4, chats 19, contact 6, chatOrg 7, attribution
+  7, calls 1). `clearAdminCache` tetap `notifyListeners()` mentah
+  (lintas-domain, sengaja rebuild semua).
+- Tiap tab/widget ganti `context.watch<AdminProvider>()` →
+  `context.select<AdminProvider, int>((p) => p.revXxx)` + `final admin =
+  context.read<AdminProvider>()`. Tab Monitor Chat bergantung ke DUA domain
+  (`revChats` + `revCalls`) karena menampilkan daftar chat + badge call.
+  Kartu stats (storage/registrasi/tablesize) → `revStats`; sheets Atribusi →
+  `revAttribution`.
+
+**Efek:** membuka tab berat tidak lagi di-rebuild oleh polling domain lain.
+Polling stats tiap 60 dtk hanya menyentuh tab Ringkasan/Poin; polling devices
+hanya menyentuh tab Perangkat.
+
+**Verifikasi:** analyze bersih (provider 0 issue; sisa info lint lama di
+screens); `test/admin_*.dart` 165 lulus + 2 test baru ("notify STATS tidak
+menaikkan counter domain lain", "notify DEVICES hanya menaikkan revDevices").
+
+### 27m. Ngetik ngelag "setelah app dipakai lama" — akumulasi cache memori (2026-10-06)
+
+**Gejala (user):** fresh install lancar; setelah ±½–1 jam pakai, **ngetik di
+private chat ngelag**; **restart app → normal lagi (sementara)**. Klik kartu
+list→chat & menu Online→chat juga "berat"; hapus huruf terakhir teks panjang
+ngelag.
+
+**Diagnosis (§25):** trace frame UI saat ngetik **semua <12ms** (render sehat),
+tapi keluhan konsisten "makin lama makin berat" → **akumulasi memori**
+(GC storm), bukan satu-frame berat. Restart bersihkan cache → cocok.
+
+**Akar — cache memori menahan base64/bytes foto (tumbuh seiring pemakaian):**
+| Cache | Isi | Cap lama |
+|---|---|---|
+| `MessageCache._memCache` | 30 chat × pesan **termasuk `imageData` base64 foto** (~2MB/foto) | 30 |
+| `decodedImageCache` (`private_chat_message`) | bytes foto asli (~2-3MB) | 40 |
+| `timeline_provider._posts` | post feed | **tak ada cap** |
+
+30 chat berisi foto bisa menahan **ratusan MB** tertahan → GC stop-the-world →
+ngetik ketahan. Restart kosongkan → normal.
+
+**Fix:**
+- `_memCacheMax` 30 → **8** (chat lain dibaca dari SQLite saat dibuka).
+- `_decodedCacheMax` 40 → **16**.
+- `timeline_provider._posts` **cap 120** (helper `_capPosts`, dipanggil di 4
+  titik add/insert; post lama tetap di `_scopeCache`/disk).
+- **Trim saat resume (`app.dart`)**: kalau app di-background **>60 dtk**, pada
+  resume panggil `MessageCache.trimMemCache()` + `ImageCacheHygiene.clearAll()`
+  (buang cache memori, disk tetap). Background sebentar TIDAK di-trim → chat
+  tetap instan. `MessageCache.trimMemCache()` = baru (in-memory saja).
+
+**Fix lain sesi ini (jank tap & decode):**
+- `activeMentionToken` (`utils/mention.dart`): scan mundur dibatasi
+  `_maxQueryLen+2` — dulu ke awal teks = O(n) tiap keystroke → **O(n²)** saat
+  ngetik/hapus teks panjang.
+- `composer_link_preview.dart`: `extractUrl` (regex O(n)) + setState dipindah
+  ke **dalam debounce 400ms** (dulu sinkron tiap `onChanged`).
+- `decodeImageB64` (`private_chat_message.dart`): baca dimensi dari **header
+  JPEG/PNG** (`parseImageDimensions`) — dulu `img.decodeImage` **full-res 12MP
+  ≈ 48MB** tiap foto baru → spike ~470MB saat scroll chat berfoto (buffer =>
+  user scroll). Terukur 46MB→**515MB** jadi 52MB→**55MB**.
+- `online_users_screen._startChat`: 2 RPC (`isUserActive`+`startPrivateChat`)
+  ditunda ~400ms (dulu jatuh di frame transisi).
+- `online_users_screen` `_unreadSub`: `setState` hanya bila peta unread
+  BERUBAH (dulu tiap emit chat-list → `build Online=170`).
+- `leaderboard_sheet._load` cache per-scope + TTL 60 dtk (dulu tiap buka =
+  loading ulang).
+- Sheet komentar (post_card) & Top Aktif: viewPadding (nav bar) bukan padding;
+  sheet komentar tak lagi ikut naik saat keyboard (input naik sendiri).
+
+**Verifikasi:** analyze bersih; test (mention, link_preview, timeline,
+photo_bubble, message_cache, leaderboard_cache, post_card) lulus; ukur heap
+scroll chat berfoto 515MB→55MB.
