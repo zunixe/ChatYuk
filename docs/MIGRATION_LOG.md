@@ -1,4 +1,23 @@
 ﻿
+## 2026-10-05 — Daftar user admin: flag Fake GPS vs GPS asli
+
+- **Minta user:** di "Per User" admin, tahu MANA Fake GPS vs GPS asli;
+  tanggal daftar per user (WIB) — yang terakhir sudah ada di sheet
+  registrasi (`formatDateTimeWib` + relatif) & kartu Per User (`Terdaftar:`),
+  jadi tidak diubah.
+- **Migrasi** `20261006060000_admin_users_gps_flag.sql`:
+  `admin_stats_users_page` (BUKAN frozen) kirim tambahan `lat_gps`,
+  `lon_gps`, `gps_updated_at`, `location_mocked`, `location_mock_reason`.
+  Body lain identik. Applied via Management API + tercatat di
+  `schema_migrations`.
+- **Client:** widget baru `GpsBadge` (Fake GPS merah + reason / GPS asli
+  hijau / Hanya IP) di `DeviceCard` + kartu user tanpa device; merge
+  `mergeUsersWithDevices` meneruskan field GPS; string bilingual di
+  `strings_admin.dart`.
+- **Test:** `gps_badge_test.dart` (4) + kasus merge GPS di
+  `admin_grouping_test.dart`. `check_migrations` OK; boundary OK
+  (pelanggaran hanya pre-existing).
+
 ## 2026-10-05 — Call 1:1/video: hardening RLS + gerbang billing lebih awal
 
 - **Review subsistem call** (1:1 & video call). Temuan + fix server-side:
@@ -38,6 +57,18 @@
   riwayat lokasi + reason mock diperjelas → tidak lagi tertukar.
 - **Verifikasi:** `check_migrations` OK; pgTAP schema_sync 58/58 (+3);
   `flutter analyze` 0/0 (kecuali 1 warning TikTok paralel).
+
+## 2026-10-06 — Putus teman (unfollow) benar-benar memutus (fix stale)
+
+- **Temuan:** 2 definisi teman — `_privacy_are_friends` (mutual follows;
+  privasi/Top Aktif) vs `_are_friends` (friend_requests accepted; story).
+  `unfollow_user` dulu hanya hapus `follows` → `_are_friends` tetap true →
+  story mantan teman stale. (Top Aktif sudah benar.)
+- **Fix** `20261006070000`: `unfollow_user` juga hapus `friend_requests`
+  accepted/pending kedua arah → konsisten.
+- **Verifikasi:** privacy_test 20/20 (+3: sebelum/sesudah unfollow).
+- **Efek ke Top Aktif:** `friends`/`friends_except` otomatis berhenti lihat
+  setelah unfollow (sudah benar, kini story ikut konsisten).
 
 ## 2026-10-06 — Privasi "Top Aktif" (leaderboard visibility)
 
