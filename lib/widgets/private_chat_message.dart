@@ -2925,7 +2925,12 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFull();
+    // Jangan tembak disk+decrypt+decode full TEPAT saat transisi push (frame
+    // pertama viewer = animasi route). Tunda ke setelah frame pertama supaya
+    // transisi bersih; bytes thumbnail sudah tampil instan dari cache.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadFull();
+    });
   }
 
   @override
@@ -3017,11 +3022,14 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                       bytes,
                       fit: BoxFit.contain,
                       gaplessPlayback: true,
-                      // Cap 1600px: layar HP ~1080px, zoom 6x tetap cukup
-                      // tajam; full-res 12MP = ~48MB bitmap native vs
-                      // ~8MB di 1600px. Tanpa cap, viewer fullscreen adalah
-                      // decode bitmap terbesar di aplikasi.
-                      cacheWidth: 1600,
+                      // FASE AWAL (belum ada full): bytes = thumbnail bubble
+                      // yang SUDAH didecode di ImageCache dengan cacheWidth
+                      // 1080. Pakai 1080 juga → ImageCache HIT → tampil INSTAN
+                      // tanpa re-decode. Dulu viewer memaksa 1600 walau masih
+                      // bytes bubble 1080 → cache MISS → decode ulang bitmap
+                      // besar tepat saat transisi push = "serasa lambat".
+                      // FASE FULL (setelah _loadFull): pakai 1600 untuk zoom.
+                      cacheWidth: _fullBytes == null ? 1080 : 1600,
                     ),
                   ),
                 ),
