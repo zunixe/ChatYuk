@@ -76,8 +76,7 @@ void main() {
       expect(res.exclusions, isEmpty);
     });
 
-    test('update: 6 param snake_case, enum pakai name, null tetap terkirim',
-        () async {
+    test('update: param snake_case (7 param), null tetap terkirim', () async {
       final handler = FakeSupabaseHandler();
       handler.on(
         '/rest/v1/rpc/update_privacy_settings',
@@ -87,6 +86,7 @@ void main() {
 
       final res = await svc.update(
         presence: PrivacyVisibility.nobody,
+        leaderboard: PrivacyVisibility.friends,
         readReceipts: false,
       );
 
@@ -95,6 +95,7 @@ void main() {
 
       final params = rpcParamsOf(handler, 'update_privacy_settings');
       expect(params['p_presence'], 'nobody');
+      expect(params['p_leaderboard'], 'friends');
       expect(params['p_read_receipts'], isFalse);
       expect(params.containsKey('p_last_seen'), isTrue);
       expect(params['p_last_seen'], isNull);

@@ -22,6 +22,18 @@ void main() {
     expect(settings.exclusions['last_seen'], {'u1', 'u2'});
   });
 
+  test('leaderboard (Top Aktif) diparse + default everyone', () {
+    final set = PrivacySettings.fromMap({'leaderboard': 'nobody'});
+    expect(set.leaderboard, PrivacyVisibility.nobody);
+    // Absen → default everyone (kompatibel DB lama).
+    final abs = PrivacySettings.fromMap({});
+    expect(abs.leaderboard, PrivacyVisibility.everyone);
+    // copyWith leaderboard tidak mengubah field lain.
+    final changed = abs.copyWith(leaderboard: PrivacyVisibility.friends);
+    expect(changed.leaderboard, PrivacyVisibility.friends);
+    expect(changed.presence, PrivacyVisibility.everyone);
+  });
+
   test('invalid visibility falls back to everyone', () {
     final settings = PrivacySettings.fromMap({'presence': 'invalid'});
     expect(settings.presence, PrivacyVisibility.everyone);

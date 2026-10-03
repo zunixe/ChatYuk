@@ -192,6 +192,47 @@ void main() {
           profilePhoto: null,
           about: null,
           story: null,
+          leaderboard: null,
+          readReceipts: null,
+        )).called(1);
+    expect(find.text(s.privacyNobody), findsOneWidget);
+  });
+
+  testWidgets('tile Top Aktif tampil + pilih Sembunyikan → update(leaderboard)',
+      (tester) async {
+    when(() => service.update(
+          presence: null,
+          lastSeen: null,
+          profilePhoto: null,
+          about: null,
+          story: null,
+          leaderboard: PrivacyVisibility.nobody,
+          readReceipts: null,
+        )).thenAnswer(
+      (_) async => const PrivacySettings(leaderboard: PrivacyVisibility.nobody),
+    );
+
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+
+    // Tile "Top Aktif" tampil di layar Privasi.
+    expect(find.text(s.privacyLeaderboard), findsOneWidget);
+
+    await tester.tap(find.text(s.privacyLeaderboard));
+    await tester.pumpAndSettle();
+    // Sheet 6 opsi — 'Sembunyikan' bisa di bawah lipatan di viewport test.
+    await tester.ensureVisible(find.text(s.privacyNobody));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.privacyNobody));
+    await tester.pumpAndSettle();
+
+    verify(() => service.update(
+          presence: null,
+          lastSeen: null,
+          profilePhoto: null,
+          about: null,
+          story: null,
+          leaderboard: PrivacyVisibility.nobody,
           readReceipts: null,
         )).called(1);
     expect(find.text(s.privacyNobody), findsOneWidget);
