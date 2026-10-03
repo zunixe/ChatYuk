@@ -65,7 +65,12 @@ bool _isBoundary(String c) {
 ({int start, String query})? activeMentionToken(String text, int cursor) {
   if (cursor <= 0 || cursor > text.length) return null;
   var i = cursor - 1;
-  while (i >= 0) {
+  // PERF: batasi scan mundur ke (maxQueryLen + 1) char. Dulu loop jalan sampai
+  // AWAL teks tiap keystroke → ngetik teks panjang (satu baris tanpa spasi)
+  // jadi O(n) per keystroke = O(n²) total → "ngetik banyak makin ngelag".
+  // Token `@` tak mungkin lebih panjang dari ini (query dibatasi _maxQueryLen).
+  final floor = cursor - _maxQueryLen - 2;
+  while (i >= 0 && i >= floor) {
     final c = text[i];
     if (c == '@') {
       if (i == 0 || _isBoundary(text[i - 1])) {

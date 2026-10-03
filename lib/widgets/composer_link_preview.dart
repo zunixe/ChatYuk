@@ -41,13 +41,21 @@ class _ComposerLinkPreviewState extends State<ComposerLinkPreview> {
   void _onChanged() {
     _debounce?.cancel();
     final text = widget.controller.text;
-    final url = LinkPreviewService.instance.extractUrl(text);
-    if (url == null || url.length < 8 || !url.contains('.')) {
-      if (_url != null) setState(() => _url = null);
-      return;
-    }
-    _debounce = Timer(const Duration(milliseconds: 700), () {
+    // PERF: `extractUrl` (regex) TIDAK dijalankan tiap keystroke/hapus. Untuk
+    // teks panjang, regex O(n) tiap `onChanged` = O(n²) saat ngetik/hapus
+    // banyak → "ngelag beberapa huruf terakhir saat hapus". Sekarang regex
+    // (dan setState) hanya jalan setelah user berhenti mengetik 400ms.
+    // Cek cepat & murah: apakah ada 'http' sama sekali (indexOf O(n) tapi
+    // tanpa alokasi regex; cukup sbg gerbang).
+    final probablyUrl = text.contains('http') || _url != null;
+    if (!probablyUrl) return;
+    _debounce = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
+      final url = LinkPreviewService.instance.extractUrl(text);
+      if (url == null || url.length < 8 || !url.contains('.')) {
+        if (_url != null) setState(() => _url = null);
+        return;
+      }
       if (url != _url) setState(() => _url = url);
     });
   }
