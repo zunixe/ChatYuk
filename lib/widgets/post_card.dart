@@ -10,7 +10,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
+import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
@@ -21,6 +23,7 @@ import '../core/cache/media_disk_cache.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
 import 'post_photo_viewer.dart';
+import 'post_share_sheet.dart';
 import 'profile_avatar.dart';
 import 'gender_avatar.dart';
 import '../screens/user_info_screen.dart';
@@ -313,28 +316,24 @@ class _PostCardState extends State<PostCard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      // Kunci 70% layar: komentar sedikit = compact, komentar banyak =
-      // list scroll di dalam 70% layar (tidak full-screen sampai atas).
-      // Flexible di dalam Column(min) selalu mengisi tinggi MAKSIMAL route —
-      // tanpa batas ini sheet ikut setinggi layar penuh.
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.7,
-      ),
+      // TINGGI TETAP 70% layar (bukan menyesuaikan konten). Dulu sheet
+      // pakai Column(min) → tingginya ikut konten: skeleton (tinggi) lalu
+      // menyusut saat komentar kosong → "glitch naik-turun". Dengan tinggi
+      // tetap, loading/empty/isi semua sama persis → tidak ada lompatan.
       builder: (ctx) {
+        final sheetH = MediaQuery.sizeOf(ctx).height * 0.7;
         return StatefulBuilder(
           builder: (ctx2, setSheet) {
-            // Sheet dikunci 70% layar via constraints route (di atas);
             // input tetap di atas menu Android (nav/gesture bar) & keyboard.
-            // viewInsets = keyboard; viewPadding = nav bar (tidak terpotong
-            // saat keyboard terbuka) — kombinasi ini paling aman di MIUI.
             final bottom =
                 MediaQuery.viewInsetsOf(ctx2).bottom +
                 MediaQuery.viewPaddingOf(ctx2).bottom;
             final replying = replyToId > 0;
             return Padding(
               padding: EdgeInsets.only(bottom: bottom),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              child: SizedBox(
+                height: sheetH,
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(height: 12),
@@ -344,7 +343,7 @@ class _PostCardState extends State<PostCard> {
                     style: AppText.title,
                   ),
                   SizedBox(height: 8),
-                  Flexible(
+                  Expanded(
                     child: _CommentsList(
                       key: _commentsKey,
                       postId: _id,
@@ -482,6 +481,7 @@ class _PostCardState extends State<PostCard> {
                   ),
                 ],
               ),
+              ),
             );
           },
         );
@@ -597,41 +597,79 @@ class _PostCardState extends State<PostCard> {
 
   Future<void> _share() async {
     final s = context.read<LocaleProvider>().s;
-    final tp = context.read<TimelineProvider>();
     final author = _p['authorName'] as String? ?? 'Anon';
+    final authorUid = _p['authorId'] as String? ?? '';
+    final authorGender = _p['authorGender'] as String? ?? '';
     final text = (_p['text'] as String? ?? '').trim();
     // Teks = konten post + link ChatYuk (bilingual via strings).
     final content = s.postShareMsg(author, text);
-    // Foto ikut dibagikan bila ada — pola sama seperti story (tulis thumb
-    // ke file temp lalu shareXFiles). Tanpa ini penerima cuma dapat teks
-    // + link Play Store.
-    ShareResult result;
-    final paths = _imagePaths();
-    if (paths.isEmpty) {
-      result = await Share.share(content, subject: author);
-    } else {
-      final files = await _shareFilesFor(paths, _id);
-      if (files.isEmpty) {
-        result = await Share.share(content, subject: author);
-      } else {
-        result = await Share.shareXFiles(files, text: content, subject: author);
-      }
+    final snippet = text.length > 120 ? '${text.substring(0, 120)}…' : text;
+    await showPostShareSheet(
+      context: context,
+      authorUid: authorUid,
+      authorName: author,
+      authorGender: authorGender,
+      snippet: snippet,
+      shareText: content,
+      shareSubject: author,
+      // Foto ikut dibagikan bila ada — pola sama seperti story (tulis thumb
+      // ke file temp lalu shareXFiles). Tanpa ini penerima cuma dapat teks
+      // + link Play Store.
+      buildFiles: () => _shareFilesFor(_imagePaths(), _id),
+      onShareToUser: (user) => _shareToUser(user, content),
+      onExternalShared: () => _bumpShareCount(),
+    );
+  }
+
+  /// Bagikan post ke user ChatYuk lain via chat pribadi. Return true bila
+  /// terkirim (sheet menutup diri + snackbar "Dibagikan ke X").
+  Future<bool> _shareToUser(UserModel user, String content) async {
+    final auth = context.read<AuthProvider>();
+    final chat = context.read<ChatProvider>();
+    final s = context.read<LocaleProvider>().s;
+    final myUid = auth.uid ?? '';
+    if (myUid.isEmpty || user.uid.isEmpty) return false;
+    try {
+      final myName = auth.profile?.nickname ?? '';
+      final chatId = await chat.startPrivateChat(
+        myUid: myUid,
+        otherUid: user.uid,
+        myName: myName,
+        otherName: user.nickname,
+        myGender: auth.profile?.gender ?? '',
+        otherGender: user.gender,
+      );
+      if (chatId.isEmpty) return false;
+      final msgId = await chat.sendPrivateMessage(
+        chatId: chatId,
+        senderId: myUid,
+        senderName: myName,
+        senderGender: auth.profile?.gender ?? '',
+        text: content,
+      );
+      if (msgId == null) return false;
+      await _bumpShareCount();
+      if (!mounted) return true;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.shareSentTo(user.nickname))));
+      return true;
+    } catch (e) {
+      dlog('[PostCard] share ke user error: $e');
+      return false;
     }
-    // Counter HANYA bertambah saat user benar-benar menyelesaikan share
-    // (status success) — tap icon lalu batal tidak dihitung.
-    if (result.status != ShareResultStatus.success) return;
-    if (!mounted) return;
+  }
+
+  /// Counter HANYA bertambah saat user benar-benar menyelesaikan share
+  /// (status success / terkirim ke user) — tap lalu batal tidak dihitung.
+  Future<void> _bumpShareCount() async {
+    final tp = context.read<TimelineProvider>();
     try {
       await tp.sharePost(_id);
       if (!mounted) return;
       final c = ((_p['shareCount'] as num?)?.toInt() ?? 0) + 1;
       tp.updatePost(_id, {'shareCount': c});
     } catch (_) {}
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.msgShared)));
-    }
   }
 
   Future<void> _boost() async {
@@ -1507,7 +1545,14 @@ class _CommentsListState extends State<_CommentsList> {
     final myUid = context.read<AuthProvider>().uid ?? '';
     if (!_loaded && items.isEmpty) return const _CommentSkeleton();
     if (items.isEmpty) {
-      return const SizedBox(height: 80);
+      // Isi penuh area (sheet tinggi TETAP) → empty state center, tidak
+      // menyisakan celah / tidak mengubah tinggi sheet.
+      return Center(
+        child: Text(
+          context.watch<LocaleProvider>().s.commentEmpty,
+          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        ),
+      );
     }
     // Flexible di parent sudah memberi tinggi BOUNDED → tidak perlu
     // shrinkWrap (dulu shrinkWrap:true membangun SEMUA baris sekaligus,
