@@ -53,6 +53,21 @@ void main() {
     test('Pekalongan punya koordinat (untuk deteksi terdekat)', () {
       expect(kotaCoords['Indonesia|Pekalongan'], isNotNull);
     });
+
+    test('SEMUA kota Indonesia punya koordinat (auto-deteksi akurat)', () {
+      final tdkPunya =
+          id.where((c) => kotaCoords['Indonesia|$c'] == null).toList();
+      expect(tdkPunya, isEmpty,
+          reason: 'kota tanpa koordinat: $tdkPunya');
+    });
+
+    test('alias kota beda nama GeoNames tetap terpetakan', () {
+      // Jambi (GeoNames "Jambi City"), Solo (GeoNames "Surakarta"),
+      // Mamuju & Tidore (manual, tak ada di cities15000).
+      for (final c in const ['Jambi', 'Solo', 'Mamuju', 'Tidore']) {
+        expect(kotaCoords['Indonesia|$c'], isNotNull, reason: c);
+      }
+    });
   });
 
   group('nearestCity', () {
