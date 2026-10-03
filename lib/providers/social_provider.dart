@@ -212,6 +212,9 @@ class SocialProvider extends ChangeNotifier {
       _pendingFriendRequests
         ..clear()
         ..addAll(pending);
+      // Counter badge inbox = jumlah item pending yang MASUK (inbox saja) —
+      // disamakan dengan `refreshInbox()`/stream agar tidak drift.
+      _friendRequestCount = (results[4] as List).length;
       if (!_disposed) notifyListeners();
       // Cache disk — buka app berikutnya status teman tampil instan.
       unawaited(MessageCache.instance.saveRawList('social_sets', [
@@ -238,8 +241,24 @@ class SocialProvider extends ChangeNotifier {
       _service.socialList(kind, uid);
   Future<Map<String, dynamic>> unsubscribeCreator(String uid) =>
       _service.unsubscribeCreator(uid);
-  Future<Map<String, dynamic>> respondFriendRequest(int id, bool accept) =>
-      _service.respondFriendRequest(id, accept);
+  Future<Map<String, dynamic>> respondFriendRequest(int id, bool accept) async {
+    final res = await _service.respondFriendRequest(id, accept);
+    // Sinkron state lokal tanpa menunggu refresh realtime: inbox layar lain
+    // langsung berubah (tombol "Tambah Teman" → "Teman" setelah accept).
+    try {
+      if (accept) {
+        // respond_insert follows dua arah → refresh graf (following/friends)
+        // supaya tombol di layar lain langsung jadi "Teman".
+        await _refreshSelfSetsNow();
+      } else {
+        // Reject juga mengeluarkan item dari inbox → perbarui counter.
+        final inbox = await _service.friendRequestInbox();
+        _friendRequestCount = inbox.length;
+      }
+    } catch (_) {}
+    if (!_disposed) notifyListeners();
+    return res;
+  }
 
   /// Batalkan friend request yang sudah dikirim ke [targetUid]. Hapus dari
   /// set pending supaya tombol di layar lain langsung kembali "Tambah".
@@ -297,21 +316,37 @@ class SocialProvider extends ChangeNotifier {
     }
   }
 
+  /// Kirim permintaan teman. Kembalikan status yang JELAS (jangan biarkan
+  /// pemanggil menebak dari string kosong):
+  ///   'pending' → permintaan terkirim (state pending lokal ikut di-set)
+  ///   'friends' → sudah berteman (tidak ada request baru; state friends di-set)
+  ///   'failed'  → gagal (anon/target tak terdaftar/jaringan) — pemanggil
+  ///               WAJIB tidak menampilkan pesan sukses.
+  ///
+  /// Catatan: nilai lama `''`/`'rejected'` dihapus — dulu pemanggil memakai
+  /// `res != 'rejected'` yang SELALU true (RPC tak pernah kirim 'rejected')
+  /// → gagal pun tampil "Permintaan teman terkirim" (pesan palsu).
   Future<String> sendFriendRequest(String targetUid) async {
+    if (targetUid.isEmpty) return 'failed';
     try {
       final res = await _service.sendFriendRequest(targetUid);
       if (res['already_friends'] == true) {
         _friends.add(targetUid);
         _pendingFriendRequests.remove(targetUid);
-      } else {
+        if (!_disposed) notifyListeners();
+        return 'friends';
+      }
+      // Sukses kirim → server balas {ok:true, status:'pending'}.
+      if (res['ok'] == true) {
         // Optimistic: tombol langsung jadi "Requested" tanpa spinner.
         _pendingFriendRequests.add(targetUid);
+        if (!_disposed) notifyListeners();
+        return 'pending';
       }
-      if (!_disposed) notifyListeners();
-      return res['status']?.toString() ?? '';
+      return 'failed';
     } catch (e) {
       dlog('[SocialProvider] sendFriendRequest error: $e');
-      return '';
+      return 'failed';
     }
   }
 

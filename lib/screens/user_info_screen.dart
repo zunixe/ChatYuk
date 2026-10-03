@@ -163,9 +163,18 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       if (status == 'pending') _friendRequestSent = true;
       _busySocial = false;
     });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+    // Pesan akurat: 'friends' (sudah teman), 'pending' (terkirim),
+    // selain itu gagal — jangan selalu bilang "terkirim".
+    if (status == 'friends') {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(s.btnFriends)));
+    } else if (status == 'pending') {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+    } else {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(s.errGeneric)));
+    }
   }
 
   Future<void> _subscribe() async {

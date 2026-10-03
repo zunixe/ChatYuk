@@ -2855,15 +2855,22 @@ class _UserCard extends StatelessWidget {
                                               ScaffoldMessenger.of(context);
                                           final res = await sp
                                               .sendFriendRequest(user.uid);
-                                          // 'rejected' = gagal; selain itu
-                                          // (ok/pending) anggap terkirim.
-                                          if (res != 'rejected') {
+                                          if (!context.mounted) return;
+                                          // 'pending' = terkirim; 'friends' =
+                                          // sudah teman (bukan error). Selain
+                                          // itu = gagal → jangan bilang sukses.
+                                          if (res == 'pending' ||
+                                              res == 'friends') {
                                             messenger.showSnackBar(
                                               SnackBar(
                                                 content: Text(
                                                   s.friendRequestSent,
                                                 ),
                                               ),
+                                            );
+                                          } else {
+                                            messenger.showSnackBar(
+                                              SnackBar(content: Text(s.errGeneric)),
                                             );
                                           }
                                         },

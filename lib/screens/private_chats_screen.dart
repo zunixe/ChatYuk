@@ -1485,13 +1485,16 @@ class _FriendButtonState extends State<_FriendButton> {
     );
     if (!mounted) return;
     setState(() => _busy = false);
-    if (res != 'rejected') {
+    if (res == 'pending' || res == 'friends') {
       // Pop sukses: membesar sesaat lalu kembali (tanpa controller).
       setState(() => _scale = 1.3);
       await Future.delayed(const Duration(milliseconds: 150));
       if (!mounted) return;
       setState(() => _scale = 1.0);
       messenger.showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+    } else {
+      // Gagal (anon/target tak terdaftar/jaringan) → jangan bilang sukses.
+      messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
     }
   }
 
