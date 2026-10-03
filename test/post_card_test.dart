@@ -460,4 +460,108 @@ void _cleanupTestChannels() {
     await tester.pump(const Duration(seconds: 120));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('balas komentar: chip muncul + kirim memakai parentId',
+      (tester) async {
+    when(() => timeline.comments(any())).thenAnswer(
+      (_) async => [
+        {
+          'id': 77,
+          'postId': 'p1',
+          'parentId': 0,
+          'text': 'Komentar asal',
+          'authorId': 'other',
+          'authorName': 'Orang',
+          'authorGender': '',
+          'likeCount': 0,
+          'shareCount': 0,
+          'isLiked': false,
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
+        },
+      ],
+    );
+    when(() => timeline.replyComment(any(), any(), any()))
+        .thenAnswer((_) async => {'ok': true, 'id': 88});
+    await pump(tester, _post());
+
+    await tester.tap(find.byIcon(PhosphorIconsRegular.chatCircle).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Tap tombol balas pada komentar → chip "Balas Orang" muncul.
+    await tester.tap(find.byIcon(PhosphorIconsRegular.chatCircle).last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Balas Orang'), findsWidgets);
+
+    // Ketik lalu kirim → replyComment dipanggil dengan parentId=77.
+    await tester.enterText(find.byType(TextField).last, 'balasanku');
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    verify(() => timeline.replyComment('p1', 77, 'balasanku')).called(1);
+
+    // Tutup sheet + buang semua timer (pola sama test "kirim komentar").
+    Navigator.of(tester.element(find.byType(TextField).last)).pop();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(TextField), findsNothing, reason: 'sheet harus tertutup');
+    _cleanupTestChannels();
+    await tester.pump(const Duration(seconds: 120));
+    expect(
+      Supabase.instance.client.realtime.channels,
+      isEmpty,
+      reason: 'channel realtime harus bersih',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mengetik di composer tidak menghapus baris komentar (list utuh)',
+      (tester) async {
+    when(() => timeline.comments(any())).thenAnswer(
+      (_) async => [
+        for (var i = 0; i < 3; i++)
+          {
+            'id': 200 + i,
+            'postId': 'p1',
+            'parentId': 0,
+            'text': 'Komen $i',
+            'authorId': 'u$i',
+            'authorName': 'Nama $i',
+            'authorGender': '',
+            'likeCount': 0,
+            'shareCount': 0,
+            'isLiked': false,
+            'createdAt': DateTime.now().toUtc().toIso8601String(),
+          },
+      ],
+    );
+    await pump(tester, _post());
+
+    await tester.tap(find.byIcon(PhosphorIconsRegular.chatCircle).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.textContaining('Komen 0'), findsOneWidget);
+    expect(find.textContaining('Komen 2'), findsOneWidget);
+
+    // Ketik banyak karakter ke composer → list komentar tetap utuh
+    // (state tidak ikut ter-reset oleh rebuild ketikan).
+    await tester.enterText(find.byType(TextField).last, 'halo mengetik cepat');
+    await tester.pump();
+
+    expect(find.textContaining('Komen 0'), findsOneWidget);
+    expect(find.textContaining('Komen 2'), findsOneWidget);
+    expect(find.text('halo mengetik cepat'), findsOneWidget);
+
+    Navigator.of(tester.element(find.byType(TextField).last)).pop();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(TextField), findsNothing, reason: 'sheet harus tertutup');
+    _cleanupTestChannels();
+    await tester.pump(const Duration(seconds: 120));
+    expect(tester.takeException(), isNull);
+  });
 }

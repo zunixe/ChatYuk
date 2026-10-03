@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
@@ -84,6 +85,16 @@ class _PostCardState extends State<PostCard> {
   Map<String, dynamic> get _p => widget.post;
   bool _busy = false;
   bool _followBusy = false;
+  // Controller komentar dibuat SEKALI per kartu (dulu dibuat di dalam
+  // `_comment()` tiap buka sheet → tidak pernah di-dispose = leak + kerja
+  // alokasi tiap kali sheet dibuka = buka terasa lambat).
+  final TextEditingController _commentCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
   // Foto tunggal = selebar area konten (sampai tepi kanan, dengan padding).
   static const double _kSingleWidthFactor = 1.0;
   // Fallback rasio bila rasio asli foto tak diketahui.
@@ -258,49 +269,58 @@ class _PostCardState extends State<PostCard> {
     // daripada loop thumb() sekuensial untuk post multi-foto.
     final thumbs = await cache.loadMany(paths);
     if (!mounted) return;
-    setState(() {
-      for (var i = 0; i < paths.length; i++) {
-        if (i >= _imageThumbs.length) break;
-        final t = thumbs[paths[i]];
-        if (t != null) {
+    var changed = false;
+    for (var i = 0; i < paths.length; i++) {
+      if (i >= _imageThumbs.length) break;
+      final t = thumbs[paths[i]];
+      if (t != null) {
+        if (_imageThumbs[i] == null) {
           _imageThumbs[i] = t;
-        } else {
-          _failedPaths.add(paths[i]);
+          changed = true;
         }
+      } else {
+        if (_failedPaths.add(paths[i])) changed = true;
       }
-    });
+    }
     // Fallback rasio: post lama tanpa dimensi payload → decode rasio dari
     // bytes thumbnail (thumb = copyResize(width:1024) → rasio asli terjaga).
-    await _fillAspectsFromThumbs(paths);
+    // SATU setState untuk thumb + rasio (dulu 2 rebuild per kartu), dan
+    // lewati rebuild sama sekali bila tidak ada yang berubah (mis. notify
+    // provider yang me-reload kartu saat scroll).
+    if (await _fillAspectsFromThumbs(paths)) changed = true;
+    if (!mounted) return;
+    if (!changed) return;
+    setState(() {});
   }
 
-  /// Isi rasio yang MASIH null dengan decode bytes thumbnail (off-main-thread).
-  Future<void> _fillAspectsFromThumbs(List<String> paths) async {
-    final missing = <int>[];
+  /// Isi rasio yang MASIH null dengan SATU compute isolate untuk semua foto
+  /// (dulu satu isolate per foto → spawn berulang saat scroll cepat).
+  /// Return true bila ada rasio yang terisi. Tanpa setState sendiri —
+  /// pemanggil me-rebuild sekali setelahnya.
+  Future<bool> _fillAspectsFromThumbs(List<String> paths) async {
+    final idx = <int>[];
+    final jobs = <Uint8List>[];
     for (var i = 0; i < paths.length; i++) {
       if (i < _imageAspect.length &&
           _imageAspect[i] == null &&
           i < _imageThumbs.length &&
           _imageThumbs[i] != null) {
-        missing.add(i);
+        idx.add(i);
+        jobs.add(_imageThumbs[i]!);
       }
     }
-    if (missing.isEmpty) return;
-    final computed = <int, double>{};
-    for (final i in missing) {
-      final bytes = _imageThumbs[i];
-      if (bytes == null) continue;
-      final a = await compute(_aspectRatioOfBytes, bytes);
-      if (a != null && a > 0) computed[i] = a;
-    }
-    if (!mounted || computed.isEmpty) return;
-    setState(() {
-      for (final e in computed.entries) {
-        if (e.key < _imageAspect.length && _imageAspect[e.key] == null) {
-          _imageAspect[e.key] = e.value;
-        }
+    if (jobs.isEmpty) return false;
+    final computed = await compute(_aspectRatiosOfBytes, jobs);
+    var filled = false;
+    for (var k = 0; k < idx.length && k < computed.length; k++) {
+      final a = computed[k];
+      final i = idx[k];
+      if (a != null && a > 0 && i < _imageAspect.length && _imageAspect[i] == null) {
+        _imageAspect[i] = a;
+        filled = true;
       }
-    });
+    }
+    return filled;
   }
 
   Future<void> _like() async {
@@ -342,10 +362,9 @@ class _PostCardState extends State<PostCard> {
   }
 
   Future<void> _comment() async {
-    final s = context.read<LocaleProvider>().s;
-    final ctrl = TextEditingController();
-    var replyToId = 0;
-    var replyToName = '';
+    // Controller dibuat SEKALI di State (di-dispose di dispose()) — dulu
+    // alokasi baru tiap buka sheet → buka terasa lambat + leak.
+    _commentCtrl.clear();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -353,192 +372,18 @@ class _PostCardState extends State<PostCard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      // TINGGI TETAP 70% layar (bukan menyesuaikan konten). Dulu sheet
-      // pakai Column(min) → tingginya ikut konten: skeleton (tinggi) lalu
-      // menyusut saat komentar kosong → "glitch naik-turun". Dengan tinggi
-      // tetap, loading/empty/isi semua sama persis → tidak ada lompatan.
-      builder: (ctx) {
-        final sheetH = MediaQuery.sizeOf(ctx).height * 0.7;
-        return StatefulBuilder(
-          builder: (ctx2, setSheet) {
-            // input tetap di atas menu Android (nav/gesture bar) & keyboard.
-            final bottom =
-                MediaQuery.viewInsetsOf(ctx2).bottom +
-                MediaQuery.viewPaddingOf(ctx2).bottom;
-            final replying = replyToId > 0;
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottom),
-              child: SizedBox(
-                height: sheetH,
-                child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(height: 12),
-                  Text(
-                    s.btnComment,
-                    textAlign: TextAlign.center,
-                    style: AppText.title,
-                  ),
-                  SizedBox(height: 8),
-                  Expanded(
-                    child: _CommentsList(
-                      key: _commentsKey,
-                      postId: _id,
-                      onReply: (id, name) => setSheet(() {
-                        replyToId = id;
-                        replyToName = name;
-                      }),
-                    ),
-                  ),
-                  Divider(height: 1),
-                  if (replying)
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(16, 6, 8, 0),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.subdirectory_arrow_right,
-                            size: 16,
-                            color: AppTheme.primary,
-                          ),
-                          SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              s.hintReplyTo(replyToName),
-                              style: AppText.caption.copyWith(
-                                color: AppTheme.primary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            icon: Icon(
-                              Icons.close,
-                              size: 16,
-                              color: AppTheme.textSecondary,
-                            ),
-                            onPressed: () => setSheet(() {
-                              replyToId = 0;
-                              replyToName = '';
-                            }),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(16, 4, 8, 16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: AppTheme.bgCard,
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: AppTheme.bgCard,
-                                width: 1,
-                              ),
-                            ),
-                            child: TextField(
-                              controller: ctrl,
-                              style: AppText.body,
-                              decoration: InputDecoration(
-                                hintText: replying
-                                    ? s.hintReplyTo(replyToName)
-                                    : s.hintComment,
-                                hintStyle: AppText.body.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                                filled: false,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 10,
-                                ),
-                              ),
-                              minLines: 1,
-                              maxLines: 4,
-                              keyboardType: TextInputType.multiline,
-                              textCapitalization: TextCapitalization.sentences,
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _sendComment(
-                                ctx2,
-                                ctrl,
-                                replyToId,
-                                () => setSheet(() {
-                                  replyToId = 0;
-                                  replyToName = '';
-                                }),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Tombol send bulatan — gaya sama dengan composer
-                        // private chat (40px, primary, ikon putih).
-                        GestureDetector(
-                          onTap: () => _sendComment(
-                            ctx2,
-                            ctrl,
-                            replyToId,
-                            () => setSheet(() {
-                              replyToId = 0;
-                              replyToName = '';
-                            }),
-                          ),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: AppTheme.primary,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppTheme.primary.withValues(
-                                    alpha: 0.4,
-                                  ),
-                                  blurRadius: 10,
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.send_rounded,
-                              size: 20,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              ),
-            );
-          },
-        );
-      },
+      // Sheet dikelola oleh StatefulWidget sendiri (_CommentSheet) sehingga
+      // perubahan state internal (mode balas / fokus) TIDAK merelayout
+      // seluruh sheet lewat StatefulBuilder di root. Mengetik kini hanya
+      // memicu repaint TextField (dibungkus RepaintBoundary), bukan rebuild
+      // list komentar.
+      builder: (_) => _CommentSheet(
+        postId: _id,
+        ctrl: _commentCtrl,
+        commentsKey: _commentsKey,
+        onSubmit: _submitComment,
+      ),
     );
-  }
-
-  Future<void> _sendComment(
-    BuildContext ctx,
-    TextEditingController ctrl,
-    int parentId,
-    void Function() resetReply,
-  ) async {
-    final text = ctrl.text.trim();
-    if (text.isEmpty) return;
-    // Sheet TETAP terbuka (dulu pop menutup seluruh sheet komentar).
-    ctrl.clear();
-    resetReply();
-    FocusScope.of(ctx).unfocus();
-    await _submitComment(text, parentId: parentId);
   }
 
   Future<void> _submitComment(String text, {int? parentId}) async {
@@ -1021,18 +866,17 @@ class _PostCardState extends State<PostCard> {
               ? _photoBoxFor(a, maxW)
               : (width: maxW * _kSingleWidthFactor,
                  height: maxW * _kSingleWidthFactor / _kCarouselFallbackAspect);
-          return AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            alignment: Alignment.topLeft,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                key: const ValueKey('photo_single'),
-                width: box.width,
-                height: box.height,
-                child: singlePhoto(),
-              ),
+          // TANPA AnimatedSize: placeholder sudah dicadangkan seukuran
+          // layout final (rasio payload), jadi tidak ada lompatan. Animasi
+          // layout per foto memaksa relayout seluruh list tiap thumb tiba →
+          // jank saat scroll cepat.
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              key: const ValueKey('photo_single'),
+              width: box.width,
+              height: box.height,
+              child: singlePhoto(),
             ),
           );
         }
@@ -1047,6 +891,8 @@ class _PostCardState extends State<PostCard> {
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             padding: EdgeInsets.zero,
+            // Jangan pre-build foto di luar viewport strip (decode mahal).
+            scrollCacheExtent: ScrollCacheExtent.pixels(0),
             itemCount: loaded.length,
             separatorBuilder: (_, _) => const SizedBox(width: _kCarouselGap),
             itemBuilder: (_, i) => SizedBox(
@@ -1314,6 +1160,215 @@ class _PostCardState extends State<PostCard> {
   }
 
   String _timeAgo(DateTime t) => _timeAgoShort(t);
+}
+
+/// Sheet komentar — state TERISOLASI dari list komentar.
+///
+/// Dulu seluruh sheet dibangun dalam `StatefulBuilder` di root: setiap
+/// perubahan (mode balas, munculnya keyboard) memicu rebuild yang menyentuh
+/// `_CommentsList` (ListView + avatar) → mengetik terasa ngelag. Kini:
+///  - mode balas dikelola di sini (setState lokal),
+///  - `_CommentsList` TIDAK ikut rebuild saat mengetik/balas (dibungkus
+///    RepaintBoundary + hanya bergantung pada onReply),
+///  - `TextField` dibungkus RepaintBoundary sehingga ketikan hanya
+///    merepaint dirinya sendiri,
+///  - tinggi sheet tetap 70% & bar input naik sendiri di atas keyboard.
+class _CommentSheet extends StatefulWidget {
+  final String postId;
+  final TextEditingController ctrl;
+  final GlobalKey<_CommentsListState> commentsKey;
+  final Future<void> Function(String text, {int? parentId}) onSubmit;
+  const _CommentSheet({
+    required this.postId,
+    required this.ctrl,
+    required this.commentsKey,
+    required this.onSubmit,
+  });
+
+  @override
+  State<_CommentSheet> createState() => _CommentSheetState();
+}
+
+class _CommentSheetState extends State<_CommentSheet> {
+  int _replyToId = 0;
+  String _replyToName = '';
+
+  void _setReply(int id, String name) {
+    if (_replyToId == id && _replyToName == name) return;
+    setState(() {
+      _replyToId = id;
+      _replyToName = name;
+    });
+  }
+
+  void _clearReply() {
+    if (_replyToId == 0) return;
+    setState(() {
+      _replyToId = 0;
+      _replyToName = '';
+    });
+  }
+
+  Future<void> _send(BuildContext ctx) async {
+    final text = widget.ctrl.text.trim();
+    if (text.isEmpty) return;
+    final parentId = _replyToId;
+    // Sheet TETAP terbuka (dulu pop menutup seluruh sheet komentar).
+    widget.ctrl.clear();
+    _clearReply();
+    FocusScope.of(ctx).unfocus();
+    await widget.onSubmit(text, parentId: parentId > 0 ? parentId : null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final replying = _replyToId > 0;
+    // Tinggi tetap 70% layar — loading/empty/isi sama persis (anti glitch).
+    final sheetH = MediaQuery.sizeOf(context).height * 0.7;
+    // Sheet DIAM di 70% (tak ikut naik saat keyboard). viewInsets dibuang
+    // dari subtree lewat removeViewInsets, lalu hanya BAR INPUT yang digeser
+    // ke atas keyboard.
+    final insets = MediaQuery.viewInsetsOf(context).bottom;
+    final navPad = MediaQuery.viewPaddingOf(context).bottom;
+    final kb = insets > navPad ? insets : navPad;
+    return SizedBox(
+      height: sheetH,
+      child: MediaQuery.removeViewInsets(
+        context: context,
+        removeBottom: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 12),
+            Text(s.btnComment, textAlign: TextAlign.center, style: AppText.title),
+            const SizedBox(height: 8),
+            Expanded(
+              // RepaintBoundary: ketikan/balasan tidak memicu repaint list.
+              child: RepaintBoundary(
+                child: _CommentsList(
+                  key: widget.commentsKey,
+                  postId: widget.postId,
+                  onReply: _setReply,
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            if (replying)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 8, 0),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.subdirectory_arrow_right,
+                      size: 16,
+                      color: AppTheme.primary,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        s.hintReplyTo(_replyToName),
+                        style: AppText.caption.copyWith(color: AppTheme.primary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        Icons.close,
+                        size: 16,
+                        color: AppTheme.textSecondary,
+                      ),
+                      onPressed: _clearReply,
+                    ),
+                  ],
+                ),
+              ),
+            // Bar input naik di atas keyboard — list komentar & sheet DIAM.
+            AnimatedPadding(
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: kb),
+              child: RepaintBoundary(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 8, 16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: AppTheme.bgCard,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: AppTheme.bgCard,
+                              width: 1,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: widget.ctrl,
+                            style: AppText.body,
+                            decoration: InputDecoration(
+                              hintText: replying
+                                  ? s.hintReplyTo(_replyToName)
+                                  : s.hintComment,
+                              hintStyle: AppText.body.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                            ),
+                            minLines: 1,
+                            maxLines: 4,
+                            keyboardType: TextInputType.multiline,
+                            textCapitalization: TextCapitalization.sentences,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _send(context),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Tombol send bulatan — gaya sama dengan composer
+                      // private chat (40px, primary, ikon putih).
+                      GestureDetector(
+                        onTap: () => _send(context),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primary.withValues(alpha: 0.4),
+                                blurRadius: 10,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.send_rounded,
+                            size: 20,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _CommentsList extends StatefulWidget {
@@ -2085,21 +2140,26 @@ class _CommentAvatarState extends State<_CommentAvatar> {
   }
 }
 
-/// Rasio asli (w/h) dari bytes gambar — top-level untuk compute().
-/// Dipakai fallback post lama yang belum menyimpan dimensi.
-Future<double?> _aspectRatioOfBytes(Uint8List bytes) async {
-  ui.Codec? codec;
-  try {
-    codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    final w = frame.image.width;
-    final h = frame.image.height;
-    frame.image.dispose();
-    if (w <= 0 || h <= 0) return null;
-    return w / h;
-  } catch (_) {
-    return null;
-  } finally {
-    codec?.dispose();
+/// Rasio asli (w/h) BANYAK gambar sekaligus — top-level untuk compute().
+/// Satu isolate untuk semua foto (bukan satu isolate per foto).
+Future<List<double?>> _aspectRatiosOfBytes(List<Uint8List> list) async {
+  final out = <double?>[];
+  for (final bytes in list) {
+    ui.Codec? codec;
+    try {
+      codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final w = frame.image.width;
+      final h = frame.image.height;
+      frame.image.dispose();
+      out.add(w > 0 && h > 0 ? w / h : null);
+    } catch (_) {
+      out.add(null);
+    } finally {
+      codec?.dispose();
+    }
   }
+  return out;
 }
+
+

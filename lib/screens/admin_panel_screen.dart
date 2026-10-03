@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
+import '../config/strings_docs.dart';
 import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
@@ -18,6 +19,7 @@ import 'admin_deleted_tab.dart';
 import 'admin_dummy_tab.dart';
 import 'admin_global_setting_tab.dart';
 import 'admin_attribution_tab.dart';
+import 'admin_docs_tab.dart';
 import 'admin_panel/widgets/usermap_card.dart';
 import 'admin_panel/widgets/storageusage_card.dart';
 import 'admin_panel/widgets/registrationschart_card.dart';
@@ -108,7 +110,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _tabCtrl = TabController(length: 9, vsync: this);
+    _tabCtrl = TabController(length: 10, vsync: this);
     _tabCtrl.addListener(_onTabChanged);
     final admin = context.read<AdminProvider>();
     Future.microtask(() => admin.fetchStats());
@@ -351,6 +353,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             Tab(text: s.adminDeviceTab),
             Tab(text: s.adminDeletedTab),
             Tab(text: s.adminAttributionTab),
+            Tab(text: s.adminDocsTab),
           ],
         ),
       ),
@@ -393,6 +396,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             const SizedBox.shrink(),
           if (_visitedTabs.contains(8))
             const AdminAttributionTab()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(9))
+            const AdminDocsTab()
           else
             const SizedBox.shrink(),
         ],

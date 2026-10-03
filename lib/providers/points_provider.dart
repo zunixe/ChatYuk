@@ -249,11 +249,20 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Ambil nominal biaya foto dari server (dipanggil saat buka profil orang).
-  Future<void> refreshPhotoCosts() async {
+  ///
+  /// ANTI-NGELAG: hanya fetch SEKALI per sesi + skip bila sudah ada. Dulu
+  /// dipanggil tiap `UserInfoScreen.initState`; `notifyListeners()` di sini
+  /// memicu rebuild SELURUH app (semua watcher PointsProvider) tiap buka
+  /// profil → terasa ngelag saat pindah-pindah profil. Nilai harga jarang
+  /// berubah, jadi sekali cukup (refresh manual via layar poin bila perlu).
+  bool _photoCostsLoaded = false;
+  Future<void> refreshPhotoCosts({bool force = false}) async {
+    if (_photoCostsLoaded && !force) return;
     try {
       final c = await _service.photoCosts();
       _photoUnlockOnce = c.$1;
       _photoUnlockPerm = c.$2;
+      _photoCostsLoaded = true;
       if (!_disposed) notifyListeners();
     } catch (e) {
       dlog('[POINTS] refreshPhotoCosts error: $e');

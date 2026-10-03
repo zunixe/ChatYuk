@@ -131,6 +131,40 @@ void main() {
       final out = mergeUsersWithDevices(users, const []);
       expect(out.map((e) => e['user_id']).toList(), ['b', 'a']);
     });
+
+    test('field GPS profil diteruskan (badge Fake GPS)', () {
+      final users = [
+        {
+          'id': 'u1',
+          'nickname': 'Fake',
+          'location_mocked': true,
+          'location_mock_reason': 'shared_coord',
+          'lat_gps': -6.9,
+          'lon_gps': 107.5,
+          'gps_updated_at': '2026-10-03T00:00:00Z',
+          'loc_source': 'gps',
+        },
+        {
+          'id': 'u2',
+          'nickname': 'Asli',
+          'location_mocked': false,
+          'lat_gps': -6.2,
+          'lon_gps': 106.8,
+          'loc_source': 'gps',
+        },
+      ];
+      final devices = [row('u1', 'd1', '2026-10-03T00:00:00Z')];
+      final out = mergeUsersWithDevices(users, devices);
+      final withDev = out.firstWhere((e) => e['user_id'] == 'u1');
+      expect(withDev['_hasDevice'], isTrue);
+      expect(withDev['location_mocked'], isTrue);
+      expect(withDev['location_mock_reason'], 'shared_coord');
+      expect(withDev['lat_gps'], -6.9);
+      final noDev = out.firstWhere((e) => e['user_id'] == 'u2');
+      expect(noDev['_hasDevice'], isFalse);
+      expect(noDev['location_mocked'], isFalse);
+      expect(noDev['lat_gps'], -6.2);
+    });
   });
 
   group('matchesQuery', () {

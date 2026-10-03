@@ -835,7 +835,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       // → tap kartu user YANG SAMA diulang tak nyahut dalam window 2 dtk.
     ).then((_) => releaseNav(navKey));
 
-    // Validasi + upsert di background setelah screen sudah terbuka.
+    // Validasi + upsert di background setelah screen sudah terbuka — DITUNDA
+    // ~400ms supaya 2 RPC (isUserActive + startPrivateChat) tidak jatuh di
+    // frame transisi buka chat ("klik card Online terasa berat"). Sebelumnya
+    // jalan langsung setelah push → ikut frame animasi.
+    unawaited(Future<void>.delayed(const Duration(milliseconds: 400), () async {
+    if (!context.mounted) return;
     try {
       final active = await chat.isUserActive(user.uid);
       if (!active) {
@@ -878,6 +883,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
       }
     }
+    })); // akhir unawaited(delayed)
   }
 
   // Sembunyikan TANPA snackbar: swipe beruntun + bar transient = bar

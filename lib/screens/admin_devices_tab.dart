@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import 'admin_devices/widgets/device_group_card.dart';
 import 'admin_devices/widgets/device_card.dart';
+import 'admin_devices/widgets/gps_badge.dart';
 import 'admin_devices/widgets/device_detail_sheet.dart';
 import 'admin_devices/widgets/user_detail_sheet.dart';
 import '../config/strings.dart';
@@ -495,6 +496,8 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                         ],
                       ],
                     ),
+                    // Status lokasi user: Fake GPS vs GPS asli vs IP saja.
+                    GpsBadge(device: u, s: s),
                   ],
                 ),
               ),

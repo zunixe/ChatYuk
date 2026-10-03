@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
@@ -411,11 +412,11 @@ class _TimelineScreenState extends State<TimelineScreen>
                 controller: _scroll,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.only(top: 4, bottom: 88),
-                // PERF: cacheExtent kecil (dulu default 250px). Kartu di luar
+                // PERF: cache kecil (dulu default 250px). Kartu di luar
                 // viewport lebih sedikit yang ter-build → tidak lagi mengunduh
                 // + decode foto post yang belum terlihat saat Timeline dibuka.
                 // Kombinasi dgn _loadImages post-frame di PostCard.
-                cacheExtent: 100,
+                scrollCacheExtent: ScrollCacheExtent.pixels(100),
                 itemCount: posts.length +
                       (loading && hasMore ? 1 : 0) +
                       (!hasMore ? 1 : 0),
