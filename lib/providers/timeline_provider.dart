@@ -29,6 +29,17 @@ class TimelineProvider extends ChangeNotifier {
   final TimelineService _service;
 
   final List<Map<String, dynamic>> _posts = [];
+  // PERF: batas post di memori. Scroll feed panjang / realtime post baru terus
+  // menambah `_posts` → akumulasi (tiap post bawa map+path foto) seiring
+  // pemakaian lama. Di-cap: post terlama dibuang dari memori (masih di disk
+  // via _scopeCache), cukup untuk scroll mundur wajar. Post yg dibuang muncul
+  // lagi saat scroll naik ke atas (fetch ulang).
+  static const int _maxMemPosts = 120;
+  void _capPosts() {
+    while (_posts.length > _maxMemPosts) {
+      _posts.removeLast();
+    }
+  }
   List<Map<String, dynamic>> _postsView = const [];
   // TRUE sejak awal: frame pertama Timeline tidak boleh flash empty state
   // "Ketuk +" — tunggu disk/network selesai dulu (posts.isEmpty && loading
@@ -211,6 +222,7 @@ class TimelineProvider extends ChangeNotifier {
         _posts
           ..clear()
           ..addAll(_excludeOwn(posts, scope));
+        _capPosts();
         _cursor = _scopeCache[scope]!.cursor;
         _cursorBoosted = _scopeCache[scope]!.cursorBoosted;
         _hasMore = _scopeCache[scope]!.hasMore;
@@ -313,6 +325,7 @@ class TimelineProvider extends ChangeNotifier {
       }
     }
     _posts.insert(0, p);
+    _capPosts();
     _invalidateView();
     _syncScopeCache();
     if (!_disposed) notifyListeners();
@@ -699,6 +712,7 @@ class TimelineProvider extends ChangeNotifier {
               if (!seen.contains(p['id'])) _posts.add(p);
             }
           }
+          _capPosts();
           // Cursor keyset konsisten dengan ORDER BY (is_boosted desc,
           // created_at desc).
           _cursor = cursor;

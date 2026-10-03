@@ -34,7 +34,7 @@ mixin AdminAttributionMx on AdminBase {
     if (days != null) _attrDays = days;
     _attrLoading = true;
     _attrError = null;
-    if (!_disposed) notifyListeners();
+    _notifyAttribution();
     if (_attrSummary == null) {
       try {
         final cached = await MessageCache.instance.loadRawObj(
@@ -42,7 +42,7 @@ mixin AdminAttributionMx on AdminBase {
         );
         if (cached.isNotEmpty && _attrSummary == null) {
           _attrSummary = cached;
-          if (!_disposed) notifyListeners();
+          _notifyAttribution();
         }
       } catch (_) {}
     }
@@ -60,7 +60,7 @@ mixin AdminAttributionMx on AdminBase {
       dlog('[ADMIN] fetchAttribution error: $e');
     }
     _attrLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyAttribution();
   }
 
   /// Muat halaman-1 daftar user untuk 1 kanal ([source] kosong = semua).
@@ -69,7 +69,7 @@ mixin AdminAttributionMx on AdminBase {
     _attrUsersLoading = true;
     _attrUsersError = null;
     _attrUsersHasMore = true;
-    if (!_disposed) notifyListeners();
+    _notifyAttribution();
     try {
       final res = await _service.listAttributionUsers(
         source: _attrSource,
@@ -84,7 +84,7 @@ mixin AdminAttributionMx on AdminBase {
       dlog('[ADMIN] fetchAttributionUsers error: $e');
     }
     _attrUsersLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyAttribution();
   }
 
   /// Muat halaman berikutnya (infinite scroll).
@@ -95,7 +95,7 @@ mixin AdminAttributionMx on AdminBase {
       return;
     }
     _attrUsersFetchingMore = true;
-    if (!_disposed) notifyListeners();
+    _notifyAttribution();
     try {
       final res = await _service.listAttributionUsers(
         source: _attrSource,
@@ -112,6 +112,6 @@ mixin AdminAttributionMx on AdminBase {
       dlog('[ADMIN] loadMoreAttributionUsers error: $e');
     }
     _attrUsersFetchingMore = false;
-    if (!_disposed) notifyListeners();
+    _notifyAttribution();
   }
 }

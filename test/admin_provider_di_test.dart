@@ -633,4 +633,49 @@ void main() {
       await sub.cancel();
     });
   });
+
+  group('Revision counter per-domain (granular rebuild)', () {
+    test('notify domain STATS tidak menaikkan counter domain lain', () async {
+      final before = <String, int>{
+        'stats': provider.revStats,
+        'devices': provider.revDevices,
+        'chats': provider.revChats,
+        'deleted': provider.revDeleted,
+        'contact': provider.revContact,
+        'attribution': provider.revAttribution,
+        'chatOrg': provider.revChatOrg,
+        'calls': provider.revCalls,
+      };
+
+      when(() => service.getStats()).thenAnswer((_) async => {'x': 1});
+      await provider.fetchStats();
+
+      // Hanya revStats yang naik (fetchStats notify 2×: loading + selesai).
+      expect(provider.revStats, greaterThan(before['stats']!));
+      expect(provider.revDevices, before['devices']);
+      expect(provider.revChats, before['chats']);
+      expect(provider.revDeleted, before['deleted']);
+      expect(provider.revContact, before['contact']);
+      expect(provider.revAttribution, before['attribution']);
+      expect(provider.revChatOrg, before['chatOrg']);
+      expect(provider.revCalls, before['calls']);
+    });
+
+    test('notify domain DEVICES hanya menaikkan revDevices', () async {
+      when(() => service.listDevices(
+              limit: any(named: 'limit'), offset: any(named: 'offset')))
+          .thenAnswer((_) async => {'items': [], 'total': 0});
+      when(() => service.getExcludedDevices())
+          .thenAnswer((_) async => <String>{});
+
+      final statsBefore = provider.revStats;
+      final chatsBefore = provider.revChats;
+
+      await provider.fetchDevices();
+
+      expect(provider.revDevices, greaterThan(0));
+      expect(provider.revStats, statsBefore);
+      expect(provider.revChats, chatsBefore);
+    });
+  });
 }

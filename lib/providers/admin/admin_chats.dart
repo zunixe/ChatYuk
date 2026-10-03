@@ -83,7 +83,7 @@ mixin AdminChatsMx on AdminBase {
   Future<void> fetchChats() async {
     _chatsLoading = true;
     _chatsError = null;
-    if (!_disposed) notifyListeners();
+    _notifyChats();
     // Data kosong (cold start / tab baru) → tampilkan cache disk dulu.
     if (_chats.isEmpty) {
       try {
@@ -91,7 +91,7 @@ mixin AdminChatsMx on AdminBase {
         if (cached.isNotEmpty && _chats.isEmpty) {
           _chats = cached;
           _chatsTotal = cached.length;
-          if (!_disposed) notifyListeners();
+          _notifyChats();
         }
       } catch (_) {}
     }
@@ -121,7 +121,7 @@ mixin AdminChatsMx on AdminBase {
       dlog('[ADMIN] fetchChats error: $e');
     }
     _chatsLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyChats();
   }
 
   /// Muat halaman berikutnya (infinite scroll list chat).
@@ -130,7 +130,7 @@ mixin AdminChatsMx on AdminBase {
   Future<bool> fetchMoreChats() async {
     if (_chatsFetchingMore || !_chatsHasMore || _chatsLoading) return false;
     _chatsFetchingMore = true;
-    if (!_disposed) notifyListeners(); // footer spinner muncul saat mulai
+    _notifyChats(); // footer spinner muncul saat mulai
     var ok = false;
     try {
       final res = await _service.listChats(
@@ -154,7 +154,7 @@ mixin AdminChatsMx on AdminBase {
       dlog('[ADMIN] fetchMoreChats error: $e');
     }
     _chatsFetchingMore = false;
-    if (!_disposed) notifyListeners();
+    _notifyChats();
     return ok;
   }
 
@@ -183,7 +183,7 @@ mixin AdminChatsMx on AdminBase {
     // Satu RPC besar (bila daftar sekarang masih lebih kecil dari bulkLimit).
     if (_chats.length < bulkLimit && !_chatsFetchingMore && !_chatsLoading) {
       _chatsFetchingMore = true;
-      if (!_disposed) notifyListeners();
+      _notifyChats();
       try {
         final res = await _service.listChats(limit: bulkLimit, offset: 0);
         final fresh = List<Map<String, dynamic>>.from(res['items'] ?? const []);
@@ -199,7 +199,7 @@ mixin AdminChatsMx on AdminBase {
         dlog('[ADMIN] ensureChatsContain bulk error: $e');
       }
       _chatsFetchingMore = false;
-      if (!_disposed) notifyListeners();
+      _notifyChats();
     }
 
     if (allPresent()) return;
@@ -248,7 +248,7 @@ mixin AdminChatsMx on AdminBase {
     } catch (e) {
       dlog('[ADMIN] refreshChats error: $e');
     }
-    if (!_disposed) notifyListeners();
+    _notifyChats();
   }
 
   // ── Call aktif (badge monitor + pantau call) ──
@@ -289,7 +289,7 @@ mixin AdminChatsMx on AdminBase {
     _activeCallsLoading = false;
     // Poll tiap 5–10 dtk: diam bila daftar sama supaya daftar monitor di
     // belakang layar tidak rebuild terus.
-    if (changed && !_disposed) notifyListeners();
+    if (changed) _notifyCalls();
   }
 
   /// Sidik daftar call aktif (id+status+chat) untuk deteksi perubahan.
@@ -352,7 +352,7 @@ mixin AdminChatsMx on AdminBase {
   Future<void> fetchContactMessages() async {
     _contactLoading = true;
     _contactError = null;
-    if (!_disposed) notifyListeners();
+    _notifyContact();
     // Cold start / tab baru → cache disk dulu (tahan offline).
     if (_contactMessages.isEmpty) {
       try {
@@ -362,7 +362,7 @@ mixin AdminChatsMx on AdminBase {
         if (cached.isNotEmpty && _contactMessages.isEmpty) {
           _contactMessages = cached;
           _contactTotal = cached.length;
-          if (!_disposed) notifyListeners();
+          _notifyContact();
         }
       } catch (_) {}
     }
@@ -387,7 +387,7 @@ mixin AdminChatsMx on AdminBase {
       dlog('[ADMIN] fetchContactMessages error: $e');
     }
     _contactLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyContact();
   }
 
   /// Muat halaman berikutnya (infinite scroll list pesan kontak).
@@ -407,7 +407,7 @@ mixin AdminChatsMx on AdminBase {
       dlog('[ADMIN] fetchMoreContactMessages error: $e');
     }
     _contactFetchingMore = false;
-    if (!_disposed) notifyListeners();
+    _notifyContact();
   }
 
   Future<void> setContactRead(String id, {bool read = true}) async {
@@ -416,7 +416,7 @@ mixin AdminChatsMx on AdminBase {
       final i = _contactMessages.indexWhere((m) => m['id'] == id);
       if (i >= 0) {
         _contactMessages[i] = {..._contactMessages[i], 'is_read': read};
-        if (!_disposed) notifyListeners();
+        _notifyContact();
       }
     } catch (e) {
       dlog('[ADMIN] setContactRead error: $e');
@@ -428,7 +428,7 @@ mixin AdminChatsMx on AdminBase {
       await _service.deleteContactMessage(id);
       _contactMessages.removeWhere((m) => m['id'] == id);
       if (_contactTotal > 0) _contactTotal--;
-      if (!_disposed) notifyListeners();
+      _notifyContact();
     } catch (e) {
       dlog('[ADMIN] deleteContactMessage error: $e');
     }
@@ -545,7 +545,7 @@ mixin AdminChatsMx on AdminBase {
       if (!_chatMsgHasMore.containsKey(chatId)) {
         _chatMsgHasMore[chatId] = local.length >= messagePageSize;
       }
-      if (!_disposed) notifyListeners();
+      _notifyChats();
       return true;
     }
     try {
@@ -568,7 +568,7 @@ mixin AdminChatsMx on AdminBase {
       dlog('[ADMIN] fetchChatMessages error: $e');
       return false;
     } finally {
-      if (!_disposed) notifyListeners();
+      _notifyChats();
     }
   }
 
@@ -600,7 +600,7 @@ mixin AdminChatsMx on AdminBase {
       dlog('[ADMIN] fetchMoreChatMessages error: $e');
     }
     _chatMessagesFetchingMore = false;
-    if (!_disposed) notifyListeners();
+    _notifyChats();
   }
 
   /// Refresh pesan terbaru chat [chatId] tanpa reset pagination — merge
@@ -622,7 +622,7 @@ mixin AdminChatsMx on AdminBase {
             AdminBase.adminChatMsgKey(chatId),
             latest,
           );
-          if (!_disposed) notifyListeners();
+          _notifyChats();
         }
         return;
       }
@@ -636,7 +636,7 @@ mixin AdminChatsMx on AdminBase {
         AdminBase.adminChatMsgKey(chatId),
         res.merged,
       );
-      if (!_disposed) notifyListeners();
+      _notifyChats();
     } catch (e) {
       dlog('[ADMIN] refreshChatMessages error: $e');
     }

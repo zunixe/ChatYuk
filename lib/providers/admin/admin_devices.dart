@@ -19,7 +19,7 @@ mixin AdminDevicesMx on AdminBase {
 Future<void> fetchDevices() async {
     _devicesLoading = true;
     _devicesError = null;
-    if (!_disposed) notifyListeners();
+    _notifyDevices();
     // Cold start / tab baru → cache disk dulu (tahan offline).
     if (_devices.isEmpty) {
       try {
@@ -29,7 +29,7 @@ Future<void> fetchDevices() async {
         if (cached.isNotEmpty && _devices.isEmpty) {
           _devices = cached;
           _devicesTotal = cached.length;
-          if (!_disposed) notifyListeners();
+          _notifyDevices();
         }
       } catch (_) {}
     }
@@ -53,7 +53,7 @@ Future<void> fetchDevices() async {
       dlog('[ADMIN] fetchDevices error: $e');
     }
     _devicesLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyDevices();
   }
 
   /// Refresh periodic tanpa spinner & tanpa menimpa list saat error.
@@ -71,7 +71,7 @@ Future<void> fetchDevices() async {
       dlog('[ADMIN] refreshDevicesSilent error: $e');
       if (_devices.isEmpty) _devicesError = classifyAdminError(e);
     }
-    if (!_disposed) notifyListeners();
+    _notifyDevices();
   }
 
   Future<void> fetchMoreDevices() async {
@@ -89,7 +89,7 @@ Future<void> fetchDevices() async {
       dlog('[ADMIN] fetchMoreDevices error: $e');
     }
     _devicesFetchingMore = false;
-    if (!_disposed) notifyListeners();
+    _notifyDevices();
   }
 
   /// Detail lengkap satu user (profil + device + chat + lokasi).

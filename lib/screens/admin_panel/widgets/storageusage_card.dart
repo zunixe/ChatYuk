@@ -42,7 +42,9 @@ class AdminStorageUsageCardState extends State<AdminStorageUsageCard> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: data storage bagian dari domain STATS.
+    context.select<AdminProvider, int>((p) => p.revStats);
+    final admin = context.read<AdminProvider>();
     final st = admin.storageStats;
     final loading = admin.storageStatsLoading && st == null;
     final failed = !loading && st == null && admin.storageStatsError;

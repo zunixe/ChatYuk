@@ -236,7 +236,9 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: rebuild hanya saat domain DELETED berubah.
+    context.select<AdminProvider, int>((p) => p.revDeleted);
+    final admin = context.read<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
     // Hitung sekali per build — dulu `_filtered()` dipanggil di dalam
     // `itemBuilder` sehingga daftar difilter ulang untuk SETIAP baris (O(n²)

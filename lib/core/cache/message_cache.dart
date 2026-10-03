@@ -81,7 +81,12 @@ class MessageCache {
   // In-memory cache: sekali decrypt, buka ulang chat tidak perlu decrypt lagi.
   // Dibatasi 30 chat â€” LRU sederhana, buang yang paling lama saat penuh.
   final Map<String, List<MessageModel>> _memCache = {};
-  static const _memCacheMax = 30;
+  // PERF: 30 → 8. Tiap entri = seluruh pesan satu chat TERMASUK `imageData`
+  // base64 foto (bisa ~2MB/foto). 30 chat berisi foto bisa menahan ratusan MB
+  // → GC storm → "ngetik ngelag setelah app dipakai lama" (restart normal lagi
+  // karena cache ini kosong). 8 chat cukup untuk yang sering dibuka, hemat
+  // memori drastis; chat lain tetap dibaca dari disk (SQLite) saat dibuka.
+  static const _memCacheMax = 8;
 
   SecretKey? _key;
 
@@ -397,6 +402,15 @@ class MessageCache {
       if ((_memCache[chatKey]?.isNotEmpty ?? false)) return;
       await loadMessages(chatKey);
     } catch (_) {}
+  }
+
+  /// Buang cache pesan IN-MEMORY saja (disk tetap) — dipanggil saat app
+  /// di-background. Tiap entri menahan pesan + `imageData` base64 foto
+  /// (bisa besar); melepasnya mencegah akumulasi → "ngetik ngelag setelah
+  /// app lama". Saat dibuka lagi, chat dibaca ulang dari SQLite (cepat).
+  void trimMemCache() {
+    _memCache.clear();
+    _memRawList.clear();
   }
 
   /// Hapus SEMUA cache (dipakai saat logout / reset).

@@ -167,7 +167,10 @@ Uint8List? b64ToBytes(String b64) {
 // bounded 40 (LRU) cegah OOM. 40 (dulu 80) supaya RAM di HP 4-6GB lebih lega
 // (tiap entri foto menyimpan bytes asli; video poster terpisah di disk cache).
 final decodedImageCache = <int, DecodedImage>{};
-const _decodedCacheMax = 40;
+// PERF: 40 → 16. Tiap entri = bytes foto asli (bisa ~2-3MB). 40 entri bisa
+// menahan ~80-120MB → GC storm seiring pemakaian. 16 cukup untuk bubble yang
+// tampil sekaligus saat scroll; foto lain dibaca ulang dari cache disk/chat.
+const _decodedCacheMax = 16;
 // Daftarkan pembersih ke hygiene logout (satu titik, lihat
 // core/media/image_cache_hygiene.dart) — bytes foto user lama tidak boleh
 // tinggal di RAM setelah ganti akun. Lazy: dipanggil saat cache pertama diisi.

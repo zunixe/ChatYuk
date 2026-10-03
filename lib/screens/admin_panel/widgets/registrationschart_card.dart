@@ -50,7 +50,9 @@ class AdminRegistrationsChartCardState extends State<AdminRegistrationsChartCard
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: data registrasi bagian dari domain STATS.
+    context.select<AdminProvider, int>((p) => p.revStats);
+    final admin = context.read<AdminProvider>();
 
     return Container(
       padding: const EdgeInsets.all(14),

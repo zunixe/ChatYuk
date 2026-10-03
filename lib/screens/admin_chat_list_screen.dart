@@ -303,7 +303,13 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: layar ini menampilkan dua domain sekaligus — daftar chat
+    // (revChats) DAN badge call aktif (revCalls) — jadi harus bergantung ke
+    // keduanya. Tanpa ini, setiap notify dari domain lain (stats/devices/
+    // deleted) ikut me-rebuild layar monitor yang berat.
+    context.select<AdminProvider, int>((p) => p.revChats);
+    context.select<AdminProvider, int>((p) => p.revCalls);
+    final admin = context.read<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
     // Hitung SEKALI per build: dulu `_sortedFiltered()` (filter+sort)
     // dipanggil di empty-check + itemCount + di dalam itemBuilder per baris

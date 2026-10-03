@@ -293,7 +293,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: panel hanya bergantung pada domain STATS. Dulu
+    // `context.watch<AdminProvider>()` → setiap notify (polling 60 dtk,
+    // realtime call, fetch device) me-rebuild SELURUH panel + semua tab
+    // yang sudah dibangun → jank tak stabil. `select` pada revStats saja
+    // membuat panel rebuild HANYA saat statistik berubah; domain lain
+    // (devices/chats/deleted/…) di-rebuild oleh tab masing-masing.
+    context.select<AdminProvider, int>((p) => p.revStats);
+    // Nilai non-reaktif dibaca via read (tidak menambah dependency).
+    final admin = context.read<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
     final stats = admin.stats;
 

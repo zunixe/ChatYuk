@@ -54,7 +54,9 @@ class _TableSizeBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: data ukuran tabel bagian dari domain STATS.
+    context.select<AdminProvider, int>((p) => p.revStats);
+    final admin = context.read<AdminProvider>();
     if (admin.tableSizesLoading && admin.tableSizes.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(strokeWidth: 2),

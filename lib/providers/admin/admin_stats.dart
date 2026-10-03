@@ -18,7 +18,7 @@ mixin AdminStatsMx on AdminBase {
   Future<void> fetchStats({bool force = false}) async {
     _loading = true;
     _error = null;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
     // Cold start / data kosong: tampilkan cache disk dulu (instan, tanpa
     // network) supaya panel tidak kosong saat offline.
     if (_stats == null) {
@@ -27,7 +27,7 @@ mixin AdminStatsMx on AdminBase {
         if (cached.isNotEmpty && _stats == null) {
           _stats = cached;
           _pointsEnabled = _stats?['points_enabled'] == true;
-          if (!_disposed) notifyListeners();
+          _notifyStats();
         }
       } catch (_) {}
     }
@@ -46,7 +46,7 @@ mixin AdminStatsMx on AdminBase {
       dlog('[ADMIN] fetchStats error: $e');
     }
     _loading = false;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
   }
 
   /// Refresh statistik tanpa memicu state "loading" (untuk timer/polling).
@@ -64,7 +64,7 @@ mixin AdminStatsMx on AdminBase {
     } catch (e) {
       dlog('[ADMIN] refreshStats error: $e');
     }
-    if (!_disposed) notifyListeners();
+    _notifyStats();
   }
 
   /// Ambil detail data card Overview (list user/room per kategori).
@@ -151,7 +151,7 @@ mixin AdminStatsMx on AdminBase {
   Future<void> fetchRegistrationInsights({bool force = false}) async {
     if (_regInsightLoaded && !force) return;
     _regInsightLoading = true;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
     try {
       final results = await Future.wait([
         _service.fetchRegistrationKpis(),
@@ -164,7 +164,7 @@ mixin AdminStatsMx on AdminBase {
       dlog('[ADMIN] fetchRegistrationInsights error: $e');
     }
     _regInsightLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
   }
 
   Future<void> fetchRegistrationsDaily(int year, int month) async {
@@ -176,11 +176,11 @@ mixin AdminStatsMx on AdminBase {
     if (!isCurrentMonth && _regDailyCache.containsKey(cacheKey)) {
       if (_regDaily == _regDailyCache[cacheKey]) return;
       _regDaily = _regDailyCache[cacheKey]!;
-      if (!_disposed) notifyListeners();
+      _notifyStats();
       return;
     }
     _regLoading = true;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
     try {
       _regDaily = await _service.fetchRegistrationsDaily(year, month);
       _regDailyCache[cacheKey] = _regDaily;
@@ -189,7 +189,7 @@ mixin AdminStatsMx on AdminBase {
       _regDaily = {};
     }
     _regLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
   }
 
   Future<Map<String, dynamic>?> massBonus(int bonus) async {
@@ -218,7 +218,7 @@ mixin AdminStatsMx on AdminBase {
     try {
       final result = await _service.togglePointsSystem(enabled);
       _pointsEnabled = result;
-      if (!_disposed) notifyListeners();
+      _notifyStats();
       return result;
     } catch (e) {
       dlog('[ADMIN] togglePointsSystem error: $e');
@@ -258,7 +258,7 @@ mixin AdminStatsMx on AdminBase {
     }
     _storageStatsLoading = true;
     _storageStatsError = false;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
     try {
       final fresh = await _service.getStorageStats();
       if (fresh.isEmpty) {
@@ -273,7 +273,7 @@ mixin AdminStatsMx on AdminBase {
       if (_storageStats == null) _storageStatsError = true;
     }
     _storageStatsLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
   }
 
   // ── Breakdown ukuran tabel (sheet dari kartu Database) ──
@@ -291,7 +291,7 @@ mixin AdminStatsMx on AdminBase {
   Future<void> fetchTableSizes() async {
     _tableSizesLoading = true;
     _tableSizesError = false;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
     try {
       final res = await _service.getTableSizes();
       final rows =
@@ -306,7 +306,7 @@ mixin AdminStatsMx on AdminBase {
       if (_tableSizes.isEmpty) _tableSizesError = true;
     }
     _tableSizesLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
   }
 
   // ── Daftar registrasi email ──
@@ -318,7 +318,7 @@ mixin AdminStatsMx on AdminBase {
 
   Future<void> fetchRegistrations() async {
     _registrationsLoading = true;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
     try {
       final res = await _service.listRegistrations(limit: 200, offset: 0);
       _registrations =
@@ -327,7 +327,7 @@ mixin AdminStatsMx on AdminBase {
       dlog('[ADMIN] fetchRegistrations error: $e');
     }
     _registrationsLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyStats();
   }
 
   // ── Cloudflare Realtime TURN usage ──
@@ -338,7 +338,7 @@ mixin AdminStatsMx on AdminBase {
   Future<void> fetchCfUsage() async {
     try {
       _cfUsage = await _service.getCfUsage();
-      if (!_disposed) notifyListeners();
+      _notifyStats();
     } catch (e) {
       dlog('[ADMIN] fetchCfUsage error: $e');
     }
