@@ -2143,28 +2143,34 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           // Ditaruh di layer terluar (Positioned.fill) agar TIDAK ikut
           // bergeser saat keyboard muncul (resizeToAvoidBottomInset: false).
           Positioned.fill(
-            child: Container(
-              color: AppTheme.bgScreen,
-              child: chatBackgroundImage == null
-                  ? const SizedBox.shrink()
-                  : Opacity(
-                      opacity: 0.55,
-                      child: RawImage(
-                        image: chatBackgroundImage,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
+            child: RepaintBoundary(
+              // Background statis: RawImage (opaque) + lapisan warna
+              // bgScreen 45% DI ATASNYA → efek "55% terlihat" TANPA `Opacity`
+              // widget. `Opacity` full-screen memaksa GPU bikin offscreen
+              // layer penuh tiap frame transisi (raster berat = jank buka/
+              // tutup chat). Dua draw sederhana ini jauh lebih murah.
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (chatBackgroundImage != null)
+                    RawImage(image: chatBackgroundImage, fit: BoxFit.cover)
+                  else
+                    const SizedBox.shrink(),
+                  Container(
+                    color: AppTheme.bgScreen.withValues(alpha: 0.45),
+                  ),
+                ],
+              ),
             ),
           ),
-          // Konten (list + composer) naik di atas keyboard via padding
-          // viewInsets sendiri — bg tetap fullscreen diam (tidak ikut
-          // bergeser), karena resizeToAvoidBottomInset: false di atas.
+          // Konten (list + composer). PENTING: jangan baca viewInsets di
+          // sini — dulu `Padding(bottom: MediaQuery.viewInsetsOf...)` di level
+          // ini membungkus Column(list+composer) → tiap keyboard muncul
+          // (viewInsets 0→~300) SELURUH list pesan rebuild = buka keyboard
+          // terasa lambat. Insets sekarang hanya membungkus composer (di
+          // bawah), list tak ikut rebuild.
           Positioned.fill(
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewInsetsOf(context).bottom,
-              ),
-              child: Column(
+            child: Column(
               children: [
                 Expanded(
                   child: Stack(
@@ -2525,7 +2531,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                               ],
                             ),
                           ),
-                        ChatComposerInput(
+                        // Insets keyboard HANYA di composer → list pesan tak
+                        // rebuild saat keyboard muncul (buka keyboard cepat).
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.viewInsetsOf(context).bottom,
+                          ),
+                          child: ChatComposerInput(
                           controller: _msgCtrl,
                           focusNode: _inputFocus,
                           onSend: sendMessage,
@@ -2599,16 +2611,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           mentionCandidates: _mentionCandidates,
                           mentionAllowAll: false,
                         )
+                        ),
                         ],
                        ],
                      ),
                    ),
                  ),
-               ],
-             ),
-           ),
-           ),
-           if (_showCallOverlay)
+                ],
+              ),
+            ),
+            if (_showCallOverlay)
             Positioned.fill(
               child: ChatCallOverlay(
                 session: CallProvider.instance.activeSession!,

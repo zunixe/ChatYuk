@@ -9,7 +9,6 @@ import 'mention_spans.dart';
 import 'chat_video_bubble.dart';
 import 'media_caption_time.dart';
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -129,13 +128,19 @@ List<TextSpan> applySearchHighlight(List<TextSpan> spans, String query) {
   return out;
 }
 
-// Top-level function untuk compute() isolate — decode base64 + dimensi di background
+// Top-level function untuk compute() isolate — base64 → bytes + dimensi.
+//
+// PERF: dulu `img.decodeImage(bytes)` men-decode foto FULL-RES (12MP ≈ 48MB
+// RGBA) hanya untuk dapat width/height → spike memori ~470MB saat scroll chat
+// berisi banyak foto (terukur). Sekarang dimensi dibaca dari HEADER JPEG/PNG
+// (parseImageDimensions — tanpa decode penuh). Bytes tetap utuh untuk render
+// (Image.memory sudah `cacheWidth`). Sama pola dgn fix `genPostThumb` (§26).
 DecodedImage? decodeImageB64(String base64) {
   try {
     final bytes = base64Decode(base64);
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return DecodedImage(bytes, 0, 0);
-    return DecodedImage(bytes, decoded.width, decoded.height);
+    final dims = parseImageDimensions(bytes);
+    if (dims == null) return DecodedImage(bytes, 0, 0);
+    return DecodedImage(bytes, dims.width, dims.height);
   } catch (_) {
     return null;
   }
@@ -1851,6 +1856,12 @@ class _MessageImageState extends State<MessageImage> {
       final s = photoViewSize(_decoded!.width, _decoded!.height);
       _phW = s.width;
       _phH = s.height;
+    }
+    // PREFETCH full-res ke mem cache PhotoCache — supaya saat foto di-TAP,
+    // viewer langsung dapat versi full (tanpa "tahan dulu" disk-read+decrypt).
+    // Fire-and-forget; membuka viewer tetap instan dgn thumbnail lebih dulu.
+    if (widget.chatKey.isNotEmpty && widget.messageId.isNotEmpty) {
+      unawaited(PhotoCache.instance.load(widget.chatKey, widget.messageId));
     }
   }
 
