@@ -107,12 +107,14 @@ class AdminRegistrationsSheetState extends State<AdminRegistrationsSheet> {
                         final r = list[i];
                         final nick = r['nickname'] ?? '?';
                         final email = r['email'] ?? '-';
-                        final created = r['created_at'] != null
-                            ? formatRelativeTime(
-                                DateTime.tryParse(r['created_at']) ??
-                                    DateTime.now(),
-                                isId: s.isId,
-                              )
+                        // Tanggal + JAM register (WIB) — eksplisit supaya
+                        // admin tahu waktu pastinya, bukan cuma "3 hari lalu".
+                        final createdDt = r['created_at'] != null
+                            ? DateTime.tryParse('${r['created_at']}')
+                            : null;
+                        final createdFull = formatDateTimeWib(createdDt);
+                        final createdRel = createdDt != null
+                            ? formatRelativeTime(createdDt, isId: s.isId)
                             : '';
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 5),
@@ -155,11 +157,25 @@ class AdminRegistrationsSheetState extends State<AdminRegistrationsSheet> {
                                   ],
                                 ),
                               ),
-                              Text(
-                                created,
-                                style: AppText.micro.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
+                              const SizedBox(width: 8),
+                              // Tanggal + jam register (WIB) + jarak relatif.
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    createdFull,
+                                    style: AppText.micro.copyWith(
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  if (createdRel.isNotEmpty)
+                                    Text(
+                                      createdRel,
+                                      style: AppText.micro.copyWith(
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ],
                           ),

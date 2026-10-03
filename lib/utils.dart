@@ -153,6 +153,17 @@ String formatDateWib(DateTime? dt) {
   return '${wib.day} ${bulan[wib.month - 1]} ${wib.year}';
 }
 
+/// Tanggal + JAM register akun dalam WIB (Asia/Jakarta), format
+/// '30 Sep 2026, 14:35'. Dipakai kartu Ringkasan (daftar registrasi) supaya
+/// admin tahu tanggal DAN jam pastinya, konsisten WIB (bukan zona HP admin).
+String formatDateTimeWib(DateTime? dt) {
+  if (dt == null) return '';
+  final wib = dt.toUtc().add(const Duration(hours: 7));
+  final hh = wib.hour.toString().padLeft(2, '0');
+  final mm = wib.minute.toString().padLeft(2, '0');
+  return '${formatDateWib(dt)}, $hh:$mm';
+}
+
 /// Waktu ala kartu explore: 'Baru', '2 mnt', '14 mnt', '1 jam'.
 String formatExploreTime(DateTime dt, {bool isId = false}) {
   final diff = DateTime.now().difference(dt.toLocal());
