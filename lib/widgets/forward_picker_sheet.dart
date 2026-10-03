@@ -12,11 +12,23 @@ class ForwardTarget {
   final String chatId;
   final String title;
   final String subtitle;
+
+  /// UID lawan bicara untuk chat private (format `chatId` = `uid1_uid2`,
+  /// jadi BUKAN uid user). Dipakai avatar agar cache/foto pakai key yang benar.
+  /// Kosong untuk target room.
+  final String otherUid;
+
+  /// Gender lawan ('male'/'female'/lainnya) — menentukan warna ring avatar
+  /// mengikuti aturan yang sama dengan daftar chat & Pengguna Online.
+  final String gender;
+
   const ForwardTarget({
     required this.chatType,
     required this.chatId,
     required this.title,
     required this.subtitle,
+    this.otherUid = '',
+    this.gender = '',
   });
 }
 
@@ -68,6 +80,8 @@ class _ForwardSheetState extends State<_ForwardSheet> {
         chatId: c.chatId,
         title: name,
         subtitle: c.lastMessage,
+        otherUid: otherId,
+        gender: c.participantGenders[otherId] ?? '',
       ));
     }
     final roomTargets = <ForwardTarget>[];
@@ -131,9 +145,19 @@ class _ForwardSheetState extends State<_ForwardSheet> {
                       ListTile(
                         dense: true,
                         leading: ProfileAvatar(
-                          uid: t.chatId,
+                          // PENTING: uid lawan (bukan chatId) — kalau pakai
+                          // chatId, key cache & fetch avatar salah → foto
+                          // tidak pernah muncul. Ring warna mengikuti gender
+                          // (aturan sama dgn daftar chat & Pengguna Online).
+                          uid: t.otherUid,
                           name: t.title,
                           size: 36,
+                          borderColor: t.gender == 'male'
+                              ? AppTheme.male
+                              : t.gender == 'female'
+                              ? AppTheme.female
+                              : AppTheme.accent,
+                          bgColor: AppTheme.avatarBg,
                         ),
                         title: Text(
                           t.title,
