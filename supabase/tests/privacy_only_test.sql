@@ -124,5 +124,22 @@ select supabase_tests.check('mitra chat TIDAK otomatis lihat about',
   not public.privacy_can_view('d0c1e000-0000-4000-8000-000000000001','about',
     'd0c1e000-0000-4000-8000-000000000005'));
 
+-- Anggota GRUP/room yang SAMA boleh lihat foto (2026-10-05). Pakai ...004 &
+-- ...005 sebagai anggota room yang sama.
+insert into public.rooms (id, name, is_private) values ('test-room-x','Test Room', true);
+insert into public.room_members (room_id, user_id, role) values
+ ('test-room-x','d0c1e000-0000-4000-8000-000000000004','member'),
+ ('test-room-x','d0c1e000-0000-4000-8000-000000000005','member');
+select supabase_tests.check('anggota room sama lihat foto',
+  public.privacy_can_view('d0c1e000-0000-4000-8000-000000000004','profile_photo',
+    'd0c1e000-0000-4000-8000-000000000005'));
+-- Rule room HANYA untuk profile_photo: set about owner ke 'nobody' → tetap
+-- ditolak walau sesama anggota room.
+update public.profiles set about_visibility='nobody'
+ where id='d0c1e000-0000-4000-8000-000000000004';
+select supabase_tests.check('anggota room sama TIDAK otomatis lihat about',
+  not public.privacy_can_view('d0c1e000-0000-4000-8000-000000000004','about',
+    'd0c1e000-0000-4000-8000-000000000005'));
+
 select supabase_tests.report() as result;
 rollback;

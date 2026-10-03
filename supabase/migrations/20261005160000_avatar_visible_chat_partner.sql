@@ -53,6 +53,17 @@ begin
     return true;
   end if;
 
+  -- (BARU) Foto profil: anggota GRUP/room yang SAMA (room_members) boleh
+  -- saling lihat — seusai konteks obrolan room. Hanya field profile_photo.
+  if p_field = 'profile_photo' and exists (
+    select 1
+      from public.room_members a
+      join public.room_members b on b.room_id = a.room_id
+     where a.user_id = p_owner and b.user_id = p_viewer
+  ) then
+    return true;
+  end if;
+
   select case p_field
     when 'presence' then presence_visibility
     when 'last_seen' then last_seen_visibility
