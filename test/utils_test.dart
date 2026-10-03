@@ -161,6 +161,30 @@ void main() {
     });
   });
 
+  group('formatWib (tanggal/jam register)', () {
+    // 2026-09-30 07:35 UTC → WIB (+7) = 30 Sep 2026, 14:35.
+    final utc = DateTime.utc(2026, 9, 30, 7, 35);
+
+    test('formatDateWib → "30 Sep 2026" (WIB)', () {
+      expect(utils.formatDateWib(utc), '30 Sep 2026');
+    });
+
+    test('formatDateTimeWib → "30 Sep 2026, 14:35" (WIB)', () {
+      expect(utils.formatDateTimeWib(utc), '30 Sep 2026, 14:35');
+    });
+
+    test('jam dua digit (pad) + melewati tengah malam WIB', () {
+      // 2026-09-30 17:05 UTC → WIB 1 Okt 2026, 00:05.
+      final u = DateTime.utc(2026, 9, 30, 17, 5);
+      expect(utils.formatDateTimeWib(u), '1 Okt 2026, 00:05');
+    });
+
+    test('null → string kosong', () {
+      expect(utils.formatDateWib(null), '');
+      expect(utils.formatDateTimeWib(null), '');
+    });
+  });
+
   group('dateChipLabel', () {
     test('hari ini & kemarin bilingual', () {
       final id = S(isId: true);
