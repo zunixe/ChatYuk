@@ -1949,6 +1949,8 @@ class S {
   String get photoCountLabel => isId ? 'foto' : 'photos';
   String get btnBoost => isId ? 'Boost' : 'Boost';
   String get btnComment => isId ? 'Komentar' : 'Comments';
+  String get commentEmpty =>
+      isId ? 'Belum ada komentar' : 'No comments yet';
   String get btnShare => isId ? 'Bagikan' : 'Share';
   String get labelVisibility =>
       isId ? 'Siapa yang bisa melihat' : 'Who can see this';
@@ -2008,6 +2010,14 @@ class S {
   String get msgLiked => isId ? 'Disukai' : 'Liked';
   String get msgUnliked => isId ? 'Batal suka' : 'Unliked';
   String get msgShared => isId ? 'Dibagikan' : 'Shared';
+  String get shareSearchUsers => isId ? 'Cari user...' : 'Search users...';
+  String get shareViaApps =>
+      isId ? 'Bagikan via aplikasi' : 'Share via apps';
+  String get shareCopyLink => isId ? 'Salin Tautan' : 'Copy Link';
+  String get shareCopied => isId ? 'Tautan disalin' : 'Link copied';
+  String get shareMoreApps => isId ? 'Lainnya' : 'More';
+  String shareSentTo(String name) =>
+      isId ? 'Dibagikan ke $name' : 'Shared to $name';
   String postShareMsg(String author, String text) {
     const link =
         'https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
