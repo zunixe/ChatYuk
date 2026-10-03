@@ -31,7 +31,9 @@ class AdminRegistrationsSheetState extends State<AdminRegistrationsSheet> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: data registrasi bagian dari domain STATS.
+    context.select<AdminProvider, int>((p) => p.revStats);
+    final admin = context.read<AdminProvider>();
     // Urutkan di klien (≤200 baris, instan) — server selalu newest-first.
     final list = [...admin.registrations];
     list.sort((a, b) {

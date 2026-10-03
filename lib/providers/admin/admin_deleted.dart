@@ -37,7 +37,7 @@ mixin AdminDeletedMx on AdminBase {
   Future<void> fetchDeleted() async {
     _deletedLoading = true;
     _deletedError = null;
-    if (!_disposed) notifyListeners();
+    _notifyDeleted();
     // Cold start / tab baru → cache disk dulu (tahan offline).
     if (_deleted.isEmpty) {
       try {
@@ -47,7 +47,7 @@ mixin AdminDeletedMx on AdminBase {
         if (cached.isNotEmpty && _deleted.isEmpty) {
           _deleted = cached;
           _deletedTotal = cached.length;
-          if (!_disposed) notifyListeners();
+          _notifyDeleted();
         }
       } catch (_) {}
     }
@@ -72,7 +72,7 @@ mixin AdminDeletedMx on AdminBase {
       dlog('[ADMIN] fetchDeleted error: $e');
     }
     _deletedLoading = false;
-    if (!_disposed) notifyListeners();
+    _notifyDeleted();
   }
 
   Future<void> fetchMoreDeleted() async {
@@ -90,7 +90,7 @@ mixin AdminDeletedMx on AdminBase {
       dlog('[ADMIN] fetchMoreDeleted error: $e');
     }
     _deletedFetchingMore = false;
-    if (!_disposed) notifyListeners();
+    _notifyDeleted();
   }
 
   /// Riwayat device user yang sudah dihapus.

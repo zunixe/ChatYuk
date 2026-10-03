@@ -88,4 +88,47 @@ abstract class AdminBase extends ChangeNotifier {
     kAdminContactKey,
     kAdminAttributionKey,
   ];
+
+  // ── Revision counter per-domain (granular rebuild) ──
+  // AdminProvider adalah SATU ChangeNotifier untuk semua domain. Tanpa
+  // pemisahan, setiap notifyListeners() (60 titik, termasuk polling 60 dtk &
+  // realtime call) me-rebuild SELURUH panel + semua tab yang sudah dibangun →
+  // jank tak stabil saat buka tab berat (Perangkat/Terhapus/Chat).
+  //
+  // Tiap domain menaikkan counter-nya sendiri SEBELUM notifyListeners().
+  // Tab memakai `context.select<AdminProvider, int>((p) => p.revXxx)` sehingga
+  // HANYA rebuild saat domain-nya berubah — bukan saat domain lain berubah.
+  int _revStats = 0;
+  int _revDevices = 0;
+  int _revChats = 0;
+  int _revDeleted = 0;
+  int _revContact = 0;
+  int _revAttribution = 0;
+  int _revChatOrg = 0;
+  int _revCalls = 0;
+
+  int get revStats => _revStats;
+  int get revDevices => _revDevices;
+  int get revChats => _revChats;
+  int get revDeleted => _revDeleted;
+  int get revContact => _revContact;
+  int get revAttribution => _revAttribution;
+  int get revChatOrg => _revChatOrg;
+  int get revCalls => _revCalls;
+
+  /// Bump counter domain + notify. `domain` dipilih dari helper di bawah.
+  void _bumpAndNotify(void Function() bump) {
+    if (_disposed) return;
+    bump();
+    notifyListeners();
+  }
+
+  void _notifyStats() => _bumpAndNotify(() => _revStats++);
+  void _notifyDevices() => _bumpAndNotify(() => _revDevices++);
+  void _notifyChats() => _bumpAndNotify(() => _revChats++);
+  void _notifyDeleted() => _bumpAndNotify(() => _revDeleted++);
+  void _notifyContact() => _bumpAndNotify(() => _revContact++);
+  void _notifyAttribution() => _bumpAndNotify(() => _revAttribution++);
+  void _notifyChatOrg() => _bumpAndNotify(() => _revChatOrg++);
+  void _notifyCalls() => _bumpAndNotify(() => _revCalls++);
 }

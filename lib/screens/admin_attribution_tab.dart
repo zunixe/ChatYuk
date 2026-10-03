@@ -56,7 +56,9 @@ class _AdminAttributionTabState extends State<AdminAttributionTab> {
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: rebuild hanya saat domain ATTRIBUTION berubah.
+    context.select<AdminProvider, int>((p) => p.revAttribution);
+    final admin = context.read<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
     final summary = admin.attrSummary;
     final sources = _asList(summary?['sources']);
@@ -396,7 +398,9 @@ class _AttributionUsersSheetState extends State<_AttributionUsersSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: daftar user per kanal bagian dari domain ATTRIBUTION.
+    context.select<AdminProvider, int>((p) => p.revAttribution);
+    final admin = context.read<AdminProvider>();
     final users = admin.attrUsers;
     return DraggableScrollableSheet(
       expand: false,

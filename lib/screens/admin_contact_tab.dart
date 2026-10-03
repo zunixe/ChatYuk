@@ -69,7 +69,9 @@ class _AdminContactTabState extends State<AdminContactTab> {
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: rebuild hanya saat domain CONTACT berubah.
+    context.select<AdminProvider, int>((p) => p.revContact);
+    final admin = context.read<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
 
     final unread = admin.contactMessages

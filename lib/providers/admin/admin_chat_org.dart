@@ -134,7 +134,7 @@ mixin AdminChatOrgMx on AdminBase {
         !_categories.contains(_activeCategory)) {
       _activeCategory = null;
     }
-    if (changed && notify && !_disposed) notifyListeners();
+    if (changed && notify) _notifyChatOrg();
   }
 
   // ── Bridge ke service (di-override di AdminProvider; null = tanpa sync) ──
@@ -207,7 +207,7 @@ mixin AdminChatOrgMx on AdminBase {
     } else {
       _pinnedChatIds.add(chatId);
     }
-    if (!_disposed) notifyListeners();
+    _notifyChatOrg();
     await _persistChatOrg();
     await _pushChatOrgToServer();
     return !now;
@@ -219,7 +219,7 @@ mixin AdminChatOrgMx on AdminBase {
     final n = name.trim();
     if (n.isEmpty) return '';
     _categories.add(n);
-    if (!_disposed) notifyListeners();
+    _notifyChatOrg();
     await _persistChatOrg();
     await _pushChatOrgToServer();
     return n;
@@ -236,7 +236,7 @@ mixin AdminChatOrgMx on AdminBase {
       _categories.add(cat);
       _chatCategory[chatId] = cat;
     }
-    if (!_disposed) notifyListeners();
+    _notifyChatOrg();
     await _persistChatOrg();
     await _pushChatOrgToServer();
   }
@@ -247,7 +247,7 @@ mixin AdminChatOrgMx on AdminBase {
     _categories.remove(name);
     _chatCategory.removeWhere((_, v) => v == name);
     if (_activeCategory == name) _activeCategory = null;
-    if (!_disposed) notifyListeners();
+    _notifyChatOrg();
     await _persistChatOrg();
     await _pushChatOrgToServer();
   }
@@ -261,7 +261,7 @@ mixin AdminChatOrgMx on AdminBase {
     _categories.add(n);
     _chatCategory.updateAll((_, v) => v == from ? n : v);
     if (_activeCategory == from) _activeCategory = n;
-    if (!_disposed) notifyListeners();
+    _notifyChatOrg();
     await _persistChatOrg();
     await _pushChatOrgToServer();
   }
@@ -271,7 +271,7 @@ mixin AdminChatOrgMx on AdminBase {
   void setActiveChatCategory(String? category) {
     if (_activeCategory == category) return;
     _activeCategory = category;
-    if (!_disposed) notifyListeners();
+    _notifyChatOrg();
   }
 
   /// ChatId yang terdaftar di kategori [cat] (sumber: category_map).

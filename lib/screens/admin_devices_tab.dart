@@ -213,7 +213,9 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
-    final admin = context.watch<AdminProvider>();
+    // GRANULAR: rebuild hanya saat domain DEVICES berubah.
+    context.select<AdminProvider, int>((p) => p.revDevices);
+    final admin = context.read<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
     // Hitung SEKALI per build: grouping+sort diulang tiap frame dulu.
     // Per-User TIDAK lagi berbasis device rows (lihat `_usersView`).

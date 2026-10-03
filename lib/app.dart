@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -23,6 +24,7 @@ import 'providers/social_provider.dart';
 import 'core/admin_gate.dart';
 import 'providers/locale_provider.dart';
 import 'core/cache/message_cache.dart';
+import 'core/media/image_cache_hygiene.dart';
 import 'models/user_model.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/call_provider.dart';
@@ -584,6 +586,10 @@ class _MainNav extends StatefulWidget {
 }
 
 class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
+  // Kapan app terakhir di-background — untuk memutuskan trim cache memori
+  // saat resume (hanya kalau background CUKUP LAMA, biar chat tetap instan
+  // saat app sekadar sebentar pindah app).
+  DateTime? _pausedAt;
   // Provider tab sudah dibuat di root (_ChatYukAppState) sejak app start —
   // di sini cukup consume. Dulu: dibuat DI SINI (setelah skeleton auth
   // hilang) → disk cache baru menghangat saat halaman sudah tampil →
@@ -684,6 +690,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final auth = context.read<AuthProvider>();
     if (state == AppLifecycleState.paused) {
+      _pausedAt = DateTime.now();
       // Ringkasan probe (p50/p90/max) dicetak saat app di-background — satu
       // blok per sesi, tanpa perlu memanggil manual. No-op saat probe off.
       PerfProbe.report('sesi berakhir (app di-background)');
@@ -704,6 +711,22 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // App di-kill/force-close → set idle (offline otomatis setelah threshold).
       auth.goIdle();
     } else if (state == AppLifecycleState.resumed) {
+      // PERF: kalau app lama di-background (>60 dtk), buang cache pesan
+      // in-memory (tiap chat menahan pesan + base64 foto) — cegah akumulasi
+      // yang bikin "ngetik ngelag setelah dipakai lama". Background sebentar
+      // TIDAK di-trim supaya chat tetap instan.
+      final pausedFor = _pausedAt == null
+          ? null
+          : DateTime.now().difference(_pausedAt!);
+      _pausedAt = null;
+      if (pausedFor != null && pausedFor.inSeconds >= 60) {
+        try {
+          MessageCache.instance.trimMemCache();
+        } catch (_) {}
+        try {
+          ImageCacheHygiene.clearAll();
+        } catch (_) {}
+      }
       // PERF: hangatkan koneksi HTTP Supabase DULUAN (fire-and-forget).
       // Setelah idle, koneksi keep-alive basi → request pertama user
       // menggantung ~13 detik (terukur). Warm-up ini membuang koneksi basi
@@ -1027,36 +1050,59 @@ class _BottomNav extends StatelessWidget {
             return sum + ((c.unreadCounts[uid] ?? 0));
           });
         });
-        return BottomAppBar(
-          color: AppTheme.bgCard,
-          shape: const CircularNotchedRectangle(),
-          notchMargin: 6,
-          padding: EdgeInsets.zero,
-          height: 52,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _navItem(
-                context,
-                Icons.group_rounded,
-                s.navOnline,
-                0,
-                badge: onlineCount,
-                badgeColor: AppTheme.onlineDark,
-                badgePill: true,
+        // Nav bar Android (system bar bawah) dibuat SAMA dengan footer
+        // (bgCard) ala WhatsApp: edge-to-edge membuat app menggambar DI
+        // BELAKANG system bar, jadi kita cat area inset bawah dengan warna
+        // footer. Hanya kecerahan ikon nav yang disetel (tanpa warna nav
+        // karena API warna system bar deprecated di Android 15+).
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            systemNavigationBarIconBrightness:
+                AppTheme.isDark ? Brightness.light : Brightness.dark,
+            systemNavigationBarContrastEnforced: false,
+          ),
+          child: ColoredBox(
+            color: AppTheme.bgCard,
+            child: SafeArea(
+              top: false,
+              child: BottomAppBar(
+                color: AppTheme.bgCard,
+                shape: const CircularNotchedRectangle(),
+                notchMargin: 6,
+                padding: EdgeInsets.zero,
+                height: 52,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _navItem(
+                      context,
+                      Icons.group_rounded,
+                      s.navOnline,
+                      0,
+                      badge: onlineCount,
+                      badgeColor: AppTheme.onlineDark,
+                      badgePill: true,
+                    ),
+                    _navItem(
+                      context,
+                      Icons.chat_bubble,
+                      s.navChats,
+                      1,
+                      badge: totalUnread,
+                      badgePill: true,
+                    ),
+                    const SizedBox(width: 48),
+                    _navItem(
+                      context,
+                      Icons.dynamic_feed_rounded,
+                      s.navTimeline,
+                      2,
+                    ),
+                    _navItem(context, Icons.person, s.navProfile, 3),
+                  ],
+                ),
               ),
-              _navItem(
-                context,
-                Icons.chat_bubble,
-                s.navChats,
-                1,
-                badge: totalUnread,
-                badgePill: true,
-              ),
-              const SizedBox(width: 48),
-              _navItem(context, Icons.dynamic_feed_rounded, s.navTimeline, 2),
-              _navItem(context, Icons.person, s.navProfile, 3),
-            ],
+            ),
           ),
         );
       },
