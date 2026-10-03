@@ -86,8 +86,8 @@ Semua cache gambar/byte di memori **wajib** punya batas. Pola di repo:
 | `ImageCache` global (`main.dart`) | 80 entri / 48 MB |
 | `PostPhotoCache._mem` | 30 MB (LRU) |
 | `PhotoCache._memCache` | 20 MB |
-| `AvatarB64Service._cache` | 100 entri |
-| `online_users_screen` map avatar | 120 entri |
+| `AvatarB64Service._cache` / `._pathCache` | 100 entri (satu-satunya store avatar by-uid/path; `ChatService._avatarCache` kini delegasi ke sini) |
+| `user_avatar.dart` map render avatar (bytes + ImageProvider stabil) | 120 entri (cap `_avatarMapCap`) |
 | `profile_avatar` `_bytesCache` | 60 entri |
 | `MessageCache._memCache` | 30 chat |
 

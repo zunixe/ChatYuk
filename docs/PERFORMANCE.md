@@ -1891,4 +1891,472 @@ preview). Kalau ragu: cap = `lebar_px_tampil × 2`, lalu evict bila full-screen.
 **Test:** `flutter test` story (preload_window, slides_cache, viewer_model,
 viewer_avatar) hijau.
 
+---
 
+## 25. METODE: Profiling jank tanpa DevTools UI via VM Service (2026-10-03)
+
+Resep mengukur **jank transisi** (mis. "buka/tutup layar terasa telat") di HP
+kerja tanpa buka DevTools UI. Terbukti mem-buktikan penyebab 853ms → 8.5ms
+(§26). Semua dijalankan dari Mac memakai `adb` + `dart` (bundel Flutter SDK).
+
+### Saat pakai metode ini
+- Keluhan "X terasa ngelag / telat" yang **bukan** spike memori (cek dulu
+  `dumpsys meminfo`, §1h & §23 — kalau memory flat, ini jank transisi).
+- Ingin **angka** (durasi event per-frame), bukan tebakan urutan kode.
+
+### Langkah
+
+**1. Build PROFILE (bukan debug/release) + PERF_PROBE.**
+`dlog`/`PerfProbe` aktif di profile, dan build profile di-sign keystore
+release (lihat `android/app/build.gradle.kts` buildType `profile`) sehingga
+menimpa install rilis tanpa uninstall:
+
+```bash
+flutter build apk --profile --flavor apkpureProd --dart-define=PERF_PROBE=true
+adb install -r build/app/outputs/flutter-apk/app-apkpureprod-profile.apk
+```
+
+**2. Ambil URL VM Service + forward + serve DevTools/DDS.**
+DevTools **sudah bundling** di Flutter SDK — tak perlu `pub global activate`
+(paket `devtools` di pub.dev di-takedown; `dart devtools` dari SDK ini yang benar).
+
+```bash
+# URL muncul di logcat saat app start:
+adb logcat -c; adb shell monkey -p com.chatyuk.chatyuk -c android.intent.category.LAUNCHER 1
+URL=$(adb logcat -d | grep -o 'http://127.0.0.1:[0-9]*/[A-Za-z0-9_=+-]*/' | tail -1)
+PORT=$(echo $URL | sed -E 's|.*:([0-9]+)/.*|\1|')
+TOK=$(echo $URL  | sed -E 's|.*:[0-9]+/(.*)|\1|')
+adb forward tcp:$PORT tcp:$PORT
+# DART = $(dirname $(dirname $(which flutter)))/bin/cache/dart-sdk/bin/dart
+$DART devtools --no-launch-browser --port=9100 "http://127.0.0.1:$PORT/$TOK"
+# → cetak "DDS at ws://127.0.0.1:<DDS_PORT>/<DDS_TOK>=/ws" — pakai ws itu.
+```
+
+> Jangan lewatkan `http://` ke skrip probe; `dart devtools` menolak skema `ws`.
+> URL harus diakhiri `/` (token diakhiri `=`).
+
+**3. Skrip probe (paket `vm_service`).** Set timeline flagnya, tunggu, ambil,
+lalu **pasangkan event `ph:B`↔`ph:E`** per thread (B sangat nested → pakai
+STACK, bukan sepasang sekali). Field harus dibaca dari `e.json` (TIDAK ada
+getter `.name/.dur/.ts` di `TimelineEvent` vm_service).
+
+```dart
+// pubspec: vm_service, web_socket_channel
+final s = await vmServiceConnectUri('ws://127.0.0.1:PORT/TOK=/ws');
+await s.setVMTimelineFlags(['Dart','GC','Compiler','Embedder','API']);
+await Future.delayed(Duration(seconds: 12));      // user lakukan aksi di HP
+final tl = await s.getVMTimeline();
+dynamic g(TimelineEvent e, String k) => e.json?[k];   // name/ph/ts/tid/args
+// stack B/E per '${pid}.${tid}' → dur = ts(E) - ts(B)  → sort desc
+```
+
+**4. Baca hasilnya — fokus thread `2.ui`.**
+Event `Dart_HandleMessage` / `Dart_InvokeClosure` / `BUILD` yang **> 16ms**
+di thread `2.ui` = kerja sinkron yang memblokir frame transisi. Contoh §26:
+satu `Dart_HandleMessage` **853ms** = biang "back lambat".
+
+### Batasan yang ketemu
+- **CPU sampling profiler TIDAK jalan** di app yang sudah start tanpa
+  `--profiler`. `getCpuSamples` → "Feature is disabled". Timeline trace
+  cukup untuk menunjuk **durasi**; untuk tahu **fungsi**-nya, tambahkan
+  `PerfProbe.measure`/`timed` (aktif dgn `--dart-define=PERF_PROBE=true`)
+  di kandidat lalu baca logcat `[PERF]`.
+- `gfxinfo` sering "Total frames: 0" untuk Flutter release (SurfaceView) —
+  pakai trace VM service, bukan gfxinfo.
+- Logcat ber-noise (BLE/scan proses lain) → filter ke PID app.
+
+### Skrip probe tersimpan
+`/var/folders/.../opencode/vmprobe/{pair.dart,cpu.dart,probe.dart}` (Mac local,
+sekali pakai). Bila script permanent mau di-commit: taruh di `tool/perf/`.
+
+---
+
+## 26. Jank "back lambat" private chat — select presence berlebih (2026-10-03)
+
+**Gejala (user):** "pas nutup private chat ada lag telat" & "buka Top Aktif
+nutupnya ngelag". Buka chat sudah mulus setelah fix §27-ish (tunda kerja).
+
+**Ukur (metode §25):**
+```
+853.08 ms | 2.ui | DartIsolate::HandleMessage   ← SATU pesan blokir UI thread
+853.07 ms | 2.ui | Dart_HandleMessage
+580.83 ms | 2.ui | Dart_InvokeClosure
+```
+Satu operasi sinkron **853ms** di UI thread tepat saat buka/tutup chat =
+"back lambat bereaksi". Bukan memory (heap flat ±30-45MB sepanjang sesi).
+
+**Akar:** `lib/screens/private_chats_screen.dart` (daftar chat di belakang,
+hidup di `IndexedStack`) memakai:
+```dart
+final onlineUsers = context.select<OnlineUsersProvider, List<UserModel>>(
+  (o) => o.users,          // SELURUH list online (bisa puluhan user)
+);
+```
+`OnlineUsersProvider` emit tiap **event presence** (heartbeat ~30s, user
+online/offline). Karena selector mengembalikan **seluruh list**, IDENTITY
+list berubah tiap emit → **seluruh `PrivateChatsScreen` (AppBar + daftar 10
+chat + thumbnail avatar) rebuild penuh**, sering menabrak frame transisi
+push/pop chat → jank.
+
+**Fix:** `select` hanya **status/nama uid yang benar-benar ada di daftar
+chat** (Map kecil), bukan seluruh list:
+```dart
+final chatOtherUids = _lastChats.map((c) => c.participants.firstWhere(
+  (p) => p != auth.uid, orElse: () => '')).where((u) => u.isNotEmpty).toSet();
+final onlineRelevant = context.select<OnlineUsersProvider,
+    ({Map<String,String> status, Map<String,String> name})>((o) {
+  final st = <String,String>{}; final nm = <String,String>{};
+  for (final u in o.users) {
+    if (!chatOtherUids.contains(u.uid)) continue;
+    st[u.uid] = u.status; if (u.nickname.isNotEmpty) nm[u.uid] = u.nickname;
+  }
+  return (status: st, name: nm);
+});
+final statusMap = onlineRelevant.status;   // dipakai seperti sebelumnya
+final liveNameMap = onlineRelevant.name;
+```
+Presence user di luar daftar chat **tidak lagi** memicu rebuild daftar chat.
+
+**Hasil terukur (trace ulang, §25):**
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| Event UI terpanjang | **853.1 ms** | **8.5 ms** |
+| `Dart_InvokeClosure` max | 580.8 ms | 8.4 ms |
+| Kesimpulan | blokir frame transisi | **semua frame < 14ms** ✅ |
+
+**Aturan turunan:** **halaman penuh / daftar panjang JANGAN `watch`/`select`
+seluruh list provider yang sering emit** (presence, heartbeat, points).
+Turunkan selector ke **turunan terkecil** yang benar-benar dipakai render
+(mis. Map uid→status untuk **uid relevan saja**).
+
+**Test:** `flutter test` (chat_search, chat_base_di, private_initial_deleted,
+photo_bubble_persistence) hijau.
+
+### 26b. Profil — `watch<AuthProvider>` penuh (fix, 2026-10-03)
+
+Pola sama di `lib/screens/profile_screen.dart`: `build()` memakai
+`context.watch<AuthProvider>()` → SELURUH halaman (CustomScrollView + slivers
++ galeri) rebuild tiap `notifyListeners` AuthProvider, termasuk **heartbeat
+presence** berkala. Kontradiksi dgn komentar §2.3 di file yang sama
+(PointsProvider sudah `select` per field, AuthProvider masih `watch` penuh).
+
+**Fix:** `select` SNAPSHOT field yang dipakai render (record Dart, banding
+via equality):
+```dart
+final (:profile, :uid, :isAnonymous, :signingOut, :dummySessionActive,
+       :emailConfirmed, :userEmail) =
+  context.select<AuthProvider, ({UserModel? profile, String? uid, bool isAnonymous,
+    bool signingOut, bool dummySessionActive, bool emailConfirmed, String? userEmail})>(
+    (a) => (profile: a.profile, uid: a.uid, isAnonymous: a.isAnonymous,
+      signingOut: a.signingOut, dummySessionActive: a.dummySessionActive,
+      emailConfirmed: a.emailConfirmed, userEmail: a.userEmail));
+```
+Notify yang tidak mengubah field ini tak lagi me-rebuild halaman.
+
+### 26c. Verifikasi Timeline & Profil pasca-fix (2026-10-03, metode §25)
+
+Trace 14 dtk pindah-pindah tab Timeline/Profil → event UI terpanjang **7ms**
+(`NotifyIdle`/GC). Laporan sesi terakhir (`PERF_PROBE`, tekan HOME):
+
+```
+frames=4000  build[p50=1.1 p90=1.5 max=10.5ms]  raster[p50=1.9 p90=2.1 max=7.3ms]
+janky(build)=0  janky(raster)=0
+build Profile=16  Online=15  Timeline=11  MainNav=9  ChatList=5
+```
+
+**0 jank** (build & raster max < 16ms). `ChatList=5` (dulu 6) menandakan fix
+§26 menekan rebuild daftar. Timeline sudah `select` granular sejak awal
+(`postsRaw/hasMore/loading/fetchFailed`) — sehat, tak perlu perubahan.
+
+### 26d. Lazy-load foto post + cacheExtent Timeline (2026-10-03)
+
+**Gejala (user):** "buka Timeline loadnya lebih berat dari chat".
+
+**Akar:** `PostCard.initState` langsung `_loadImages(paths)` → SETIAP kartu
+yang ter-build (termasuk yang masih di `cacheExtent` default 250px, belum
+terlihat) langsung unduh + decode fotonya. Buka Timeline = puluhan foto
+diunduh+decode sekaligus. Bedanya dgn chat: daftar chat hanya metadata
+(nama/unread) + ~10 avatar; feed punya foto per post (jauh lebih berat).
+
+**Fix:**
+- `PostCard.initState`: `_loadImages` dipindah ke `addPostFrameCallback`
+  (frame pertama murni layout — tidak menembak IO/decode).
+- `timeline_screen.dart` `ListView.builder`: `cacheExtent: 100` (dulu default
+  250) → lebih sedikit kartu ter-build di luar viewport.
+
+**Verifikasi (trace §25):** buka Timeline → event UI terpanjang **7.25ms**
+(`NotifyIdle`/GC), tak ada spike. Menu **Online → private chat** → terpanjang
+**13.6ms** (di bawah 16ms = 60fps); jank yg dulu terasa teratasi oleh fix §26.
+
+> Catatan beda Timeline vs Chat: Timeline **tak** punya swipe (post pakai
+> tombol aksi; swipe bentrok scroll vertikal + carousel foto horizontal).
+> Daftar chat/pesan punya `Dismissible`/`onHorizontalDrag` utk aksi cepat.
+
+### 26e. "Balik dari chat, list Online susah diklik" — overlay bubble unread nyangkut (2026-10-03)
+
+**Gejala (user):** balik dari private chat ke menu Online → kartu user "ga
+sensitif / susah diklik" (tap tak nyahut), makin parah makin sering dibuka.
+
+**Akar:** di `online_users_screen.dart`, tap kartu user yang PUNYA unread
+memunculkan bubble preview via `OverlayEntry` (`_showUnreadBubble`). Bubble
+itu punya lapisan **`Positioned.fill` transparan** (penangkap tap-dismiss).
+Overlay hanya dihapus lewat **timer 4 dtk** + cek `entry.mounted`:
+
+```dart
+Future.delayed(const Duration(seconds: 4), () {
+  try { if (entry.mounted) entry.remove(); } catch (_) {}
+});
+```
+
+Skenario gagal: tap kartu ber-unread → bubble muncul → user LANGSUNG tap lagi
+buka chat (< 4 dtk) → overlay belum ter-remove (timer belum jalan / `mounted`
+false saat di-unmount) → balik ke Online → **lapisan transparan menelan semua
+tap** → "list susah diklik".
+
+**Fix:** simpan referensi `_unreadBubbleEntry` + helper `_dismissUnreadBubble()`;
+paksa-remove saat (a) `_startChat` (navigasi), (b) `dispose`; remove entry lama
+sebelum insert baru. Tidak lagi bergantung timer saja.
+
+**Verifikasi (trace §25):** klik dari menu Online → chat berulang, event UI
+terpanjang **6.78ms** (sehat, tak ada blokir). Fix `build Online` (§26, 170→3
+rebuild) + overlay cleanup ini menuntaskan keluhan "klik dari Online berat /
+susah diklik".
+
+**Aturan turunan:** setiap `OverlayEntry` (bubble/popup) WAJIB di-remove di
+`dispose` **dan** sebelum navigasi/perubahan route — jangan andalkan timer
+auto-close saja (entry yang di-unmount bisa gagal `remove` → sisa penghalang
+tap). Simpan referensinya, panggil `remove()` idempotent di try/catch.
+
+### 26f. "Kartu list Online susah diklik — klik beberapa kali baru kebuka" — `releaseNav` lupa dipanggil (2026-10-03)
+
+**Gejala (user):** di menu Online, tap kartu user kadang tak membuka chat —
+harus klik beberapa kali baru kebuka; makin sering diklik makin susah.
+
+**Akar:** `online_users_screen._startChat` memanggil `tryClaimNav(navKeyChat)`
+lalu `Navigator.push(...)` **TANPA** `.then((_) => releaseNav(navKey))`
+(sedangkan `private_chat_screen` & `user_info` SUDAH pakai). Klaim di
+`_navClaim[key]` tak pernah dilepas saat route di-pop.
+
+`tryClaimNav` menolak klaim kedua dalam **window 2 dtk**. Karena release tak
+pernah jalan, tap berikutnya ke kartu yang sama dalam 2 dtk → **ditolak →
+tap tertelan**. Tiap tap yang lolos me-reset `_navClaim[key]=now` → makin
+sering diklik makin sering timer di-reset → terasa "makin susah".
+
+**Verifikasi bahwa ini BUKAN jank:** trace §25 saat klik berulang → semua
+frame UI < **7ms** (render normal). Jadi masalahnya **tap tak sampai ke
+kartu** (hit-test/logika), bukan render/berat.
+
+**Fix:** tambahkan `.then((_) => releaseNav(navKey))` pada `Navigator.push`
+di `_startChat` (aturan nav_guard §18: setiap push WAJIB lepas klaim saat pop).
+
+**Aturan turunan:** tiap `tryClaimNav` **WAJIB** berpasangan dengan
+`.then((_) => releaseNav(key))`. Kalau tidak, tap ke tujuan yang sama
+tertelan selama window 2 dtk. Cek juga jalur `return` sebelum push
+(harus `releaseNav` kalau klaim sudah diambil — sudah ada di `!context.mounted`).
+
+> Catatan diagnosa: "kartu susah diklik / nggak nyahut" = **hit-test**, bukan
+> jank. Trace yang semua frame <16ms TAPI user bilang tidak responsif →
+> curigai penghalang tap (overlay sisa, `tryClaimNav` nyangkut, `AbsorbPointer`)
+> — BUKAN optimasi render.
+
+### 26g. List Chat kurang responsif — tap lewat InkWell di dalam Dismissible (2026-10-03)
+
+**Gejala (user):** tap kartu di list chat (tab Pesan) terasa kurang responsif
+dibanding menu Online.
+
+**Akar:** kartu chat dibungkus `AppGestureDetector(onLongPress)` →
+`Dismissible` → `Material` → `InkWell(onTap)`. `InkWell` (tap) berada **DI
+DALAM** `Dismissible` (drag) & di bawah long-press → tap harus menunggu
+gesture arena memutuskan dulu → **delay**. Menu Online (`_UserCard`)
+sebaliknya: tap ada di `AppGestureDetector` **lapis dalam yang sama** dgn
+long-press & di luar drag → cepat.
+
+**Verifikasi:** trace §25 saat tap kartu chat → semua frame < **7ms**
+(render sehat) → memang gesture arena, bukan render.
+
+**Fix:** samakan dgn Online — pindah `onTap` ke `AppGestureDetector` (tambah
+`behavior: HitTestBehavior.opaque`, `onTap` → `_openChat(chat)` / toggle
+select), `InkWell.onTap = null` (matikan penyerap gesture dalam; struktur
+visual tetap). Logika push dipindah ke method `_openChat`.
+
+**Aturan turunan:** **JANGAN taruh `InkWell`/`GestureDetector` tap DI DALAM
+`Dismissible`**. Taruh tap di lapis **luar** (satu `AppGestureDetector` dgn
+`onLongPress`) — pola `_UserCard` (`online_users_screen`) & `private_chats_screen`.
+
+### 26h. Top Aktif "selalu loading" — tak ada cache (2026-10-03)
+
+**Gejala (user):** tiap buka menu Top Aktif selalu loading.
+
+**Akar:** `LeaderboardSheet.initState` → `Timer(300ms)` → `_load()` → **selalu**
+RPC `activity_leaderboard` tanpa cache. Tiap buka = 300ms tunda + ~150-400ms
+RPC = **~500-700ms loading**, berulang tiap buka.
+
+**Fix:** cache statis per-scope (weekly/alltime) + cache lokal per-sheet:
+- `initState`: isi dari cache dulu (instan, tanpa spinner) → refresh diam.
+  Tunda animasi 300ms → **120ms** bila sudah ada cache.
+- `_switchScope`: ganti tab pakai cache scope itu bila ada (instan).
+- **TTL 60 dtk**: cache masih fresh → skip RPC sama sekali.
+- Gagal refresh TAPI ada cache → **pertahankan data lama** (jangan kosongkan).
+
+**Hasil:** buka pertama tetap loading (mengisi cache); **buka ulang & ganti
+tab = instan** (data dari cache + refresh background).
+
+**Aturan turunan:** sheet/halaman yang memuat daftar dari RPC **WAJIB cache
+per-key + TTL**, tampilkan cache dulu, refresh di latar. Jangan RPC polos di
+`initState` — itu penyebab "tiap buka selalu loading".
+
+> Ringkas pola bug sesi 2026-10-03: banyak keluhan "lelet/ga responsif"
+> ternyata **bukan** render (trace semua <16ms), melainkan (a) `select`
+> provider kelewat lebar → rebuild berlebih (§26/26b), (b)
+> `InkWell`/`tryClaimNav` ngeblok tap (§26f/26g), (c) tak ada cache → loading
+> berulang (§26h). **Ukur dulu (trace §25 / `build X=`) sebelum optimasi render.**
+
+
+
+### 27a. Call 1:1/video — signaling ephemeral + proximity (2026-10-05)
+
+Review subsistem call; tiga perubahan berdampak, semuanya terverifikasi.
+
+| Area | Sebelum | Sesudah |
+|---|---|---|
+| ICE candidate | 1 INSERT DB + 1 event realtime **per candidate** (puluhan/call) | Realtime **Broadcast** ephemeral (tanpa DB); fallback DB hanya bila channel belum siap |
+| `call_billing_tick` saat fitur OFF | 2 SELECT `app_settings` + gate | Gate `feature_enabled_for` **paling atas** → 0 query config |
+| RLS `calls_update` | `USING` saja (kolom identitas bisa diubah peserta) | `USING` + `WITH CHECK` (identitas terkunci, status/heartbeat tetap boleh) |
+| Audio call | layar selalu hidup (wakelock) meski dekat telinga | `PROXIMITY_SCREEN_OFF_WAKE_LOCK` — layar mati saat didekatkan |
+
+**Perubahan kode:**
+- Baru `lib/core/call/signal_route.dart` (logika murni routing sinyal;
+  `test/signal_route_test.dart` 11 kasus).
+- `lib/services/call_service.dart`: `sendSignal`/`onSignal` bercabang
+  reliable vs ephemeral; `_setProximity` pada transisi `inCall` + cleanup.
+- `lib/services/call/call_ui.dart|call_ui_channel.dart`: method `setProximity`.
+- Native: `ProximityManager.kt` + handler `setProximity` di `CallUiBridge.kt`
+  + izin `WAKE_LOCK`.
+- Migrasi: `20261005130000_calls_update_with_check.sql`,
+  `20261005140000_call_billing_gate_first.sql`.
+
+**Verifikasi:** `dart analyze` bersih (file tersentuh); 78 test call+signaling
+lulus; `check_migrations` OK; `:app:compilePlayProdDebugKotlin` BUILD SUCCESSFUL.
+Uji 2-device (panduan `docs/CALL_NATIVE.md § Uji`) untuk connect < 5 dtk &
+`count(call_signals)` per call turun dari puluhan ke ~3.
+
+### 27b. Call 1:1/video — heartbeat lebih hemat + keputusan signaling (2026-10-05)
+
+Lanjutan §27a.
+
+- **Heartbeat `touchCall` 15 dtk → 25 dtk** (`call_service.dart`
+  `_touchHeartbeat`). Ambang zombie server (`admin_sweep_calls`) = 75 dtk;
+  dengan 25 dtk worst-case (satu tick terlewat) = 50 dtk → margin 3×. Untuk
+  call 30 menit: 120 → 72 update/peserta (−40%).
+- **Keputusan: offer/answer TIDAK dimigrasi ke Realtime Broadcast.** Broadcast
+  tidak replay; offer dikirim sebelum callee subscribe → hilang → call
+  nyangkut. Catch-up SELECT `call_signals` wajib ada. Hanya `candidate` yang
+  ephemeral. (Detail: `docs/CALL_NATIVE.md § Signaling call`.)
+- `_syncAll` (12 dtk) sudah hemat: saat `inCall` + ICE connected hanya sync
+  penuh tiap tick ke-3 (~36 dtk) ≈ 1.7 query/menit — tidak diubah.
+
+### 27c. REVERT: candidate ephemeral → DB (regresi "call menghubungkan lama") 2026-10-05
+
+Uji 2-device menemukan regresi dari §27a: candidate via Realtime Broadcast
+**tidak sampai ke peer** (log callee tak pernah menerima `onSignal
+type=candidate`) → ICE menunggu 15 dtk → `fallback all-candidates` → call
+"menghubungkan lama" (baru connect setelah ~15 dtk).
+
+**Fix:** `kEphemeralSignalTypes` dikosongkan → SEMUA sinyal (termasuk
+candidate) kembali lewat DB `call_signals` (postgres_changes) — jalur lama
+yang terbukti cepat. Kode broadcast dipertahankan (dorman) untuk diaktifkan
+kembali setelah broadcast diperbaiki & diuji.
+
+**Pelajaran:** jangan pindahkan sinyal yang butuh latensi rendah & andal ke
+Broadcast tanpa uji 2-device; postgres_changes (DB) justru lebih andal untuk
+kasus ini. Optimasi bandwidth §1k (heartbeat 25 dtk) tetap berlaku.
+
+### 27d. Voice stage (audio grup) — percepat connect (2026-10-05)
+
+Keluhan: voice stage connect **lebih lambat** dari call 1:1 (uji 2-device:
+~8 dtk vs 3 dtk). Akar (baca kode): (1) handshake `v_speak`→`v_join`→`v_offer`
+= 2 round-trip DB sebelum ICE mulai; (2) `getPeerConfig(relayOnly: false)`
+hardcoded → negosiasi semua kandidat (call 1:1 relay-only = 1-3 dtk);
+(3) fallback sync `_burstSync` hanya 1.5s/4s.
+
+**Fix (`room_voice_service.dart`):**
+- **A. ICE relay-only per-peer + fallback all-candidates.** `_relayOnlyFor`
+  per peer; `_retryPeerAllCandidates` (sekali/peer) rebuild pc + offer ulang
+  bila relay belum Connected >6 dtk (watchdog uplink & downlink/timer 6 dtk) —
+  pola `_retryWithAllCandidates` call 1:1. Policy di-MIRROR lewat field
+  `relay` di `v_offer` agar dua arah konsisten (cegah mixed relay/host).
+- **B. Percepat handshake.** Saat speaker naik stage, langsung offer ke
+  speaker lain yang sudah diketahui (potong round-trip `v_join`); `v_join`
+  tetap jalur cadangan.
+- **C. `_burstSync` lebih rapat** (400/1200/2500/4000 ms) di fase awal.
+
+**Test:** `room_voice_session_test.dart` +3 kasus (relayOnlyFor per-peer).
+**Verifikasi:** analyze bersih; 63 test lulus; uji 2-device (target ~3 dtk).
+
+Migrasi: TIDAK ada (perubahan klien murni).
+
+### 27e. Voice stage (audio grup) — izin mic + kualitas capture (2026-10-05)
+
+Lanjutan §27d. Temuan saat "cek mic room global":
+
+- **BUG izin (utama):** `room_chat_screen.dart` TIDAK pernah meminta izin
+  mikrofon sebelum naik stage — beda dari semua jalur call lain
+  (`ensureCallPermissions` dipakai di call history/incoming/private chat/user
+  info). Akibat: device yang belum grant mic → `getUserMedia` gagal senyap
+  tanpa dialog. **FIX:** `_ensureMicPermission()` (panggil
+  `ensureCallPermissions(video:false)` + `showCallPermissionDialog` bila
+  ditolak) dipanggil di KEDUA jalur naik stage.
+- **Kualitas mic:** `getUserMedia({'audio':true})` tanpa constraint → tambah
+  constraint eksplisit (AEC/NS/AGC + Google highpass/typing + mono), dengan
+  **fallback** ke tanpa-constraint bila device menolak (Overconstrained) agar
+  voice tetap jalan. Plus `Helper.selectAudioInput` (mic terbaik, best-effort).
+- **Opus codec prefs:** `_preferOpusCodec` (transceiver audio) dipanggil
+  sebelum `createOffer` (uplink) & `createAnswer` (downlink) — low-latency+FEC,
+  best-effort.
+
+**Verifikasi:** analyze bersih; test room lulus; rebuild `--profile` +
+install 2 device. Uji: device belum grant mic → tap mic → muncul dialog izin →
+grant → mic hijau & jelas.
+
+### 27f. Voice stage — FIX full mesh 3-6 orang (2026-10-05)
+
+Gejala (uji 3 device): "semua muter-muter" lalu "muter berhenti tapi tak ada
+suara". Dua akar:
+
+1. **`_applySpeakers` membuang pc downlink** — iterasi `_peers.keys` (termasuk
+   `dn_<uid>`) dibandingkan dengan daftar speaker (uid tanpa prefix) → `dn_B`
+   dianggap "bukan speaker" → downlink dibongkar tiap refresh daftar speaker
+   (realtime + polling + burst) → koneksi mesh terus putus (gejala muter).
+   FIX: skip key ber-prefix `dn_`.
+2. **Arah audio speaker-lama → speaker-baru tidak pernah terbentuk.** Saat di
+   stage menerima `v_speak` dari speaker baru, kode lama hanya membalas
+   `v_join` (→ X offer ke aku = X→aku), TIDAK offer (aku→X). Dengan 2 orang
+   kebetulan tercover urutan naik-stage; 3+ orang → sebagian pasangan bisu.
+   FIX: di `v_speak`, bila aku JUGA di stage → `_makeOfferTo(from)` (aku→X);
+   bila pendengar → tetap `v_join`. Plus `_applySpeakers` proaktif offer ke
+   speaker baru yang belum punya pc (`meshNeedsOfferTo`).
+3. **Glare guard** di `_handleOffer`: offer dengan `pcId` sama & remoteDescription
+   sudah ada → abaikan (cegah `createAnswer ... state other than
+   have-remote-offer` saat mesh 3+).
+
+Hasil: tiap pasangan speaker membentuk 2 pc (uplink dua arah) → full mesh
+3-6 orang bersuara. Test: +4 kasus `meshNeedsOfferTo`.
+
+### 27g. Voice stage — mic tidak mati (keluar room & mute) 2026-10-05
+
+Dua bug mic dari uji 3 device:
+
+1. **Keluar room → mic masih nyala.** `RoomChatScreen.dispose()` hanya
+   menghentikan `_broadcastSession`, TIDAK `_voiceSession` — jadi track mic
+   tetap hidup + speakerphone/wakelock tidak dilepas. `stop()` voice hanya
+   dipanggil saat user TAP-TAHAN mic. FIX: panggil
+   `_voiceSession.stop()` (+ removeListener) di `dispose()`.
+2. **Mute tidak benar-benar senyap.** `setMuted` hanya `track.enabled=false`;
+   di sebagian device itu TIDAK memutus mic ke AudioDeviceModule. FIX: pakai
+   `Helper.setMicrophoneMute(value, track)` (mute native ADM) BERSAMA
+   `track.enabled`. Juga: saat masuk stage → `setMicrophoneMute(false)`
+   (reset), saat turun stage/keluar → `setMicrophoneMute(true)` + `stop()`.
+
+**Verifikasi:** analyze bersih; 19 test room lulus; build `--profile` +
+install 3 device (Redmi/Xiaomi/Huawei).
