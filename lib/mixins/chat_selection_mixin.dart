@@ -460,6 +460,14 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     if (!await _chargeEditIfNeeded(msg.id)) return;
     if (!mounted) return;
     editMessage(msg);
+    // Menu popup masih beranimasi tutup (~150-250ms) saat requestFocus di
+    // editMessage jalan — fokus sering tertelan sehingga keyboard tidak
+    // terbuka dan user mengira tap gagal ("harus dua kali"). Tegaskan fokus
+    // sekali lagi setelah animasi selesai. Guard: hanya bila masih mode
+    // edit pesan yang sama (user mungkin sudah pindah/cancel).
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    if (editingMessage?.id == msg.id) chatFocusComposer();
   }
 
   void cancelEdit() {
