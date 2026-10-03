@@ -59,6 +59,7 @@ select supabase_tests.check('friends: non-teman tetap ditolak',
 select supabase_tests.check('friends: mutual tetap lolos',
   public.privacy_can_view('d0c1e000-0000-4000-8000-000000000001','presence',
     'd0c1e000-0000-4000-8000-000000000002'));
+
 update public.profiles set presence_visibility = 'only'
  where id = 'd0c1e000-0000-4000-8000-000000000001';
 
@@ -110,6 +111,18 @@ select supabase_tests.check('picker: chatter registered (bukan teman) muncul',
 select supabase_tests.check('picker: stranger tak pernah chat TIDAK muncul',
   not exists (select 1 from jsonb_array_elements(public.privacy_excludable_users()) r
            where r->>'nickname' = 'TEST Isolated'));
+
+-- Mitra CHAT PRIVATE boleh lihat foto walau visibility bukan 'everyone'
+-- (2026-10-05). Ditaruh PALING AKHIR agar insert private_chats tidak
+-- mengganggu test picker di atas (picker = daftar chatter owner).
+insert into public.private_chats (chat_id, participants) values
+ ('test-only-partner', array['d0c1e000-0000-4000-8000-000000000001','d0c1e000-0000-4000-8000-000000000005']::uuid[]);
+select supabase_tests.check('mitra chat private lihat foto (mode only)',
+  public.privacy_can_view('d0c1e000-0000-4000-8000-000000000001','profile_photo',
+    'd0c1e000-0000-4000-8000-000000000005'));
+select supabase_tests.check('mitra chat TIDAK otomatis lihat about',
+  not public.privacy_can_view('d0c1e000-0000-4000-8000-000000000001','about',
+    'd0c1e000-0000-4000-8000-000000000005'));
 
 select supabase_tests.report() as result;
 rollback;
