@@ -463,11 +463,21 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     // Menu popup masih beranimasi tutup (~150-250ms) saat requestFocus di
     // editMessage jalan — fokus sering tertelan sehingga keyboard tidak
     // terbuka dan user mengira tap gagal ("harus dua kali"). Tegaskan fokus
-    // sekali lagi setelah animasi selesai. Guard: hanya bila masih mode
-    // edit pesan yang sama (user mungkin sudah pindah/cancel).
+    // sekali lagi setelah animasi selesai.
+    await _refocusComposer(() => editingMessage?.id == msg.id);
+  }
+
+  /// Tegaskan fokus composer setelah jeda singkat.
+  ///
+  /// `requestFocus` yang diminta tepat saat tap ikon seleksi sering tertelan
+  /// rebuild realtime/animasi yang mendarat di jendela yang sama → keyboard
+  /// tidak terbuka dan user mengira tap gagal. Penegasan ini idempoten
+  /// (fokus yang sudah benar tidak berubah) dan dijaga [stillValid] supaya
+  /// tidak merebut fokus bila user sudah pindah/cancel.
+  Future<void> _refocusComposer(bool Function() stillValid) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
-    if (editingMessage?.id == msg.id) chatFocusComposer();
+    if (stillValid()) chatFocusComposer();
   }
 
   void cancelEdit() {
@@ -484,6 +494,9 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     });
     chatFocusComposer();
     chatScrollToBottom();
+    // Sama seperti edit: fokus langsung sering tertelan rebuild di jendela
+    // tap → tegaskan sekali lagi (lihat _refocusComposer).
+    unawaited(_refocusComposer(() => replyingTo?.id == msg.id));
   }
 
   void cancelReply() => setState(() => replyingTo = null);

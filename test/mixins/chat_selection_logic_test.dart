@@ -234,6 +234,8 @@ void main() {
       await tester.pump();
       expect(s.replyingTo, isNull, reason: 'edit membatalkan balas');
       expect(s.editingMessage, isNotNull);
+      // Siram timer penegasan fokus reply (guard menolak: sudah mode edit).
+      await tester.pump(const Duration(milliseconds: 300));
     });
 
     testWidgets('replyMessage memicu fokus + scroll composer', (tester) async {
@@ -244,6 +246,8 @@ void main() {
       expect(s.replyingTo?.id, 'r');
       expect(s.focusCount, 1);
       expect(s.scrollCount, 1);
+      // Siram timer penegasan fokus.
+      await tester.pump(const Duration(milliseconds: 300));
     });
 
     testWidgets('replyMessage membatalkan mode edit', (tester) async {
@@ -255,6 +259,35 @@ void main() {
       s.replyMessage(msg(id: 'r'));
       await tester.pump();
       expect(s.editingMessage, isNull);
+      // Siram timer penegasan fokus.
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+
+    testWidgets('replyMessage menegasan fokus setelah jeda (anti tap dua kali)',
+        (tester) async {
+      final s = await pumpSel(tester);
+      s.replyMessage(msg(id: 'r'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+
+      expect(s.replyingTo?.id, 'r');
+      // Fokus 1× langsung + 1× penegasan pasca-jeda.
+      expect(s.focusCount, 2);
+    });
+
+    testWidgets('replyMessage TIDAK refokus bila balasan sudah dibatalkan',
+        (tester) async {
+      final s = await pumpSel(tester);
+      s.replyMessage(msg(id: 'r'));
+      await tester.pump();
+      expect(s.focusCount, 1);
+
+      s.cancelReply();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+
+      expect(s.replyingTo, isNull);
+      expect(s.focusCount, 1, reason: 'jangan rebut fokus setelah cancel');
     });
 
     testWidgets('cancelEdit reset state + kosongkan composer', (tester) async {
@@ -276,6 +309,8 @@ void main() {
       s.cancelReply();
       await tester.pump();
       expect(s.replyingTo, isNull);
+      // Siram timer penegasan fokus (guard menolak: sudah cancel).
+      await tester.pump(const Duration(milliseconds: 300));
     });
 
     testWidgets(
