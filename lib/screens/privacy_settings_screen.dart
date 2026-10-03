@@ -78,6 +78,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       'profile_photo' => p.profilePhoto,
       'about' => p.about,
       'story' => p.story,
+      'leaderboard' => p.leaderboard,
       _ => PrivacyVisibility.everyone,
     };
   }
@@ -89,6 +90,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       'profile_photo' => s.privacyProfilePhoto,
       'about' => s.privacyAbout,
       'story' => s.privacyStory,
+      'leaderboard' => s.privacyLeaderboard,
       _ => s.privacyTitle,
     };
   }
@@ -123,6 +125,8 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
         await provider.update(about: value);
       case 'story':
         await provider.update(story: value);
+      case 'leaderboard':
+        await provider.update(leaderboard: value);
     }
   }
 
@@ -305,6 +309,12 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 title: s.privacyStory,
                 value: _valueLabel(s, 'story', p),
                 onTap: () => _choose('story', p),
+              ),
+              _PrivacyTile(
+                icon: Icons.emoji_events_outlined,
+                title: s.privacyLeaderboard,
+                value: _valueLabel(s, 'leaderboard', p),
+                onTap: () => _choose('leaderboard', p),
               ),
             ],
           ),

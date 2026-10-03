@@ -58,6 +58,7 @@ class PrivacySettings {
   final PrivacyVisibility profilePhoto;
   final PrivacyVisibility about;
   final PrivacyVisibility story;
+  final PrivacyVisibility leaderboard;
   final bool readReceipts;
   final Map<String, Set<String>> exclusions;
 
@@ -67,6 +68,7 @@ class PrivacySettings {
     this.profilePhoto = PrivacyVisibility.everyone,
     this.about = PrivacyVisibility.everyone,
     this.story = PrivacyVisibility.everyone,
+    this.leaderboard = PrivacyVisibility.everyone,
     this.readReceipts = true,
     this.exclusions = const {},
   });
@@ -79,6 +81,7 @@ class PrivacySettings {
       profilePhoto: PrivacyVisibility.fromWire(map['profile_photo']),
       about: PrivacyVisibility.fromWire(map['about']),
       story: PrivacyVisibility.fromWire(map['story']),
+      leaderboard: PrivacyVisibility.fromWire(map['leaderboard']),
       readReceipts: map['read_receipts'] != false,
       exclusions: {
         for (final entry in raw.entries)
@@ -95,6 +98,7 @@ class PrivacySettings {
     PrivacyVisibility? profilePhoto,
     PrivacyVisibility? about,
     PrivacyVisibility? story,
+    PrivacyVisibility? leaderboard,
     bool? readReceipts,
     Map<String, Set<String>>? exclusions,
   }) {
@@ -104,6 +108,7 @@ class PrivacySettings {
       profilePhoto: profilePhoto ?? this.profilePhoto,
       about: about ?? this.about,
       story: story ?? this.story,
+      leaderboard: leaderboard ?? this.leaderboard,
       readReceipts: readReceipts ?? this.readReceipts,
       exclusions: exclusions ?? this.exclusions,
     );

@@ -18,6 +18,7 @@ class PrivacyService {
     PrivacyVisibility? profilePhoto,
     PrivacyVisibility? about,
     PrivacyVisibility? story,
+    PrivacyVisibility? leaderboard,
     bool? readReceipts,
   }) async {
     final res = await _sb.rpc(
@@ -28,6 +29,7 @@ class PrivacyService {
         'p_profile_photo': profilePhoto?.wireKey,
         'p_about': about?.wireKey,
         'p_story': story?.wireKey,
+        'p_leaderboard': leaderboard?.wireKey,
         'p_read_receipts': readReceipts,
       },
     );

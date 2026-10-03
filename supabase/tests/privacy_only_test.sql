@@ -141,5 +141,24 @@ select supabase_tests.check('anggota room sama TIDAK otomatis lihat about',
   not public.privacy_can_view('d0c1e000-0000-4000-8000-000000000004','about',
     'd0c1e000-0000-4000-8000-000000000005'));
 
+-- Top Aktif (leaderboard) — privasi penuh, TANPA aturan mitra/anggota room.
+update public.profiles set leaderboard_visibility='everyone'
+ where id='d0c1e000-0000-4000-8000-000000000001';
+select supabase_tests.check('leaderboard everyone → lolos',
+  public.privacy_can_view('d0c1e000-0000-4000-8000-000000000001','leaderboard',
+    'd0c1e000-0000-4000-8000-000000000002'));
+update public.profiles set leaderboard_visibility='nobody'
+ where id='d0c1e000-0000-4000-8000-000000000001';
+select supabase_tests.check('leaderboard nobody → ditolak',
+  not public.privacy_can_view('d0c1e000-0000-4000-8000-000000000001','leaderboard',
+    'd0c1e000-0000-4000-8000-000000000002'));
+update public.profiles set leaderboard_visibility='friends'
+ where id='d0c1e000-0000-4000-8000-000000000001';
+select supabase_tests.check('leaderboard friends → teman lolos, non-teman tolak',
+  public.privacy_can_view('d0c1e000-0000-4000-8000-000000000001','leaderboard',
+    'd0c1e000-0000-4000-8000-000000000002')
+  and not public.privacy_can_view('d0c1e000-0000-4000-8000-000000000001','leaderboard',
+    'd0c1e000-0000-4000-8000-000000000003'));
+
 select supabase_tests.report() as result;
 rollback;
