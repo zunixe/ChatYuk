@@ -22,6 +22,12 @@ abstract class CallUi {
   /// Tutup UI sistem untuk [callId] (ditolak, dibatalkan, atau berakhir).
   Future<void> dismiss(String callId);
 
+  /// Aktifkan/matikan mode proximity (layar mati saat HP didekatkan ke
+  /// telinga) — dipakai panggilan AUDIO 1:1 supaya hemat baterai + cegah
+  /// pipi menyentuh tombol. Native menangani sensor; platform tanpa dukungan
+  /// = no-op. Best-effort: kegagalan tidak boleh mengganggu panggilan.
+  Future<void> setProximity(bool on);
+
   /// Callback dari UI sistem. Native memanggil ini saat pengguna menekan
   /// terima/tolak dari layar kunci/headset, ATAU saat sistem mengakhiri call.
   set onAccept(FutureOr<void> Function(String callId)? cb);
@@ -52,6 +58,9 @@ class CallUiStub implements CallUi {
 
   @override
   Future<void> dismiss(String callId) async {}
+
+  @override
+  Future<void> setProximity(bool on) async {}
 
   @override
   bool get usesSystemUi => false;

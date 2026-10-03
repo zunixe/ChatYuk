@@ -4,7 +4,7 @@
 > (layar kunci, headset, Bluetooth, Android Auto) — gaya WhatsApp — tanpa
 > memindahkan WebRTC ke native.
 
-Terakhir diperbarui: 2026-09-19.
+Terakhir diperbarui: 2026-10-05.
 
 ---
 
@@ -16,6 +16,32 @@ menangani:
 
 1. Menampilkan ring panggilan masuk (UI sistem, bukan layar Dart).
 2. Meneruskan aksi pengguna: jawab / tolak / akhiri.
+3. Proximity screen-off saat panggilan audio (OS-level, lihat di bawah).
+
+### Signaling call (satu jalur — DB)
+
+Signaling 1:1 lewat tabel `call_signals` + realtime `postgres_changes`.
+Mekanisme di `lib/core/call/signal_route.dart` menyediakan jalur ephemeral
+(Realtime Broadcast) untuk sinyal high-churn, TAPI **SAAT INI DIMATIKAN**
+(`kEphemeralSignalTypes` kosong).
+
+- **Reliable (DB + postgres_changes)** — SEMUA sinyal: `offer`, `answer`,
+  `bye`, `camera`, `candidate`, `watch_*`.
+- **Ephemeral (Realtime Broadcast)** — kode ada tapi dormant
+  (`lib/core/call/signal_route.dart`).
+
+**Kenapa SEMUA lewat DB** (keputusan sadar, jangan diubah tanpa baca ini):
+- Realtime Broadcast TIDAK me-replay. `offer` dikirim SEGERA setelah init —
+  sering SEBELUM callee subscribe → hilang → callee nyangkut "menghubungkan…".
+  Jaring keselamatan `_catchUpSignals` (SELECT `call_signals`) butuh offer ADA
+  di tabel.
+- **Uji 2-device (2026-10-05):** candidate via Broadcast TIDAK sampai ke peer
+  (log callee tak pernah terima `candidate`) → ICE tunggu 15 dtk lalu fallback
+  → call "menghubungkan lama". Jalur DB (postgres_changes) justru lebih cepat
+  & andal untuk kasus ini.
+
+Untuk mengaktifkan ephemeral lagi: isi `kEphemeralSignalTypes` — SETELAH
+broadcast diperbaiki & diuji 2-device (jangan langsung ke produksi).
 
 Ini mungkin karena `CallSession.init()` (mulai WebRTC) baru dipanggil
 **setelah** pengguna menekan terima (`incoming_call_screen.dart` → `_accept`).
@@ -55,9 +81,22 @@ CallUi (abstract)                       CallConnectionService  ← Telecom
 | Dart→native | `showIncoming` | `{callId, callerName, callType}` |
 | Dart→native | `setConnected` | `{callId}` |
 | Dart→native | `dismiss` | `{callId}` |
+| Dart→native | `setProximity` | `{on: bool}` |
 | native→Dart | `onAccept` | `callId` |
 | native→Dart | `onDecline` | `callId` |
 | native→Dart | `onEnd` | `callId` |
+
+### Proximity (panggilan audio)
+
+`setProximity(true)` dipanggil `CallSession` saat panggilan **audio** mencapai
+`inCall` — `ProximityManager` memegang `PROXIMITY_SCREEN_OFF_WAKE_LOCK`
+sehingga layar mati saat HP didekatkan ke telinga (hemat baterai + cegah pipi
+menyentuh tombol). `setProximity(false)` dipanggil saat call berakhir
+(`_finish`/`close`), plus jaring pengaman `ProximityManager.release()` di
+`CallConnectionService.onDestroy`. Hanya audio (video butuh layar hidup).
+
+- Butuh izin `android.permission.WAKE_LOCK` (ditambahkan ke manifest).
+- Best-effort: device tanpa sensor proximity → no-op (tidak crash).
 
 ---
 
@@ -144,6 +183,9 @@ CallKit iOS = pekerjaan + backend terpisah.
   3. App mati (swipe dari recents): panggil → ring sistem → jawab → app
      terbuka & tersambung.
   4. Bluetooth/headset: jawab dari tombol headset.
-  5. Caller batalkan saat ring → ring sistem berhenti.
-  6. Regresi: notifikasi chat/mention tetap muncul saat app di background
-     (memastikan `super.onMessageReceived` jalan).
+5. Caller batalkan saat ring → ring sistem berhenti.
+6. Regresi: notifikasi chat/mention tetap muncul saat app di background
+   (memastikan `super.onMessageReceived` jalan).
+7. **Proximity**: panggilan AUDIO tersambung → dekatkan HP ke telinga →
+   layar mati; jauhkan → layar hidup. Akhiri call → layar tetap hidup
+   (wake lock lepas). Video call TIDAK mengaktifkan proximity.

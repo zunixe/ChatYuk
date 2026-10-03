@@ -4,9 +4,13 @@ import '../utils.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/call_config.dart';
+import '../config/strings.dart';
 import '../config/supabase_config.dart';
 import '../core/call/opus_sdp.dart';
+import '../core/call/signal_route.dart' as signal_route;
 import '../core/call/watch_policy.dart';
+import 'call/call_ui.dart' show CallUi;
+import 'call/call_ui_factory.dart' show createCallUi;
 import '../core/call/call_permissions.dart' show CallMediaError;
 import '../core/perf/perf_probe.dart';
 
@@ -16,6 +20,26 @@ enum CallPhase { connecting, ringing, inCall, ended, error }
 /// Alasan panggilan berakhir — buat pesan di UI.
 enum CallEndReason { ended, declined, busy, canceled, missed, error }
 
+/// Pemetaan alasan berakhir → pesan. Satu sumber kebenaran supaya CallScreen
+/// (fullscreen) & ChatCallOverlay (video-in-chat) tidak pernah beda teks.
+extension CallEndReasonMessage on CallEndReason {
+  String message(S s) {
+    switch (this) {
+      case CallEndReason.declined:
+        return s.msgCallDeclined;
+      case CallEndReason.busy:
+        return s.msgCallBusy;
+      case CallEndReason.missed:
+        return s.msgCallMissed;
+      case CallEndReason.error:
+        return s.msgCallError;
+      case CallEndReason.ended:
+      case CallEndReason.canceled:
+        return s.msgCallEnded;
+    }
+  }
+}
+
 /// CallService: tabel `calls` + signaling via Realtime broadcast.
 /// SDP/ICE TIDAK lewat DB — broadcast channel `call-signal-<callId>`
 /// (ephemeral, pola sama seperti typing indicator).
@@ -24,10 +48,18 @@ class CallService {
   final SupabaseClient? _injected;
   CallService._([SupabaseClient? sb]) : _injected = sb;
 
+  /// UI panggilan sistem (ConnectionService Android; stub di platform lain).
+  /// Dipakai untuk proximity wake lock saat panggilan AUDIO tersambung.
+  CallUi callUi = createCallUi();
+
   static CallService instance = CallService._();
 
   @visibleForTesting
-  factory CallService.forTest(SupabaseClient sb) => CallService._(sb);
+  factory CallService.forTest(SupabaseClient sb, {CallUi? callUi}) {
+    final s = CallService._(sb);
+    if (callUi != null) s.callUi = callUi;
+    return s;
+  }
 
   @visibleForTesting
   static void overrideInstance(CallService s) => instance = s;
@@ -284,7 +316,26 @@ class CallService {
     }
   }
 
-  // ── Signaling (postgres — reliable & replayable via catch-up SELECT) ──
+  // ── Signaling ──
+  // Dua jalur:
+  //  1. DB `call_signals` + postgres_changes — RELIABLE & replayable
+  //     (catch-up SELECT). Dipakai untuk offer/answer/bye yang WAJIB tak
+  //     boleh hilang (callee masih ringing → offer harus bisa di-replay).
+  //  2. Realtime BROADCAST ephemeral (channel sama) — ephemeral, TIDAK
+  //     ditulis ke DB. Dipakai untuk ICE candidate yang high-churn
+  //     (puluhan per call). Ini memotong sebagian besar write + egress DB
+  //     per call tanpa mengurangi keandalan: candidate yang hilang bisa
+  //     diminta ulang lewat re-sync offer/answer (lihat `_syncAll`).
+  //
+  // Kedua jalur menyatu ke SATU stream (controller) supaya CallSession
+  // tak perlu tahu asal sinyal.
+  static const String _signalBroadcastEvent = 'sig';
+
+  /// True bila [type] boleh dikirim ephemeral (tanpa persist DB).
+  /// Logika murni ada di `core/call/signal_route.dart`.
+  static bool isEphemeralSignal(String type) =>
+      signal_route.isEphemeralSignal(type);
+
   Stream<Map<String, dynamic>> onSignal(String callId) {
     final controller = _signalStreams.putIfAbsent(
       callId,
@@ -309,12 +360,32 @@ class CallService {
           _emitSignal(payload.newRecord, controller);
         },
       );
+      // Jalur ephemeral: candidate via broadcast (tidak masuk DB).
+      channel.onBroadcast(
+        event: _signalBroadcastEvent,
+        callback: (msg) {
+          if (controller.isClosed) return;
+          _emitBroadcastSignal(msg, controller);
+        },
+      );
       channel.subscribe((status, err) {
         if (err != null) dlog('[CallService] signal realtime error: $err');
       });
       _signalChannels[callId] = channel;
     }
     return controller.stream;
+  }
+
+  /// Teruskan sinyal broadcast ephemeral (candidate) ke controller.
+  /// Bentuk payload identik dengan sinyal DB: {type, ...payload}.
+  void _emitBroadcastSignal(
+    Map<String, dynamic> msg,
+    StreamController<Map<String, dynamic>> controller,
+  ) {
+    if (controller.isClosed) return;
+    final signal = signal_route.decodeEphemeralEnvelope(msg, myUid: uid);
+    if (signal == null) return;
+    controller.add(signal);
   }
 
   Future<void> _catchUpSignals(
@@ -349,7 +420,34 @@ class CallService {
     String type, {
     Map<String, dynamic>? payload,
   }) async {
-    dlog('[CallService] sendSignal callId=$callId type=$type');
+    final ephemeral = isEphemeralSignal(type);
+    dlog(
+      '[CallService] sendSignal callId=$callId type=$type ephemeral=$ephemeral',
+    );
+    if (ephemeral) {
+      // Candidate: kirim via realtime broadcast (ephemeral, tanpa DB).
+      // Fallback ke DB bila channel belum siap (mis. dipanggil sebelum
+      // subscribe) supaya candidate TIDAK pernah hilang diam-diam.
+      final ch = _signalChannels[callId];
+      if (ch != null) {
+        try {
+          await ch.sendBroadcastMessage(
+            event: _signalBroadcastEvent,
+            payload: signal_route.buildEphemeralEnvelope(
+              fromUid: uid,
+              type: type,
+              payload: payload,
+              seq: _broadcastSeq++,
+              micros: DateTime.now().microsecondsSinceEpoch,
+            ),
+          );
+          return;
+        } catch (e) {
+          dlog('[CallService] broadcast candidate gagal → fallback DB: $e');
+        }
+      }
+      // Channel belum ada → tetap persist (jarang; setup awal).
+    }
     try {
       await _sb.from('call_signals').insert({
         'call_id': callId,
@@ -361,6 +459,8 @@ class CallService {
       dlog('[CallService] sendSignal error: $e');
     }
   }
+
+  int _broadcastSeq = 0;
 
   /// Ambil semua signal (offer/candidates) untuk sebuah call — dipakai untuk
   /// re-sync agar tidak ada kandidat yang terlewat.
@@ -766,6 +866,7 @@ class CallSession extends ChangeNotifier {
             _connectedAt = DateTime.now();
             _recordConnected('pcState');
             _startBilling();
+            _setProximity(true);
             notifyListeners();
           }
         }
@@ -835,6 +936,7 @@ class CallSession extends ChangeNotifier {
             _connectedAt = _connectedAt ?? DateTime.now();
             _recordConnected('timeout15Check');
             _startBilling();
+            _setProximity(true);
             notifyListeners();
           }
           return;
@@ -871,6 +973,7 @@ class CallSession extends ChangeNotifier {
             _connectedAt = _connectedAt ?? DateTime.now();
             _recordConnected('iceState');
             _startBilling();
+            _setProximity(true);
             changed = true;
           }
           if (changed) notifyListeners();
@@ -1563,10 +1666,17 @@ class CallSession extends ChangeNotifier {
 
   /// Heartbeat ke server — admin monitor pakai ini untuk membedakan call
   /// yang masih hidup vs call zombie (app ditutup paksa di tengah call).
+  ///
+  /// Interval 25 dtk (dulu 15). Ambang zombie server (`admin_sweep_calls`)
+  /// = `last_seen_at` lebih tua dari 75 dtk. Dengan 25 dtk, worst-case
+  /// (satu tick terlewat karena jaringan) = 50 dtk < 75 dtk → margin 3×.
+  /// Untuk call panjang (30 mnt) ini memangkas ~40% write heartbeat
+  /// (120 → 72 update) tanpa memperbesar risiko call zombie.
   void _touchHeartbeat() {
     final now = DateTime.now();
-    if (_lastTouch != null && now.difference(_lastTouch!).inSeconds < 15)
+    if (_lastTouch != null && now.difference(_lastTouch!).inSeconds < 25) {
       return;
+    }
     _lastTouch = now;
     _service.touchCall(callId);
   }
@@ -1606,6 +1716,7 @@ class CallSession extends ChangeNotifier {
       _connectedAt = _connectedAt ?? DateTime.now();
       _recordConnected('syncSafetyNet');
       _startBilling();
+      _setProximity(true);
       notifyListeners();
     }
     try {
@@ -1727,6 +1838,20 @@ class CallSession extends ChangeNotifier {
     _billingTimer = null;
   }
 
+  // ── Proximity (audio call) ──
+  // Layar mati saat HP didekatkan ke telinga — hemat baterai + cegah pipi
+  // menyentuh tombol. HANYA audio (video butuh layar hidup). Best-effort.
+  bool _proximityOn = false;
+
+  void _setProximity(bool on) {
+    if (callType != 'audio') return; // video: layar harus tetap hidup
+    if (_proximityOn == on) return;
+    _proximityOn = on;
+    unawaited(
+      _service.callUi.setProximity(on).catchError((_) {}),
+    );
+  }
+
   void _finish(CallEndReason reason) {
     if (_closed) return;
     dlog('[CallService] _finish reason=$reason phase=$_phase');
@@ -1735,6 +1860,7 @@ class CallSession extends ChangeNotifier {
     _ringTimer?.cancel();
     _syncTimer?.cancel();
     _stopBilling();
+    _setProximity(false);
     _service.releaseCallStatus(callId);
     _phase = CallPhase.ended;
     notifyListeners();
@@ -1750,6 +1876,7 @@ class CallSession extends ChangeNotifier {
     _ringTimer?.cancel();
     _syncTimer?.cancel();
     _stopBilling();
+    _setProximity(false);
     _pendingCandidates.clear();
     _pendingSignals.clear();
     for (final pc in _watchPcs.values) {

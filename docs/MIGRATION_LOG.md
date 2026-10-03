@@ -1,4 +1,28 @@
 ﻿
+## 2026-10-05 — Call 1:1/video: hardening RLS + gerbang billing lebih awal
+
+- **Review subsistem call** (1:1 & video call). Temuan + fix server-side:
+  - `20261005130000_calls_update_with_check.sql`: policy `calls_update` dulu
+    tanpa `WITH CHECK` → peserta berpotensi meng-UPDATE kolom identitas
+    (caller_id/callee_id). FIX: pisahkan `USING` (baris lama) dari
+    `WITH CHECK` (baris baru tetap peserta, identitas tak berubah). Tidak
+    mengubah izin update status/answered_at/ended_at/last_seen_at.
+  - `20261005140000_call_billing_gate_first.sql`: `call_billing_tick` dulu
+    membaca `app_settings` (unit_cost/cut_pct) SEBELUM gate
+    `feature_enabled_for('call_billing')`. FIX: gate dipindah ke paling atas
+    → jalur OFF nol query config. Kontrak return tidak berubah.
+- **Client** (`lib/services/call_service.dart` + baru
+  `lib/core/call/signal_route.dart`): awalnya ICE candidate dikirim EPHEMERAL
+  via Realtime Broadcast. **DI-REVERT** (uji 2-device): candidate broadcast
+  TIDAK sampai ke peer → ICE tunggu 15 dtk → call "menghubungkan lama". Kini
+  SEMUA sinyal kembali lewat DB `call_signals` (postgres_changes) — jalur lama
+  yang terbukti cepat. Kode broadcast dipertahankan (dorman) + didokumentasikan
+  (`docs/PERFORMANCE.md §27c`).
+- **Test:** `test/signal_route_test.dart` (routing tipe, envelope, dedup,
+  defense broadcast ditolak saat ephemeral OFF). Regresi call lama OK.
+- **Verifikasi device (2 HP):** panggil audio + video → connect cepat kembali
+  (< 5 dtk) setelah revert.
+
 ## 2026-10-05 — Fake GPS lanjutan (shared/static/emulator) + badge sumber IP/GPS
 
 - **Temuan (audit Kartika/live):** 77/348 user ber-GPS di 19 koordinat dipakai

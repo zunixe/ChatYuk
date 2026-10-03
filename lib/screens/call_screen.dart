@@ -168,18 +168,7 @@ class _CallScreenState extends State<CallScreen> {
       case CallPhase.error:
         return callMediaErrorMessage(s, _session.mediaError);
       case CallPhase.ended:
-        switch (_session.endReason) {
-          case CallEndReason.declined:
-            return s.msgCallDeclined;
-          case CallEndReason.busy:
-            return s.msgCallBusy;
-          case CallEndReason.missed:
-            return s.msgCallMissed;
-          case CallEndReason.error:
-            return s.msgCallError;
-          default:
-            return s.msgCallEnded;
-        }
+        return _session.endReason.message(s);
       case CallPhase.inCall:
         return _elapsed.value;
     }

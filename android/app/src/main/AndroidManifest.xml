@@ -14,6 +14,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- Proximity wake lock: layar mati saat HP didekatkan ke telinga
+         (panggilan audio) — hemat baterai + cegah pipi menyentuh tombol. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Panggilan sistem (ConnectionService SELF_MANAGED): wajib agar app
          boleh mendaftarkan panggilan sendiri ke Telecom (UI panggilan di
          layar kunci/headset/Bluetooth, gaya WhatsApp). -->

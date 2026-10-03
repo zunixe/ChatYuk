@@ -5,7 +5,7 @@ import '../main.dart';
 import '../screens/incoming_call_screen.dart';
 import '../services/call_service.dart';
 export '../services/call_service.dart'
-    show CallSession, CallPhase, CallEndReason;
+    show CallSession, CallPhase, CallEndReason, CallEndReasonMessage;
 import '../services/call_notification.dart';
 import '../services/call/call_ui_factory.dart';
 import '../utils.dart';
