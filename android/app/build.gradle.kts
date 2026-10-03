@@ -60,10 +60,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.chatyuk.chatyuk"
@@ -161,6 +157,14 @@ androidComponents {
 
 flutter {
     source = "../.."
+}
+
+// KGP 2.3.20: `kotlinOptions { jvmTarget }` di dalam `android {}` sudah
+// deprecated (jadi error di build). Pindah ke compilerOptions DSL.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 // Plugin facebook_app_events memakai versi DINAMIS `[18.0,19.0)` yang harus

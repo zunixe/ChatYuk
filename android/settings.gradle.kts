@@ -27,7 +27,8 @@ plugins {
     id("com.google.gms.google-services") version("4.4.2") apply false
     id("com.google.firebase.crashlytics") version("3.0.3") apply false
     // END: FlutterFire Configuration
-    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // 2.2.20 → 2.3.20: Flutter 3.47 memperingatkan KGP < 2.3.20 akan di-drop.
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
 }
 
 include(":app")
