@@ -1824,6 +1824,30 @@ class S {
       isId ? 'Diterima' : 'Accepted';
   String get friendRequestStatusRejected =>
       isId ? 'Ditolak' : 'Rejected';
+
+  // ── Sheet "Status kamu" (status + visibilitas diri sendiri) ──
+  String get myStatusTitle => isId ? 'Status kamu' : 'Your status';
+  String get myStatusStatusLabel => isId ? 'Status' : 'Status';
+  String get myStatusVisibleTo =>
+      isId ? 'Terlihat oleh' : 'Visible to';
+  String get myStatusVisibleEveryone =>
+      isId ? '🌍 Semua orang' : '🌍 Everyone';
+  String get myStatusVisibleFriends => isId ? '👥 Hanya teman' : '👥 Friends only';
+  String myStatusVisibleOnly(int n) =>
+      isId ? '✋ Hanya $n orang' : '✋ Only $n people';
+  String get myStatusVisibleNobody => isId ? '🚫 Tidak ada' : '🚫 Nobody';
+  String myStatusExceptN(int n) =>
+      isId ? 'kecuali $n orang' : 'except $n people';
+  String myStatusExceptNAndOffline(int n) => isId
+      ? 'kecuali $n orang · mereka melihatmu Offline'
+      : 'except $n people · they see you Offline';
+  String get myStatusTheySeeOffline =>
+      isId ? 'kamu tampak Offline' : 'you appear Offline';
+  String get myStatusGhostActive =>
+      isId ? 'Mode hantu aktif' : 'Ghost mode active';
+  String get myStatusPhotoLabel => isId ? 'Foto profil' : 'Profile photo';
+  String get myStatusManageInPrivacy =>
+      isId ? 'Kelola di Privasi' : 'Manage in Privacy';
   String get subscriptionsTitle => isId ? 'Langganan' : 'Subscriptions';
   String get subscriptionsEmpty =>
       isId ? 'Belum ada langganan' : 'No subscriptions yet';

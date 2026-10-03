@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../providers/location_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
 import '../config/regions.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
@@ -43,9 +44,14 @@ import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
 import '../providers/story_provider.dart';
 import '../providers/call_provider.dart';
+import '../providers/privacy_provider.dart';
+import '../models/privacy_settings.dart';
+import '../widgets/sheet_drag_handle.dart';
+import 'privacy_settings_screen.dart';
 import '../core/perf/perf_probe.dart';
 import '../widgets/app_gesture.dart';
 import '../widgets/anon_prompt_dialog.dart';
+import '../widgets/social_actions.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
@@ -471,6 +477,43 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     });
   }
 
+  /// Sheet "Status kamu" — jawab: "bagaimana orang lain melihatku?".
+  ///
+  /// Menampilkan DUA dimensi yang sengaja DIPISAH (tidak disatukan):
+  ///   1. STATUS asli (fakta teknis): Online / Idle / Offline.
+  ///   2. TERLIHAT OLEH (efek privasi per-audiens) — chip + subbaris.
+  ///
+  /// `invisible` (ghost) BUKAN status: user tetap Online, hanya tampak
+  /// Offline ke sebagian/semua orang. Karena itu ia muncul sebagai badge
+  /// terpisah + efeknya dinyatakan di baris visibilitas (bukan ditulis
+  /// "Invisible" yang menyesatkan).
+  Future<void> _showMyStatusSheet() async {
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final privacy = context.read<PrivacyProvider>();
+    // Muat visibilitas bila belum pernah dimuat (lazy; tak ada RPC baru bila
+    // sudah ter-cache di provider).
+    unawaited(privacy.load());
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.bgScreen,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => MyStatusSheet(
+        s: s,
+        nickname: auth.profile?.nickname ?? '-',
+        avatar: auth.profile?.avatar ?? '',
+        status: auth.profile?.status ?? 'offline',
+        invisible: auth.invisibleEnabled,
+        privacy: privacy,
+      ),
+    );
+  }
+
   /// Zoom foto profil user lain: pakai bytes cache global kalau ada (b64
   /// langsung / path dari disk), else download path → tampilkan dialog.
   Future<void> _zoomUserAvatar(UserModel user, Color color) async {
@@ -550,6 +593,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     String myAvatar,
     String myNickname,
     bool myRegistered,
+    String myStatus,
+    bool invisible,
   ) {
     // Tile avatar sendiri TETAP di tengah tray (vertikal) — Center
     // mengembalikan posisi tengah seperti semula.
@@ -563,7 +608,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               clipBehavior: Clip.none,
               children: [
                 GestureDetector(
-                  onTap: () {
+                  // Tap avatar sendiri → sheet "Status kamu" (status + siapa
+                  // yang bisa melihat). Zoom foto tetap via long-press.
+                  onTap: () => _showMyStatusSheet(),
+                  onLongPress: () {
                     final b64 = myAvatar;
                     final init = (myNickname.isEmpty ? '?' : myNickname)[0]
                         .toUpperCase();
@@ -613,6 +661,29 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                         );
                       },
                     ),
+                  ),
+                ),
+                Positioned(
+                  // Dot status diri sendiri (kiri-bawah) — kamera upload di
+                  // kanan-bawah, tidak bertabrakan. Ghost mode → ikon 👻
+                  // supaya beda jelas dari online biasa.
+                  left: -2,
+                  bottom: -2,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: invisible
+                          ? AppTheme.bgCard
+                          : AppTheme.statusColor(myStatus),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: invisible
+                        ? const Center(
+                            child: Text('👻', style: TextStyle(fontSize: 9)),
+                          )
+                        : null,
                   ),
                 ),
                 Positioned(
@@ -688,6 +759,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     String myAvatar,
     String myNickname,
     bool myRegistered,
+    String myStatus,
+    bool invisible,
   ) {
     final sp = ctx.watch<StoryProvider>();
     // Hanya item berisi slide (slideCount>0) yang tampil & bisa dibuka.
@@ -707,7 +780,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         itemBuilder: (_, i) {
           // Slot 0 = avatar sendiri (ikut scroll seperti IG).
           if (i == 0) {
-            return _buildOwnAvatarTile(myAvatar, myNickname, myRegistered);
+            return _buildOwnAvatarTile(
+              myAvatar,
+              myNickname,
+              myRegistered,
+              myStatus,
+              invisible,
+            );
           }
           final j = i - 1;
           // Slot berikutnya = tile "+" kalau belum punya story sendiri.
@@ -1171,6 +1250,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     final myRegistered = context.select<AuthProvider, bool>(
       (a) => a.profile?.isRegistered ?? false,
     );
+    // Status diri sendiri + ghost mode — untuk dot badge di avatar sendiri.
+    final myStatus = context.select<AuthProvider, String>(
+      (a) => a.profile?.status ?? 'offline',
+    );
+    final myInvisible = context.select<AuthProvider, bool>(
+      (a) => a.invisibleEnabled,
+    );
     super.build(context);
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
@@ -1354,7 +1440,14 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             // Atas 2 (rapat ke field cari di toolbar) — total
             // 2 + 132 + 4 = 138 ≤ 146, tidak overflow.
             padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-            child: _buildStoryTray(context, myAvatar, myNickname, myRegistered),
+            child: _buildStoryTray(
+              context,
+              myAvatar,
+              myNickname,
+              myRegistered,
+              myStatus,
+              myInvisible,
+            ),
           ),
         ),
         iconTheme: IconThemeData(color: AppTheme.textPrimary),
@@ -2924,6 +3017,276 @@ class _UserCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Sheet "Status kamu" ─────────────────────────────────────────────────────
+
+/// Pemetaan visibilitas privacy → (label chip, subbaris opsional).
+///
+/// Publik + murni supaya bisa diuji tanpa widget. Subbaris WAJIB ada saat
+/// ada daftar pengecualian ("kecuali N orang") supaya "Semua orang" tidak
+/// menyesatkan (kasus: status online tapi sebagian orang melihat Offline).
+(String, String?) myStatusVisibilityChip(
+  S s,
+  PrivacyVisibility v,
+  int exclusionCount,
+) {
+  switch (v) {
+    case PrivacyVisibility.everyone:
+      return (s.myStatusVisibleEveryone, null);
+    case PrivacyVisibility.everyoneExcept:
+      return (
+        s.myStatusVisibleEveryone,
+        exclusionCount > 0 ? s.myStatusExceptNAndOffline(exclusionCount) : null,
+      );
+    case PrivacyVisibility.friends:
+      return (s.myStatusVisibleFriends, null);
+    case PrivacyVisibility.friendsExcept:
+      return (
+        s.myStatusVisibleFriends,
+        exclusionCount > 0 ? s.myStatusExceptN(exclusionCount) : null,
+      );
+    case PrivacyVisibility.only:
+      return (s.myStatusVisibleOnly(exclusionCount), null);
+    case PrivacyVisibility.nobody:
+      return (s.myStatusVisibleNobody, s.myStatusTheySeeOffline);
+  }
+}
+
+/// Sheet informasi status + visibilitas DIRI SENDIRI (display-only).
+///
+/// UI: chip ringkas + subbaris (agar "kecuali N orang" tidak menyesatkan).
+/// Status & visibilitas adalah 2 dimensi terpisah — lihat catatan di
+/// `_showMyStatusSheet`.
+class MyStatusSheet extends StatelessWidget {
+  final S s;
+  final String nickname;
+  final String avatar;
+  final String status;
+  final bool invisible;
+  final PrivacyProvider privacy;
+  const MyStatusSheet({
+    super.key,
+    required this.s,
+    required this.nickname,
+    required this.avatar,
+    required this.status,
+    required this.invisible,
+    required this.privacy,
+  });
+
+  String _statusLabel() {
+    switch (status) {
+      case 'idle':
+        return s.statusIdle;
+      case 'online':
+        return s.statusOnline;
+      default:
+        return s.statusOffline;
+    }
+  }
+
+  /// Bytes avatar bila `avatar` base64 valid; null bila kosong / path
+  /// storage (fallback inisial). Aman terhadap base64 rusak.
+  Uint8List? _avatarBytes() {
+    if (avatar.isEmpty || avatar.contains('/')) return null;
+    try {
+      return base64Decode(avatar);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SheetDragHandle(),
+            const SizedBox(height: 6),
+            // Header: avatar + nama. Avatar bisa base64 (foto) atau path
+            // storage ('avatars/...') → path fallback ke inisial (sheet tak
+            // mengunduh; avatar sendiri umumnya sudah base64 di memori).
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
+                  backgroundImage: _avatarBytes() != null
+                      ? MemoryImage(_avatarBytes()!)
+                      : null,
+                  child: _avatarBytes() == null
+                      ? Text(
+                          nickname.isNotEmpty
+                              ? nickname[0].toUpperCase()
+                              : '?',
+                          style: AppText.bodyStrong.copyWith(
+                            color: AppTheme.primary,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    s.myStatusTitle,
+                    style: AppText.title,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // Baris 1: STATUS asli (fakta). Ghost → badge 👻 terpisah.
+            _row(
+              icon: Icons.circle,
+              iconColor: AppTheme.statusColor(status),
+              label: s.myStatusStatusLabel,
+              child: Row(
+                children: [
+                  Text(_statusLabel(), style: AppText.bodyStrong),
+                  if (invisible) ...[
+                    const SizedBox(width: 6),
+                    const Text('👻', style: TextStyle(fontSize: 13)),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        s.myStatusGhostActive,
+                        style: AppText.caption.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Baris 2: TERLIHAT OLEH (efek privasi) — chip + subbaris.
+            AnimatedBuilder(
+              animation: privacy,
+              builder: (_, __) {
+                final st = privacy.settings;
+                final vis = st.presence;
+                final n = (st.exclusions['presence'] ?? const <String>{}).length;
+                final (chip, sub) = myStatusVisibilityChip(s, vis, n);
+                return _row(
+                  icon: Icons.visibility_outlined,
+                  iconColor: AppTheme.primary,
+                  label: s.myStatusVisibleTo,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _chip(chip),
+                      if (sub != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          sub,
+                          style: AppText.caption.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            // Baris 3: FOTO PROFIL (dimensi privasi terpisah).
+            AnimatedBuilder(
+              animation: privacy,
+              builder: (_, __) {
+                final vis = privacy.settings.profilePhoto;
+                final n = (privacy.settings.exclusions['profile_photo'] ??
+                        const <String>{})
+                    .length;
+                final (chip, _) = myStatusVisibilityChip(s, vis, n);
+                return _row(
+                  icon: Icons.person_outline,
+                  iconColor: AppTheme.textSecondary,
+                  label: s.myStatusPhotoLabel,
+                  child: _chip(chip),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            // Footer navigasi (bukan aksi ubah): buka Pengaturan Privasi.
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PrivacySettingsScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.tune, size: 16),
+                label: Text(s.myStatusManageInPrivacy),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required Widget child,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 16, color: iconColor),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 2),
+              child,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _chip(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: AppText.bodySmall.copyWith(
+          color: AppTheme.primary,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
