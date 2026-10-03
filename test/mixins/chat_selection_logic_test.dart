@@ -17,12 +17,20 @@ import '../supabase_test_client.dart';
 
 class MockAuthService extends Mock implements AuthService {}
 
+class MockAuthProvider extends Mock implements AuthProvider {}
+
 /// Harness minimal untuk `ChatSelectionMixin` — kontraknya mandiri (tidak
 /// bergantung mixin lain), jadi cukup host kecil.
 class SelHost extends StatefulWidget {
   final AuthProvider auth;
   final ChatProvider chat;
-  const SelHost({super.key, required this.auth, required this.chat});
+  final bool showAppBar;
+  const SelHost({
+    super.key,
+    required this.auth,
+    required this.chat,
+    this.showAppBar = false,
+  });
   @override
   State<SelHost> createState() => SelHostState();
 }
@@ -67,7 +75,14 @@ class SelHostState extends State<SelHost> with ChatSelectionMixin<SelHost> {
   }
 
   @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
+  Widget build(BuildContext context) {
+    if (!widget.showAppBar) return const SizedBox.shrink();
+    return Scaffold(
+      appBar: inSelection
+          ? buildSelectionAppBar()
+          : AppBar(title: const Text('normal')),
+    );
+  }
 }
 
 MessageModel msg({
@@ -90,7 +105,8 @@ MessageModel msg({
       timestamp: DateTime.now(),
     );
 
-Future<SelHostState> pumpSel(WidgetTester tester) async {
+Future<SelHostState> pumpSel(WidgetTester tester,
+    {bool showAppBar = false}) async {
   final auth = AuthProvider(autoInit: false);
   final chat = ChatProvider();
   await tester.pumpWidget(
@@ -99,7 +115,8 @@ Future<SelHostState> pumpSel(WidgetTester tester) async {
         ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
         ChangeNotifierProvider<AuthProvider>.value(value: auth),
       ],
-      child: MaterialApp(home: SelHost(auth: auth, chat: chat)),
+      child: MaterialApp(
+          home: SelHost(auth: auth, chat: chat, showAppBar: showAppBar)),
     ),
   );
   return tester.state<SelHostState>(find.byType(SelHost));
@@ -273,6 +290,38 @@ void main() {
       expect(s.replyingTo?.id, 'r');
       // Fokus 1× langsung + 1× penegasan pasca-jeda.
       expect(s.focusCount, 2);
+    });
+
+    testWidgets('tap ikon reply di AppBar SEKALI → tutup + reply langsung',
+        (tester) async {
+      // Auth di-mock (uid tanpa Supabase) supaya test ini tidak butuh
+      // initSupabaseForTest (yang meninggalkan timer periodik).
+      final mockAuth = MockAuthProvider();
+      when(() => mockAuth.uid).thenReturn('u-me');
+      final chat = ChatProvider();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<LocaleProvider>(
+                create: (_) => LocaleProvider()),
+            ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+          ],
+          child: MaterialApp(
+              home: SelHost(auth: mockAuth, chat: chat, showAppBar: true)),
+        ),
+      );
+      final s = tester.state<SelHostState>(find.byType(SelHost));
+      s.toggleSelect(msg(id: 'r', senderId: 'u-me', text: 'halo'));
+      await tester.pump();
+      expect(s.inSelection, isTrue);
+
+      await tester.tap(find.byIcon(Icons.reply));
+      await tester.pump();
+
+      expect(s.inSelection, isFalse, reason: 'seleksi harus tertutup');
+      expect(s.replyingTo?.id, 'r',
+          reason: 'reply harus jalan dalam SATU tap');
+      await tester.pump(const Duration(milliseconds: 300));
     });
 
     testWidgets('replyMessage TIDAK refokus bila balasan sudah dibatalkan',
