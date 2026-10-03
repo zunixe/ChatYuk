@@ -43,6 +43,8 @@ import '../widgets/chat_info_snack.dart';
 import '../widgets/location_picker_sheet.dart';
 import '../core/chat/chat_location.dart';
 import '../core/chat/pending_confirm.dart';
+import '../core/call/call_permissions.dart';
+import '../widgets/call_permission_dialog.dart';
 import '../utils/mention.dart';
 import '../widgets/gift_fly_overlay.dart';
 import '../widgets/room_gift_panel.dart';
@@ -356,6 +358,22 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     return ids.every(s.speakers.contains);
   }
 
+  /// Pastikan izin mikrofon sebelum mic dipakai (naik stage). Semua jalur
+  /// call lain memakai ini; voice stage dulu TERLEWAT → di device yang belum
+  /// grant mic, `getUserMedia` gagal senyap tanpa dialog. Return false bila
+  /// belum granted (dialog sudah ditampilkan).
+  Future<bool> _ensureMicPermission() async {
+    final perm = await ensureCallPermissions(video: false);
+    if (perm == CallPermissionResult.granted) return true;
+    if (!mounted) return false;
+    showCallPermissionDialog(
+      context,
+      video: false,
+      permanentlyDenied: perm == CallPermissionResult.permanentlyDenied,
+    );
+    return false;
+  }
+
   /// Tap tombol mic: belum join → join + langsung naik stage;
   /// di stage → toggle mute; belum stage → naik stage.
   Future<void> _onMicTap() async {
@@ -369,6 +387,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       // selamanya dan tap berikutnya ditolak mentah-mentah.
       setState(() => _voiceJoining = true);
       try {
+        // Izin mikrofon WAJIB sebelum mic dipakai (naik stage = getUserMedia).
+        if (!await _ensureMicPermission()) return;
+        if (!mounted) return;
         final myUid = _auth.uid;
         if (myUid == null) return;
         session = RoomVoiceSession(
@@ -404,6 +425,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       return;
     }
     if (!session.onStage) {
+      if (!await _ensureMicPermission()) return;
       final ok = await session.startSpeaking();
       if (!ok && mounted) {
         showChatSnackVia(messenger, context, s.roomVoiceStageFull);
@@ -1514,6 +1536,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       if (ch != null) unawaited(Supabase.instance.client.removeChannel(ch));
     } catch (_) {}
     unawaited(_broadcastSession?.stop());
+    // Keluar room WAJIB hentikan voice stage: tanpa ini mic tetap hidup
+    // (track tidak di-stop) + speakerphone/wakelock tidak dilepas. Dulu
+    // `stop()` voice hanya dipanggil saat user tap-tahan mic, bukan saat
+    // keluar layar → "keluar room mic masih nyala".
+    _voiceSession?.removeListener(_onVoiceChanged);
+    unawaited(_voiceSession?.stop());
+    _voiceSession = null;
     // DEFER: dispose berjalan saat widget tree terkunci (unmount IndexedStack
     // saat pindah tab) — menulis ValueNotifier sekarang memicu
     // markNeedsBuild pada CallBanner → glitch "widget tree was locked".

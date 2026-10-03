@@ -30,13 +30,23 @@ class _ProcessedStory {
 /// tidak menyeberang ke main isolate lebih dari sekali.
 _ProcessedStory _readAndProcessStory(String path) {
   final bytes = File(path).readAsBytesSync();
-  return _ProcessedStory(bytes, _processStoryImage(bytes));
+  return _ProcessedStory(bytes, processStoryImage(bytes));
 }
 
 /// Kompres foto story di isolate (pola post composer): resize sisi terpanjang
 /// 1080px, JPEG q82 — cukup tajam untuk fullscreen tanpa boros kuota.
-String _processStoryImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
+/// Publik + `@visibleForTesting` supaya kontrak resize/kualitas bisa dikunci
+/// lewat test (tanpa perlu membangun seluruh screen).
+@visibleForTesting
+String processStoryImage(Uint8List bytes) {
+  // image 4.x MELEMPAR untuk bytes korup/pendek (mis. PSD decoder membaca
+  // header melewati akhir buffer) — jangan biarkan crash; kembalikan ''.
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return '';
+  }
   if (decoded == null) return '';
   // 1080 (dulu 1440→1280) q82 (dulu 85) — layar HP tipikal ~1080px, jadi 1080
   // sudah pas satu layar saat ditampilkan fit di viewer. File ~40% lebih kecil
@@ -551,7 +561,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
               _imgOffset != Offset.zero
           ? await _renderTransformed(_bytes!)
           : _bytes!;
-      final b64 = await compute(_processStoryImage, transformed);
+      final b64 = await compute(processStoryImage, transformed);
       final path = await context.read<StorageProvider>()
           .uploadStoryImage(uid: uid, base64: b64);
       if (path == null || path.isEmpty) throw Exception('upload_failed');

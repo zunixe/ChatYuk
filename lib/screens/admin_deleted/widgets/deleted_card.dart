@@ -4,6 +4,7 @@ import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../utils.dart';
 import '../../../widgets/initial_avatar.dart';
+import '../../../widgets/app_gesture.dart';
 
 class DeletedCard extends StatelessWidget {
   final Map<String, dynamic> entry;
@@ -73,8 +74,8 @@ class DeletedCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         side: cardBorder,
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+      child: AppGestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
         onLongPress: onLongPress,
         child: Padding(

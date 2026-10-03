@@ -42,6 +42,20 @@ void main() {
     test('ukuran hasil kompres maks 8 MB', () {
       expect(StoragePhotoService.chatVideoMaxBytes, 8 * 1024 * 1024);
     });
+
+    // KONTRAK KOMPRES: `compressChatVideo` memakai 480p + `chatVideoFrameRate`.
+    // frameRate dikunci 24 (dulu 30) → ukuran file ~20% lebih kecil tanpa
+    // terlihat lebih patah di klip pendek. Kontrak ini dijaga di sini supaya
+    // perubahan tak sadar yang menaikkan bitrate/ukuran ketahuan lewat test.
+    test('frameRate kompres video chat = 24 (hemat ~20% vs 30)', () {
+      expect(StoragePhotoService.chatVideoFrameRate, 24);
+      expect(StoragePhotoService.chatVideoFrameRate, lessThan(30));
+    });
+
+    test('frameRate konsisten dengan video story (24)', () {
+      // Video story & chat sama-sama 24fps → perilaku hemat seragam.
+      expect(StoragePhotoService.chatVideoFrameRate, 24);
+    });
   });
 
   group('Pengenalan type video (dipakai dedupe pending ↔ server)', () {

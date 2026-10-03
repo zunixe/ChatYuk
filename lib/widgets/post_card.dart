@@ -22,6 +22,7 @@ import '../services/storage_photo_service.dart';
 import '../utils.dart';
 import 'post_photo_viewer.dart';
 import 'profile_avatar.dart';
+import 'gender_avatar.dart';
 import '../screens/user_info_screen.dart';
 
 /// Kartu postingan timeline: header + foto + caption + like/comment/share.
@@ -78,7 +79,16 @@ class _PostCardState extends State<PostCard> {
     final paths = _imagePaths();
     _imageThumbs.addAll(List.filled(paths.length, null));
     _initAspects(paths);
-    if (paths.isNotEmpty) _loadImages(paths);
+    // PERF: foto TIDAK dimuat di initState (frame pertama hanya layout).
+    // Dimuat post-frame — plus `cacheExtent` kecil di Timeline, kartu yang
+    // masih di luar viewport tidak lagi mengunduh+decode foto. Buka Timeline
+    // jadi tidak menembak puluhan foto sekaligus.
+    if (paths.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _loadImages(_imagePaths());
+      });
+    }
   }
 
   @override
@@ -191,11 +201,6 @@ class _PostCardState extends State<PostCard> {
     }
     final single = post['imagePath'] as String? ?? '';
     return single.isNotEmpty ? [single] : [];
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 
   List<String> _imagePaths() {
@@ -507,6 +512,7 @@ class _PostCardState extends State<PostCard> {
       'authorId': auth.uid ?? '',
       'authorName': auth.profile?.nickname ?? s.labelYou,
       'authorGender': auth.profile?.gender ?? '',
+      'authorAvatar': auth.profile?.avatar ?? '',
       'likeCount': 0,
       'shareCount': 0,
       'isLiked': false,
@@ -1523,13 +1529,15 @@ class _CommentsListState extends State<_CommentsList> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
-                child: Text(
-                  (name.isEmpty ? 'A' : name[0]).toUpperCase(),
-                  style: AppText.label.copyWith(color: AppTheme.primary),
-                ),
+              // Avatar penulis komentar — foto (lazy-load pola sama seperti
+              // avatar post) + ring warna gender untuk yang tanpa foto,
+              // seperti daftar "Pengguna Online" (male=biru/female=pink).
+              _CommentAvatar(
+                uid: authorId,
+                name: name,
+                gender: '${c['authorGender'] ?? ''}',
+                avatar: '${c['authorAvatar'] ?? ''}',
+                size: 38,
               ),
               SizedBox(width: 10),
               Expanded(
@@ -1861,6 +1869,130 @@ Uint8List? _decodeAvatarB64(String b64) {
     return base64Decode(b64);
   } catch (_) {
     return null;
+  }
+}
+
+/// Avatar penulis KOMENTAR — pola lazy-load SAMA dengan `_AuthorAvatar`
+/// (foto dari payload `authorAvatar` dulu: cache statis → disk → decode,
+/// baru async), dan fallback memakai `GenderAvatar` supaya yang tanpa foto
+/// tampil lingkar warna gender (male=biru/female=pink) seperti daftar
+/// "Pengguna Online".
+class _CommentAvatar extends StatefulWidget {
+  final String uid;
+  final String name;
+  final String gender;
+  final String avatar;
+  final double size;
+  const _CommentAvatar({
+    required this.uid,
+    required this.name,
+    required this.gender,
+    required this.avatar,
+    this.size = 28,
+  });
+
+  @override
+  State<_CommentAvatar> createState() => _CommentAvatarState();
+}
+
+class _CommentAvatarState extends State<_CommentAvatar> {
+  static final _bytesCache = <String, Uint8List>{};
+  Uint8List? _bytes;
+  String? _resolvedFor;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_resolveSync()) _resolveAsync();
+  }
+
+  @override
+  void didUpdateWidget(_CommentAvatar old) {
+    super.didUpdateWidget(old);
+    if (old.avatar != widget.avatar || old.uid != widget.uid) {
+      _bytes = null;
+      _resolvedFor = null;
+      if (!_resolveSync()) _resolveAsync();
+    }
+  }
+
+  bool _resolveSync() {
+    final avatar = widget.avatar;
+    if (avatar.isEmpty) return false;
+    _resolvedFor = avatar;
+    try {
+      final cached = _bytesCache[avatar];
+      if (cached != null) {
+        _bytes = cached;
+        return true;
+      }
+      if (StoragePhotoService.instance.isAvatarPath(avatar)) {
+        final disk = MediaDiskCache.instance.readSync(avatar);
+        if (disk != null && disk.isNotEmpty) {
+          if (_bytesCache.length < 60) _bytesCache[avatar] = disk;
+          _bytes = disk;
+          return true;
+        }
+        return false;
+      }
+      if (avatar.length < 200000) {
+        final b = base64Decode(avatar);
+        if (b.isNotEmpty) {
+          if (_bytesCache.length < 60) _bytesCache[avatar] = b;
+          _bytes = b;
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<void> _resolveAsync() async {
+    final avatar = widget.avatar;
+    if (avatar.isEmpty) return;
+    if (_resolvedFor == avatar && _bytes != null) return;
+    _resolvedFor = avatar;
+    final cached = _bytesCache[avatar];
+    if (cached != null) {
+      if (mounted) setState(() => _bytes = cached);
+      return;
+    }
+    final isPath = StoragePhotoService.instance.isAvatarPath(avatar);
+    final b64 =
+        isPath ? await AvatarB64Service.instance.getByPath(avatar) : avatar;
+    if (b64.isEmpty || !mounted || _resolvedFor != avatar) return;
+    final bytes = await compute(_decodeAvatarB64, b64);
+    if (bytes == null || !mounted || _resolvedFor != avatar) return;
+    if (_bytesCache.length < 60) _bytesCache[avatar] = bytes;
+    setState(() => _bytes = bytes);
+  }
+
+  /// Fallback: ring warna gender + foto lazy-load by uid (GenderAvatar →
+  /// ProfileAvatar ambil dari AvatarB64Service).
+  Widget _fallback() => GenderAvatar(
+        uid: widget.uid,
+        name: widget.name,
+        gender: widget.gender,
+        size: widget.size,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = widget.avatar;
+    final bytes = _bytes;
+    if (avatar.isEmpty || bytes == null || _resolvedFor != avatar) {
+      return _fallback();
+    }
+    return ClipOval(
+      child: Image.memory(
+        bytes,
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.cover,
+        cacheWidth: (widget.size * 2).round(),
+        gaplessPlayback: true,
+      ),
+    );
   }
 }
 

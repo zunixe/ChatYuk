@@ -179,4 +179,63 @@ void main() {
           isTrue);
     });
   });
+
+  group('Full mesh 3-6 orang (keputusan offer uplink per-peer)', () {
+    test('aku di stage & belum ada pc → offer ke speaker lain', () {
+      expect(
+        RoomVoiceSession.meshNeedsOfferTo(
+          myUid: 'me',
+          peerUid: 'A',
+          onStage: true,
+          hasUplinkPc: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('pc uplink sudah ada → TIDAK offer lagi (idempoten)', () {
+      expect(
+        RoomVoiceSession.meshNeedsOfferTo(
+          myUid: 'me',
+          peerUid: 'A',
+          onStage: true,
+          hasUplinkPc: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('tidak di stage (pendengar) → tidak offer', () {
+      expect(
+        RoomVoiceSession.meshNeedsOfferTo(
+          myUid: 'me',
+          peerUid: 'A',
+          onStage: false,
+          hasUplinkPc: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('self & uid kosong → tidak offer', () {
+      expect(
+        RoomVoiceSession.meshNeedsOfferTo(
+          myUid: 'me',
+          peerUid: 'me',
+          onStage: true,
+          hasUplinkPc: false,
+        ),
+        isFalse,
+      );
+      expect(
+        RoomVoiceSession.meshNeedsOfferTo(
+          myUid: 'me',
+          peerUid: '',
+          onStage: true,
+          hasUplinkPc: false,
+        ),
+        isFalse,
+      );
+    });
+  });
 }

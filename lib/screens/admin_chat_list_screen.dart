@@ -16,6 +16,7 @@ import '../providers/theme_provider.dart';
 import '../core/ui/scroll_pagination.dart';
 import '../core/nav_guard.dart';
 import '../widgets/gender_avatar.dart';
+import '../widgets/app_gesture.dart';
 import 'user_info_screen.dart';
 
 /// Admin: daftar semua percakapan user (monitoring).
@@ -1076,41 +1077,44 @@ class _AdminChatCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onLongPress: onLongPressMenu,
-          onTap: () {
-            final id = chat['chat_id'] as String? ?? '';
-            // Tap 2× cepat menumpuk 2 route identik → 1× back terlihat mati.
-            if (!tryClaimChatPush(id)) return;
-            // Panaskan cache pesan MONITOR (provider `_chatMsgMem` + disk
-            // `admin_chatmsg_<id>`) selagi animasi transisi jalan — layar
-            // membaca ini lebih dulu → frame pertama langsung terisi.
-            // (Dulu `preloadMessages` = cache stream user, bukan yang dipakai
-            // monitor → tetap RPC server saat buka.)
-            context.read<AdminProvider>().prefetchChatMessages(id);
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => AdminChatViewScreen(
-                  chatId: id,
-                  chatLabel: label,
-                  participantOrder: orderUids,
-                  participantNames: {
-                    for (final e in names.entries)
-                      '${e.key}': '${e.value ?? ''}',
-                  },
-                  participantGenders: {
-                    for (final e in genders.entries)
-                      '${e.key}': '${e.value ?? ''}',
-                  },
-                ),
+      child: AppGestureDetector(
+        // Tap & long-press via AppGestureDetector (RawGesture, long-press
+        // 320ms, tanpa double-tap) — pola sama dgn list chat user & menu
+        // Online yang responsif. Dulu `InkWell` di dalam Material: tap
+        // menunggu gesture arena Material/ink → terasa lambat saat
+        // bulak-balik buka chat monitor.
+        behavior: HitTestBehavior.opaque,
+        onLongPress: onLongPressMenu,
+        onTap: () {
+          final id = chat['chat_id'] as String? ?? '';
+          // Tap 2× cepat menumpuk 2 route identik → 1× back terlihat mati.
+          if (!tryClaimChatPush(id)) return;
+          // Panaskan cache pesan MONITOR (provider `_chatMsgMem` + disk
+          // `admin_chatmsg_<id>`) selagi animasi transisi jalan — layar
+          // membaca ini lebih dulu → frame pertama langsung terisi.
+          // (Dulu `preloadMessages` = cache stream user, bukan yang dipakai
+          // monitor → tetap RPC server saat buka.)
+          context.read<AdminProvider>().prefetchChatMessages(id);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminChatViewScreen(
+                chatId: id,
+                chatLabel: label,
+                participantOrder: orderUids,
+                participantNames: {
+                  for (final e in names.entries)
+                    '${e.key}': '${e.value ?? ''}',
+                },
+                participantGenders: {
+                  for (final e in genders.entries)
+                    '${e.key}': '${e.value ?? ''}',
+                },
               ),
-            ).then((_) => releaseChatPush(id));
-          },
-          child: Padding(
+            ),
+          ).then((_) => releaseChatPush(id));
+        },
+        child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
@@ -1264,7 +1268,6 @@ class _AdminChatCard extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
   }
 

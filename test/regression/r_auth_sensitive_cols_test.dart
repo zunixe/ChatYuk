@@ -121,8 +121,9 @@ void main() {
         reason: 'fcm_token harus via PATCH, bukan upsert');
   });
 
-  test('registerProfile: upsert pakai ignore-duplicates (anti 42501 status/avatar/last_seen)',
-      () async {
+  test(
+      'registerProfile: INSERT polos (bukan merge-duplicates) + PATCH terpisah '
+      '(anti 42501 status/avatar/last_seen)', () async {
     final handler = buildHandler();
     handler.on('/rest/v1/profiles', (_) => <dynamic>[]);
 
@@ -135,14 +136,39 @@ void main() {
       city: 'Jakarta',
     );
 
+    // Kontrak BARU (2026-10-04): registrasi pakai INSERT polos TANPA
+    // `on_conflict` — PostgREST upsert (merge-duplicates) MEWAJIBKAN SELECT
+    // pada tabel yang di-revoke → selalu 42501. INSERT polos (201) tidak
+    // butuh SELECT; baris duplikat (23505) ditangani klien lalu lanjut PATCH.
     final upsert = handler.captured.firstWhere(
       (r) => r.method == 'POST' && r.url.path.endsWith('/rest/v1/profiles'),
-      orElse: () => throw StateError('upsert profiles tidak terkirim'),
+      orElse: () => throw StateError('INSERT profiles tidak terkirim'),
     );
-    final prefer = upsert.headers['Prefer'] ?? '';
-    expect(prefer.contains('ignore-duplicates'), isTrue,
+    final prefer = (upsert.headers['Prefer'] ?? '').toLowerCase();
+    expect(prefer.contains('merge-duplicates'), isFalse,
         reason:
-            'upsert harus ON CONFLICT DO NOTHING (tanpa butuh SELECT); merge-duplicates → 42501. Prefer: $prefer');
+            'merge-duplicates → butuh SELECT → 42501. Prefer: $prefer');
+    expect(prefer.contains('resolution=merge-duplicates'), isFalse,
+        reason: 'upsert merge-duplicates dilarang (42501). Prefer: $prefer');
+
+    // Split-write: kolom pasca-INSERT (status/avatar/last_seen/nickname)
+    // dikirim lewat PATCH terpisah (tidak butuh SELECT kolom tsb).
+    final patches = handler.captured
+        .where((r) =>
+            r.method == 'PATCH' && r.url.path.endsWith('/rest/v1/profiles'))
+        .toList();
+    expect(patches, isNotEmpty,
+        reason: 'split-write PATCH wajib ada setelah INSERT polos');
+    final rowPatch = patches.firstWhere(
+      (r) {
+        final b = jsonDecode(r.body) as Map<String, dynamic>;
+        return b.containsKey('status');
+      },
+      orElse: () => throw StateError('PATCH status tidak terkirim'),
+    );
+    final body = jsonDecode(rowPatch.body) as Map<String, dynamic>;
+    expect(body['status'], 'online');
+    expect(body.containsKey('last_seen'), isTrue);
   });
 
   test('registerProfile: UPDATE terpisah dikirim untuk baris yang sudah ada',

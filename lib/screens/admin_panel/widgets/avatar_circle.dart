@@ -1,18 +1,24 @@
-import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../config/theme.dart';
 import '../../../providers/avatar_provider.dart';
+import '../../../widgets/user_avatar.dart';
 
+/// Avatar kotak (radius 8) untuk panel admin — memakai widget avatar
+/// MODULAR [UserAvatar] untuk render foto (decode isolate + cap + anti-kedip),
+/// sehingga tidak lagi menyalin logika decode/cache sendiri.
+///
+/// Bytes di-resolve lewat [AvatarProvider] (RAM→disk→network, RPC ber-privacy)
+/// lalu dioper apa adanya ke [UserAvatar]. Tap → dialog zoom.
 class AdminAvatarCircle extends StatefulWidget {
   final String uid;
   final String name;
   final Color color;
   const AdminAvatarCircle({
+    super.key,
     required this.uid,
     required this.name,
     required this.color,
@@ -23,7 +29,9 @@ class AdminAvatarCircle extends StatefulWidget {
 }
 
 class AdminAvatarCircleState extends State<AdminAvatarCircle> {
-  Uint8List? _bytes;
+  /// Sumber avatar (base64) untuk diteruskan ke [UserAvatar]. '' = inisial.
+  String _src = '';
+  bool _loaded = false;
 
   @override
   void initState() {
@@ -35,14 +43,30 @@ class AdminAvatarCircleState extends State<AdminAvatarCircle> {
     if (widget.uid.isEmpty) return;
     try {
       final b64 = await context.read<AvatarProvider>().get(widget.uid);
-      if (!mounted || b64.isEmpty) return;
-      setState(() => _bytes = base64Decode(b64));
-    } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _src = b64;
+        _loaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
   }
 
-  void _zoom() {
-    final bytes = _bytes;
-    showDialog(
+  Future<void> _zoom() async {
+    // Ambil bytes dari cache render modular kalau sudah ada (dipakai kartu),
+    // else resolve ulang dari provider.
+    var bytes = cachedUserAvatarBytes(widget.uid);
+    if (bytes == null) {
+      try {
+        final b64 = _src.isNotEmpty
+            ? _src
+            : await context.read<AvatarProvider>().get(widget.uid);
+        if (b64.isNotEmpty) bytes = base64Decode(b64);
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    showDialog<void>(
       context: context,
       barrierColor: Colors.black87,
       builder: (_) => Dialog(
@@ -103,34 +127,31 @@ class AdminAvatarCircleState extends State<AdminAvatarCircle> {
 
   @override
   Widget build(BuildContext context) {
+    final hasPhoto = _src.isNotEmpty;
     return GestureDetector(
       onTap: _zoom,
       child: Container(
         width: 34,
         height: 34,
         decoration: BoxDecoration(
-          color: _bytes != null
+          color: hasPhoto
               ? Colors.transparent
               : widget.color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: _bytes != null
-              ? Image.memory(_bytes!, fit: BoxFit.cover, cacheWidth: 96)
-              : Center(
-                  child: Text(
-                    widget.name.isNotEmpty
-                        ? widget.name[0].toUpperCase()
-                        : '?',
-                    style: TextStyle(
-                      fontSize: AppGlyph.avatarInitial(34),
-                      color: widget.color,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-        ),
+        clipBehavior: Clip.antiAlias,
+        child: _loaded
+            ? UserAvatar(
+                key: ValueKey(widget.uid),
+                uid: widget.uid,
+                avatarB64: _src,
+                initial: widget.name.isNotEmpty
+                    ? widget.name[0].toUpperCase()
+                    : '?',
+                color: widget.color,
+                borderRadius: 8,
+              )
+            : const SizedBox.shrink(),
       ),
     );
   }

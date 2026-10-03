@@ -17,6 +17,7 @@ import '../admin/admin_grouping.dart';
 import '../utils.dart';
 import '../core/ui/scroll_pagination.dart';
 import '../widgets/search_field.dart';
+import '../widgets/app_gesture.dart';
 
 /// Admin: pelacakan device & user (tab Perangkat).
 /// List semua device semua user; klik → detail user (profil + semua device
@@ -430,8 +431,8 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: AppTheme.divider),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+      child: AppGestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

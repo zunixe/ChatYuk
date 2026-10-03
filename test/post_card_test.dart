@@ -80,6 +80,10 @@ void main() {
 
   setUpAll(() async {
     await initSupabaseForTest();
+    // Prewarm cache media — avatar komentar (ProfileAvatar → AvatarB64Service
+    // → MediaDiskCache.waitReady) tidak boleh menjadwalkan timer pending yang
+    // menggagalkan test ("Pending timers" saat teardown).
+    await prewarmMediaForTest();
     // Sheet komentar memakai AppText (Poppins via google_fonts) — pakai font
     // sistem di test supaya tidak unduh/bundel font (tanpa jaringan).
     GoogleFonts.config.allowRuntimeFetching = false;

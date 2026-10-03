@@ -26,6 +26,7 @@ import 'admin_panel/widgets/point_tab_cards.dart';
 import 'admin_panel/widgets/overview_cards.dart';
 import 'admin_panel/widgets/app_stats_card.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/app_gesture.dart';
 import '../main.dart' show localNotifications, resumeWarmup;
 
 class AdminPanelScreen extends StatefulWidget {
@@ -606,8 +607,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         child: Material(
           color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(10),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(10),
+          child: AppGestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: items[i].$5.isEmpty
                 ? null
                 : () => showStatDetailSheet(context, items[i]),

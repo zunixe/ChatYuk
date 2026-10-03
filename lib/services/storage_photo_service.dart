@@ -245,6 +245,13 @@ class StoragePhotoService {
   /// Batas durasi video chat (60 detik).
   static const int chatVideoMaxMs = 60 * 1000;
 
+  /// Frame rate kompres video chat (24fps — dulu 30). Dikunci sebagai
+  /// konstanta supaya kontrak "video chat ≤24fps" bisa di-unit-test tanpa
+  /// plugin native. 24 tetap mulus di klip pendek, ukuran file ~20% lebih
+  /// kecil dari 30fps.
+  @visibleForTesting
+  static const int chatVideoFrameRate = 24;
+
   /// Path video chat. Pola sama [newPath] (chatId + timestamp, tanpa
   /// messageId yang baru diketahui setelah insert).
   String chatVideoPath(String chatId) =>
@@ -293,7 +300,9 @@ class StoragePhotoService {
         quality: VideoQuality.Res640x480Quality,
         deleteOrigin: false,
         includeAudio: true,
-        frameRate: 30,
+        // 24fps (dulu 30): video chat pendek (≤60 dtk) — 24 tetap mulus di
+        // mata, bitrate & ukuran file turun ~20% (hemat kuota & storage).
+        frameRate: chatVideoFrameRate,
       ).timeout(const Duration(seconds: 240));
       sub?.unsubscribe();
       final f = info?.file;
