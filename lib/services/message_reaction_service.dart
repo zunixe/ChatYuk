@@ -278,4 +278,47 @@ class MessageReactionService {
       return Stream.value({});
     }
   }
+
+  static String starredCacheKey(String chatId) => 'starred:$chatId';
+
+  /// Parse cache disk ke set id pesan berbintang — defensif terhadap format
+  /// lama/rusak. Menerima bentuk `{'ids': [...]}` (wrapper) agar beda dgn
+  /// map kosong; juga toleran terhadap list langsung.
+  static Set<String> parseCachedStarred(Map<String, dynamic> raw) {
+    final rawIds = raw['ids'];
+    if (rawIds is! List) return {};
+    final out = <String>{};
+    for (final v in rawIds) {
+      final id = '$v';
+      if (id.isNotEmpty) out.add(id);
+    }
+    return out;
+  }
+
+  /// Muat id pesan berbintang tersimpan untuk tampil INSTAN saat buka chat —
+  /// stream realtime menimpa sesudahnya (pola sama seperti reaksi & pesan).
+  /// Dulu starred TIDAK punya cache → tiap buka chat bintang "di-load dulu"
+  /// menunggu round-trip Supabase.
+  Future<Set<String>> loadCachedStarred(String chatId) async {
+    try {
+      final raw = await MessageCache.instance.loadRawObj(
+        starredCacheKey(chatId),
+      );
+      return parseCachedStarred(raw);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Simpan tiap emission stream. Dibungkus `{'ids': [...]}` supaya kondisi
+  /// "tak ada starred" tetap tersimpan (menimpa cache lama) — `saveRawObj`
+  /// meng-skip map kosong, sehingga tanpa wrapper bintang yang di-unstar akan
+  /// nyangkut di cache.
+  Future<void> saveCachedStarred(String chatId, Set<String> ids) async {
+    try {
+      await MessageCache.instance.saveRawObj(starredCacheKey(chatId), {
+        'ids': ids.where((e) => e.isNotEmpty).toList(),
+      });
+    } catch (_) {}
+  }
 }

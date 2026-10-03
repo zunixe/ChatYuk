@@ -54,4 +54,8 @@ class MessageReactionProvider extends ChangeNotifier {
       service.watchReactions(chatId);
   Stream<Set<String>> watchStarred(String chatId) =>
       service.watchStarred(chatId);
+  Future<Set<String>> loadCachedStarred(String chatId) =>
+      service.loadCachedStarred(chatId);
+  Future<void> saveCachedStarred(String chatId, Set<String> ids) =>
+      service.saveCachedStarred(chatId, ids);
 }
