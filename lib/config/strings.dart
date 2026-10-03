@@ -1816,6 +1816,10 @@ class S {
       isId ? 'Permintaan teman diterima' : 'Friend request accepted';
   String get friendRequestCancelled =>
       isId ? 'Permintaan teman dibatalkan' : 'Friend request cancelled';
+  String get friendRequestStatusAccepted =>
+      isId ? 'Diterima' : 'Accepted';
+  String get friendRequestStatusRejected =>
+      isId ? 'Ditolak' : 'Rejected';
   String get subscriptionsTitle => isId ? 'Langganan' : 'Subscriptions';
   String get subscriptionsEmpty =>
       isId ? 'Belum ada langganan' : 'No subscriptions yet';

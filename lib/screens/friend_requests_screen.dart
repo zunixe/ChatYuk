@@ -233,17 +233,44 @@ class _RequestTile extends StatelessWidget {
               child: Text(s.btnConfirm, style: TextStyle(color: Colors.white)),
             ),
           ] else ...[
-            Text(
-              s.btnFriendRequested,
-              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(width: 4),
-            TextButton(
-              onPressed: onCancel,
-              child: Text(
-                s.btnCancel,
-                style: TextStyle(color: AppTheme.danger),
-              ),
+            // Outbox memuat SEMUA riwayat (pending/accepted/rejected) —
+            // tombol Batal HANYA untuk yang masih pending. Backend
+            // `cancel_friend_request` menolak non-pending (not_pending),
+            // jadi menampilkannya = tombol yang pasti gagal.
+            Builder(
+              builder: (_) {
+                final st = '${entry['status'] ?? 'pending'}';
+                if (st == 'pending') {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        s.btnFriendRequested,
+                        style: AppText.caption
+                            .copyWith(color: AppTheme.textSecondary),
+                      ),
+                      const SizedBox(width: 4),
+                      TextButton(
+                        onPressed: onCancel,
+                        child: Text(
+                          s.btnCancel,
+                          style: TextStyle(color: AppTheme.danger),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Text(
+                  st == 'accepted'
+                      ? s.friendRequestStatusAccepted
+                      : s.friendRequestStatusRejected,
+                  style: AppText.caption.copyWith(
+                    color: st == 'accepted'
+                        ? AppTheme.online
+                        : AppTheme.textSecondary,
+                  ),
+                );
+              },
             ),
           ],
         ],
