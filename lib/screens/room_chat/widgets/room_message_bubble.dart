@@ -12,6 +12,8 @@ import '../../../widgets/location_bubble.dart';
 import '../../../widgets/link_preview.dart';
 import '../../../widgets/mention_spans.dart';
 import '../../../widgets/private_chat_message.dart';
+import '../../../widgets/profile_avatar.dart';
+import '../../../widgets/gender_avatar.dart';
 import '../../../widgets/reply_quote.dart';
 import '../../../widgets/voice_bubble.dart';
 
@@ -49,13 +51,6 @@ class RoomMessageBubble extends StatelessWidget {
   // Warna teks bubble mengikuti tema (gelap di light mode, terang di dark mode)
   // supaya sinkron dengan warna bubble (bgInput / primary alpha).
   static Color get _textColor => AppTheme.textPrimary;
-
-  /// Warna ring gender avatar inisial — pemetaan SAMA dengan daftar Online.
-  static Color _genderColor(String gender) => gender == 'male'
-      ? AppTheme.male
-      : gender == 'female'
-      ? AppTheme.female
-      : AppTheme.accent;
 
   bool get _isMedia =>
       msg.type == 'image' ||
@@ -368,31 +363,15 @@ class RoomMessageBubble extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onTapUser,
-            // Ring gender di sekeliling inisial (room tidak membawa foto):
-            // merah muda = perempuan, biru = laki-laki — sama seperti
-            // daftar Online (`AppTheme.female/male`).
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: _genderColor(msg.senderGender),
-                  width: 1.5,
-                ),
-              ),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: color,
-                child: Text(
-                  msg.senderName.isNotEmpty
-                      ? msg.senderName[0].toUpperCase()
-                      : '?',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: AppGlyph.avatarInitial(32),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+            // Avatar: FOTO asli bila ada (lazy via ProfileAvatar) + border
+            // WARNA GENDER (male=biru/female=pink); fallback inisial bila
+            // tanpa foto — sama seperti list Pengguna Online & chat private.
+            child: ProfileAvatar(
+              uid: msg.senderId,
+              name: msg.senderName,
+              size: 32,
+              borderColor: GenderAvatar.colorFor(msg.senderGender),
+              borderWidth: 1.5,
             ),
           ),
           SizedBox(width: 8),
