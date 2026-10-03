@@ -55,6 +55,7 @@ class PrivacyProvider extends ChangeNotifier {
     PrivacyVisibility? profilePhoto,
     PrivacyVisibility? about,
     PrivacyVisibility? story,
+    PrivacyVisibility? leaderboard,
     bool? readReceipts,
   }) async {
     _settings = _settings.copyWith(
@@ -63,6 +64,7 @@ class PrivacyProvider extends ChangeNotifier {
       profilePhoto: profilePhoto,
       about: about,
       story: story,
+      leaderboard: leaderboard,
       readReceipts: readReceipts,
     );
     notifyListeners();
@@ -73,6 +75,7 @@ class PrivacyProvider extends ChangeNotifier {
         profilePhoto: profilePhoto,
         about: about,
         story: story,
+        leaderboard: leaderboard,
         readReceipts: readReceipts,
       );
       notifyListeners();

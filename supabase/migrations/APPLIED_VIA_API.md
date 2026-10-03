@@ -1481,3 +1481,24 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   saat tak ada sesi → user TIDAK dibuat otomatis; gate tampilkan EntryScreen,
   sesi anon + profil dibuat saat user menekan "Mulai" (nickname PILIHAN user).
 - Verifikasi: schema_sync 62/62; auth_gate 15/15; auth_login_flow 41/41.
+
+## 2026-10-06 — 20261006030000 + 20261006040000 (APPLY)
+
+Privasi "Top Aktif" (leaderboard) — setara field privasi lain (everyone/
+everyone_except/friends/friends_except/only/nobody).
+
+- **20261006030000_privacy_leaderboard:**
+  - kolom `profiles.leaderboard_visibility` (default 'everyone').
+  - CHECK `profile_privacy_exclusions_field_check` +'leaderboard'.
+  - `update_privacy_settings` +param `p_leaderboard` (DROP overload 6-arg
+    lama → cegah "function not unique").
+  - `my_privacy_settings` +'leaderboard'.
+  - `privacy_can_view` +mapping field 'leaderboard' (TANPA aturan mitra
+    chat/anggota room — Top Aktif patuh penuh).
+  - `replace_privacy_exclusions` +'leaderboard' whitelist.
+  - `activity_leaderboard` filter `privacy_can_view(id,'leaderboard',viewer)`
+    di entries & me.
+- **20261006040000_admin_privacy_leaderboard_field:** `admin_stats_compute`
+  .privacy_users +field 'leaderboard' (kartu Privasi admin).
+- **Verifikasi live:** set novikoh leaderboard=nobody → hilang dari Top Aktif
+  (top jadi anggi); privacy_can_view friends → teman true, non-teman false.

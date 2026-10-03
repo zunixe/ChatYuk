@@ -39,6 +39,19 @@
 - **Verifikasi:** `check_migrations` OK; pgTAP schema_sync 58/58 (+3);
   `flutter analyze` 0/0 (kecuali 1 warning TikTok paralel).
 
+## 2026-10-06 — Privasi "Top Aktif" (leaderboard visibility)
+
+- **Kolom** `profiles.leaderboard_visibility` (default everyone) + CHECK
+  `profile_privacy_exclusions.field` +'leaderboard'.
+- **RPC** `update_privacy_settings`(+p_leaderboard, drop overload 6-arg),
+  `my_privacy_settings`, `privacy_can_view` (+mapping leaderboard),
+  `replace_privacy_exclusions` (+leaderboard), `activity_leaderboard`
+  (filter privacy_can_view(id,'leaderboard',viewer) di entries & me).
+- **Admin:** `admin_stats_compute.privacy_users` +field leaderboard.
+- **App:** PrivacySettings.leaderboard + service/provider + tile "Top Aktif"
+  di layar Privasi (6 opsi sama) + strings bilingual.
+- Verifikasi: privacy_only 22/22; semua SQL test lolos; analyze 0/0.
+
 ## 2026-10-05 — Tanggal register di list Perangkat + fix gate onboarding
 
 - **Temuan (user Anon6A/Anon0DB):** trigger `handle_new_user_profile` membuat

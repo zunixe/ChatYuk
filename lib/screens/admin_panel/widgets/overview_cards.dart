@@ -319,6 +319,7 @@ class PrivacyUsersCard extends StatelessWidget {
     add('profile_photo', s.privPhoto);
     add('about', s.privAbout);
     add('story', s.privStory);
+    add('leaderboard', s.privLeaderboard);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),

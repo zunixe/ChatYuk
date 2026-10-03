@@ -679,6 +679,10 @@ class S {
   String get privacyProfilePhoto => isId ? 'Foto profil' : 'Profile photo';
   String get privacyAbout => isId ? 'About' : 'About';
   String get privacyStory => isId ? 'Story' : 'Story';
+  String get privacyLeaderboard => isId ? 'Top Aktif' : 'Top Active';
+  String get privacyLeaderboardDesc => isId
+      ? 'Apakah kamu muncul di peringkat Top Aktif.'
+      : 'Whether you appear in the Top Active ranking.';
   String get privacyReadReceipts => isId ? 'Laporan dibaca' : 'Read receipts';
   String get privacyReadReceiptsDesc => isId
       ? 'Pesan tetap terkirim, tetapi pengirim tidak melihat centang biru.'

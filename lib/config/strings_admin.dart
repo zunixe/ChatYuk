@@ -438,6 +438,7 @@ extension SAdminX on S {
   String get privPhoto => isId ? 'Foto profil' : 'Profile photo';
   String get privAbout => isId ? 'Tentang' : 'About';
   String get privStory => isId ? 'Story' : 'Story';
+  String get privLeaderboard => isId ? 'Top Aktif' : 'Top Active';
   // Nilai privasi.
   String get privEveryone => isId ? 'Semua' : 'Everyone';
   String get privFriends => isId ? 'Teman' : 'Friends';
