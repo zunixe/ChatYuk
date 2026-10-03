@@ -200,7 +200,7 @@ mixin ChatServicePresenceMx on ChatBase {
                     _onlinePathByUid[u.uid] = u.avatar;
                   }
                   if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
-                    final cachedB64 = ChatService._avatarCache[u.avatar];
+                    final cachedB64 = ChatService.avatarB64Peek(u.avatar);
                     if (cachedB64 != null && cachedB64.isNotEmpty) {
                       u = u.copyWith(avatar: cachedB64);
                     } else {
@@ -230,7 +230,7 @@ mixin ChatServicePresenceMx on ChatBase {
                 cached = List.of(pendingFast);
                 if (!controller.isClosed) controller.add(List.unmodifiable(cached));
                 // Background download avatar batch (sama seperti slow path).
-                // Lewati path yang sudah ada di ChatService._avatarCache (tidak download
+                // Lewati path yang sudah ada di cache avatar (tidak download
                 // ulang tiap tick); index via Map biar O(1), bukan indexWhere.
                 const avatarBatch = 20;
                 bool avatarUpdated = false;
@@ -241,7 +241,7 @@ mixin ChatServicePresenceMx on ChatBase {
                   final chunk = pendingFast.skip(i).take(avatarBatch).toList();
                   final results = await Future.wait(chunk.map((u) async {
                     if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
-                      final hit = ChatService._avatarCache[u.avatar];
+                      final hit = ChatService.avatarB64Peek(u.avatar);
                       if (hit != null && hit.isNotEmpty) {
                         return u.copyWith(avatar: hit);
                       }
@@ -387,7 +387,7 @@ mixin ChatServicePresenceMx on ChatBase {
               _onlinePathByUid[u.uid] = u.avatar;
             }
             if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
-              final cachedB64 = ChatService._avatarCache[u.avatar];
+              final cachedB64 = ChatService.avatarB64Peek(u.avatar);
               if (cachedB64 != null && cachedB64.isNotEmpty) {
                 u = u.copyWith(avatar: cachedB64);
               } else {

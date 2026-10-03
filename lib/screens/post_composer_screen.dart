@@ -18,11 +18,14 @@ import '../providers/theme_provider.dart';
 import '../core/perf/perf_probe.dart';
 
 /// Hasil proses satu foto: bytes JPEG + lebar/tinggi (rasio asli).
-class _ProcessedPhoto {
+/// Publik + `@visibleForTesting` supaya kontrak resize/kualitas bisa dikunci
+/// lewat unit test tanpa membangun seluruh composer.
+@visibleForTesting
+class ProcessedPhoto {
   final Uint8List bytes;
   final int width;
   final int height;
-  const _ProcessedPhoto(this.bytes, this.width, this.height);
+  const ProcessedPhoto(this.bytes, this.width, this.height);
 }
 
 /// Proses foto (resize + JPEG) di isolate sebelum upload — sekaligus
@@ -33,12 +36,13 @@ class _ProcessedPhoto {
 /// detail yang hilang di feed, tapi file ~30% lebih kecil. q78 (dulu 82)
 /// juga sedikit lebih ringan tanpa beda terlihat. Hemat storage, bandwidth
 /// upload/download, dan disk cache di HP penerima.
-_ProcessedPhoto? _processPostImageDim(List<int> bytes) {
+@visibleForTesting
+ProcessedPhoto? processPostImageDim(List<int> bytes) {
   try {
     final decoded = img.decodeImage(Uint8List.fromList(bytes));
     if (decoded == null) return null;
     final resized = img.copyResize(decoded, width: 1080);
-    return _ProcessedPhoto(
+    return ProcessedPhoto(
       Uint8List.fromList(img.encodeJpg(resized, quality: 78)),
       resized.width,
       resized.height,
@@ -96,7 +100,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       final results = await Future.wait(
         picked.map((p) async {
           final bytes = await p.readAsBytes();
-          return compute(_processPostImageDim, bytes);
+          return compute(processPostImageDim, bytes);
         }),
       );
       if (!mounted) return;
@@ -125,7 +129,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       );
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
-      final processed = await compute(_processPostImageDim, bytes);
+      final processed = await compute(processPostImageDim, bytes);
       if (!mounted) return;
       setState(() {
         if (processed != null && _images.length < _maxImages) {

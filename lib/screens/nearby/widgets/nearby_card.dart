@@ -1,20 +1,14 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../utils/bounded_cache.dart';
 import '../../../config/theme.dart';
 import '../../../providers/locale_provider.dart';
+import '../../../widgets/user_avatar.dart';
 
 class NearbyCard extends StatelessWidget {
-  /// Cache bytes avatar (bounded) — dipindah dari nearby_screen.
-  static final avatarBytesCache = BoundedCache<String, Uint8List>(80);
-
   final Map<String, dynamic> data;
   final VoidCallback onTap;
-  const NearbyCard({required this.data, required this.onTap});
+  const NearbyCard({super.key, required this.data, required this.onTap});
 
   Color _statusColor(String status) => AppTheme.statusColor(status);
 
@@ -46,17 +40,6 @@ class NearbyCard extends StatelessWidget {
         ? s.genderFemale
         : s.genderOther;
 
-    final avatarBytes = avatar.isNotEmpty
-        ? avatarBytesCache.putIfAbsent(avatar, () {
-            try {
-              return base64Decode(avatar);
-            } catch (_) {
-              return Uint8List(0);
-            }
-          })
-        : null;
-    final hasAvatar = avatarBytes?.isNotEmpty == true;
-
     return Container(
       margin: EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -81,42 +64,33 @@ class NearbyCard extends StatelessWidget {
               children: [
                 Stack(
                   children: [
-                    Container(
+                    SizedBox(
                       width: 44,
                       height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color.withValues(alpha: 0.15),
-                        // Ring warna hanya untuk inisial — foto tampil
-                        // bersih tanpa ring (lihat ProfileAvatar).
-                        border: Border.all(
-                          color: hasAvatar ? Colors.transparent : color,
-                          width: 1.5,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: color.withValues(alpha: 0.15),
                         ),
-                        image: hasAvatar
-                            ? DecorationImage(
-                                // Kartu 44px — cap decode biar tidak
-                                // raster avatar penuh.
-                                image: ResizeImage(MemoryImage(avatarBytes!),
-                                    width: 96),
-                                fit: BoxFit.cover,
-                              )
-                            : null,
+                        clipBehavior: Clip.antiAlias,
+                        // Avatar modular (user_avatar): sumber bisa base64
+                        // ATAU path storage, decode di isolate + cap 96px,
+                        // anti-kedip — sama seperti daftar Pengguna Online.
+                        child: UserAvatar(
+                          key: ValueKey('${data['id'] ?? nickname}'),
+                          uid: '${data['id'] ?? ''}',
+                          avatarB64: avatar,
+                          initial: nickname.isNotEmpty
+                              ? nickname[0].toUpperCase()
+                              : '?',
+                          color: color,
+                          borderColor: color,
+                          borderWidth: 1.5,
+                          // Ring "disamarkan" (transparan) saat foto tampil —
+                          // kontrak kartu Nearby (lihat widgets_nearby_ring_test).
+                          keepRingForPhoto: true,
+                        ),
                       ),
-                      child: hasAvatar
-                          ? null
-                          : Center(
-                              child: Text(
-                                nickname.isNotEmpty
-                                    ? nickname[0].toUpperCase()
-                                    : '?',
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: AppGlyph.avatarInitial(44),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
                     ),
                     Positioned(
                       right: 0,

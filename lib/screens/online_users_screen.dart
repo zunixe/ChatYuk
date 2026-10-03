@@ -30,11 +30,11 @@ import '../core/ui/online_pill_mode.dart';
 import '../models/story_model.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
-import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
 import '../widgets/leaderboard_sheet.dart';
+import '../widgets/user_avatar.dart' as ua;
 import 'room_chat_screen.dart';
 import 'lobby_screen.dart';
 import 'story_composer_screen.dart';
@@ -50,56 +50,37 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 
-final _avatarCache = BoundedCache<String, Uint8List>(80);
-
-// Cache byte avatar per-UID GLOBAL — bertahan antar state/widget rebuild.
-// Urutan list bisa berubah tiap event presence; tanpa cache global, state
-// widget ter-recycle → decode ulang → inisial sebentar = kedip.
-final Map<String, Uint8List> _avatarBytesByUid = {};
-final Map<String, String> _avatarLastSrcByUid = {};
-
-// ImageProvider instance STABIL per-UID — dipisahkan total dari data
-// pengguna online yang berganti-ganti tiap event presence. Bitmap di-decode
-// SEKALI per foto; rebuild list berapapun tidak menyentuh bitmap.
+// Cache render avatar (bytes + ImageProvider stabil per-uid) kini MODULAR di
+// `widgets/user_avatar.dart` (dipakai lintas halaman user-facing). Layar ini
+// hanya menyisakan helper cap-decode untuk avatar SENDIRI (tile tray & zoom).
 //
-// Di-CAP via ResizeImage (≤ [_avatarDecodePx]) — avatar di list hanya ~40px;
-// tanpa cap, JPEG 1080px di-decode penuh (~4.6MB bitmap) padahal butuh 40px
-// (~0.01MB). 20 kartu = ~92MB terbuang → penyebab utama memory spike/lag.
-final Map<String, ImageProvider> _avatarImageByUid = {};
+// `clearAllAvatarCaches` & peek `_avatarBytesByUid` dulu: sekarang
+// `clearAllAvatarCaches` (di user_avatar.dart) + `cachedUserAvatarBytes(uid)`.
 
 /// Lebar decode maksimum avatar di list (px). 96 = cukup untuk avatar 40px
 /// di layar 2-3× DPI tanpa blur, ~25× lebih kecil dari decode full-res.
 const int _avatarDecodePx = 96;
 
 /// Bungkus MemoryImage dengan cap decode. Provider STABIL per-uid (instance
-/// sama dipakai teruz) supaya ImageCache hit & tidak kedip.
+/// sama dipakai terus) supaya ImageCache hit & tidak kedip.
 ImageProvider _cappedAvatarImage(Uint8List bytes) =>
     ResizeImage(MemoryImage(bytes), width: _avatarDecodePx);
 
-void clearAllAvatarCaches() {
-  _avatarCache.clear();
-  _avatarBytesByUid.clear();
-  _avatarLastSrcByUid.clear();
-  _avatarImageByUid.clear();
-}
+/// Bersihkan cache avatar (delegasi ke modul user_avatar) — dipertahankan
+/// sebagai API layar ini supaya pemanggil eksternal tidak berubah.
+void clearAllAvatarCaches() => ua.clearAllAvatarCaches();
 
-// Batas ukuran map avatar global — tanpa ini, 3 map tumbuh seumur sesi
-// (1 entry per user yang pernah terlihat) → risiko memori besar di HP
-// low-end saat sesi panjang. Evict FIFO (urutan insert) kalau lewat cap.
-//
-// 120 (dulu 200): bitmap sudah di-cap render via [_cappedAvatarImage], tapi
-// `_avatarBytesByUid` menyimpan bytes MENTAH base64-decoded (ratusan KB/uid)
-// untuk zoom. 120 × ~200KB ≈ 24MB — cukup untuk list & tetap ringan.
-const _avatarMapCap = 120;
-
-void _boundAvatarMap(Map<String, Object?> m) {
-  while (m.length > _avatarMapCap) {
-    m.remove(m.keys.first);
+/// Proses avatar (crop 1:1 sudah dilakukan cropper) → resize 640 + JPEG q85.
+/// Publik + `@visibleForTesting` supaya kontrak ukuran/kualitas diuji.
+@visibleForTesting
+String? processAvatarImage(Uint8List bytes) {
+  // image 4.x MELEMPAR untuk bytes korup/pendek — jangan biarkan crash.
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
   }
-}
-
-String? _processAvatarImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
   // 640px (dulu 1024) + q85 (dulu 90): avatar tampil maksimal ~108px fisik,
   // 640 sudah >5× resolusi tampil (tajam di semua DPI) tapi file ~50% lebih
@@ -118,261 +99,7 @@ String? _processAvatarImage(Uint8List bytes) {
 // profile/krominansi yang tidak konsisten antar-device → avatar tampil
 // "biro-biro" saat dilihat dari HP lain lewat CDN. JPEG polos universal.
 Future<String?> _processAvatarJpeg(Uint8List bytes) async {
-  return _processAvatarImage(bytes);
-}
-
-class _AsyncAvatar extends StatefulWidget {
-  final String uid;
-  final String avatarB64;
-  final String initial;
-  final Color color;
-  // Ring warna digambar DI DALAM sini supaya hanya muncul saat placeholder
-  // inisial — foto yang sudah tampil tidak kena ring (lihat ProfileAvatar).
-  final Color? borderColor;
-  final double borderWidth;
-  const _AsyncAvatar({
-    super.key,
-    required this.uid,
-    required this.avatarB64,
-    required this.initial,
-    required this.color,
-    this.borderColor,
-    this.borderWidth = 1.5,
-  });
-
-  @override
-  State<_AsyncAvatar> createState() => _AsyncAvatarState();
-}
-
-/// Decode base64 avatar di isolate — B64 besar dari network tidak boleh
-/// block UI thread saat scroll list online.
-Uint8List? _decodeAvatarB64Iso(String b64) {
-  try {
-    return base64Decode(b64);
-  } catch (_) {
-    return null;
-  }
-}
-
-class _AsyncAvatarState extends State<_AsyncAvatar> {
-  ImageProvider? _provider;
-  String? _asyncResolvingFor;
-
-  /// UID pendek untuk log — aman untuk uid kosong/pendek.
-  String get _uid8 => widget.uid.length >= 8
-      ? widget.uid.substring(0, 8)
-      : widget.uid.isEmpty
-      ? '-'
-      : widget.uid;
-
-  @override
-  void initState() {
-    super.initState();
-    _resolve();
-    // Tanpa Timer.periodic(300ms) per kartu: decode isolate & tulis disk
-    // async yang mendarat setelah frame pertama di-resolve via didUpdateWidget
-    // (provider notifyListeners → parent rebuild) ATAU callback .then pada
-    // compute() di bawah. Hemat 1 timer per kartu dalam list panjang.
-  }
-
-  void _resolve() {
-    final src = widget.avatarB64;
-    // Batasi map global sebelum tulis baru — evict FIFO kalau lewat cap.
-    // CATATAN: `_avatarLastSrcByUid` SENGAJA tidak di-evict. Map itu hanya
-    // menyimpan string pendek (path/base64), tapi jadi kunci "sumber sama"
-    // di bawah — kalau entry-nya terbuang saat list panjang, decode ulang
-    // jalan percuma dan satu kegagalan decode sempat mengosongkan foto
-    // (gejala "kadang ada kadang hilang").
-    _boundAvatarMap(_avatarBytesByUid);
-    _boundAvatarMap(_avatarImageByUid);
-    final srcType = src.isEmpty
-        ? 'EMPTY'
-        : src.startsWith('avatars/')
-        ? 'PATH'
-        : 'B64';
-    // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
-    if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) {
-      dlog(
-        '[AVATAR] $_uid8 KEEP ($srcType) t=${DateTime.now().millisecondsSinceEpoch % 100000}',
-      );
-      return;
-    }
-    _avatarLastSrcByUid[widget.uid] = src;
-    if (src.isEmpty) {
-      // Kosong → pertahankan provider lama (jangan kedip ke inisial).
-      dlog('[AVATAR] $_uid8 EMPTY keep-old=${_provider != null}');
-      return;
-    }
-    // Sumber non-kosong dan BARU (atau provider hilang) → buang bytes +
-    // provider lama milik uid ini. Maps per-uid di bawah memakai `??=` /
-    // `putIfAbsent` yang tidak pernah menimpa — tanpa ini foto lama tersaji
-    // selamanya: user ganti avatar tidak muncul di list online HP lain
-    // sampai restart app (State kartu dipertahankan antar-reorder, jadi
-    // inilah satu-satunya jalur update foto).
-    final staleProvider = _avatarImageByUid.remove(widget.uid);
-    _avatarBytesByUid.remove(widget.uid);
-    _provider = null;
-    if (staleProvider != null) {
-      try {
-        PaintingBinding.instance.imageCache.evict(staleProvider);
-      } catch (_) {}
-    }
-    // PATH storage → baca bytes dari MEDIA DISK CACHE (instan, tanpa
-    // network) → foto langsung tampil bahkan di mount pertama.
-    if (src.startsWith('avatars/')) {
-      final disk = MediaDiskCache.instance.readSync(src);
-      if (disk != null && disk.isNotEmpty) {
-        _avatarBytesByUid[widget.uid] ??= disk;
-        _provider = _avatarImageByUid.putIfAbsent(
-          widget.uid,
-          () => _cappedAvatarImage(_avatarBytesByUid[widget.uid]!),
-        );
-        _boundAvatarMap(_avatarBytesByUid);
-        _boundAvatarMap(_avatarImageByUid);
-        dlog('[AVATAR] $_uid8 FROM-DISK');
-      }
-      // Tidak ada di disk → biarkan inisial; batch network akan mengisi.
-      return;
-    }
-    // Instance MemoryImage stabil per-uid → pakai apa adanya.
-    final stable = _avatarImageByUid[widget.uid];
-    if (stable != null && _provider != stable) {
-      dlog(
-        '[AVATAR] $_uid8 SWAP-STABLE t=${DateTime.now().millisecondsSinceEpoch % 100000}',
-      );
-      _provider = stable;
-      return;
-    }
-    // Decode sinkron (murah — server sudah q70/300px) lalu simpan
-    // instance ImageProvider sekali selamanya untuk uid ini.
-    if (_avatarBytesByUid[widget.uid] == null) {
-      Uint8List? b;
-      final cached = _avatarCache.get(src);
-      if (cached != null) {
-        b = cached;
-      } else if (src.length > 100000 && _asyncResolvingFor != src) {
-        // B64 besar dari network batch → decode di isolate agar scroll
-        // tidak jank; poll initState menampilkan hasilnya saat siap.
-        _asyncResolvingFor = src;
-        compute(_decodeAvatarB64Iso, src).then((decoded) {
-          _asyncResolvingFor = null;
-          if (decoded == null || decoded.isEmpty) {
-            dlog(
-              '[AVATAR] $_uid8 DECODE-FAIL(async) keep-old=${_provider != null}',
-            );
-            return;
-          }
-          // Foto sudah berganti saat decode berjalan → buang hasil basi
-          // (jangan timpa foto baru dengan foto lama).
-          if (_avatarLastSrcByUid[widget.uid] != src) {
-            dlog('[AVATAR] $_uid8 STALE-DECODE dropped');
-            return;
-          }
-          _avatarCache.putIfAbsent(src, () => decoded);
-          _avatarBytesByUid[widget.uid] ??= decoded;
-          _avatarImageByUid.putIfAbsent(
-            widget.uid,
-            () => _cappedAvatarImage(_avatarBytesByUid[widget.uid]!),
-          );
-          _boundAvatarMap(_avatarBytesByUid);
-          _boundAvatarMap(_avatarImageByUid);
-          if (mounted)
-            setState(() => _provider = _avatarImageByUid[widget.uid]);
-        });
-        return;
-      } else if (src.length > 100000) {
-        return;
-      } else {
-        try {
-          final decoded = base64Decode(src);
-          _avatarCache.putIfAbsent(src, () => decoded);
-          b = decoded;
-        } catch (_) {
-          b = null;
-        }
-      }
-      if (b == null) {
-        // ── JANGAN buang foto yang sudah tampil ──
-        // Satu emission dengan base64 rusak/kecil tidak boleh mengosongkan
-        // kartu: pertahankan `_provider` lama dan tunggu emission berikutnya
-        // membawa data benar. Dulu `_provider = null` di sini → foto hilang
-        // (transparan) sampai batch network menyusul = "kadang ada kadang
-        // hilang".
-        dlog(
-          '[AVATAR] $_uid8 DECODE-FAIL(sync) len=${src.length} '
-          'keep-old=${_provider != null}',
-        );
-        return;
-      }
-      _avatarBytesByUid[widget.uid] = b;
-    }
-    _provider = _avatarImageByUid.putIfAbsent(
-      widget.uid,
-      () => _cappedAvatarImage(_avatarBytesByUid[widget.uid]!),
-    );
-    _boundAvatarMap(_avatarBytesByUid);
-    _boundAvatarMap(_avatarImageByUid);
-  }
-
-  @override
-  void didUpdateWidget(covariant _AsyncAvatar old) {
-    super.didUpdateWidget(old);
-    _resolve();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _resolve();
-    final p = _provider;
-    if (p == null) {
-      // Avatar ADA (PATH/B64) tapi bytes belum siap → TRANSPARAN, jangan
-      // tampilkan huruf inisial dulu (user tidak mau flash "S" → foto).
-      // Huruf hanya untuk yang memang tidak punya foto (string kosong).
-      if (widget.avatarB64.isNotEmpty) {
-        return const SizedBox.shrink();
-      }
-      final letter = Center(
-        child: Text(
-          widget.initial,
-          style: TextStyle(
-            color: widget.color,
-            fontSize: AppGlyph.avatarInitial(40),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-      // Placeholder inisial: pakai ring kalau diminta. Foto/loading:
-      // tanpa ring supaya foto gelap tidak terlihat bercacat biru.
-      if (widget.borderColor == null) return letter;
-      return Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: widget.borderColor!,
-            width: widget.borderWidth,
-          ),
-        ),
-        child: letter,
-      );
-    }
-    // gaplessPlayback: foto benar-benar baru (bytes beda) → bitmap lama
-    // tetap tampil sampai bitmap baru siap, tanpa blank putih.
-    return Image(
-      image: p,
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
-      errorBuilder: (_, __, ___) => Center(
-        child: Text(
-          widget.initial,
-          style: TextStyle(
-            color: widget.color,
-            fontSize: AppGlyph.avatarInitial(40),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
+  return processAvatarImage(bytes);
 }
 
 class OnlineUsersScreen extends StatefulWidget {
@@ -398,6 +125,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   final ScrollController _scrollCtrl = ScrollController();
   final TextEditingController _searchCtrl = TextEditingController();
   StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
+  // Entry bubble unread yang sedang tampil (overlay). Disimpan supaya bisa
+  // dipaksa-remove saat pindah rute / dispose — mencegah penghalang tap.
+  OverlayEntry? _unreadBubbleEntry;
   Map<String, int> _unreadMap = {};
   String? _hiddenOwner;
   bool _showHidden = false;
@@ -475,6 +205,17 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     await loc.updateMyLocation();
   }
 
+  /// Bandingkan dua peta unread (uid→count) — supaya emit chat-list yang tidak
+  /// mengubah badge unread TIDAK me-rebuild seluruh halaman Online.
+  bool _unreadMapEquals(Map<String, int> a, Map<String, int> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (final e in a.entries) {
+      if (b[e.key] != e.value) return false;
+    }
+    return true;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -503,6 +244,11 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                 if (count > 0) map[otherUid] = count;
               }
             }
+            // PERF: dulu setState TIAP emit chat list (pesan baru/read/pin dari
+            // chat mana pun) → SELURUH halaman Online (story tray + 20 kartu +
+            // avatar) rebuild — terukur `build Online=170` dalam sesi singkat.
+            // Sekarang hanya rebuild bila peta unread benar-benar BERUBAH.
+            if (_unreadMapEquals(_unreadMap, map)) return;
             setState(() => _unreadMap = map);
           }, onError: (e) {
             // OFFLINE: stream chat-list error → jangan tak tertangkap.
@@ -728,7 +474,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   /// Zoom foto profil user lain: pakai bytes cache global kalau ada (b64
   /// langsung / path dari disk), else download path → tampilkan dialog.
   Future<void> _zoomUserAvatar(UserModel user, Color color) async {
-    Uint8List? bytes = _avatarBytesByUid[user.uid];
+    Uint8List? bytes = ua.cachedUserAvatarBytes(user.uid);
     final src = user.avatar;
     if (bytes == null && src.isNotEmpty && !src.startsWith('avatars/')) {
       try {
@@ -758,6 +504,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
     _unreadSub?.cancel();
+    _dismissUnreadBubble();
     super.dispose();
   }
 
@@ -1028,6 +775,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   }
 
   Future<void> _startChat(BuildContext context, UserModel user) async {
+    // Buang bubble unread overlay (kalau ada) SEBELUM navigasi — overlay
+    // transparannya tak boleh ikut ke halaman chat / nyangkut jadi penghalang.
+    _dismissUnreadBubble();
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
     final s = context.read<LocaleProvider>().s;
@@ -1080,7 +830,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           );
         },
       ),
-    );
+      // WAJIB release klaim nav saat route di-pop (aturan nav_guard §18).
+      // Dulu jalur ini LUPA `.then(releaseNav)` → klaim `navKeyChat` nyangkut
+      // → tap kartu user YANG SAMA diulang tak nyahut dalam window 2 dtk.
+    ).then((_) => releaseNav(navKey));
 
     // Validasi + upsert di background setelah screen sudah terbuka.
     try {
@@ -1367,15 +1120,32 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       },
     );
     overlay.insert(entry);
-    // Auto-tutup 4 dtk. `remove()` dibungkus try/catch + cek `mounted`:
-    // overlay yang sudah di-unmount (pindah rute) bisa melempar saat
-    // remove() → kalau tak tertangkap, jadi penghalang transparan sisa
-    // (tap/back tertelan padahal scroll jalan).
+    // Simpan referensi supaya bisa dipaksa-remove saat halaman di-pop / user
+    // membuka chat — TIDAK hanya mengandalkan timer 4 dtk. Kalau overlay
+    // tertinggal (timer belum jalan / entry.mounted false), `Positioned.fill`
+    // transparannya menelan tap → gejala "balik dari chat, list Online susah
+    // diklik". _unreadBubbleEntry lama di-remove dulu (anti tumpuk).
+    _unreadBubbleEntry?.remove();
+    _unreadBubbleEntry = entry;
+    // Auto-tutup 4 dtk. `remove()` dibungkus try/catch: overlay yang sudah
+    // di-unmount bisa melempar saat remove().
     Future.delayed(const Duration(seconds: 4), () {
       try {
-        if (entry.mounted) entry.remove();
+        if (identical(_unreadBubbleEntry, entry)) _unreadBubbleEntry = null;
+        entry.remove();
       } catch (_) {}
     });
+  }
+
+  /// Buang bubble unread overlay kalau masih ada (anti penghalang tap).
+  void _dismissUnreadBubble() {
+    final e = _unreadBubbleEntry;
+    _unreadBubbleEntry = null;
+    if (e != null) {
+      try {
+        e.remove();
+      } catch (_) {}
+    }
   }
 
   @override
@@ -2905,13 +2675,13 @@ class _UserCard extends StatelessWidget {
                         color: color.withValues(alpha: 0.15),
                       ),
                       clipBehavior: Clip.antiAlias,
-                      // SELALU _AsyncAvatar (jangan ternary inisial↔foto):
+                      // SELALU UserAvatar (jangan ternary inisial↔foto):
                       // pergantian tipe widget menyebabkan State avatar
                       // di-dispose/dibuat-ulang tiap emission → kedip.
-                      // Inisial dirender di dalam _AsyncAvatar.
-                      // Ring warna digambar _AsyncAvatar hanya saat
+                      // Inisial dirender di dalam UserAvatar.
+                      // Ring warna digambar UserAvatar hanya saat
                       // placeholder inisial — foto tampil tanpa ring.
-                      child: _AsyncAvatar(
+                      child: ua.UserAvatar(
                         key: ValueKey(user.uid),
                         uid: user.uid,
                         avatarB64: user.avatar,
@@ -3007,6 +2777,9 @@ class _UserCard extends StatelessWidget {
                     ),
                     // Isi Tentang (dari RPC online, hormati about_visibility
                     // di server). Kosong = tidak tampil agar kartu ringkas.
+                    // TANPA maxLines/ellipsis: teks "Tentang" tampil UTUH
+                    // (dulu dipotong 2 baris jadi "...") — user minta jangan
+                    // kepotong. Bungkus penuh, tinggi kartu menyesuaikan.
                     if (user.about.trim().isNotEmpty)
                       GestureDetector(
                         onTap: onTap,
@@ -3016,8 +2789,6 @@ class _UserCard extends StatelessWidget {
                             color: AppTheme.textSecondary,
                             fontStyle: FontStyle.italic,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                   ],

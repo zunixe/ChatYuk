@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
+import '../../../widgets/app_gesture.dart';
 import '../../../utils.dart';
 
 class DeviceGroupCard extends StatelessWidget {
@@ -50,8 +51,8 @@ class DeviceGroupCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.35)),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+      child: AppGestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

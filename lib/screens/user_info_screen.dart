@@ -47,6 +47,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   // lambat, SELURUH profil kena timeout 10 dtk → layar "Coba lagi"
   // (keluhan "profilnya ga muncul" padahal datanya ada).
   String _avatarB64 = '';
+  // Bytes avatar ter-decode — di-cache supaya TIDAK decode base64 di dalam
+  // build() tiap rebuild (dulu `base64Decode(_avatarB64)` di _profileCarousel
+  // → decode ulang tiap setState/animation). Decode hanya saat string berubah.
+  String _avatarB64Cached = '';
+  Uint8List? _avatarBytesCached;
   // Path avatar terakhir + penanda sudah pernah dicoba, supaya kegagalan
   // sesaat bisa dicoba ulang sekali (foto tidak "menghilang" permanen
   // selama layar terbuka).
@@ -526,6 +531,25 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     _avatarRetried = true;
   }
 
+  /// Bytes avatar ter-decode, cache per-string — decode SEKALI saat b64
+  /// berubah, bukan tiap build. Mengembalikan null bila tidak ada/gagal.
+  Uint8List? _decodedAvatarBytes() {
+    if (_avatarB64.isEmpty) {
+      _avatarB64Cached = '';
+      _avatarBytesCached = null;
+      return null;
+    }
+    if (_avatarB64 != _avatarB64Cached) {
+      try {
+        _avatarBytesCached = base64Decode(_avatarB64);
+      } catch (_) {
+        _avatarBytesCached = null;
+      }
+      _avatarB64Cached = _avatarB64;
+    }
+    return _avatarBytesCached;
+  }
+
   void _retryLoad() {
     setState(() {
       _loading = true;
@@ -902,13 +926,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     required Color statusColor,
     required List<UserPhoto> unlocked,
   }) {
-    final hasAvatar = avatarB64.isNotEmpty;
-    Uint8List? avatarBytes;
-    if (hasAvatar) {
-      try {
-        avatarBytes = base64Decode(avatarB64);
-      } catch (_) {}
-    }
+    // Bytes dari cache (decode sekali saat b64 berubah) — jangan decode di
+    // dalam build. Parameter `avatarB64` = `_avatarB64` (lihat pemanggil).
+    final Uint8List? avatarBytes = _decodedAvatarBytes();
     final pageCount = (avatarBytes != null ? 1 : 0) + unlocked.length;
     if (pageCount == 0) {
       return CircleAvatar(

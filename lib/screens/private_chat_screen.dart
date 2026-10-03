@@ -50,6 +50,16 @@ import '../widgets/location_picker_sheet.dart';
 import '../mixins/chat_outbox_mixin.dart';
 import '../core/perf/perf_probe.dart';
 
+/// Warna latar Scaffold private chat — WAJIB opaque (bukan transparent).
+///
+/// Route transparan bocor ke halaman DI BAWAH private chat selama transisi
+/// push/pop (mis. buka profil dari avatar) → sekejap terlihat daftar
+/// chat/online + avatar inisial. bgScreen identik visual dengan Container bg
+/// di body, jadi tampilan tak berubah; hanya menutup kebocoran transisi.
+/// Dikunci sebagai konstanta supaya invarian ini bisa di-unit-test.
+@visibleForTesting
+final Color privateChatScaffoldBg = AppTheme.bgScreen;
+
 class PrivateChatScreen extends StatefulWidget {
   final String chatId;
   final String otherName;
@@ -926,54 +936,66 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // markAsRead: RPC tanpa render → aman dijalankan langsung (centang-2
+      // lawan cepat maju). Bukan beban frame.
       if (auth.uid != null) chat.markAsRead(widget.chatId, auth.uid!);
-      // Cache dulu (tampil instan), stream menimpa sesudahnya.
-      context.read<MessageReactionProvider>().loadCachedReactions(widget.chatId).then((
-        cached,
-      ) {
-        if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
-        setState(() => reactions = cached);
-      });
-      _reactionsSub = context.read<MessageReactionProvider>()
-          .watchReactions(widget.chatId)
-          .listen((m) {
-        if (mounted) setState(() => reactions = m);
-        context.read<MessageReactionProvider>().saveCachedReactions(widget.chatId, m);
-      }, onError: (e) {
-        debugPrint('[NAV] reactions stream error: $e');
-      });
-      _starredSub = context.read<MessageReactionProvider>()
-          .watchStarred(widget.chatId)
-          .listen((m) {
-        if (mounted) setState(() => starredIds = m);
-      }, onError: (e) {
-        debugPrint('[NAV] starred stream error: $e');
-      });
-      // Subscribe status realtime lawan bicara
-      // Kalau diblokir, tampilkan offline langsung tanpa fetch DB
-      if (!_wasBlocked) {
-        _subscribeStatus();
-        _subscribeTyping();
-      }
-      // Ambil profil lawan sekali untuk lengkapi kota (mis. dibuka dari room chat
-      // yang hanya mengirim gender tanpa country/city).
-      final otherId = widget.otherUid;
-      context.read<AuthProvider>().getOtherProfile(otherId).then((p) {
-        if (!mounted || p == null) return;
-        final city = p.city.trim();
-        final country = p.country.trim();
-        setState(() {
-          _otherCity = city;
-          _otherCountry = country;
-          // Fix: profil lawan di-fetch live — bukan cuma dari param,
-          // supaya chat yang dibuka lewat notifikasi ikut tahu status
-          // terdaftar lawan (tombol call & icon verified).
-          _otherRegistered = p.isRegistered;
-          // Fix umur/gender hilang-timbul: snapshot participantAges/
-          // participantGenders di baris chat bisa 0/kosong (chat lama
-          // belum ke-backfill). Lengkapi dari profil live.
-          _otherAgeLive = p.age;
-          _otherGenderLive = p.gender;
+      // ── Sisa pekerjaan (reaksi, starred, status, typing, profil) TIDAK
+      // dijalankan di frame pertama: dulu semuanya nembak bersamaan TEPAT
+      // saat animasi buka private chat mulai → 7 tugas (disk+setState+RPC)
+      // bersaing dengan transisi = jank "pas mau kebuka". Ditunda ~220ms
+      // (di atas durasi transisi 150ms) supaya frame animasi bersih; fitur
+      // (badge reaksi) menyusul sekejap setelah chat tampil.
+      _openWorkTimer = Timer(const Duration(milliseconds: 220), () {
+        if (!mounted) return;
+        _openWorkTimer = null;
+        // Cache dulu (tampil instan), stream menimpa sesudahnya.
+        context.read<MessageReactionProvider>().loadCachedReactions(widget.chatId).then((
+          cached,
+        ) {
+          if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
+          setState(() => reactions = cached);
+        });
+        _reactionsSub = context.read<MessageReactionProvider>()
+            .watchReactions(widget.chatId)
+            .listen((m) {
+          if (mounted) setState(() => reactions = m);
+          context.read<MessageReactionProvider>().saveCachedReactions(widget.chatId, m);
+        }, onError: (e) {
+          debugPrint('[NAV] reactions stream error: $e');
+        });
+        _starredSub = context.read<MessageReactionProvider>()
+            .watchStarred(widget.chatId)
+            .listen((m) {
+          if (mounted) setState(() => starredIds = m);
+        }, onError: (e) {
+          debugPrint('[NAV] starred stream error: $e');
+        });
+        // Subscribe status realtime lawan bicara
+        // Kalau diblokir, tampilkan offline langsung tanpa fetch DB
+        if (!_wasBlocked) {
+          _subscribeStatus();
+          _subscribeTyping();
+        }
+        // Ambil profil lawan sekali untuk lengkapi kota (mis. dibuka dari room chat
+        // yang hanya mengirim gender tanpa country/city).
+        final otherId = widget.otherUid;
+        context.read<AuthProvider>().getOtherProfile(otherId).then((p) {
+          if (!mounted || p == null) return;
+          final city = p.city.trim();
+          final country = p.country.trim();
+          setState(() {
+            _otherCity = city;
+            _otherCountry = country;
+            // Fix: profil lawan di-fetch live — bukan cuma dari param,
+            // supaya chat yang dibuka lewat notifikasi ikut tahu status
+            // terdaftar lawan (tombol call & icon verified).
+            _otherRegistered = p.isRegistered;
+            // Fix umur/gender hilang-timbul: snapshot participantAges/
+            // participantGenders di baris chat bisa 0/kosong (chat lama
+            // belum ke-backfill). Lengkapi dari profil live.
+            _otherAgeLive = p.age;
+            _otherGenderLive = p.gender;
+          });
         });
       });
     });
@@ -1063,6 +1085,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     _statusSub?.cancel();
     _typingSub?.cancel();
     _typingClearTimer?.cancel();
+    _openWorkTimer?.cancel();
     _liveTimer?.cancel();
     _imgQueue.clear();
     _imgQueued.clear();
@@ -1250,6 +1273,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   Timer? _pendingConfirmTimer;
   StreamSubscription<(String, int)>? _typingSub;
   Timer? _typingClearTimer;
+  // Timer penunda kerja non-kritis saat buka chat (reaksi/starred/status/
+  // typing/profil) — supaya tidak jatuh bersamaan animasi transisi. Di-cancel
+  // di dispose agar kotak buka-tutup cepat tak menyisakan subscribe nyangkut.
+  Timer? _openWorkTimer;
   DateTime _lastTypingSent = DateTime(2000);
   bool _showTyping = false;
   bool _showRecording = false;
@@ -1804,7 +1831,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       },
       child: Scaffold(
       extendBody: true,
-      backgroundColor: Colors.transparent,
+      // OPAQUE (dulu Colors.transparent) — lihat [privateChatScaffoldBg].
+      backgroundColor: privateChatScaffoldBg,
       // FALSE: background chat TIDAK ikut bergeser saat keyboard muncul
       // (satu halaman tetap). List & composer mengatur inset sendiri
       // via viewInsets/MediaQuery — layout konten tidak meng-krem bg.

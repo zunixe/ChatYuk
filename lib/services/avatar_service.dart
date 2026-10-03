@@ -79,6 +79,18 @@ class AvatarB64Service {
   final Map<String, Future<String>> _pathJobs = {};
   static const _maxCache = 100;
 
+  /// View key cache path (dipakai test & delegasi `ChatService._avatarCache`).
+  /// Hanya berisi path yang benar-benar tersimpan di `_pathCache`.
+  Set<String> get pathCacheKeys => _pathCache.keys.toSet();
+
+  /// Peek base64 by path dari cache RAM SAJA (tanpa disk/network) — dipakai
+  /// jalur presence chat list (dulu `ChatService._avatarCache[path]`).
+  String? peekPath(String path) {
+    if (path.isEmpty) return null;
+    final v = _pathCache[path];
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
   /// Kembalikan base64 avatar user ('' jika tidak ada / gagal).
   /// Urutan: RAM → DISK (instan, anti-kedip) → network. Disk ditulis
   /// saat upload (setForUid) maupun setelah fetch network berhasil.

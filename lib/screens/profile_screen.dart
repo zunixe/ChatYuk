@@ -15,6 +15,7 @@ import '../config/regions.dart';
 import '../config/strings.dart';
 import '../models/user_photo.dart';
 import '../providers/auth_provider.dart';
+import '../models/user_model.dart';
 import '../providers/device_info_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
@@ -34,15 +35,22 @@ import 'friend_requests_screen.dart';
 import 'subscriptions_screen.dart';
 import '../core/perf/perf_probe.dart';
 
-// Top-level function untuk compute() isolate — decode + resize + encode di background
-Future<String?> _processAvatar(Uint8List bytes) async {
+// Top-level function untuk compute() isolate — decode + resize + encode di background.
+// Publik + `@visibleForTesting` supaya kontrak resize/kualitas avatar diuji.
+@visibleForTesting
+Future<String?> processAvatar(Uint8List bytes) async {
   // SELALU JPEG. Dulu dicoba WebP via FlutterImageCompress dulu, tapi encoder
   // WebP native itu menghasilkan file dengan ICC profile/krominansi yang tidak
   // konsisten antar-device → avatar tampil "biro-biro" (warna aneh) saat
   // dilihat dari HP LAIN lewat CDN. JPEG polos tidak punya masalah ini dan
   // di-decode universal — sama seperti foto chat. Cropper interaktif sudah
   // menentukan area 1:1, jadi cukup resize + encode.
-  final decoded = img.decodeImage(bytes);
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
   if (decoded == null) return null;
   // 640px (dulu 1024) + q85 (dulu 90): avatar tampil maksimal ~108px fisik,
   // 640 sudah >5× resolusi tampil (tajam) tapi file ~50% lebih kecil.
@@ -435,7 +443,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
 
     // Proses image di background isolate — tidak block UI thread
-    final base64 = await _processAvatar(bytes);
+    final base64 = await processAvatar(bytes);
     if (base64 == null) {
       if (mounted)
         ScaffoldMessenger.of(
@@ -850,8 +858,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('Profile');
-    final auth = context.watch<AuthProvider>();
-    final profile = auth.profile;
+    // PERF (§2.3 / §26): dulu `context.watch<AuthProvider>()` — SELURUH
+    // halaman (CustomScrollView + slivers + galeri) rebuild tiap
+    // `notifyListeners` AuthProvider, termasuk **heartbeat presence** &
+    // refresh profil berkala → sering menabrak frame transisi/tap tab =
+    // jank. Sekarang `select` SNAPSHOT field yang benar-benar dipakai render,
+    // dibandingkan via equality record: notify yang tidak mengubah field ini
+    // TIDAK me-rebuild halaman.
+    final (
+      :profile,
+      :uid,
+      :isAnonymous,
+      :signingOut,
+      :dummySessionActive,
+      :emailConfirmed,
+      :userEmail,
+    ) = context.select<AuthProvider, ({
+      UserModel? profile,
+      String? uid,
+      bool isAnonymous,
+      bool signingOut,
+      bool dummySessionActive,
+      bool emailConfirmed,
+      String? userEmail,
+    })>(
+      (a) => (
+        profile: a.profile,
+        uid: a.uid,
+        isAnonymous: a.isAnonymous,
+        signingOut: a.signingOut,
+        dummySessionActive: a.dummySessionActive,
+        emailConfirmed: a.emailConfirmed,
+        userEmail: a.userEmail,
+      ),
+    );
     // Deteksi swap sesi (dummy ⇄ admin): profil berubah identitas tanpa
     // initState ulang. Pakai profile.id (bukan auth.uid) supaya reset hanya
     // terjadi saat DATA profil benar-benar milik akun baru — auth.uid sudah
@@ -894,13 +934,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Sesi anon SESUNGGUHNYA — jangan tampilkan banner saat proses keluar
     // (signingOut): sesi belum kosong & isAnonymous masih true sekejap →
     // banner oranye berkedip sebelum EntryScreen muncul.
-    final isAnon = auth.isAnonymous && !auth.signingOut;
+    final isAnon = isAnonymous && !signingOut;
     // Sesi dummy aktif HANYA bisa dibuat dari panel admin (becomeDummy) —
     // flag internal AuthService. Dulu: kondisi && isRealAdmin membuat banner
     // TIDAK PERNAH tampil, karena saat sesi dummy aktif currentUser.email
     // = email DUMMY (bukan zunixe) → isRealAdmin false → "klik untuk
     // kembali ke admin" hilang.
-    final dummyActive = auth.dummySessionActive;
+    final dummyActive = dummySessionActive;
     // `select` (bukan `watch`): PointsProvider di-refresh beberapa kali saat
     // buka halaman (get_points_enabled/get_wallet/yukcoin_v2_status). `watch`
     // membuat SELURUH halaman Profil (CustomScrollView + slivers) rebuild tiap
@@ -1093,7 +1133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // (lib/admin/profile_sections.dart) lewat AdminGate.
                   // Tanpa isRealAdmin: saat dummy aktif, email session =
                   // email dummy → isRealAdmin false → banner hilang.
-                  if (auth.dummySessionActive)
+                  if (dummySessionActive)
                     AdminGate.dummySessionBanner?.call(
                           context,
                           profile?.nickname,
@@ -1181,24 +1221,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             height: 36,
                             decoration: BoxDecoration(
                               color:
-                                  (auth.emailConfirmed
+                                  (emailConfirmed
                                           ? Colors.green
                                           : Colors.orange)
                                       .shade50,
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              auth.emailConfirmed
+                              emailConfirmed
                                   ? Icons.verified_user
                                   : Icons.warning_amber_rounded,
-                              color: auth.emailConfirmed
+                              color: emailConfirmed
                                   ? Colors.green
                                   : Colors.orange,
                               size: 20,
                             ),
                           ),
                           title: Text(
-                            auth.emailConfirmed
+                            emailConfirmed
                                 ? s.labelEmailVerified
                                 : s.labelEmailUnverified,
                             style: AppText.bodySmall.copyWith(
@@ -1206,17 +1246,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           subtitle: Text(
-                            auth.userEmail ?? '-',
+                            userEmail ?? '-',
                             style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           trailing: Icon(
-                            auth.emailConfirmed
+                            emailConfirmed
                                 ? Icons.check_circle
                                 : Icons.error_outline,
-                            color: auth.emailConfirmed
+                            color: emailConfirmed
                                 ? Colors.green
                                 : Colors.orange,
                             size: 20,
@@ -1257,7 +1297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.badge_outlined,
                         iconColor: AppTheme.primary,
                         label: s.labelUserId,
-                        value: auth.uid?.substring(0, 8) ?? '-',
+                        value: uid?.substring(0, 8) ?? '-',
                       ),
                       Divider(height: 1, indent: 52),
                       // About — teks bebas 150 karakter, diedit INLINE di

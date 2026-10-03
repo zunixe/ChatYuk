@@ -9,6 +9,7 @@ import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/attribution_service.dart';
 import '../widgets/admin_error_view.dart';
+import '../widgets/app_gesture.dart';
 import 'admin_devices/widgets/user_detail_sheet.dart';
 
 /// Admin: tab Atribusi — user datang dari kanal mana (FB/IG/Google/TikTok/
@@ -232,8 +233,8 @@ class _AdminAttributionTabState extends State<AdminAttributionTab> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.divider),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+      child: AppGestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => _openUsers(s, key),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -507,8 +508,8 @@ class _AttributionUsersSheetState extends State<_AttributionUsersSheet> {
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: AppTheme.divider),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+      child: AppGestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => _openUser(u),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

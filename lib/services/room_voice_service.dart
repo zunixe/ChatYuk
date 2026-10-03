@@ -258,6 +258,19 @@ class RoomVoiceSession extends ChangeNotifier {
     required Set<String> allCandTried,
   }) => !allCandTried.contains(peerUid);
 
+  /// Murni & testable: apakah aku (di stage) perlu menawarkan uplink ke X.
+  /// True bila: aku sendiri di stage, X speaker lain (bukan aku), dan belum
+  /// ada pc uplink ke X. Menjamin FULL MESH: tiap pasangan speaker punya
+  /// uplink dua arah (bukan hanya arah pendengar→speaker).
+  @visibleForTesting
+  static bool meshNeedsOfferTo({
+    required String myUid,
+    required String peerUid,
+    required bool onStage,
+    required bool hasUplinkPc,
+  }) =>
+      onStage && peerUid.isNotEmpty && peerUid != myUid && !hasUplinkPc;
+
   // Generasi sesi (monotonik per proses): teardown sesi LAMA mengirim v_bye
   // yang bisa tiba SETELAH v_speak sesi BARU bila user keluar-masuk cepat
   // (stop() async tak sempat selesai). Tanpa gate, v_bye basi itu memutus
@@ -383,23 +396,64 @@ class RoomVoiceSession extends ChangeNotifier {
     }
     // Timeout WAJIB: getUserMedia bisa gantung di sebagian HP (mic dipakai
     // app lain / izin menggantung) → join tak pernah selesai.
+    // Constraint eksplisit (sama seperti call 1:1): AEC/NS/AGC + perbaikan
+    // Google (highpass/typing) + mono → suara jernih & hemat. Tanpa ini tiap
+    // device pakai default berbeda (Xiaomi pernah pilih mic jauh = pelan).
+    // Fallback: bila device menolak constraint (Overconstrained), coba tanpa
+    // constraint supaya voice tetap jalan (jangan gagalkan sesi).
+    const audioConstraints = {
+      'echoCancellation': true,
+      'noiseSuppression': true,
+      'autoGainControl': true,
+      'googEchoCancellation': true,
+      'googAutoGainControl': true,
+      'googNoiseSuppression': true,
+      'googHighpassFilter': true,
+      'googTypingNoiseDetection': true,
+      'channelCount': 1,
+    };
     try {
       _localStream = await navigator.mediaDevices
-          .getUserMedia({
-            'audio': true,
-            'video': false,
-          })
+          .getUserMedia({'audio': audioConstraints, 'video': false})
           .timeout(const Duration(seconds: 10));
     } catch (e) {
-      dlog('[VOICE] getUserMedia audio failed: $e');
+      dlog('[VOICE] getUserMedia (constraint) failed: $e — coba tanpa constraint');
       try {
-        await _sb.rpc('room_voice_leave', params: {'p_room_id': roomId});
-      } catch (_) {}
-      return false;
+        _localStream = await navigator.mediaDevices
+            .getUserMedia({'audio': true, 'video': false})
+            .timeout(const Duration(seconds: 10));
+      } catch (e2) {
+        dlog('[VOICE] getUserMedia audio failed: $e2');
+        try {
+          await _sb.rpc('room_voice_leave', params: {'p_room_id': roomId});
+        } catch (_) {}
+        return false;
+      }
     }
+    // Pilih mic terbaik (audioinput pertama): di sebagian device default bisa
+    // jatuh ke mic jauh → suara pelan. Best-effort (pola call 1:1).
+    try {
+      final devices = await navigator.mediaDevices.enumerateDevices();
+      for (final d in devices) {
+        if (d.kind == 'audioinput' && d.deviceId.isNotEmpty) {
+          await Helper.selectAudioInput(d.deviceId);
+          break;
+        }
+      }
+    } catch (_) {}
     _onStage = true;
     _muted = false;
     _speakers.add(myUid);
+    // Pastikan mic native UNMUTE saat mulai stage (bisa tertinggal true dari
+    // sesi sebelumnya → "mic hijau tapi bisu").
+    for (final t in _localStream?.getAudioTracks() ?? const []) {
+      try {
+        t.enabled = true;
+      } catch (_) {}
+      try {
+        await Helper.setMicrophoneMute(false, t);
+      } catch (_) {}
+    }
     // Audio route: speakerphone WAJIB agar suara lawan terdengar kencang
     // (default earpiece/volume rendah = "mic hijau tapi bisu"). Best-effort:
     // jangan gagalkan sesi bila tak didukung device.
@@ -512,11 +566,18 @@ class RoomVoiceSession extends ChangeNotifier {
       await _dropPeer(uid);
     }
     _speakers.remove(myUid);
-    try {
-      for (final t in _localStream?.getAudioTracks() ?? const []) {
+    // Turun stage: matikan mic native dulu (bukan hanya track.stop()).
+    for (final t in _localStream?.getAudioTracks() ?? const []) {
+      try {
+        await Helper.setMicrophoneMute(true, t);
+      } catch (_) {}
+      try {
+        t.enabled = false;
+      } catch (_) {}
+      try {
         t.stop();
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
     _localStream = null;
     notifyListeners();
   }
@@ -528,15 +589,47 @@ class RoomVoiceSession extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Paksa codec Opus untuk transceiver audio (latency rendah + FEC).
+  /// Dipanggil setelah addTrack/setRemoteDescription & sebelum
+  /// createOffer/createAnswer. Best-effort: gagal → pakai default.
+  Future<void> _preferOpusCodec(RTCPeerConnection pc) async {
+    if (_closed) return;
+    try {
+      final transceivers = await pc.getTransceivers();
+      for (final t in transceivers) {
+        try {
+          final kind = t.receiver.track?.kind;
+          if (kind != null && kind != 'audio') continue;
+          await t.setCodecPreferences([
+            RTCRtpCodecCapability(
+              mimeType: 'audio/opus',
+              clockRate: 48000,
+              channels: 2,
+              sdpFmtpLine: 'minptime=10;useinbandfec=1',
+            ),
+          ]);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
   // ── Mute/unmute mic sendiri (tetap di stage, tanpa renegosiasi). ──
+  // Pakai DUA jalur agar benar-benar senyap di semua device:
+  //  (1) track.enabled=false (lewat API track),
+  //  (2) Helper.setMicrophoneMute (mute di AudioDeviceModule native) — pada
+  //      sebagian device `enabled=false` saja TIDAK memutus mic ("mic di-off
+  //      tapi tetap kedengar"). Native mute menutup celah itu.
   Future<void> setMuted(bool value) async {
     if (!_onStage) return;
     _muted = value;
-    try {
-      for (final t in _localStream?.getAudioTracks() ?? const []) {
+    for (final t in _localStream?.getAudioTracks() ?? const []) {
+      try {
         t.enabled = !value;
-      }
-    } catch (_) {}
+      } catch (_) {}
+      try {
+        await Helper.setMicrophoneMute(value, t);
+      } catch (_) {}
+    }
     await _sendSignal(type: 'v_mute', payload: {'muted': value});
     notifyListeners();
   }
@@ -575,11 +668,19 @@ class RoomVoiceSession extends ChangeNotifier {
     _peerSess.clear();
     _lastJoinReqAt.clear();
     _uplinkSince.clear();
-    try {
-      for (final t in _localStream?.getAudioTracks() ?? const []) {
+    // Matikan mic DULU (native) lalu stop track — sebagian device tidak
+    // melepas mic hanya dengan track.stop() ("keluar room mic masih nyala").
+    for (final t in _localStream?.getAudioTracks() ?? const []) {
+      try {
+        await Helper.setMicrophoneMute(true, t);
+      } catch (_) {}
+      try {
+        t.enabled = false;
+      } catch (_) {}
+      try {
         t.stop();
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
     _localStream = null;
     for (final pc in _peers.values) {
       try {
@@ -710,7 +811,7 @@ class RoomVoiceSession extends ChangeNotifier {
 
     switch (type) {
       case 'v_speak':
-        // Speaker baru: aku (pendengar) membalas v_join terarah.
+        // Speaker baru (X) mengumumkan diri.
         // Catat generasinya — v_bye lebih tua dari ini diabaikan.
         final speakSess = (payload['sess'] as num?)?.toInt();
         if (speakSess != null) {
@@ -718,11 +819,21 @@ class RoomVoiceSession extends ChangeNotifier {
           if (speakSess > known) _peerSess[from] = speakSess;
         }
         _joinSentTo.add(from);
-        unawaited(_sendSignal(type: 'v_join', toUid: from, payload: {
-          'ts': DateTime.now().toIso8601String(),
-          'sess': sessId,
-        }));
         _speakers.add(from);
+        // FULL MESH 3-6 orang: tiap pasangan butuh DUA arah audio (aku→X dan
+        // X→aku). Bila aku JUGA di stage, aku harus menawarkan uplink-ku ke X
+        // (aku→X). Tanpa ini arah dari speaker-lama ke speaker-baru TIDAK
+        // pernah terbentuk (hanya v_join → X offer ke aku = X→aku) → bertiga
+        // sebagian pasangan bisu. Bila aku pendengar (tidak di stage), cukup
+        // balas v_join (minta X offer ke aku).
+        if (_onStage) {
+          unawaited(_makeOfferTo(from));
+        } else {
+          unawaited(_sendSignal(type: 'v_join', toUid: from, payload: {
+            'ts': DateTime.now().toIso8601String(),
+            'sess': sessId,
+          }));
+        }
         notifyListeners();
         break;
       case 'v_join':
@@ -817,8 +928,31 @@ class RoomVoiceSession extends ChangeNotifier {
 
   void _applySpeakers(Iterable<String> ids) {
     final next = Set<String>.from(ids)..removeWhere((e) => e.isEmpty);
+    // FULL MESH: bila aku di stage, tawarkan uplink ke speaker lain yang
+    // BELUM punya pc (baru muncul di daftar). Menjamin tiap pasangan
+    // terbentuk walau `v_speak`/v_join terlewat (realtime telat). Idempoten:
+    // `_makeOfferTo` guard `_offerBusy` + cek pc existing.
+    if (_onStage) {
+      for (final uid in next) {
+        if (meshNeedsOfferTo(
+          myUid: myUid,
+          peerUid: uid,
+          onStage: _onStage,
+          hasUplinkPc: _peers.containsKey(uid),
+        )) {
+          unawaited(_makeOfferTo(uid));
+        }
+      }
+    }
     // Peer yang hilang dari stage → drop.
+    // PENTING: iterasi hanya pc UPLINK (key uid asli). Key downlink `dn_<uid>`
+    // TIDAK boleh dibandingkan dengan daftar speaker (next berisi uid tanpa
+    // prefix) — dulu `dn_B` dianggap "bukan speaker" → downlink dari B
+    // DIBUANG tiap refresh daftar speaker → koneksi mesh terus dibongkar
+    // (gejala "3 orang semua muter-putus"). Downlink dibersihkan lewat
+    // `_dropPeer`/v_bye saat peer benar-benar keluar, bukan di sini.
     for (final uid in _peers.keys.toList()) {
+      if (uid.startsWith('dn_')) continue;
       if (uid == myUid) continue;
       if (!next.contains(uid) && !_joinSentTo.contains(uid)) {
         unawaited(_dropPeer(uid));
@@ -879,6 +1013,9 @@ class RoomVoiceSession extends ChangeNotifier {
       final tracks = _localStream!.getAudioTracks();
       if (tracks.isEmpty) return;
       await pc.addTrack(tracks.first, _localStream!);
+      // Opus low-latency + FEC: setelah addTrack (transceiver ada) & sebelum
+      // createOffer. Best-effort (pola call 1:1 _preferOpusCodec).
+      await _preferOpusCodec(pc);
       pc.onIceCandidate = (c) {
         _sendSignal(type: 'v_cand', toUid: peerUid, payload: {
           'candidate': c.toMap(),
@@ -973,6 +1110,15 @@ class RoomVoiceSession extends ChangeNotifier {
         if (st == RTCPeerConnectionState.RTCPeerConnectionStateConnected ||
             st == RTCPeerConnectionState.RTCPeerConnectionStateConnecting) {
           return;
+        }
+        // GLARE/dedup: offer dengan pcId yang SAMA & remoteDescription sudah
+        // terpasang = duplikat (realtime + burst sync). Jangan close-rebuild
+        // — rebuild saat state have-remote-offer memicu error
+        // "cannot createAnswer in state other than have-remote-offer" saat
+        // negosiasi mesh 3+ orang.
+        if (offerPcId.isNotEmpty && _pcIds[key] == offerPcId) {
+          final rd = await pc.getRemoteDescription();
+          if (rd != null) return;
         }
         try {
           await pc.close();
@@ -1079,6 +1225,9 @@ class RoomVoiceSession extends ChangeNotifier {
         } catch (_) {}
       }
       _pendingCands.remove(dnPcId);
+      // Opus low-latency + FEC untuk audio jawaban (setelah setRemoteDescription
+      // offer, sebelum createAnswer). Best-effort.
+      await _preferOpusCodec(pc);
       final answer = await pc.createAnswer();
       final answerMunged = applyOpusLowLatencyPrefs(answer.sdp ?? '');
       final localAnswer = RTCSessionDescription(

@@ -28,6 +28,38 @@ import 'gender_avatar.dart';
 class LeaderboardSheet extends StatefulWidget {
   const LeaderboardSheet({super.key});
 
+  /// Cache hasil Top Aktif per-scope (weekly/alltime) — supaya buka ulang
+  /// INSTAN (tidak "selalu loading"). Diisi setelah RPC sukses; refresh
+  /// background tetap jalan saat dibuka (data mungkin berubah).
+  static final Map<String, ({List<dynamic> entries, Map<String, dynamic>? me})>
+      _cache = {};
+  static final Map<String, DateTime> _cacheAt = {};
+  static const _cacheFreshTtl = Duration(seconds: 60);
+
+  /// Kontrak cache Top Aktif — dibuka test (bukan API produksi).
+  @visibleForTesting
+  static bool hasCacheFor(String scope) => _cache.containsKey(scope);
+
+  @visibleForTesting
+  static void seedCacheForTest(
+    String scope, {
+    required List<dynamic> entries,
+    Map<String, dynamic>? me,
+    DateTime? at,
+  }) {
+    _cache[scope] = (entries: entries, me: me);
+    _cacheAt[scope] = at ?? DateTime.now();
+  }
+
+  @visibleForTesting
+  static void clearCacheForTest() {
+    _cache.clear();
+    _cacheAt.clear();
+  }
+
+  @visibleForTesting
+  static Duration get cacheFreshTtl => _cacheFreshTtl;
+
   /// Tampilkan sebagai bottom sheet melengkung dari halaman pemanggil.
   static Future<void> show(BuildContext context) {
     return showModalBottomSheet<void>(
@@ -48,21 +80,67 @@ class _LeaderboardSheetState extends State<LeaderboardSheet> {
   bool _loading = true;
   List<dynamic> _entries = [];
   Map<String, dynamic>? _me;
+  // Cache hasil per-scope milik sheet ini (weekly/alltime) — tampil instan
+  // saat ganti tab. Di-seed dari LeaderboardSheet._cache di initState.
+  final Map<String, ({List<dynamic> entries, Map<String, dynamic>? me})>
+      _scopeCache = {};
+  // Timer penunda: menahan `_load` sampai animasi buka sheet selesai supaya
+  // kerja berat (render 50 baris + avatar) tidak jatuh bersamaan transisi →
+  // tidak jank "pas mau kebuka". (dulu _load dipanggil langsung di initState)
+  Timer? _settleTimer;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    // Isi dari cache DULU (instan, tanpa loading) — kalau ada.
+    final cached = LeaderboardSheet._cache[_scope];
+    if (cached != null) {
+      _entries = cached.entries;
+      _me = cached.me;
+      _loading = false;
+    }
+    // Terapkan cache scope lain juga (saat ganti tab) tersedia instan.
+    for (final e in LeaderboardSheet._cache.entries) {
+      _scopeCache[e.key] = e.value;
+    }
+    // Muat/refresh dengan buffer supaya tidak jatuh di tengah animasi buka.
+    // Lebih pendek kalau sudah ada cache (data sudah tampil, refresh diam).
+    final delay = cached != null ? 120 : 300;
+    _settleTimer = Timer(Duration(milliseconds: delay), () {
+      if (!mounted) return;
+      _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _settleTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    // Ada cache → JANGAN tampilkan spinner (data sudah tampil). Refresh diam.
+    final hasCache = _scopeCache.containsKey(_scope);
+    if (!hasCache) setState(() => _loading = true);
+    // Cache masih fresh (<TTL) → skip RPC sama sekali (data kemungkinan sama).
+    final at = LeaderboardSheet._cacheAt[_scope];
+    if (hasCache &&
+        at != null &&
+        DateTime.now().difference(at) < LeaderboardSheet._cacheFreshTtl) {
+      return;
+    }
     try {
       final res = await _service.activityLeaderboard(_scope);
       if (!mounted) return;
+      final entries = (res['entries'] as List?) ?? [];
+      final me = res['me'] is Map ? Map<String, dynamic>.from(res['me']) : null;
+      // Simpan ke cache (static + lokal per-scope).
+      LeaderboardSheet._cache[_scope] = (entries: entries, me: me);
+      LeaderboardSheet._cacheAt[_scope] = DateTime.now();
+      _scopeCache[_scope] = (entries: entries, me: me);
       setState(() {
-        _entries = (res['entries'] as List?) ?? [];
-        _me = res['me'] is Map ? Map<String, dynamic>.from(res['me']) : null;
+        _entries = entries;
+        _me = me;
         _loading = false;
       });
       unawaited(
@@ -75,6 +153,8 @@ class _LeaderboardSheetState extends State<LeaderboardSheet> {
       );
     } catch (e) {
       if (!mounted) return;
+      // Gagal refresh TAPI ada cache → pertahankan data lama (jangan kosongkan).
+      if (hasCache) return;
       setState(() {
         _entries = [];
         _me = null;
@@ -85,9 +165,20 @@ class _LeaderboardSheetState extends State<LeaderboardSheet> {
 
   void _switchScope(String scope) {
     if (scope == _scope) return;
+    // Ganti tab: pakai cache scope itu kalau ada (instan, tanpa loading),
+    // lalu refresh diam. Kalau belum ada → tampilkan loading saat fetch.
+    final cached = _scopeCache[scope];
     setState(() {
       _scope = scope;
-      _entries = [];
+      if (cached != null) {
+        _entries = cached.entries;
+        _me = cached.me;
+        _loading = false;
+      } else {
+        _entries = [];
+        _me = null;
+        _loading = true;
+      }
     });
     _load();
   }
@@ -205,10 +296,14 @@ class _LeaderboardSheetState extends State<LeaderboardSheet> {
                           indent: 60,
                           color: AppTheme.divider.withValues(alpha: 0.5),
                         ),
-                        itemBuilder: (_, i) => LeaderboardRow(
-                          entry: Map<String, dynamic>.from(_entries[i] as Map),
-                          s: s,
-                          scope: _scope,
+                        itemBuilder: (_, i) => RepaintBoundary(
+                          // Batasi repaint ke baris ini saja: scroll/animasi
+                          // sheet tak memaksa seluruh 50 baris digambar ulang.
+                          child: LeaderboardRow(
+                            entry: Map<String, dynamic>.from(_entries[i] as Map),
+                            s: s,
+                            scope: _scope,
+                          ),
                         ),
                       ),
           ),

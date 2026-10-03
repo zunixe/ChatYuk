@@ -91,6 +91,54 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
 
   void _clearSelection() => setState(() => _selected.clear());
 
+  /// Buka private chat dari kartu list. Dipanggil AppGestureDetector (lapis
+  /// luar) supaya tak bergantung InkWell di dalam Dismissible (tap lambat).
+  void _openChat(PrivateChatInfo chat) {
+    final myUid = context.read<AuthProvider>().uid;
+    final otherUid = chat.participants.firstWhere(
+      (p) => p != myUid,
+      orElse: () => '',
+    );
+    final otherName = chat.participantNames[otherUid] ?? '';
+    // Guard double-push (§18): tap 2× cepat menumpuk 2 route identik.
+    final navKey = navKeyChat(chat.chatId);
+    if (!tryClaimNav(navKey)) return;
+    // Prefetch pesan ke memori sebelum push → buka chat instant.
+    context.read<ChatProvider>().prefetchPrivateChat(chat.chatId);
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 150),
+        reverseTransitionDuration: const Duration(milliseconds: 120),
+        settings: RouteSettings(name: privateChatRoute(chat.chatId)),
+        pageBuilder: (_, __, ___) => PrivateChatScreen(
+          chatId: chat.chatId,
+          otherName: otherName,
+          otherUid: otherUid,
+          otherGender: chat.participantGenders[otherUid] ?? '',
+          otherCountry: chat.participantLocations[otherUid] ?? '',
+          otherAge: chat.participantAges[otherUid] ?? 0,
+          otherRegistered: chat.participantRegistered[otherUid] == true,
+          initialOtherDeleted: chat.otherDeleted,
+        ),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
+          );
+        },
+      ),
+    ).then((_) => releaseNav(navKey));
+  }
+
   /// Aksi massal gaya WhatsApp — pin, mute, arsip untuk semua terpilih.
   /// Tombol menampilkan AKSI (misal semua sudah pin → tawarkan unpin).
   Future<void> _pinSelected(String uid, bool pin) async {
@@ -781,6 +829,13 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         // AppGestureDetector: tahan 320ms langsung masuk mode
                         // seleksi (bukan 500ms default Flutter).
                         child: AppGestureDetector(
+                          // Tap di lapis LUAR (pola _UserCard menu Online yang
+                          // responsif). Dulu tap lewat InkWell di dalam Dismissible
+                          // → gesture arena menunggu drag/long-press → lambat.
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _selectionMode
+                              ? () => _toggleSelect(chat.chatId)
+                              : () => _openChat(chat),
                           // Tahan = mulai seleksi (gaya WhatsApp), ketuk = tambah/kurangi.
                           onLongPress: () {
                             if (!_selectionMode) _toggleSelect(chat.chatId);
@@ -949,80 +1004,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                 color: Colors.transparent,
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(14),
-                                   onTap: _selectionMode
-                                       ? () => _toggleSelect(chat.chatId)
-                                       : () {
-                                           // Guard double-push: tap 2× cepat saat
-                                           // transisi push menumpuk 2 route identik
-                                           // → 1× back tampak "tidak bereaksi"
-                                           // (scroll jalan). docs/PERFORMANCE.md §18.
-                                           final navKey =
-                                               navKeyChat(chat.chatId);
-                                           if (!tryClaimNav(navKey)) return;
-                                           // Prefetch pesan ke memori sebelum push →
-                                           // buka chat instant (tanpa loading pesan).
-                                           context
-                                               .read<ChatProvider>()
-                                               .prefetchPrivateChat(chat.chatId);
-                                           Navigator.push(
-                                             context,
-                                             PageRouteBuilder(
-                                               transitionDuration:
-                                                   const Duration(
-                                                     milliseconds: 150,
-                                                   ),
-                                               reverseTransitionDuration:
-                                                   const Duration(
-                                                     milliseconds: 120,
-                                                   ),
-                                               settings: RouteSettings(
-                                                 name: privateChatRoute(
-                                                   chat.chatId,
-                                                 ),
-                                               ),
-                                              pageBuilder: (_, __, ___) => PrivateChatScreen(
-                                                chatId: chat.chatId,
-                                                otherName: otherName,
-                                                otherUid: otherUid,
-                                                otherGender:
-                                                    chat.participantGenders[otherUid] ??
-                                                    '',
-                                                otherCountry:
-                                                    chat.participantLocations[otherUid] ??
-                                                    '',
-                                                otherAge:
-                                                    chat.participantAges[otherUid] ??
-                                                    0,
-                                                otherRegistered:
-                                                    chat.participantRegistered[otherUid] ==
-                                                    true,
-                                                initialOtherDeleted:
-                                                    chat.otherDeleted,
-                                              ),
-                                              transitionsBuilder:
-                                                  (_, animation, __, child) {
-                                                    final curved =
-                                                        CurvedAnimation(
-                                                          parent: animation,
-                                                          curve: Curves
-                                                              .easeOutCubic,
-                                                          reverseCurve: Curves
-                                                              .easeInCubic,
-                                                        );
-                                                    return SlideTransition(
-                                                      position: Tween<Offset>(
-                                                        begin: const Offset(
-                                                          1,
-                                                          0,
-                                                        ),
-                                                        end: Offset.zero,
-                                                      ).animate(curved),
-                                                       child: child,
-                                                     );
-                                                   },
-                                             ),
-                                           ).then((_) => releaseNav(navKey));
-                                         },
+                                  onTap: null,
                                   child: Padding(
                                     padding: EdgeInsets.symmetric(
                                       horizontal: 12,

@@ -159,7 +159,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
     if (widget.borderColor != null && _bytes == null) {
       // Ring warna HANYA untuk placeholder inisial (tanpa foto). Digambar
       // DI DALAM bounds (foregroundDecoration) supaya ukuran total tetap
-      // `size` — sama persis dengan daftar "Pengguna Online" (_AsyncAvatar).
+      // `size` — sama persis dengan daftar "Pengguna Online" (UserAvatar).
       //
       // Dulu ring memakai container `size + borderWidth*2` (membesar 3px)
       // → ring tampak "beda/kurang rapi" dibanding online dan bisa terpotong

@@ -411,6 +411,11 @@ class _TimelineScreenState extends State<TimelineScreen>
                 controller: _scroll,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.only(top: 4, bottom: 88),
+                // PERF: cacheExtent kecil (dulu default 250px). Kartu di luar
+                // viewport lebih sedikit yang ter-build → tidak lagi mengunduh
+                // + decode foto post yang belum terlihat saat Timeline dibuka.
+                // Kombinasi dgn _loadImages post-frame di PostCard.
+                cacheExtent: 100,
                 itemCount: posts.length +
                       (loading && hasMore ? 1 : 0) +
                       (!hasMore ? 1 : 0),

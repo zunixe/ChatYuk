@@ -140,7 +140,7 @@ class OnlineUsersProvider extends ChangeNotifier {
     await MediaDiskCache.instance.prewarm();
     try {
       // Cold start: tampilkan cache disk dulu (<50ms) sebelum fetch network.
-      // SKIP avatar batch load di cold start — _AsyncAvatar resolve dari
+      // SKIP avatar batch load di cold start — UserAvatar resolve dari
       // disk sendiri, tidak perlu dimuat ke _diskAvatars dulu. Ini memotong
       // _loadDisk dari ~6s jadi ~1s di Xiaomi cold start.
       final cached = await PerfProbe.timed(
@@ -176,7 +176,7 @@ class OnlineUsersProvider extends ChangeNotifier {
           // Dulu batch avatar di-`await` SEBELUM list dipasang, sehingga
           // frame pertama menunggu N pembacaan kv (satu per uid). List tanpa
           // foto masih jauh lebih baik daripada list yang belum muncul —
-          // `_AsyncAvatar` sudah resolve sendiri dari disk saat render.
+          // `UserAvatar` sudah resolve sendiri dari disk saat render.
           // Jadi: pasang list sekarang, lalu isi avatar di latar.
           _users = _reorderStable([], diskUsers);
           _loaded = true;
@@ -196,7 +196,7 @@ class OnlineUsersProvider extends ChangeNotifier {
 
   /// Muat avatar base64 dari disk untuk [diskUsers] di LATAR (setelah list
   /// tampil), lalu emit sekali bila ada yang berubah. Non-blocking: kegagalan
-  /// apa pun diabaikan karena `_AsyncAvatar` tetap punya fallback inisial.
+  /// apa pun diabaikan karena `UserAvatar` tetap punya fallback inisial.
   Future<void> _loadDiskAvatars(List<UserModel> diskUsers) async {
     try {
       final avatars = await Future.wait(

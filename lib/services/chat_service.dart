@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../core/cache/media_disk_cache.dart';
-import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
@@ -12,6 +11,7 @@ import '../core/cache/message_cache.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/media/chat_photo_helper.dart';
 import '../services/storage_photo_service.dart';
+import '../services/avatar_service.dart';
 import '../utils.dart';
 import '../utils/mention.dart';
 import '../core/perf/perf_probe.dart';
@@ -74,38 +74,12 @@ abstract class ChatBase {
   final Map<String, Timer> _typingGrace = {};
   final Map<String, int> _lastPingTyping = {};
 
-  Future<String> _avatarB64(String path) async {
-    final cached = ChatService._avatarCache[path];
-    if (cached != null) {
-      // LRU sejati: yang baru dibaca pindah ke ujung (tahan dari eviction).
-      ChatService._avatarCache.remove(path);
-      ChatService._avatarCache[path] = cached;
-      return cached;
-    }
-    // DISK FIRST: baca dari cache lokal (instan, tanpa network).
-    final disk = await MediaDiskCache.instance.read(path);
-    if (disk != null && disk.isNotEmpty) {
-      final b64 = base64Encode(disk);
-      if (ChatService._avatarCache.length >= ChatService._avatarCacheMax) {
-        ChatService._avatarCache.remove(ChatService._avatarCache.keys.first);
-      }
-      ChatService._avatarCache[path] = b64;
-      return b64;
-    }
-    // Disk miss → download server → TULIS KE DISK (sumber lokal berikutnya).
-    final b64 = await StoragePhotoService.instance.download(path) ?? '';
-    if (b64.isNotEmpty) {
-      try {
-        await MediaDiskCache.instance
-            .write(path, Uint8List.fromList(base64Decode(b64)));
-      } catch (_) {}
-      if (ChatService._avatarCache.length >= ChatService._avatarCacheMax) {
-        ChatService._avatarCache.remove(ChatService._avatarCache.keys.first);
-      }
-      ChatService._avatarCache[path] = b64;
-    }
-    return b64;
-  }
+  /// Resolve avatar/photo path → base64. KONSOLIDASI: delegasi ke
+  /// [AvatarB64Service] (satu-satunya cache path avatar + RAM/disk/network).
+  /// Dulu ada cache path terpisah di sini (`_avatarCache`) → data avatar user
+  /// tersimpan ganda & tidak konsisten antar jalur. Sekarang satu sumber.
+  Future<String> _avatarB64(String path) =>
+      AvatarB64Service.instance.getByPath(path);
   /// Unduh audio voice message ke cache lokal (base64 via PhotoCache) —
   /// dipakai VoiceBubble untuk play offline tanpa fetch ulang.
   Future<void> _downloadVoiceToCache(String cacheKey, MessageModel msg) async {
@@ -163,38 +137,41 @@ class ChatService extends ChatBase with ChatServicePrivateMx, ChatServicePrivate
   /// Client opsional untuk test; produksi → `SupabaseConfig.client`.
   ChatService([super.sb]);
 
-  static final Map<String, String> _avatarCache = {};
-  static const _avatarCacheMax = 100;
+  // ── Cache avatar: KONSOLIDASI ke AvatarB64Service ────────────────────────
+  // API statis dipertahankan (caller: auth_provider & chat_service_presence)
+  // tapi seluruh isi delegasi ke `AvatarB64Service` (RAM→disk→network,
+  // cap 100, path-keyed) supaya TIDAK ada dua store avatar terpisah.
   @visibleForTesting
-  static Set<String> get avatarCacheKeys => _avatarCache.keys.toSet();
+  static Set<String> get avatarCacheKeys =>
+      AvatarB64Service.instance.pathCacheKeys;
   static final Set<String> _voiceDownloadInflight = {};
   static void clearAvatarCacheForPath(String path) {
-    _avatarCache.remove(path);
+    AvatarB64Service.instance.clearForPath(path);
   }
   static void clearAvatarCacheForUid(String uid) {
-    _avatarCache.remove('avatars/$uid.jpg');
+    AvatarB64Service.instance.clearForUid(uid);
   }
   static void setAvatarCacheForUid(String uid, String base64) {
+    if (uid.isEmpty) return;
     if (base64.isEmpty) {
-      _avatarCache.remove('avatars/$uid.jpg');
+      AvatarB64Service.instance.clearForUid(uid);
       return;
     }
-    if (_avatarCache.length >= _avatarCacheMax) {
-      _avatarCache.remove(_avatarCache.keys.first);
-    }
-    _avatarCache['avatars/$uid.jpg'] = base64;
+    AvatarB64Service.instance.setForUid(uid, base64);
   }
   static void setAvatarCacheForPath(String path, String base64) {
     if (path.isEmpty) return;
     if (base64.isEmpty) {
-      _avatarCache.remove(path);
+      AvatarB64Service.instance.clearForPath(path);
       return;
     }
-    if (_avatarCache.length >= _avatarCacheMax) {
-      _avatarCache.remove(_avatarCache.keys.first);
-    }
-    _avatarCache[path] = base64;
+    AvatarB64Service.instance.setForPath(path, base64);
   }
+
+  /// Peek SINKRON base64 avatar by path (tanpa disk/network) — pengganti
+  /// baca langsung `ChatService._avatarCache[path]` di jalur presence.
+  static String? avatarB64Peek(String path) =>
+      AvatarB64Service.instance.peekPath(path);
   /// Foto masih perlu diisi: imageData kosong ATAU masih path storage
   /// (belum ter-download ke base64 lokal).
   static bool _needsPhotoFill(MessageModel m) {

@@ -287,14 +287,22 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     final rows = results[0] as List<dynamic>;
     final hiddenSet = results[1] as Set<String>;
     _privateChatsHidden[myUid] = hiddenSet;
-    final list = rows
-        .where((row) => !hiddenSet.contains((row as Map)['chat_id']))
-        .map((r) => _rowToPrivateChat(Map<String, dynamic>.from(r as Map), myUid: myUid))
-        .where((c) => c.messageCount > 0)
-        .toList();
-    list.sort((a, b) => ChatService._comparePinned(a, b, myUid));
+    // [PERF] parse 50 baris → PrivateChatInfo (sinkron). Kandidat blokir UI
+    // saat kembali ke daftar — diukur supaya tak menebak.
+    final list = PerfProbe.measure('chat.parseRows', () {
+      final l = rows
+          .where((row) => !hiddenSet.contains((row as Map)['chat_id']))
+          .map((r) => _rowToPrivateChat(Map<String, dynamic>.from(r as Map), myUid: myUid))
+          .where((c) => c.messageCount > 0)
+          .toList();
+      list_sort(l, myUid);
+      return l;
+    });
     return list;
   }
+
+  void list_sort(List<PrivateChatInfo> l, String myUid) =>
+      l.sort((a, b) => ChatService._comparePinned(a, b, myUid));
 
   PrivateChatInfo _rowToPrivateChat(Map<String, dynamic> row, {String? myUid}) {
     final d = snakeToCamel(row);
