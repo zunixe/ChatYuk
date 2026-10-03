@@ -122,6 +122,10 @@ class CallUiChannel implements CallUi {
       _invoke('dismiss', {'callId': callId});
 
   @override
+  Future<void> setProximity(bool on) =>
+      _invoke('setProximity', {'on': on});
+
+  @override
   bool get usesSystemUi => true;
 
   /// Pasang ulang handler (test yang memanggil `dispose` lalu ingin

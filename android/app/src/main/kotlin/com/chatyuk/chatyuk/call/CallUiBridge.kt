@@ -44,6 +44,12 @@ class CallUiBridge private constructor(
                     CallConnectionService.dismissCurrent()
                     result.success(true)
                 }
+                "setProximity" -> {
+                    val args = call.arguments as? Map<*, *>
+                    val on = args?.get("on") as? Boolean ?: false
+                    if (on) ProximityManager.acquire(context) else ProximityManager.release()
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }

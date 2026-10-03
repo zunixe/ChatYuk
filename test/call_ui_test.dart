@@ -28,6 +28,9 @@ class _FakeCallUi implements CallUi {
   Future<void> dismiss(String callId) async => calls.add('dismiss:$callId');
 
   @override
+  Future<void> setProximity(bool on) async => calls.add('proximity:$on');
+
+  @override
   bool get usesSystemUi => false;
 
   @override

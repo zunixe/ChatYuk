@@ -101,18 +101,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
         // gagal, user bingung "kenapa video call gagal".
         return callMediaErrorMessage(s, sess.mediaError);
       case CallPhase.ended:
-        switch (sess.endReason) {
-          case CallEndReason.error:
-            return s.msgCallError;
-          case CallEndReason.declined:
-            return s.msgCallDeclined;
-          case CallEndReason.busy:
-            return s.msgCallBusy;
-          case CallEndReason.missed:
-            return s.msgCallMissed;
-          default:
-            return s.msgCallEnded;
-        }
+        return sess.endReason.message(s);
       case CallPhase.inCall:
         return '';
     }

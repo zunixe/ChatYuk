@@ -62,6 +62,9 @@ class CallConnectionService : ConnectionService() {
     override fun onDestroy() {
         current?.destroy()
         current = null
+        // Jaring pengaman: lepas proximity wake lock agar tidak bocor bila
+        // Dart tak sempat memanggil setProximity(false).
+        ProximityManager.release()
         super.onDestroy()
     }
 

@@ -2,6 +2,23 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-05 — Call 1:1/video: hardening RLS calls_update + gerbang billing
+
+- **Status:** SUDAH TERAPPLIED via Management API (version `20261005130000`,
+  `20261005140000`). Sudah dicatat di `supabase_migrations.schema_migrations`.
+- **Verifikasi live:**
+  - `pg_policy` untuk `calls_update`: `check_expr` kini terisi (bukan null) =
+    `auth.uid()=caller_id OR callee_id OR email admin` → kolom identitas
+    terkunci saat UPDATE.
+  - `call_billing_tick`: `position('feature_enabled_for')`=530 <
+    `position('call_audio_cost_per_min')`=1101 → gate fitur JALAN sebelum
+    baca config.
+- **File:**
+  - `20261005130000_calls_update_with_check.sql` — policy `calls_update`
+    dapat `WITH CHECK`.
+  - `20261005140000_call_billing_gate_first.sql` — rewrite `call_billing_tick`
+    (gate paling atas; kontrak return sama).
+
 ## 2026-10-05 — Fix avatar admin bypass di daftar Online (get_online_users)
 
 - **Status:** SUDAH TERAPPLIED via Management API (version 20261005070000,
