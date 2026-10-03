@@ -72,6 +72,16 @@ CITY_ALIASES = {
     'mazar-i-sharif': 'mazar-e sharif',
     'quebec city': 'quebec',
     'santa cruz': 'santa cruz de la sierra',
+    # Nama kurasi -> nama GeoNames (beda penulisan).
+    'jambi': 'jambi city',
+    'solo': 'surakarta',
+}
+
+# Koordinat manual: kota yang memang TIDAK ada di GeoNames cities15000
+# (populasi < 15k / penamaan berbeda). Key: 'Negara|Kota'.
+MANUAL_COORDS = {
+    'Indonesia|Mamuju': [-2.67480, 118.88850],
+    'Indonesia|Tidore': [0.71700, 127.43300],
 }
 
 def main():
@@ -119,11 +129,12 @@ def main():
     for country, cities in sorted(regions.items()):
         cc = name2code.get(norm(country))
         for city in cities:
-            coord = lookup(city, cc)
+            key = f'{country}|{city}'
+            coord = MANUAL_COORDS.get(key) or lookup(city, cc)
             if coord:
-                out_map[f'{country}|{city}'] = coord
+                out_map[key] = coord
             else:
-                missing.append(f'{country}|{city}')
+                missing.append(key)
 
     lines = [
         '// AUTO-GENERATED oleh scripts/gen_city_coords.py — jangan edit manual.',
