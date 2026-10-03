@@ -42,5 +42,15 @@ select supabase_tests.check('messages punya kolom gambar (image_path)',
       and column_name = 'image_path'
   ));
 
+-- REGRESI 2026-10-05: upload foto ROOM gagal — policy storage menolak
+-- `chat/room_<roomId>/...` (dulu hanya cek private_chats). Fungsi owner_ok
+-- harus menangani segmen 'room_'.
+select supabase_tests.check('storage_object_owner_ok tangani path room',
+  (select pg_get_functiondef(p.oid) like '%room\_%'
+     and pg_get_functiondef(p.oid) like '%room_members%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='storage_object_owner_ok'
+   limit 1));
+
 select supabase_tests.report() as result;
 rollback;
