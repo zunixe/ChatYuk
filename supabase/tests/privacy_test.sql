@@ -115,5 +115,31 @@ select supabase_tests.check('privacy_can_view memuat 6 opsi',
    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = 'privacy_can_view' limit 1));
 
+-- ── REGRESI 2026-10-06: putus teman (unfollow) WAJIB memutus di SEMUA
+--    definisi teman (`_privacy_are_friends` mutual-follow DAN `_are_friends`
+--    friend_requests accepted). Dulu unfollow hanya hapus follows → story
+--    mantan teman tetap terlihat (stale). ──
+insert into public.friend_requests (from_id, to_id, status)
+values ('aa000000-0000-0000-0000-00000000000a',
+        'bb000000-0000-0000-0000-00000000000b', 'accepted');
+-- Sebelum putus: keduanya true.
+select supabase_tests.check('sebelum unfollow: _are_friends & _privacy_are_friends true',
+  public._are_friends('aa000000-0000-0000-0000-00000000000a',
+    'bb000000-0000-0000-0000-00000000000b')
+  and public._privacy_are_friends('aa000000-0000-0000-0000-00000000000a',
+    'bb000000-0000-0000-0000-00000000000b'));
+-- Simulasi A putus teman B.
+select set_config('request.jwt.claims',
+  '{"sub":"aa000000-0000-0000-0000-00000000000a","role":"authenticated"}', false);
+select public.unfollow_user('bb000000-0000-0000-0000-00000000000b');
+reset request.jwt.claims;
+-- Sesudah putus: keduanya false (konsisten).
+select supabase_tests.check('sesudah unfollow: _are_friends false (story putus)',
+  not public._are_friends('aa000000-0000-0000-0000-00000000000a',
+    'bb000000-0000-0000-0000-00000000000b'));
+select supabase_tests.check('sesudah unfollow: _privacy_are_friends false (Top Aktif putus)',
+  not public._privacy_are_friends('aa000000-0000-0000-0000-00000000000a',
+    'bb000000-0000-0000-0000-00000000000b'));
+
 select supabase_tests.report() as result;
 rollback;

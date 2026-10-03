@@ -2,6 +2,15 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-05 — Daftar user admin: flag Fake GPS vs GPS asli
+
+- **Status:** SUDAH TERAPPLIED via Management API
+  (`20261006060000_admin_users_gps_flag.sql`). Tercatat di
+  `supabase_migrations.schema_migrations`.
+- `admin_stats_users_page` kirim tambahan `lat_gps`, `lon_gps`,
+  `gps_updated_at`, `location_mocked`, `location_mock_reason` (body lain
+  identik; fungsi ini BUKAN frozen).
+
 ## 2026-10-05 — HENTIKAN pembuatan profil otomatis (semua user)
 
 - **Status:** SUDAH TERAPPLIED via Management API (`20261006010000
@@ -1502,3 +1511,17 @@ everyone_except/friends/friends_except/only/nobody).
   .privacy_users +field 'leaderboard' (kartu Privasi admin).
 - **Verifikasi live:** set novikoh leaderboard=nobody → hilang dari Top Aktif
   (top jadi anggi); privacy_can_view friends → teman true, non-teman false.
+
+## 2026-10-06 — 20261006070000_unfollow_clears_friend_requests (APPLY)
+
+- **Temuan (uji "berhenti berteman"):** ada 2 definisi teman —
+  `_privacy_are_friends` (mutual follows, dipakai privasi/Top Aktif) dan
+  `_are_friends` (friend_requests.status='accepted', dipakai story_tray/
+  story_slides/mark_story_seen). `unfollow_user` DULU hanya hapus `follows`
+  → `_are_friends` tetap TRUE setelah putus teman → **story mantan teman
+  masih terlihat (stale)**. (Top Aktif sudah benar: pakai mutual-follow.)
+- **Fix:** `unfollow_user` juga hapus `friend_requests` (accepted/pending,
+  kedua arah) antara me & followee → kedua definisi konsisten.
+- **Verifikasi live:** accept friend → unfollow → `_are_friends=false` DAN
+  `_privacy_are_friends=false` (sebelumnya `_are_friends` tetap true).
+- **Test:** privacy_test +3 (sebelum/sesudah unfollow konsisten) → 20/20.
