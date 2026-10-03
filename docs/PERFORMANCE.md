@@ -2405,3 +2405,60 @@ menekan back ke Pengaturan/Akun.
   EntryScreen, route lama (Pengaturan/Akun) dibuang.
 
 **Verifikasi:** analyze bersih; test delete-account lulus; build+install 2 device.
+
+### 27j. Fix flash kartu "Keamanan Akun" saat keluar (2026-10-05)
+
+Dilaporkan: saat keluar, masih terlihat FLASH halaman Akun (kartu kuning
+Keamanan Akun + tombol Daftarkan Email) sebelum ke menu utama.
+
+**Akar:** di `_confirmLogout.finally`, `_leaving` direset ke false SEBELUM
+`popUntil` + sebelum gate swap ke EntryScreen → ada 1 frame `_leaving=false`
+& `isAnonymous` masih true → kartu kuning anon render sekejap (flash).
+
+**Fix (`account_screen.dart`):**
+- JANGAN reset `_leaving` setelah logout sukses — biarkan true sampai layar
+  benar-benar di-pop (reset hanya bila logout GAGAL, agar interaksi normal).
+- Saat `_leaving=true`, body diganti `_LeavingSkeleton` (STATIS — bukan
+  spinner animasi, agar `pumpAndSettle` test tak menggantung) → tidak ada
+  konten Akun yang sempat tampil.
+- `return` dipindah keluar dari blok `finally` (hilangkan lint
+  control_flow_in_finally).
+
+**Verifikasi:** analyze bersih; test settings_account + delete_account lulus
+(19); build+install Xiaomi.
+
+### 27k. Komentar timeline — jank "ngetik" + sheet "buka lambat" (2026-10-06)
+
+Dilaporkan: saat mengetik komentar terasa ngelag; saat menekan tombol
+"tulis komentar" sheet terasa lambat terbuka.
+
+**Akar** (semua di `lib/widgets/post_card.dart`, `_comment()`):
+1. Seluruh sheet (header + `_CommentsList` + bar input) dibangun dalam satu
+   `StatefulBuilder` di root. Setiap perubahan state internal (mode balas,
+   keyboard muncul) memicu **rebuild yang menyentuh `_CommentsList`** —
+   `ListView.builder` + tiap `_CommentAvatar` (decode foto/`compute`) ikut
+   dibangun ulang. Tidak ada `RepaintBoundary` → ketikan merembet repaint
+   seluruh sheet.
+2. `TextEditingController` dibuat **baru setiap kali** sheet dibuka
+   (`TextEditingController()` di dalam `_comment()`) dan **tidak pernah
+   di-dispose** → kerja alokasi tiap buka + leak.
+3. `kb = viewInsets/viewPadding` dihitung di root builder →
+   `AnimatedPadding` meretrigger relayout SELURUH sheet saat keyboard
+   animasi.
+
+**Fix:**
+- Bar input + list dipisah ke `_CommentSheet` (StatefulWidget) tersendiri:
+  mode balas dikelola lokal (`setState`), **tidak** merelayout lewat
+  `StatefulBuilder` di root.
+- `_CommentsList` dibungkus `RepaintBoundary` (ketikan/balasan tidak
+  merepaint list) dan tetap memakai `GlobalKey` agar state-nya persisten.
+- Bar input dibungkus `RepaintBoundary`.
+- `TextEditingController _commentCtrl` dipindah ke `_PostCardState` (dibuat
+  SEKALI, di-`dispose()`) — hilangkan alokasi-per-buka + leak.
+- Geser keyboard hanya menggerakkan bar input (`AnimatedPadding` di subtree
+  `_CommentSheet`), list & tinggi sheet tetap diam.
+
+**Verifikasi:** analyze bersih (hanya lint lama `_cleanupTestChannels`);
+`test/post_card_test.dart` 17 lulus (2 regresi baru: "balas komentar → kirim
+memakai parentId" & "mengetik tidak menghapus baris komentar"); suite
+timeline/detail/functional 82 lulus.

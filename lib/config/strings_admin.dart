@@ -646,6 +646,11 @@ extension SAdminX on S {
       ? 'Perkiraan dari IP (kasar, bisa meleset)'
       : 'IP estimate (rough, can be off)';
 
+  /// Badge status lokasi di daftar user "Per User".
+  String get adminGpsReal => isId ? 'GPS asli' : 'Real GPS';
+  String get adminGpsFake => 'Fake GPS';
+  String get adminGpsIpOnly => isId ? 'Hanya IP' : 'IP only';
+
   /// Terjemahkan reason koma-terpisah → label ringkas.
   String fakeReasonLabel(String reason) {
     if (reason.isEmpty) return mapFakeGps;

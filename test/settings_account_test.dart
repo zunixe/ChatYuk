@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/chat_provider.dart';
 import 'package:chatyuk/providers/device_info_provider.dart';
@@ -295,6 +298,69 @@ void main() {
 
       verify(() => authSvc.signOut()).called(1);
       expect(testChat.resets, 1);
+    });
+
+    testWidgets(
+        'hapus akun anon: kartu kuning hilang sejak konfirmasi (anti-kedip)',
+        (t) async {
+      await pumpAccount(t, anon: true);
+      final warn = S(isId: true).msgAnonymousWarning;
+      // Sebelum proses: kartu peringatan anon tampil (kondisi normal).
+      expect(find.text(warn), findsOneWidget);
+
+      // Tahan RPC supaya alur "sedang berjalan" (provider signingOut MASIH
+      // false di window ini — celah yang dulu membuat kartu berkedip).
+      final deleteGate = Completer<void>();
+      final signOutGate = Completer<void>();
+      when(() => authSvc.deleteMyAccount())
+          .thenAnswer((_) => deleteGate.future);
+      when(() => authSvc.signOut()).thenAnswer((_) => signOutGate.future);
+
+      await openDeleteMenu(t);
+      await t.tap(find.widgetWithText(FilledButton, 'Hapus Akun'));
+      await t.pumpAndSettle();
+      await t.enterText(find.byType(TextField), 'HAPUS');
+      await t.pump();
+      await t.tap(find.widgetWithText(FilledButton, 'Hapus Akun'));
+      await t.pump();
+
+      // Selama RPC berjalan: kartu kuning TIDAK boleh render frame mana pun.
+      expect(find.text(warn), findsNothing);
+
+      deleteGate.complete();
+      signOutGate.complete();
+      await t.pumpAndSettle();
+
+      verify(() => authSvc.deleteMyAccount()).called(1);
+      expect(find.text(warn), findsNothing);
+    });
+
+    testWidgets('keluar anon: kartu kuning hilang sejak konfirmasi',
+        (t) async {
+      await pumpAccount(t, anon: true);
+      final warn = S(isId: true).msgAnonymousWarning;
+      expect(find.text(warn), findsOneWidget);
+
+      // Tahan signOut supaya alur "sedang berjalan".
+      final signOutGate = Completer<void>();
+      when(() => authSvc.signOut()).thenAnswer((_) => signOutGate.future);
+
+      await t.tap(find.text('Keluar'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Keluar').last);
+      await t.pump();
+
+      // Sejak konfirmasi (termasuk jeda 200ms + clearAnonSocial): kartu
+      // kuning TIDAK boleh render frame mana pun.
+      expect(find.text(warn), findsNothing);
+
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.text(warn), findsNothing);
+
+      signOutGate.complete();
+      await t.pumpAndSettle();
+
+      verify(() => authSvc.signOut()).called(1);
     });
   });
 }

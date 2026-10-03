@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../config/strings.dart';
+import '../models/user_model.dart';
 import '../providers/points_provider.dart';
 import '../providers/avatar_provider.dart';
 import '../providers/auth_provider.dart';
@@ -287,8 +288,11 @@ class _LeaderboardSheetState extends State<LeaderboardSheet> {
                     : ListView.separated(
                         padding: EdgeInsets.only(
                           top: 6,
+                          // viewPadding (bukan padding): inset nav bar murni
+                          // yang TAK dikonsumsi bottom-sheet. `padding` kadang
+                          // 0 di konteks sheet → konten nembus menu Android.
                           bottom:
-                              12 + MediaQuery.of(context).padding.bottom + (_me == null ? 0 : 8),
+                              12 + MediaQuery.viewPaddingOf(context).bottom + (_me == null ? 0 : 8),
                         ),
                         itemCount: _entries.length,
                         separatorBuilder: (_, _) => Divider(
@@ -311,7 +315,7 @@ class _LeaderboardSheetState extends State<LeaderboardSheet> {
           if (_me != null && !_loading)
             _MyRankBar(
               rank: (_me!['rank'] as num?)?.toInt(),
-              bottomInset: media.padding.bottom,
+              bottomInset: media.viewPadding.bottom,
             ),
         ],
       ),
@@ -438,11 +442,20 @@ class LeaderboardRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Nama bisa di-tap → buka PROFIL user (ada fotonya).
+                // Seed dikirim supaya halaman profil langsung tampil isi
+                // (tanpa fase loading dulu).
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: uid.isEmpty
                       ? null
-                      : () => _openProfile(context, uid, nickname),
+                      : () => _openProfile(
+                          context,
+                          uid: uid,
+                          nickname: nickname,
+                          gender: gender,
+                          registered: registered,
+                          avatar: entry['avatar']?.toString() ?? '',
+                        ),
                   child: Row(
                     children: [
                       Flexible(
@@ -493,10 +506,43 @@ class LeaderboardRow extends StatelessWidget {
     );
   }
 
-  void _openProfile(BuildContext context, String uid, String name) {
+  void _openProfile(
+    BuildContext context, {
+    required String uid,
+    required String nickname,
+    required String gender,
+    required bool registered,
+    String avatar = '',
+  }) {
+    final now = DateTime.now();
+    // Foto B64 dari cache (kalau sudah tampil di baris leaderboard) → kirim
+    // sebagai avatar seed supaya halaman profil menampilkan FOTO pada frame
+    // pertama (anti-kedip "inisial → foto"). Fallback ke path mentah bila
+    // belum ter-cache (profil akan memuatnya sendiri).
+    final cached = AvatarB64Service.instance.cachedSync(uid);
+    final seedAvatar = (cached != null && cached.isNotEmpty) ? cached : avatar;
+    final seed = UserModel(
+      uid: uid,
+      nickname: nickname,
+      gender: gender,
+      age: 0,
+      country: '',
+      city: '',
+      ipAddress: '',
+      status: '',
+      avatar: seedAvatar,
+      isRegistered: registered,
+      loginAt: now,
+      createdAt: now,
+      lastSeen: now,
+    );
     Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
-        builder: (_) => UserInfoScreen(userId: uid, fallbackName: name),
+        builder: (_) => UserInfoScreen(
+          userId: uid,
+          fallbackName: nickname,
+          initialProfile: seed,
+        ),
       ),
     );
   }

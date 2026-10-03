@@ -14,6 +14,8 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/storage_photo_service.dart';
+import '../services/avatar_service.dart';
 import '../widgets/async_photo.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../core/call/call_permissions.dart';
@@ -26,10 +28,15 @@ import '../core/perf/perf_probe.dart';
 class UserInfoScreen extends StatefulWidget {
   final String userId;
   final String fallbackName;
+  // Seed profil awal (mis. dari baris Top Aktif yang sudah punya nickname /
+  // gender / avatar) — frame pertama langsung render ISI, bukan placeholder
+  // loading. Refresh server tetap jalan di belakang dan menimpa diam-diam.
+  final UserModel? initialProfile;
   const UserInfoScreen({
     super.key,
     required this.userId,
     required this.fallbackName,
+    this.initialProfile,
   });
 
   @override
@@ -57,7 +64,16 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   // selama layar terbuka).
   String _avatarPath = '';
   bool _avatarRetried = false;
+  // True selama avatar (path) SEDANG dimuat dari cache/disk. Dipakai supaya
+  // placeholder menampilkan latar KOSONG (bukan huruf inisial) — mencegah
+  // kedip "inisial → foto" saat user punya foto tapi bytes belum siap.
+  bool _avatarLoading = false;
   List<UserPhoto> _photos = [];
+  // Bytes galeri per photo-id — decode SEKALI, bukan tiap build.
+  // `galleryPage()` dulu `base64Decode` di dalam build → tiap rebuild
+  // (update status/sosial, animasi pop/back) decode ulang semua foto → jank,
+  // paling terasa saat back dari profil ke sheet Top Aktif.
+  final Map<String, Uint8List> _galleryBytes = {};
   String _status = 'offline';
   StreamSubscription<String>? _statusSub;
 
@@ -75,16 +91,61 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   @override
   void initState() {
     super.initState();
-    // Seed SINKRON dari cache RAM/disk: foto yang sudah tampil di daftar/
-    // header chat ATAU tersimpan di disk (cold start) langsung terlihat pada
-    // frame pertama — tanpa fase inisial → foto (anti-kedip).
-    _avatarB64 =
-        context.read<AuthProvider>().cachedAvatarSyncDeep(widget.userId) ?? '';
+    // Seed: kalau pemanggil sudah punya data (nama/gender/foto), tampilkan
+    // langsung — jangan lewat fase spinner dulu.
+    if (widget.initialProfile != null) {
+      _profile = widget.initialProfile;
+      _loading = false;
+      // Status live tidak perlu menunggu fetch profil selesai.
+      _subscribeStatus(widget.initialProfile);
+    }
+    // ── ANTI-KEDIP (urutan prioritas foto) ──
+    // 1) Foto B64 yang DIKIRIM pemanggil (mis. dari leaderboard yang sudah
+    //    menampilkan foto) → pakai langsung, frame pertama = foto.
+    // 2) Cache RAM/disk per-uid.
+    // 3) Path → muat dari disk/RAM (async), placeholder = latar kosong.
+    final seedAvatar = _profile?.avatar ?? '';
+    final seedIsPath =
+        seedAvatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(seedAvatar);
+    if (seedAvatar.isNotEmpty && !seedIsPath) {
+      // B64 langsung dari pemanggil.
+      _avatarB64 = seedAvatar;
+    } else {
+      _avatarB64 =
+          context.read<AuthProvider>().cachedAvatarSyncDeep(widget.userId) ?? '';
+    }
+    if (_avatarB64.isEmpty && seedIsPath) {
+      _avatarLoading = true;
+      _loadAvatar(seedAvatar);
+    } else if (_avatarB64.isEmpty) {
+      // Belum tahu ada foto atau tidak → jangan tampilkan inisial dulu;
+      // tunggu _load() menentukan (cegah kedip inisial → foto).
+      _avatarLoading = true;
+      // Fallback cache/disk per-uid setelah prewarm (async, murah).
+      _ensureAvatarFromCache();
+    }
     _load();
     _loadPhotos();
     _loadSocial();
     // Ambil nominal biaya buka foto untuk label harga.
     context.read<PointsProvider>().refreshPhotoCosts();
+  }
+
+  /// Fallback anti-kedip: kalau belum ada b64 dari pemanggil, coba ambil
+  /// dari cache RAM/disk per-uid (async, murah). Tidak menggagalkan UI.
+  Future<void> _ensureAvatarFromCache() async {
+    final uid = widget.userId;
+    if (uid.isEmpty) return;
+    try {
+      final b64 = await AvatarB64Service.instance.get(uid);
+      if (!mounted) return;
+      if (b64.isNotEmpty) {
+        setState(() {
+          _avatarB64 = b64;
+          _avatarLoading = false;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -522,7 +583,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             .timeout(_loadTimeout);
         if (!mounted) return;
         if (b64.isNotEmpty) {
-          setState(() => _avatarB64 = b64);
+          setState(() {
+            _avatarB64 = b64;
+            _avatarLoading = false;
+          });
           dlog('[AVATAR] info ${widget.userId.substring(0, 8)} load OK '
               'len=${b64.length} attempt=$attempt');
           return;
@@ -538,6 +602,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       }
     }
     _avatarRetried = true;
+    // Selesai mencoba tapi tidak dapat foto → boleh tampil inisial.
+    if (mounted) setState(() => _avatarLoading = false);
   }
 
   /// Bytes avatar ter-decode, cache per-string — decode SEKALI saat b64
@@ -559,11 +625,32 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     return _avatarBytesCached;
   }
 
+  /// Ambil bytes galeri dari cache (decode sekali per photo-id).
+  Uint8List? _galleryBytesOf(UserPhoto photo) {
+    final hit = _galleryBytes[photo.id];
+    if (hit != null) return hit;
+    if (photo.photo.isEmpty) return null;
+    try {
+      final b = base64Decode(photo.photo);
+      if (b.isEmpty) return null;
+      // Galeri per user kecil; buang yang paling lama bila penuh supaya
+      // tidak tumbuh tanpa batas.
+      if (_galleryBytes.length >= 20) {
+        _galleryBytes.remove(_galleryBytes.keys.first);
+      }
+      _galleryBytes[photo.id] = b;
+      return b;
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _retryLoad() {
     setState(() {
       _loading = true;
       _loadError = false;
     });
+    _galleryBytes.clear();
     _load();
     _loadPhotos();
     _loadSocial();
@@ -574,7 +661,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       final photos = await context.read<AuthProvider>()
           .getPhotosWithAccess(widget.userId)
           .timeout(_loadTimeout);
-      if (mounted) setState(() => _photos = photos);
+      if (!mounted) return;
+      // Daftar diganti → cache bytes lama dibuang (isi foto bisa berubah,
+      // mis. setelah paywall dibuka). Decode ulang terjadi sekali per foto.
+      _galleryBytes.clear();
+      setState(() => _photos = photos);
     } catch (_) {}
   }
 
@@ -665,7 +756,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           ? _LoadingPlaceholder(name: widget.fallbackName)
           : (_loadError && _profile == null)
               ? _LoadErrorView(onRetry: _retryLoad)
-              : Builder(builder: (_) {
+              : SafeArea(
+                  // Cegah konten menembus system UI (nav bar/gesture bar
+                  // Android). top: false — AppBar sudah menangani status bar.
+                  top: false,
+                  child: Builder(builder: (_) {
               // Foto masih kosong padahal profil punya path → coba sekali lagi
               // (kegagalan pertama bisa sesaat). Guard `_avatarRetried` supaya
               // tidak memicu loop kalau memang tidak ada fotonya.
@@ -922,7 +1017,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                 ],
               ),
               );
-              }),
+              })),
     );
   }
 
@@ -940,6 +1035,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final Uint8List? avatarBytes = _decodedAvatarBytes();
     final pageCount = (avatarBytes != null ? 1 : 0) + unlocked.length;
     if (pageCount == 0) {
+      // Foto sedang dimuat (path diketahui, bytes menyusul) → latar KOSONG,
+      // JANGAN huruf inisial — mencegah kedip "inisial → foto".
+      if (_avatarLoading) {
+        return CircleAvatar(radius: 60, backgroundColor: avatarBg);
+      }
       return CircleAvatar(
         radius: 60,
         backgroundColor: avatarBg,
@@ -959,16 +1059,18 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       final img = b == null
           ? Container(
               color: avatarBg,
-              child: Center(
-                child: Text(
-                  initial,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: AppGlyph.avatarInitial(120),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
+              child: _avatarLoading
+                  ? null // foto menyusul → latar kosong, jangan inisial
+                  : Center(
+                      child: Text(
+                        initial,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: AppGlyph.avatarInitial(120),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
             )
           // Carousel 280px — cap 720px (bukan full-res).
           : Image.memory(
@@ -987,10 +1089,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     }
 
     Widget galleryPage(UserPhoto photo) {
-      Uint8List? b;
-      try {
-        b = base64Decode(photo.photo);
-      } catch (_) {}
+      final b = _galleryBytesOf(photo);
       return GestureDetector(
         onTap: () => _showPhotoViewer(unlocked, unlocked.indexOf(photo)),
         child: ClipRRect(

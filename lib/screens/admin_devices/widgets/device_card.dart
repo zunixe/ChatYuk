@@ -5,6 +5,7 @@ import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../widgets/app_gesture.dart';
 import '../../../utils.dart';
+import 'gps_badge.dart';
 
 class DeviceCard extends StatelessWidget {
   final Map<String, dynamic> device;
@@ -180,6 +181,8 @@ class DeviceCard extends StatelessWidget {
                           color: AppTheme.textSecondary,
                         ),
                       ),
+                    // Status lokasi user: Fake GPS vs GPS asli vs IP saja.
+                    GpsBadge(device: device, s: s),
                   ],
                 ),
               ),

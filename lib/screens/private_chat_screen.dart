@@ -970,31 +970,30 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         }, onError: (e) {
           debugPrint('[NAV] starred stream error: $e');
         });
-        // Subscribe status realtime lawan bicara
-        // Kalau diblokir, tampilkan offline langsung tanpa fetch DB
-        if (!_wasBlocked) {
-          _subscribeStatus();
-          _subscribeTyping();
-        }
-        // Ambil profil lawan sekali untuk lengkapi kota (mis. dibuka dari room chat
-        // yang hanya mengirim gender tanpa country/city).
-        final otherId = widget.otherUid;
-        context.read<AuthProvider>().getOtherProfile(otherId).then((p) {
-          if (!mounted || p == null) return;
-          final city = p.city.trim();
-          final country = p.country.trim();
-          setState(() {
-            _otherCity = city;
-            _otherCountry = country;
-            // Fix: profil lawan di-fetch live — bukan cuma dari param,
-            // supaya chat yang dibuka lewat notifikasi ikut tahu status
-            // terdaftar lawan (tombol call & icon verified).
-            _otherRegistered = p.isRegistered;
-            // Fix umur/gender hilang-timbul: snapshot participantAges/
-            // participantGenders di baris chat bisa 0/kosong (chat lama
-            // belum ke-backfill). Lengkapi dari profil live.
-            _otherAgeLive = p.age;
-            _otherGenderLive = p.gender;
+        // ── Yang MEMBUAT channel realtime + RPC profil dipisah ke tahap
+        // kedua (~500ms) — pembuatan channel Supabase (handshake join) &
+        // getOtherProfile bisa "ketahan" tepat saat transisi buka chat baru
+        // selesai sempurna. Reaksi cache (di atas, murah) tetap 220ms.
+        _channelWorkTimer = Timer(const Duration(milliseconds: 280), () {
+          if (!mounted) return;
+          _channelWorkTimer = null;
+          // Subscribe status realtime lawan bicara
+          if (!_wasBlocked) {
+            _subscribeStatus();
+            _subscribeTyping();
+          }
+          final otherId = widget.otherUid;
+          context.read<AuthProvider>().getOtherProfile(otherId).then((p) {
+            if (!mounted || p == null) return;
+            final city = p.city.trim();
+            final country = p.country.trim();
+            setState(() {
+              _otherCity = city;
+              _otherCountry = country;
+              _otherRegistered = p.isRegistered;
+              _otherAgeLive = p.age;
+              _otherGenderLive = p.gender;
+            });
           });
         });
       });
@@ -1087,6 +1086,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     _typingClearTimer?.cancel();
     _typingState.dispose();
     _openWorkTimer?.cancel();
+    _channelWorkTimer?.cancel();
     _liveTimer?.cancel();
     _imgQueue.clear();
     _imgQueued.clear();
@@ -1278,6 +1278,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   // typing/profil) — supaya tidak jatuh bersamaan animasi transisi. Di-cancel
   // di dispose agar kotak buka-tutup cepat tak menyisakan subscribe nyangkut.
   Timer? _openWorkTimer;
+  // Tahap kedua: channel realtime (status/typing) + RPC profil — dipisah dari
+  // _openWorkTimer supaya handshake channel tak "ketahan" di frame transisi.
+  Timer? _channelWorkTimer;
   DateTime _lastTypingSent = DateTime(2000);
   /// Status bubble typing/recording lawan — 0=off, 1=typing, 2=recording.
   /// ValueNotifier (bukan setState) supaya perubahan typing TIDAK me-rebuild

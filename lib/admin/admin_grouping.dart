@@ -87,6 +87,14 @@ List<Map<String, dynamic>> mergeUsersWithDevices(
         '_hasDevice': true,
         // Tanggal register (dari profil) — device row tak punya created_at.
         'created_at': u['created_at'] ?? dev['created_at'],
+        // Status lokasi (dari profil) — device row tak punya flag ini.
+        // Dipakai GpsBadge: Fake GPS vs GPS asli vs IP saja.
+        'location_mocked': u['location_mocked'],
+        'location_mock_reason': u['location_mock_reason'],
+        'lat_gps': u['lat_gps'],
+        'lon_gps': u['lon_gps'],
+        'gps_updated_at': u['gps_updated_at'],
+        'loc_source': u['loc_source'] ?? dev['loc_source'],
       });
     } else {
       out.add({
@@ -95,6 +103,12 @@ List<Map<String, dynamic>> mergeUsersWithDevices(
         'is_registered': u['is_registered'] == true,
         'last_seen_at': u['last_seen'],
         'created_at': u['created_at'],
+        'location_mocked': u['location_mocked'],
+        'location_mock_reason': u['location_mock_reason'],
+        'lat_gps': u['lat_gps'],
+        'lon_gps': u['lon_gps'],
+        'gps_updated_at': u['gps_updated_at'],
+        'loc_source': u['loc_source'],
         '_nick': '${u['nickname'] ?? '?'}',
         '_hasDevice': false,
       });

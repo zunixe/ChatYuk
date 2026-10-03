@@ -24,6 +24,12 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   bool _loggingOut = false;
+  // Keluar/HAPUS sedang berjalan (sejak konfirmasi akhir, SEBELUM RPC).
+  // Menekan kartu peringatan anon + tombol amankan-akun selama proses —
+  // provider `signingOut` baru true saat signOut() dipanggil, padahal
+  // clearAnonSocial + deleteMyAccount jalan duluan (detik-an): frame rebuild
+  // apa pun di antaranya membuat kartu kuning berkedip. Reset saat gagal.
+  bool _leaving = false;
   // Status "punya password" di-cache di state (dulu FutureBuilder di build
   // → RPC tiap rebuild = flicker + boros). Fetch sekali di initState.
   bool _hasPassword = false;
@@ -68,9 +74,11 @@ class _AccountScreenState extends State<AccountScreen> {
       hasPassword: a.hasPassword,
       profile: a.profile,
     ));
-    // Jangan tampilkan banner anon saat proses keluar (signingOut) —
-    // sesi belum kosong & isAnonymous masih true sekejap → banner berkedip.
-    final isAnon = isAnonymous && !signingOut;
+    // Jangan tampilkan banner anon saat proses keluar (signingOut/_leaving)
+    // — sesi belum kosong & isAnonymous masih true sekejap → banner berkedip.
+    // `_leaving` menutup celah alur HAPUS akun: provider `signingOut` baru
+    // true saat signOut(), padahal RPC hapus sudah jalan sebelumnya.
+    final isAnon = isAnonymous && !signingOut && !_leaving;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -108,7 +116,12 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: _leaving
+          // Sedang keluar/hapus akun: tampilkan skeleton netral (tanpa kartu
+          // Keamanan Akun/Daftarkan Email) supaya tidak ada FLASH halaman
+          // sebelum gate swap ke EntryScreen.
+          ? const _LeavingSkeleton()
+          : ListView(
         // Insets & kartu seragam dengan halaman Notifikasi.
         padding: EdgeInsets.fromLTRB(
           16,
@@ -610,6 +623,11 @@ class _AccountScreenState extends State<AccountScreen> {
     );
     if (step2 != true || !mounted) return;
 
+    // Tandai keluar SEJAK AWAL (sebelum RPC apa pun) supaya kartu peringatan
+    // anon tidak sempat render lagi di frame mana pun selama proses hapus.
+    // (Sengaja TIDAK memakai _loggingOut: spinner-nya milik tile Keluar dan
+    // animasinya membuat pumpAndSettle tak pernah settle di test.)
+    setState(() => _leaving = true);
     try {
       if (auth.isAnonymous) {
         await context.read<SocialProvider>().clearAnonSocial();
@@ -639,6 +657,9 @@ class _AccountScreenState extends State<AccountScreen> {
     } catch (e) {
       dlog('[ACCOUNT] delete account error: $e', tag: 'ACCOUNT');
       if (mounted) {
+        // Gagal → user tetap di layar: kembalikan state agar kartu peringatan
+        // anon tampil lagi (bila masih anon).
+        setState(() => _leaving = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.errDeleteAccount)));
@@ -695,7 +716,10 @@ class _AccountScreenState extends State<AccountScreen> {
     // user mengira tap tak masuk → tap 2x → flow logout balapan → nyangkut
     // tidak ke halaman utama. Jeda ini anti-blink kartu anon (orange).
     if (_loggingOut) return;
-    setState(() => _loggingOut = true);
+    setState(() {
+      _loggingOut = true;
+      _leaving = true;
+    });
     await Future<void>.delayed(const Duration(milliseconds: 200));
     if (!mounted) return;
     // Anon logout: hapus relasi sosialnya supaya followers/subscribers user
@@ -723,26 +747,49 @@ class _AccountScreenState extends State<AccountScreen> {
         tag: 'ACCOUNT',
       );
     } finally {
+      // reset chat apa pun hasilnya
       try {
         chat.reset();
       } catch (_) {}
-      if (!mounted) return;
-      setState(() => _loggingOut = false);
-      // Verifikasi sesi benar-benar mati SEBELUM meninggalkan layar.
-      // Tanpa ini, bila provider macet (state profil lama masih ada),
-      // user tetap di tumpukan layar lama dan mengira logout gagal —
-      // atau lebih buruk: mengira sudah keluar padahal sesi hidup.
-      if (auth.isSignedIn || auth.profile != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errLogoutFailed)));
-        return;
-      }
-      // Paksa kembali ke root: gate menampilkan EntryScreen (sesi kosong).
-      // Ini jaring pengaman bila rebuild gate terlewat — route lama
-      // (Pengaturan/Akun) tidak boleh tersisa setelah keluar.
-      Navigator.of(context).popUntil((r) => r.isFirst);
     }
+    if (!mounted) return;
+    // JANGAN reset `_leaving` di sini. Bila di-reset, ada 1 frame di mana
+    // `_leaving=false` + `isAnonymous` masih true → kartu kuning "Keamanan
+    // Akun / Daftarkan Email" muncul sekejap (FLASH) sebelum gate swap ke
+    // EntryScreen. Biarkan `_leaving=true` (konten diganti skeleton) sampai
+    // layar ini benar-benar di-pop.
+    setState(() => _loggingOut = false);
+    // Verifikasi sesi benar-benar mati SEBELUM meninggalkan layar.
+    // Tanpa ini, bila provider macet (state profil lama masih ada),
+    // user tetap di tumpukan layar lama dan mengira logout gagal —
+    // atau lebih buruk: mengira sudah keluar padahal sesi hidup.
+    if (auth.isSignedIn || auth.profile != null) {
+      // Logout GAGAL → kembalikan tampilan normal (boleh interaksi lagi).
+      setState(() => _leaving = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errLogoutFailed)));
+      return;
+    }
+    // Paksa kembali ke root: gate menampilkan EntryScreen (sesi kosong).
+    // Ini jaring pengaman bila rebuild gate terlewat — route lama
+    // (Pengaturan/Akun) tidak boleh tersisa setelah keluar.
+    Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+}
+
+/// Skeleton netral saat user keluar / menghapus akun.
+///
+/// Tujuan: tidak menampilkan konten asli (kartu Keamanan Akun, tombol
+/// Daftarkan Email, dst) sedetik sebelum layar ditutup — mencegah "flash".
+/// STATIS (tanpa animasi) agar tidak ada spinner yang berputar terus
+/// (membuat `pumpAndSettle` test tak pernah settle) — hanya bg layar polos.
+class _LeavingSkeleton extends StatelessWidget {
+  const _LeavingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.expand();
   }
 }
 
