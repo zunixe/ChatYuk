@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chatyuk/config/regions.dart';
+import 'package:chatyuk/config/city_coords.dart';
 
 void main() {
   final id = getCitiesForCountry('Indonesia');
@@ -23,6 +24,34 @@ void main() {
     test('tidak ada yang cocok -> null', () {
       expect(matchCity('Nausori', fiji), isNull);
       expect(matchCity('', id), isNull);
+    });
+  });
+
+  group('daftar kota Indonesia (regresi: Pekalongan dkk tidak muncul)', () {
+    test('kota-kota besar yang dulu hilang kini ADA', () {
+      for (final c in const [
+        'Pekalongan',
+        'Tegal',
+        'Purwokerto',
+        'Kediri',
+        'Jember',
+        'Probolinggo',
+        'Pasuruan',
+        'Madiun',
+        'Magelang',
+        'Cilacap',
+        'Palangkaraya',
+        'Banjarbaru',
+        'Singkawang',
+        'Cilegon',
+        'Bitung',
+      ]) {
+        expect(id, contains(c), reason: '$c harus ada di daftar kota Indonesia');
+      }
+    });
+
+    test('Pekalongan punya koordinat (untuk deteksi terdekat)', () {
+      expect(kotaCoords['Indonesia|Pekalongan'], isNotNull);
     });
   });
 
