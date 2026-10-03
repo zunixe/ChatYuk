@@ -287,6 +287,26 @@ void main() {
     verify(() => timeline.toggleLike('p1')).called(1);
   });
 
+  testWidgets('like OPTIMISTIK: tak menunggu network (anti delay)',
+      (tester) async {
+    // toggleLike MENGGANTUNG (belum selesai) — membuktikan _like sudah
+    // memanggil toggleLike & TIDAK memblok UI (tidak ada exception),
+    // lalu aman saat jawaban server datang.
+    final completer = Completer<Map<String, dynamic>>();
+    when(() => timeline.toggleLike('p1')).thenAnswer((_) => completer.future);
+    await pump(tester, _post(likes: 7, liked: false));
+
+    await tester.tap(find.byIcon(PhosphorIconsRegular.heart).first);
+    await tester.pump(); // 1 frame — belum ada jawaban server
+    verify(() => timeline.toggleLike('p1')).called(1);
+    expect(tester.takeException(), isNull,
+        reason: 'UI tidak boleh error/menunggu network saat like');
+
+    completer.complete({'liked': true, 'likeCount': 8});
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(tester.takeException(), isNull);
+  });
+
 /// Buang channel + putuskan socket realtime milik test ini dari client
 /// bersama — kalau tidak, loop reconnect socket (URL dummy tak tersambung)
 /// + disconnect tertunda 2×heartbeat (50 dtk) membuat test gagal invariant
