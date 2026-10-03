@@ -277,6 +277,45 @@ void main() {
       await tester.pump();
       expect(s.replyingTo, isNull);
     });
+
+    testWidgets(
+        'editSelected masuk mode edit + tegaskan fokus setelah jeda '
+        '(anti tap dua kali)', (tester) async {
+      final s = await pumpSel(tester);
+      s.toggleSelect(msg(id: 'e', text: 'lama'));
+      await tester.pump();
+
+      // Jeda 300ms di editSelected memakai fake-clock: majukan eksplisit.
+      final fut = s.editSelected();
+      await tester.pump(const Duration(milliseconds: 300));
+      await fut;
+      await tester.pump();
+
+      expect(s.editingMessage?.id, 'e');
+      expect(s.chatMsgCtrl.text, 'lama');
+      // Fokus 1× dari editMessage + 1× penegasan pasca-jeda.
+      expect(s.focusCount, 2);
+    });
+
+    testWidgets('editSelected TIDAK refokus bila edit sudah dibatalkan',
+        (tester) async {
+      final s = await pumpSel(tester);
+      s.toggleSelect(msg(id: 'e', text: 'lama'));
+      await tester.pump();
+
+      final fut = s.editSelected();
+      await tester.pump();
+      expect(s.editingMessage?.id, 'e');
+      expect(s.focusCount, 1);
+
+      s.cancelEdit();
+      await tester.pump(const Duration(milliseconds: 300));
+      await fut;
+      await tester.pump();
+
+      expect(s.editingMessage, isNull);
+      expect(s.focusCount, 1, reason: 'jangan rebut fokus setelah cancel');
+    });
   });
 
   group('ChatSelectionMixin — deleteSelected failCount', () {
