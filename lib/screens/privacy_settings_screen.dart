@@ -249,6 +249,15 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     final s = context.watch<LocaleProvider>().s;
     final privacy = context.watch<PrivacyProvider>();
     final p = privacy.settings;
+    // PERF (§26b): dulu 3× `watch<PointsProvider>()` → SELURUH halaman
+    // privasi rebuild tiap PointsProvider notify (refresh beberapa kali saat
+    // buka: get_points_enabled/get_wallet/yukcoin_v2_status) → lag saat masuk.
+    // Sekarang `select` field yang dirender saja.
+    final (:yukcoinV2Active, :ghostMode) = context.select<PointsProvider,
+        ({bool yukcoinV2Active, bool ghostMode})>((pp) => (
+      yukcoinV2Active: pp.yukcoinV2Active,
+      ghostMode: pp.ghostMode,
+    ));
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.privacyTitle)),
@@ -313,17 +322,17 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
             ],
           ),
           // Ghost mode (YukCoin v2) — beli sehari untuk sembunyikan presence.
-          if (context.watch<PointsProvider>().yukcoinV2Active) ...[
+          if (yukcoinV2Active) ...[
             const SizedBox(height: 12),
             _PrivacyCard(
               children: [
                 _PrivacySwitchTile(
                   icon: Icons.visibility_off_outlined,
                   title: s.yukcoinFeatureGhost,
-                  subtitle: context.watch<PointsProvider>().ghostMode
+                  subtitle: ghostMode
                       ? s.ghostModeActive
                       : '${s.ghostModeDesc} (${context.read<PointsProvider>().costGhostModeDaily})',
-                  value: context.watch<PointsProvider>().ghostMode,
+                  value: ghostMode,
                   onChanged: (v) => _buyGhost(v),
                 ),
               ],
