@@ -912,12 +912,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       // yang pernah menerimanya.
       final gone = info?.otherDeleted ?? false;
       if (gone != _otherDeleted) {
-        if (mounted) {
-          setState(() {
-            _otherDeleted = gone;
-            if (gone) _otherLastRead = null;
-          });
-        }
+        _otherDeleted = gone;
+        if (gone) _otherLastRead = null;
+        _scheduleRebuild();
       }
       if (gone) return;
       final read = info?.lastReadAt[widget.otherUid];
@@ -925,7 +922,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       // walau network/disk menyusul dengan nilai null atau lebih tua.
       final merged = ReadReceipt.merge(_otherLastRead, read);
       if (read != null && merged != _otherLastRead) {
-        if (mounted) setState(() => _otherLastRead = merged);
+        _otherLastRead = merged;
+        _scheduleRebuild();
         // Persist untuk cold start berikutnya.
         if (merged != null) _persistRead(merged);
       }
@@ -953,12 +951,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           cached,
         ) {
           if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
-          setState(() => reactions = cached);
+          reactions = cached;
+          _scheduleRebuild();
         });
         _reactionsSub = context.read<MessageReactionProvider>()
             .watchReactions(widget.chatId)
             .listen((m) {
-          if (mounted) setState(() => reactions = m);
+          reactions = m;
+          _scheduleRebuild();
           context.read<MessageReactionProvider>().saveCachedReactions(widget.chatId, m);
         }, onError: (e) {
           debugPrint('[NAV] reactions stream error: $e');
@@ -966,9 +966,24 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         _starredSub = context.read<MessageReactionProvider>()
             .watchStarred(widget.chatId)
             .listen((m) {
-          if (mounted) setState(() => starredIds = m);
+          starredIds = m;
+          _scheduleRebuild();
+          context.read<MessageReactionProvider>().saveCachedStarred(
+            widget.chatId,
+            m,
+          );
         }, onError: (e) {
           debugPrint('[NAV] starred stream error: $e');
+        });
+        // Cache dulu (bintang tampil INSTAN saat buka), stream menimpa
+        // sesudahnya. Dulu starred langsung stream → tiap buka chat bintang
+        // "di-load dulu" menunggu round-trip Supabase. Pola sama dgn reaksi.
+        context.read<MessageReactionProvider>().loadCachedStarred(
+          widget.chatId,
+        ).then((cached) {
+          if (!mounted || cached.isEmpty || starredIds.isNotEmpty) return;
+          starredIds = cached;
+          _scheduleRebuild();
         });
         // ── Yang MEMBUAT channel realtime + RPC profil dipisah ke tahap
         // kedua (~500ms) — pembuatan channel Supabase (handshake join) &
@@ -985,15 +1000,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           final otherId = widget.otherUid;
           context.read<AuthProvider>().getOtherProfile(otherId).then((p) {
             if (!mounted || p == null) return;
-            final city = p.city.trim();
-            final country = p.country.trim();
-            setState(() {
-              _otherCity = city;
-              _otherCountry = country;
-              _otherRegistered = p.isRegistered;
-              _otherAgeLive = p.age;
-              _otherGenderLive = p.gender;
-            });
+            _otherCity = p.city.trim();
+            _otherCountry = p.country.trim();
+            _otherRegistered = p.isRegistered;
+            _otherAgeLive = p.age;
+            _otherGenderLive = p.gender;
+            _scheduleRebuild();
           });
         });
       });
@@ -1112,8 +1124,35 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     if (mounted) setState(() {});
   }
 
+  // ── Koalesensi rebuild pekerjaan pasca-buka (FIX jank "buka chat") ──
+  // Saat buka chat, beberapa timer (220ms reaksi/starred, 280ms channel +
+  // profil lawan) masing-masing memicu setState → layar penuh di-build
+  // 2-3× dalam ~300ms (terukur di logcat: dua [CHAT-BUILD] hanya 17ms
+  // terpisah). Helper ini menggabungkan rebuild yang jatuh di frame yang
+  // sama jadi SATU setState — mengurangi jumlah build penuh tanpa mengubah
+  // kapan data muncul (tetap menyusul setelah transisi).
+  bool _rebuildScheduled = false;
+  void _scheduleRebuild() {
+    if (!mounted || _rebuildScheduled) return;
+    _rebuildScheduled = true;
+    WidgetsBinding.instance.scheduleFrameCallback((_) {
+      _rebuildScheduled = false;
+      if (mounted) setState(() {});
+    });
+  }
+
   void _onCallChanged() {
     final sess = CallProvider.instance.activeSession;
+    // Signature state call yang RELEVAN untuk layar ini: overlay hidup/mati
+    // ditentukan oleh (ada sesi? uid lawan? phase?). Dulu cukup `sess == null
+    // || remoteUid==other` → setState SELALU saat chat biasa (sess==null
+    // selalu true) tiap CallProvider.notify → rebuild penuh tak perlu.
+    // Kini setState hanya bila signature benar-benar berubah.
+    final relevantForThisChat =
+        sess != null && sess.remoteUid == widget.otherUid;
+    final sig = relevantForThisChat
+        ? '${sess.callId}|${sess.phase}'
+        : '_none';
     // Call baru berakhir di chat ini → tampilkan bubble "Call ended" INSTAN
     // (optimistic) agar tidak nunggu Realtime 1-2 detik. Nanti saat pesan
     // server tiba, dedup di _msgsSub akan hapus pending.
@@ -1161,10 +1200,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     // di-NULL-kan (clearSession setelah tombol end). Dulu `sess == null` lolos
     // ke `return` (null != otherUid) TANPA setState → overlay TIDAK hilang
     // sampai ada rebuild lain ("end call lama matinya", terutama di MIUI).
-    if (sess == null || sess.remoteUid == widget.otherUid) {
-      if (mounted) setState(() {});
+    // GRANULAR: rebuild hanya bila signature relevan berubah (bukan tiap
+    // notify CallProvider) — hindari rebuild penuh saat chat tanpa call.
+    if (sig != _prevCallSig) {
+      _prevCallSig = sig;
+      if (relevantForThisChat || _prevCallSig == '_none') {
+        if (mounted) setState(() {});
+      }
     }
   }
+
+  /// Signature state call terakhir yang memicu rebuild — dipakai untuk
+  /// memfilter rebuild `_onCallChanged` (lihat penjelasan di sana).
+  String _prevCallSig = '_none';
 
   bool get _showCallOverlay {
     final prov = CallProvider.instance;
@@ -1220,15 +1268,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           // Throttle 30 dtk — status flapping tidak memicu N+1 query.
           if (status == 'online') {
             if (_otherStatus != status || _otherLastSeen != null) {
-              setState(() {
-                _otherStatus = status;
-                _otherLastSeen = null;
-              });
+              _otherStatus = status;
+              _otherLastSeen = null;
+              _scheduleRebuild();
             }
           } else {
             final now = DateTime.now();
             final lastFetch = _lastSeenFetchedAt;
-            setState(() => _otherStatus = status);
+            _otherStatus = status;
+            _scheduleRebuild();
             if (lastFetch != null &&
                 now.difference(lastFetch).inSeconds < 30) {
               return;
@@ -1239,7 +1287,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                 .getUserLastSeen(widget.otherUid)
                 .then((t) {
               if (!mounted || t == null) return;
-              setState(() => _otherLastSeen = t);
+              _otherLastSeen = t;
+              _scheduleRebuild();
             });
           }
         }, onError: (e) {
