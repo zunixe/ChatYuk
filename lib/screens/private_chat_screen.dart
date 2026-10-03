@@ -732,6 +732,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     _primeReadFromCache();
     // Fallback: kv `read:` (bila snapshot memori belum ada) — async.
     _loadCachedRead();
+    // Prime bintang SINKRON: baca id pesan berbintang dari MEMORI sebelum
+    // frame pertama → bintang tampil instan, tanpa "di-load dulu" (anti-glich).
+    // Stream realtime + fallback async menimpa sesudahnya.
+    _primeStarredFromCache();
     // Rebuild saat status call berubah (overlay video dalam chat muncul/hilang).
     CallProvider.instance.addListener(_onCallChanged);
     // Buka keyboard → tutup baris menu attach (mirip WhatsApp)
@@ -975,9 +979,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         }, onError: (e) {
           debugPrint('[NAV] starred stream error: $e');
         });
-        // Cache dulu (bintang tampil INSTAN saat buka), stream menimpa
-        // sesudahnya. Dulu starred langsung stream → tiap buka chat bintang
-        // "di-load dulu" menunggu round-trip Supabase. Pola sama dgn reaksi.
+        // Fallback async: bila prime sinkron (initState) belum terisi (cache
+        // memori kosong di sesi ini), muat dari disk. Jangan timpa bila
+        // `starredIds` sudah terisi (stream/prime lebih akurat). Dulu TANPA
+        // cache → tiap buka chat bintang "di-load dulu" menunggu round-trip.
         context.read<MessageReactionProvider>().loadCachedStarred(
           widget.chatId,
         ).then((cached) {
@@ -1048,6 +1053,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       }
       final best = ReadReceipt.best(candidates);
       if (best != null) _otherLastRead = best;
+    } catch (_) {}
+  }
+
+  /// Prime bintang secara SINKRON: ambil id pesan berbintang dari MEMORI
+  /// (tanpa await) sebelum frame pertama — jadi bintang langsung tampil saat
+  /// chat dibuka, tidak menunggu satu hop async apa pun (anti-glich).
+  /// Stream realtime + fallback `_loadCachedStarredAsync` menimpa sesudahnya.
+  void _primeStarredFromCache() {
+    try {
+      final cached = context
+          .read<MessageReactionProvider>()
+          .peekCachedStarred(widget.chatId);
+      if (cached.isNotEmpty) starredIds = cached;
     } catch (_) {}
   }
 
@@ -1132,6 +1150,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   // sama jadi SATU setState — mengurangi jumlah build penuh tanpa mengubah
   // kapan data muncul (tetap menyusul setelah transisi).
   bool _rebuildScheduled = false;
+
   void _scheduleRebuild() {
     if (!mounted || _rebuildScheduled) return;
     _rebuildScheduled = true;
@@ -1275,8 +1294,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           } else {
             final now = DateTime.now();
             final lastFetch = _lastSeenFetchedAt;
+            // Guard perubahan: stream status bisa emit nilai SAMA berulang
+            // (heartbeat presence). Tanpa guard ini, `_scheduleRebuild()`
+            // tiap emit → storm rebuild ~tiap frame (jank saat ngetik).
+            final statusChanged = _otherStatus != status;
             _otherStatus = status;
-            _scheduleRebuild();
+            if (statusChanged) _scheduleRebuild();
             if (lastFetch != null &&
                 now.difference(lastFetch).inSeconds < 30) {
               return;
@@ -1333,12 +1356,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   DateTime _lastTypingSent = DateTime(2000);
   /// Status bubble typing/recording lawan — 0=off, 1=typing, 2=recording.
   /// ValueNotifier (bukan setState) supaya perubahan typing TIDAK me-rebuild
-  /// SELURUH layar chat (dulu tiap pulse typing → setState → rebuild list
-  /// pesan O(n) + semua UserAvatar → jank "ngetik ngelag"). Hanya
-  /// ValueListenableBuilder di area list yang rebuild.
+  /// SELURUH layar CHAT maupun seluruh ListView pesan — dulu ValueListenableBuilder
+  /// membungkus SELURUH daftar (items O(n) + semua MessageBubble + avatar)
+  /// sehingga tiap pulse typing = list ke-load semua ulang = "ngetik jeda".
+  /// Sekarang HANYA bubble typing (item index 0) yang di-drive notifier ini;
+  /// list & bubble lain tidak tersentuh.
   final ValueNotifier<int> _typingState = ValueNotifier<int>(0);
-  bool get _showTyping => _typingState.value == 1;
-  bool get _showRecording => _typingState.value == 2;
   // Id + waktu pesan terakhir dari lawan bicara — dipakai mematikan
   // bubble typing begitu balasan masuk (otoritatif, anti stuck) dan
   // mengabaikan pulse basi dari invokasi lama.
@@ -2104,9 +2127,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
               if (val == 'search') {
                 _openSearch();
               } else if (val == 'follow') {
+                // Dinamis: sudah follow → berhenti ikuti.
                 final social = context.read<SocialProvider>();
-                social.follow(widget.otherUid);
-                showChatSnack(context, s.btnFollow);
+                if (social.isFollowing(widget.otherUid)) {
+                  social.unfollow(widget.otherUid);
+                  showChatSnack(context, s.btnUnfollow);
+                } else {
+                  social.follow(widget.otherUid);
+                  showChatSnack(context, s.btnFollow);
+                }
               } else if (val == 'friend') {
                 final social = context.read<SocialProvider>();
                 final messenger = ScaffoldMessenger.of(context);
@@ -2116,7 +2145,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                     SnackBar(
                       content: Text(
                         (res == 'pending' || res == 'friends')
-                            ? s.friendRequestSent
+                            ? s.friendRequestSentMutual
                             : s.errGeneric,
                       ),
                     ),
@@ -2129,72 +2158,87 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                 _showReportDialog();
               }
             },
-            itemBuilder: (_) => <PopupMenuEntry<String>>[
-              PopupMenuItem(
-                value: 'search',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.search_rounded, size: 20),
-                  title: Text(s.btnSearch),
-                ),
-              ),
-              const PopupMenuDivider(height: 1),
-              PopupMenuItem(
-                value: 'follow',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.person_add_rounded, size: 20),
-                  title: Text(s.menuFollow),
-                ),
-              ),
-              const PopupMenuDivider(height: 1),
-              PopupMenuItem(
-                value: 'friend',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading:
-                      const Icon(Icons.person_add_alt_rounded, size: 20),
-                  title: Text(s.menuAddFriend),
-                ),
-              ),
-              const PopupMenuDivider(height: 1),
-              PopupMenuItem(
-                value: 'block',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(
-                    Icons.block_rounded,
-                    size: 20,
-                    color: AppTheme.danger,
-                  ),
-                  title: Text(
-                    s.btnBlock,
-                    style: const TextStyle(color: AppTheme.danger),
+            itemBuilder: (_) {
+              final social = context.watch<SocialProvider>();
+              final following = social.isFollowing(widget.otherUid);
+              // Sudah teman / permintaan terkirim → sembunyikan "Tambah Teman"
+              // (putus teman / batalkan dilakukan di profil, daftar chat, dll).
+              final friendLocked = social.isFriend(widget.otherUid) ||
+                  social.isPendingFriendRequest(widget.otherUid);
+              return <PopupMenuEntry<String>>[
+                PopupMenuItem(
+                  value: 'search',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.search_rounded, size: 20),
+                    title: Text(s.btnSearch),
                   ),
                 ),
-              ),
-              const PopupMenuDivider(height: 1),
-              PopupMenuItem(
-                value: 'report',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(
-                    Icons.flag_outlined,
-                    size: 20,
-                    color: Colors.orange,
-                  ),
-                  title: Text(
-                    s.btnReport,
-                    style: const TextStyle(color: Colors.orange),
+                const PopupMenuDivider(height: 1),
+                PopupMenuItem(
+                  value: 'follow',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      following
+                          ? Icons.person_remove_rounded
+                          : Icons.person_add_rounded,
+                      size: 20,
+                    ),
+                    title: Text(following ? s.menuUnfollow : s.menuFollow),
                   ),
                 ),
-              ),
-            ],
+                if (!friendLocked) ...[
+                  const PopupMenuDivider(height: 1),
+                  PopupMenuItem(
+                    value: 'friend',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading:
+                          const Icon(Icons.person_add_alt_rounded, size: 20),
+                      title: Text(s.menuAddFriend),
+                    ),
+                  ),
+                ],
+                const PopupMenuDivider(height: 1),
+                PopupMenuItem(
+                  value: 'block',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.block_rounded,
+                      size: 20,
+                      color: AppTheme.danger,
+                    ),
+                    title: Text(
+                      s.btnBlock,
+                      style: const TextStyle(color: AppTheme.danger),
+                    ),
+                  ),
+                ),
+                const PopupMenuDivider(height: 1),
+                PopupMenuItem(
+                  value: 'report',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.flag_outlined,
+                      size: 20,
+                      color: Colors.orange,
+                    ),
+                    title: Text(
+                      s.btnReport,
+                      style: const TextStyle(color: Colors.orange),
+                    ),
+                  ),
+                ),
+              ];
+            },
           ),
         ],
       ),
@@ -2238,13 +2282,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                 Expanded(
                   child: Stack(
                     children: [
-                      // Typing/recording bubble di-drive ValueNotifier →
-                      // hanya subtree list ini yang rebuild saat typing
-                      // berubah, BUKAN seluruh layar (cegah jank "ngetik").
-                      ValueListenableBuilder<int>(
-                        valueListenable: _typingState,
-                        builder: (context, _, __) =>
-                            StreamBuilder<List<MessageModel>>(
+                      // PERF: JANGAN bungkus seluruh ListView dengan
+                      // ValueListenableBuilder(_typingState) — dulu itu
+                      // me-rebuild SELURUH daftar pesan (items O(n) + semua
+                      // MessageBubble + avatar) tiap typing berubah, jadi
+                      // "ngetik → semua ke-load ulang → jeda". Sekarang
+                      // hanya bubble typing (item index 0) yang di-drive
+                      // ValueNotifier — list & bubble lain tak tersentuh.
+                      StreamBuilder<List<MessageModel>>(
                         stream: _msgsStream,
                         // FRAME PERTAMA LANGSUNG: data awal dari cache memori
                         // (sinkron) → pesan "nempel" sejak frame pertama
@@ -2276,11 +2321,42 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           }
                           // Bubble typing/recording jadi item paling bawah list
                           // (ala WhatsApp) supaya ikut scroll bersama pesan.
-                          final typingOn = _showTyping || _showRecording;
-                          if (all.isEmpty && !typingOn) {
-                            // Chat baru/kosong — tampilkan layar kosong saja,
-                            // tanpa ikon/teks "mulai percakapan".
-                            return const SizedBox.shrink();
+                          if (all.isEmpty) {
+                            // Chat kosong: hanya bubble typing yang mungkin
+                            // tampil → cukup listen ValueNotifier di sini
+                            // (murah; chat kosong = tak ada list pesan).
+                            return ValueListenableBuilder<int>(
+                              valueListenable: _typingState,
+                              builder: (_, tv, __) {
+                                if (tv == 0) return const SizedBox.shrink();
+                                return ListView(
+                                  controller: _scrollCtrl,
+                                  reverse: true,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    10,
+                                    12,
+                                    10,
+                                    12,
+                                  ),
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        4,
+                                        0,
+                                        6,
+                                        6,
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: ChatTypingBubble(
+                                          isRecording: tv == 2,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
                           }
                           // Auto-load image deferred (di luar window 50) —
                           // fire-and-forget, hasil masuk via stream emit.
@@ -2334,28 +2410,38 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                             controller: _scrollCtrl,
                             reverse: true,
                             padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
-                            itemCount: items.length + (typingOn ? 1 : 0),
+                            // Slot index 0 SELALU ada untuk bubble typing —
+                            // isinya di-drive ValueNotifier (bubble atau
+                            // kosong) sehingga perubahan typing TIDAK
+                            // me-rebuild list/bubble lain.
+                            itemCount: items.length + 1,
                             itemBuilder: (_, i) {
                               // Index 0 = paling bawah (list reverse): bubble
                               // typing/recording nempel di bawah pesan terbaru
                               // dan ikut scroll seperti bubble biasa.
-                              if (typingOn && i == 0) {
-                                return Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    4,
-                                    0,
-                                    0,
-                                    6,
-                                  ),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: ChatTypingBubble(
-                                      isRecording: _showRecording,
-                                    ),
-                                  ),
+                              if (i == 0) {
+                                return ValueListenableBuilder<int>(
+                                  valueListenable: _typingState,
+                                  builder: (_, tv, __) {
+                                    if (tv == 0) return const SizedBox.shrink();
+                                    return Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        4,
+                                        0,
+                                        6,
+                                        6,
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: ChatTypingBubble(
+                                          isRecording: tv == 2,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 );
                               }
-                              final di = typingOn ? i - 1 : i;
+                              final di = i - 1;
                               final item = items[items.length - 1 - di];
                               if (item.dateLabel != null) {
                                 return DateChip(label: item.dateLabel!);
@@ -2416,7 +2502,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           );
                         },
                       ),
-                      ), // ValueListenableBuilder _typingState
                       if (pointsEnabled)
                         Positioned(
                           top: 8,
