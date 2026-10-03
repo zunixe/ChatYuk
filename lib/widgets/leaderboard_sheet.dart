@@ -685,9 +685,13 @@ class _AddFriendIconButton extends StatelessWidget {
                   : () async {
                       final messenger = ScaffoldMessenger.of(context);
                       final res = await sp.sendFriendRequest(uid);
-                      if (res != 'rejected') {
+                      if (res == 'pending' || res == 'friends') {
                         messenger.showSnackBar(
                           SnackBar(content: Text(s.friendRequestSent)),
+                        );
+                      } else {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text(s.errGeneric)),
                         );
                       }
                     },

@@ -2057,8 +2057,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                 showChatSnack(context, s.btnFollow);
               } else if (val == 'friend') {
                 final social = context.read<SocialProvider>();
-                social.sendFriendRequest(widget.otherUid);
-                showChatSnack(context, s.friendRequestSent);
+                final messenger = ScaffoldMessenger.of(context);
+                social.sendFriendRequest(widget.otherUid).then((res) {
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        (res == 'pending' || res == 'friends')
+                            ? s.friendRequestSent
+                            : s.errGeneric,
+                      ),
+                    ),
+                  );
+                });
               } else if (val == 'block') {
                 chat.blockUser(myUid!, widget.otherUid);
                 showChatSnack(context, s.blockSuccess);
