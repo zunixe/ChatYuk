@@ -150,9 +150,18 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     if (selectedIds.length != 1) return;
     final link = linkFor(anchor.id);
     final entry = OverlayEntry(
-      builder: (_) => Stack(
+      builder: (overlayCtx) => Stack(
         children: [
-          Positioned.fill(
+          // Layer penutup tap-di-luar JANGAN menutupi AppBar: tap ikon
+          // AppBar seleksi (reply/edit/...) yang mendarat di layer ini MATI
+          // (terbukti di test: onPressed tak pernah jalan) → user harus tap
+          // dua kali (tap pertama cuma menutup layer). Mulai di bawah zona
+          // AppBar (status bar + toolbar standar 56).
+          Positioned(
+            top: MediaQuery.of(overlayCtx).padding.top + kToolbarHeight,
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: GestureDetector(
               onTap: hideActionBar,
               behavior: HitTestBehavior.translucent,
