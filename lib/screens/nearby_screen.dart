@@ -31,11 +31,14 @@ class NearbyScreen extends StatefulWidget {
 
 class _NearbyScreenState extends State<NearbyScreen> {
   LocationService get _loc => context.read<LocationProvider>().location;
-  double _radiusKm = 10;
+  double _radiusKm = 50;
   bool _loading = true;
   bool _shareOn = false;
   String? _error;
   List<Map<String, dynamic>> _users = [];
+  // Cegah 2 query tumpang-tindih (refresh awal + refresh GPS latar) yang
+  // memicu RPC dobel & radar berkedip. Refresh terakhir menang.
+  bool _refreshing = false;
 
   @override
   void initState() {
@@ -46,21 +49,31 @@ class _NearbyScreenState extends State<NearbyScreen> {
   Future<void> _init() async {
     final auth = context.read<AuthProvider>();
     _shareOn = auth.profile?.shareLocation ?? false;
-    // Pakai lastKnown dulu (instan) supaya radar tidak blank — GPS akurat
-    // jalan di belakang dan menyegarkan lokasi begitu selesai.
+    // Anti-lag buka layar: JANGAN tunggu GPS chain (bisa belasan detik).
+    // Pakai lastKnown (instan) kalau ada → langsung query. GPS akurat &
+    // fallback IP jalan di BELAKANG, lalu refresh sekali bila sumber berubah.
     final lastKnown = await _loc.lastKnownPosition();
+    if (!mounted) return;
     if (lastKnown != null) {
-      // lastKnown sudah cukup buat query awal; background tetap refresh.
+      // Radar + hasil tampil cepat dari posisi terakhir.
+      unawaited(_refresh());
+      // Refresh lokasi di latar; refresh ulang HANYA bila dapat posisi baru
+      // (hindari RPC sia-sia saat lokasi tak berubah / gagal).
       unawaited(_loc.updateMyLocation().then((src) {
-        if (src == 'gps' && mounted) {
-          _autoEnableShare();
-        }
+        if (!mounted || src == null) return;
+        if (src == 'gps') _autoEnableShare();
+        _refresh();
       }));
     } else {
+      // Belum ada posisi tersimpan → tandai loading (radar) lalu resolve
+      // lokasi sekali; kalau gagal, layar menampilkan empty/error, bukan
+      // spinner tanpa ujung.
+      unawaited(_refresh());
       final src = await _loc.updateMyLocation();
+      if (!mounted) return;
       if (src == 'gps') await _autoEnableShare();
+      if (mounted) await _refresh();
     }
-    await _refresh();
   }
 
   /// Auto-enable share lokasi SEKALI — HANYA jika user mengizinkan GPS
@@ -77,6 +90,8 @@ class _NearbyScreenState extends State<NearbyScreen> {
   }
 
   Future<void> _refresh() async {
+    if (_refreshing) return;
+    _refreshing = true;
     final started = DateTime.now();
     setState(() {
       _loading = true;
@@ -84,11 +99,11 @@ class _NearbyScreenState extends State<NearbyScreen> {
     });
     try {
       final list = await _loc.nearbyUsers(_radiusKm);
-      // Radar minimal 600ms (dulu 2,2s) — cukup terasa "mencari" tanpa
-      // delay buatan panjang yang membuat fitur terkesan lambat.
+      // Radar minimal 350ms — cukup terasa "mencari" tanpa delay buatan
+      // panjang. (Dulu 600ms = tambahan latensi murni tiap buka/geser.)
       final elapsed = DateTime.now().difference(started);
-      if (elapsed < const Duration(milliseconds: 600)) {
-        await Future.delayed(const Duration(milliseconds: 600) - elapsed);
+      if (elapsed < const Duration(milliseconds: 350)) {
+        await Future.delayed(const Duration(milliseconds: 350) - elapsed);
       }
       if (!mounted) return;
       setState(() {
@@ -98,8 +113,8 @@ class _NearbyScreenState extends State<NearbyScreen> {
     } catch (e) {
       if (!mounted) return;
       final elapsed = DateTime.now().difference(started);
-      if (elapsed < const Duration(milliseconds: 600)) {
-        await Future.delayed(const Duration(milliseconds: 600) - elapsed);
+      if (elapsed < const Duration(milliseconds: 350)) {
+        await Future.delayed(const Duration(milliseconds: 350) - elapsed);
       }
       if (!mounted) return;
       final msg = e.toString().toLowerCase();
@@ -118,6 +133,8 @@ class _NearbyScreenState extends State<NearbyScreen> {
             ? 'share_required'
             : (msg.contains('no location') ? 'no_location' : 'generic');
       });
+    } finally {
+      _refreshing = false;
     }
   }
 
@@ -260,35 +277,16 @@ class _NearbyScreenState extends State<NearbyScreen> {
               activeColor: AppTheme.primary,
             ),
           ),
-          // Slider( radius.
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.social_distance,
-                  size: 18,
-                  color: AppTheme.textSecondary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${s.nearbyRadius}: ${_radiusKm.round()} km',
-                  style: AppText.bodyStrong,
-                ),
-              ],
-            ),
-          ),
-          Slider(
-            value: _radiusKm,
-            min: 1,
-            // Maks = batas server (nearby_users clamp 500km). 200km terlalu
-            // kecil untuk Indonesia (Bandung–Jogja ~300km).
-            max: 500,
-            divisions: 499,
-            activeColor: AppTheme.primary,
-            label: '${_radiusKm.round()} km',
-            onChanged: (v) => setState(() => _radiusKm = v),
-            onChangeEnd: (_) => _refresh(),
+          // Slider radius di-delegasikan ke widget ber-state SENDIRI supaya
+          // geser slider tidak me-rebuild SELURUH layar + daftar kartu (dulu
+          // setState di sini = list ikut rebuild tiap frame drag → patah-patah).
+          _RadiusSlider(
+            initial: _radiusKm,
+            onChanged: (v) => _radiusKm = v,
+            onChangeEnd: (v) {
+              _radiusKm = v;
+              _refresh();
+            },
           ),
           Expanded(child: _buildBody(s)),
         ],
@@ -357,8 +355,12 @@ class _NearbyScreenState extends State<NearbyScreen> {
           MediaQuery.of(context).padding.bottom + 12,
         ),
         itemCount: _users.length,
-        itemBuilder: (_, i) =>
-            NearbyCard(data: _users[i], onTap: () => _startChat(_users[i])),
+        itemBuilder: (_, i) => RepaintBoundary(
+          child: NearbyCard(
+            data: _users[i],
+            onTap: () => _startChat(_users[i]),
+          ),
+        ),
       ),
     );
   }
@@ -403,6 +405,67 @@ class _NearbyScreenState extends State<NearbyScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Slider radius dengan state SENDIRI — geser hanya rebuild widget ini,
+/// bukan seluruh layar + daftar (dulu setState di parent = list rebuild tiap
+/// frame → patah-patah). [onChanged] = nilai live; [onChangeEnd] = trigger query.
+class _RadiusSlider extends StatefulWidget {
+  final double initial;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
+  const _RadiusSlider({
+    required this.initial,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
+
+  @override
+  State<_RadiusSlider> createState() => _RadiusSliderState();
+}
+
+class _RadiusSliderState extends State<_RadiusSlider> {
+  late double _v = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(
+            children: [
+              Icon(
+                Icons.social_distance,
+                size: 18,
+                color: AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${s.nearbyRadius}: ${_v.round()} km',
+                style: AppText.bodyStrong,
+              ),
+            ],
+          ),
+        ),
+        Slider(
+          value: _v,
+          min: 1,
+          // Maks = batas server (nearby_users clamp 500km).
+          max: 500,
+          divisions: 499,
+          activeColor: AppTheme.primary,
+          label: '${_v.round()} km',
+          onChanged: (v) {
+            setState(() => _v = v);
+            widget.onChanged(v);
+          },
+          onChangeEnd: widget.onChangeEnd,
+        ),
+      ],
     );
   }
 }

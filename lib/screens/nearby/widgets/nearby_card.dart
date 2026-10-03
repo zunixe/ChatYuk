@@ -45,13 +45,9 @@ class NearbyCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        // Tanpa boxShadow blur & tanpa border: shadow per-kartu mahal saat
+        // scroll (satu operasi blur GPU per kartu). Pemisahan kartu cukup dari
+        // kontras warna bgCard di atas bgScreen — hemat, visual tetap rapi.
       ),
       child: Material(
         color: Colors.transparent,
