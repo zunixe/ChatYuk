@@ -9,9 +9,9 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
-import '../models/user_model.dart';
 import '../utils.dart';
 import '../widgets/profile_avatar.dart';
+import '../widgets/social_actions.dart';
 import 'private_chat_screen.dart';
 import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
@@ -662,9 +662,31 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     final blocked = context.select<ChatProvider, List<String>>(
       (c) => c.blockedUids,
     );
-    final onlineUsers = context.select<OnlineUsersProvider, List<UserModel>>(
-      (o) => o.users,
-    );
+    // PERF (§26): JANGAN select SELURUH daftar online — list itu berubah
+    // referensi tiap event presence (heartbeat ~30s) sehingga seluruh
+    // ChatList rebuild dan menabrak frame saat pindah tab (terukur 853ms
+    // dulu). select HANYA status/nama uid yang benar-benar ada di daftar
+    // chat → presence user di luar daftar tidak memicu rebuild.
+    final chatOtherUids = _lastChats
+        .map(
+          (c) => c.participants.firstWhere(
+            (p) => p != auth.uid,
+            orElse: () => '',
+          ),
+        )
+        .where((u) => u.isNotEmpty)
+        .toSet();
+    final onlineRelevant = context.select<OnlineUsersProvider,
+        ({Map<String, String> status, Map<String, String> name})>((o) {
+      final st = <String, String>{};
+      final nm = <String, String>{};
+      for (final u in o.users) {
+        if (!chatOtherUids.contains(u.uid)) continue;
+        st[u.uid] = u.status;
+        if (u.nickname.isNotEmpty) nm[u.uid] = u.nickname;
+      }
+      return (status: st, name: nm);
+    });
     if (auth.uid == null) return const SizedBox();
 
     final effectiveQuery = widget.externalQuery ?? _query;
@@ -672,12 +694,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     // Map uid → status (titik/subtitle) dan uid → nickname live
     // (judul + cari) dari daftar online users. DIPISAH: status tidak
     // boleh dipakai sebagai nama (bug: judul jadi "online"/"idle").
-    final statusMap = <String, String>{};
-    final liveNameMap = <String, String>{};
-    for (final u in onlineUsers) {
-      statusMap[u.uid] = u.status;
-      if (u.nickname.isNotEmpty) liveNameMap[u.uid] = u.nickname;
-    }
+    final statusMap = onlineRelevant.status;
+    final liveNameMap = onlineRelevant.name;
 
     // Recompute hanya kalau input yang memengaruhi hasil berubah (data,
     // query, tab arsip, atau peta nama live). Rebuild lain (tema dsb.)
@@ -1435,6 +1453,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                 const SizedBox(height: 6),
                                                 _FriendButton(
                                                   otherUid: otherUid,
+                                                  name: otherName,
                                                 ),
                                               ],
                                             ],
@@ -1494,7 +1513,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
 /// N+1 RPC, spinner berjejak saat jaringan lambat).
 class _FriendButton extends StatefulWidget {
   final String otherUid;
-  const _FriendButton({required this.otherUid});
+  final String name;
+  const _FriendButton({required this.otherUid, required this.name});
 
   @override
   State<_FriendButton> createState() => _FriendButtonState();
@@ -1504,13 +1524,26 @@ class _FriendButtonState extends State<_FriendButton> {
   bool _busy = false;
   double _scale = 1.0;
 
-  Future<void> _send() async {
+  Future<void> _onTap(bool isFriend, bool pending) async {
+    if (_busy) return;
     final s = context.read<LocaleProvider>().s;
+    final social = context.read<SocialProvider>();
+    // Putus teman / batalkan lewat helper bersama (dialog + snackbar).
+    if (isFriend) {
+      setState(() => _busy = true);
+      await runUnfriend(context, social, widget.otherUid, widget.name);
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
+    if (pending) {
+      setState(() => _busy = true);
+      await runCancelRequest(context, social, widget.otherUid, widget.name);
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
-    final res = await context.read<SocialProvider>().sendFriendRequest(
-      widget.otherUid,
-    );
+    final res = await social.sendFriendRequest(widget.otherUid);
     if (!mounted) return;
     setState(() => _busy = false);
     if (res == 'pending' || res == 'friends') {
@@ -1519,7 +1552,7 @@ class _FriendButtonState extends State<_FriendButton> {
       await Future.delayed(const Duration(milliseconds: 150));
       if (!mounted) return;
       setState(() => _scale = 1.0);
-      messenger.showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+      messenger.showSnackBar(SnackBar(content: Text(s.friendRequestSentMutual)));
     } else {
       // Gagal (anon/target tak terdaftar/jaringan) → jangan bilang sukses.
       messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
@@ -1532,19 +1565,20 @@ class _FriendButtonState extends State<_FriendButton> {
     final social = context.watch<SocialProvider>();
     final isFriend = social.isFriend(widget.otherUid);
     final pending = social.isPendingFriendRequest(widget.otherUid);
-    final done = isFriend || pending;
     final icon = isFriend
-        ? Icons.how_to_reg_rounded
-        : (pending ? Icons.schedule_rounded : Icons.person_add_alt_rounded);
+        ? Icons.group_remove_rounded
+        : (pending ? Icons.cancel_rounded : Icons.person_add_alt_rounded);
     final tip = isFriend
-        ? s.btnFriends
-        : (pending ? s.btnFriendRequested : s.btnAddFriend);
+        ? s.btnUnfriend
+        : (pending
+              ? s.btnCancelRequest
+              : '${s.btnAddFriend} · ${s.sheetFriendDesc}');
     return Tooltip(
       message: tip,
       child: GestureDetector(
-        onTap: done || _busy ? null : _send,
-        onTapDown: done || _busy ? null : (_) => setState(() => _scale = 0.8),
-        onTapUp: done || _busy ? null : (_) => setState(() => _scale = 1.0),
+        onTap: _busy ? null : () => _onTap(isFriend, pending),
+        onTapDown: _busy ? null : (_) => setState(() => _scale = 0.8),
+        onTapUp: _busy ? null : (_) => setState(() => _scale = 1.0),
         onTapCancel: () => setState(() => _scale = 1.0),
         child: AnimatedScale(
           scale: _scale,
