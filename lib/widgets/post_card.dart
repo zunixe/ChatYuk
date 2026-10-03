@@ -265,23 +265,32 @@ class _PostCardState extends State<PostCard> {
 
   Future<void> _like() async {
     if (_busy) return;
+    // OPTIMISTIK: UI langsung berubah (hati + counter) TANPA menunggu
+    // network — hapus delay saat tap. RPC jalan di belakang; hasil server
+    // merekonsiliasi angka absolut, error → kembalikan ke nilai awal.
+    final tp = context.read<TimelineProvider>();
+    final curLiked = _p['isLiked'] == true;
+    final curCount = (_p['likeCount'] as num?)?.toInt() ?? 0;
+    final optLiked = !curLiked;
+    final optCount = optLiked
+        ? curCount + 1
+        : (curCount - 1).clamp(0, 1 << 31);
+    tp.updatePost(_id, {'isLiked': optLiked, 'likeCount': optCount});
     setState(() => _busy = true);
     final s = context.read<LocaleProvider>().s;
     try {
-      final res = await context.read<TimelineProvider>().toggleLike(_id);
+      final res = await tp.toggleLike(_id);
       if (!mounted) return;
       final liked = res['liked'] == true;
-      // Sumber kebenaran = server. RPC mengembalikan likeCount absolut
-      // (migration 20260922000000). Hindari hitung `cur ± 1` yang bisa
-      // dobel saat realtime UPDATE balapan menimpa nilai lokal.
+      // Sumber kebenaran = server (RPC mengembalikan likeCount absolut).
       final serverCount = (res['likeCount'] as num?)?.toInt();
-      final cur = (_p['likeCount'] as num?)?.toInt() ?? 0;
-      final nextCount = serverCount ?? (liked ? cur + 1 : (cur - 1).clamp(0, 1 << 31));
-      context.read<TimelineProvider>().updatePost(_id, {
+      tp.updatePost(_id, {
         'isLiked': liked,
-        'likeCount': nextCount,
+        'likeCount': serverCount ?? optCount,
       });
     } catch (_) {
+      // Gagal → balikkan ke state semula (anti "hati nempel").
+      tp.updatePost(_id, {'isLiked': curLiked, 'likeCount': curCount});
       if (mounted) {
         ScaffoldMessenger.of(
           context,
