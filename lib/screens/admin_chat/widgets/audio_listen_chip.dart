@@ -53,14 +53,28 @@ class _AudioListenChipState extends State<AudioListenChip>
     final s = context.watch<LocaleProvider>().s;
     final sess = widget.session;
     final sec = sess.call.elapsedSeconds;
+    // Status call NYATA: header tidak boleh selalu "Mendengarkan…" saat call
+    // masih ringing / handshake belum selesai. Dulu header selalu "Mendengarkan…"
+    // walau belum ada audio → admin bingung ("mendengarkan" tapi suara belum ada).
+    final bool ringing = sess.status == 'ringing';
+    final bool anyConnected = sess.participants.any((p) => p.connected);
+    final String headerText = ringing
+        ? s.adminCallRinging
+        : (anyConnected ? s.adminListening : s.adminWatchConnecting);
+    final Color headerColor = ringing
+        ? AppTheme.textSecondary
+        : (anyConnected ? const Color(0xFF2E9E5B) : Colors.orange);
+    final IconData headerIcon = ringing
+        ? Icons.ring_volume
+        : (anyConnected ? Icons.graphic_eq : Icons.sync);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF2E9E5B).withValues(alpha: 0.12),
+        color: headerColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF2E9E5B), width: 1),
+        border: Border.all(color: headerColor, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,11 +86,11 @@ class _AudioListenChipState extends State<AudioListenChip>
                 child: Container(
                   width: 32,
                   height: 32,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF2E9E5B),
+                  decoration: BoxDecoration(
+                    color: headerColor,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.graphic_eq, size: 18, color: Colors.white),
+                  child: Icon(headerIcon, size: 18, color: Colors.white),
                 ),
               ),
               const SizedBox(width: 10),
@@ -85,7 +99,7 @@ class _AudioListenChipState extends State<AudioListenChip>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      s.adminListening,
+                      headerText,
                       style: AppText.bodyStrong,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -102,12 +116,12 @@ class _AudioListenChipState extends State<AudioListenChip>
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.call, size: 14, color: const Color(0xFF2E9E5B)),
+                  Icon(Icons.call, size: 14, color: headerColor),
                   const SizedBox(width: 4),
                   Text(
                     '${sec ~/ 60}:${(sec % 60).toString().padLeft(2, '0')}',
                     style: AppText.label.copyWith(
-                      color: const Color(0xFF2E9E5B),
+                      color: headerColor,
                     ),
                   ),
                 ],
@@ -145,9 +159,13 @@ class _AudioListenChipState extends State<AudioListenChip>
     final Color color;
     final IconData icon;
     if (sess.status == 'ringing') {
-      status = s.adminCallRinging;
+      // Saat call masih ringing, bedakan ARAH: pemanggil "Menelepon",
+      // penerima "Berdering". Dulu keduanya "Memanggil…" → admin tak tahu
+      // siapa yang menunggu dijawab.
+      final bool isCaller = p.uid == sess.call.callerId;
+      status = isCaller ? s.adminCallerCalling : s.adminCalleeRinging;
       color = AppTheme.textSecondary;
-      icon = Icons.ring_volume;
+      icon = isCaller ? Icons.call_made : Icons.ring_volume;
     } else if (p.connecting || !p.connected) {
       status = s.adminWatchConnecting;
       color = Colors.orange;

@@ -9,6 +9,12 @@ extension SAdminX on S {
 
   String get adminCallRinging => isId ? 'Memanggil...' : 'Ringing...';
 
+  /// Arah panggilan saat masih ringing — bedakan pemanggil vs penerima
+  /// supaya admin tahu siapa yang menunggu dijawab.
+  String get adminCallerCalling => isId ? 'Menelepon' : 'Calling';
+
+  String get adminCalleeRinging => isId ? 'Berdering' : 'Ringing';
+
   String get adminWatching => isId ? 'Memantau' : 'Monitoring';
 
   String get adminListening => isId ? 'Mendengarkan...' : 'Listening...';
