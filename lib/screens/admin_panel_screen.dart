@@ -444,6 +444,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 const SizedBox(height: 12),
                 ReportedUsersCard(stats: stats, s: s),
                 const SizedBox(height: 12),
+                PrivacyUsersCard(stats: stats, s: s),
+                const SizedBox(height: 12),
                 ForceLogoutCard(
                   s: s,
                   logoutCtrl: _logoutCtrl,

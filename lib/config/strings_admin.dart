@@ -427,6 +427,25 @@ extension SAdminX on S {
 
   String get adminReportedBy => isId ? 'Dilaporkan oleh' : 'Reported by';
 
+  // ── Privasi (kartu Ringkasan) ──
+  String get adminPrivacyTitle => isId ? 'Privasi' : 'Privacy';
+  String get adminPrivacyEmpty =>
+      isId ? 'Tidak ada user pakai privasi' : 'No users use privacy';
+  String get adminPrivacyUsers => isId ? 'user' : 'users';
+  // Label field privasi.
+  String get privPresence => isId ? 'Status online' : 'Online status';
+  String get privLastSeen => isId ? 'Terakhir dilihat' : 'Last seen';
+  String get privPhoto => isId ? 'Foto profil' : 'Profile photo';
+  String get privAbout => isId ? 'Tentang' : 'About';
+  String get privStory => isId ? 'Story' : 'Story';
+  // Nilai privasi.
+  String get privEveryone => isId ? 'Semua' : 'Everyone';
+  String get privFriends => isId ? 'Teman' : 'Friends';
+  String get privNobody => isId ? 'Sembunyikan' : 'Hidden';
+  String get privEveryoneExcept => isId ? 'Semua kecuali' : 'Everyone except';
+  String get privFriendsExcept => isId ? 'Teman kecuali' : 'Friends except';
+  String get privOnly => isId ? 'Hanya tertentu' : 'Only selected';
+
   String get adminDangerZone => isId ? 'Zona Bahaya' : 'Danger Zone';
 
   String get adminResetAllPoints => isId

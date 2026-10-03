@@ -270,3 +270,125 @@ class DangerZoneCard extends StatelessWidget {
     );
   }
 }
+
+/// Daftar user yang memakai pengaturan privasi NON-default, beserta field
+/// apa saja yang mereka ubah (presence/last_seen/foto/about/story).
+/// Data dari `admin_stats_compute().privacy_users`.
+class PrivacyUsersCard extends StatelessWidget {
+  final Map<String, dynamic>? stats;
+  final S s;
+  const PrivacyUsersCard({super.key, required this.stats, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    final users = (stats?['privacy_users'] as List?) ?? const [];
+    return PanelCard(s.adminPrivacyTitle, Icons.lock_outline, AppTheme.accent, [
+      if (users.isEmpty)
+        Text(
+          s.adminPrivacyEmpty,
+          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        )
+      else ...[
+        Text(
+          '${users.length} ${s.adminPrivacyUsers}',
+          style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+        ),
+        const SizedBox(height: 8),
+        for (var i = 0; i < users.length && i < 12; i++)
+          _privacyRow(users[i]),
+      ],
+    ]);
+  }
+
+  Widget _privacyRow(dynamic raw) {
+    final u = (raw as Map?) ?? const {};
+    final nickname = (u['nickname'] ?? '?').toString();
+    final registered = u['is_registered'] == true;
+    final settings = (u['settings'] as Map?) ?? const {};
+
+    // Terjemahkan tiap field yang di-set → "Label: Nilai".
+    final parts = <String>[];
+    void add(String field, String label) {
+      final v = settings[field]?.toString();
+      if (v == null || v.isEmpty) return;
+      parts.add('$label: ${_valueLabel(v)}');
+    }
+
+    add('presence', s.privPresence);
+    add('last_seen', s.privLastSeen);
+    add('profile_photo', s.privPhoto);
+    add('about', s.privAbout);
+    add('story', s.privStory);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.person_outline, size: 14, color: AppTheme.accent),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.bodyStrong,
+                ),
+              ),
+              if (registered) ...[
+                const SizedBox(width: 4),
+                const Icon(Icons.verified, size: 12, color: AppTheme.primary),
+              ],
+            ],
+          ),
+          const SizedBox(height: 3),
+          // Chip tiap setting yang diubah.
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              for (final p in parts)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    p,
+                    style: AppText.micro.copyWith(
+                      color: AppTheme.accent,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Terjemahkan nilai visibilitas → label ramah bahasa.
+  String _valueLabel(String v) {
+    switch (v) {
+      case 'everyone':
+        return s.privEveryone;
+      case 'friends':
+        return s.privFriends;
+      case 'nobody':
+        return s.privNobody;
+      case 'everyone_except':
+        return s.privEveryoneExcept;
+      case 'friends_except':
+        return s.privFriendsExcept;
+      case 'only':
+        return s.privOnly;
+      default:
+        return v;
+    }
+  }
+}
