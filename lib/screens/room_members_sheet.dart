@@ -7,8 +7,11 @@ import '../config/strings_admin.dart';
 import '../providers/chat_provider.dart';
 import '../providers/room_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/avatar_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../widgets/sheet_drag_handle.dart';
+import '../widgets/profile_avatar.dart';
+import '../widgets/gender_avatar.dart';
 
 /// Bottom sheet anggota private room: role, kick, jadikan admin,
 /// izinkan broadcast, dan antrean approval (untuk admin).
@@ -63,6 +66,15 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
         _liveUid = room?['live_uid']?.toString();
         _loading = false;
       });
+      // Prefetch avatar semua anggota (1 query) — cegah N fetch serial saat
+      // list dirender (foto muncul cepat, bukan satu-satu lambat).
+      final uids = members
+          .map((m) => '${m['user_id'] ?? ''}')
+          .where((u) => u.isNotEmpty)
+          .toList();
+      if (uids.isNotEmpty && mounted) {
+        context.read<AvatarProvider>().prefetch(uids);
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -303,20 +315,16 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
                         final m = _members[i];
                         return ListTile(
                       dense: true,
-                      leading: CircleAvatar(
-                        radius: 16,
-                        backgroundColor:
-                            AppTheme.primary.withValues(alpha: 0.15),
-                        child: Text(
-                          ('${m['nickname'] ?? '?'}')
-                                  .isNotEmpty
-                              ? '${m['nickname']}'[0].toUpperCase()
-                              : '?',
-                          style: AppText.bodySmall.copyWith(
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                      // Avatar: foto asli bila ada (lazy via ProfileAvatar),
+                      // kalau tidak → inisial + border WARNA GENDER
+                      // (male=biru/female=pink), selaras list Pengguna Online.
+                      leading: ProfileAvatar(
+                        uid: '${m['user_id'] ?? ''}',
+                        name: '${m['nickname'] ?? '?'}',
+                        size: 32,
+                        borderColor:
+                            GenderAvatar.colorFor('${m['gender'] ?? ''}'),
+                        borderWidth: 1.6,
                       ),
                       title: Text(
                         '${m['nickname'] ?? '?'}',
@@ -542,19 +550,15 @@ Future<void> showGroupInvitePicker({
                     itemCount: people.length,
                     itemBuilder: (_, i) => ListTile(
                       dense: true,
-                      leading: CircleAvatar(
-                        radius: 16,
-                        backgroundColor:
-                            AppTheme.primary.withValues(alpha: 0.15),
-                        child: Text(
-                          (people[i]['name'] ?? '?').isNotEmpty
-                              ? people[i]['name']![0].toUpperCase()
-                              : '?',
-                          style: AppText.bodySmall.copyWith(
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                      // Avatar foto asli (lazy) + border gender; fallback
+                      // inisial bila tanpa foto — selaras list Online.
+                      leading: ProfileAvatar(
+                        uid: people[i]['uid']!,
+                        name: people[i]['name'] ?? '?',
+                        size: 32,
+                        borderColor: GenderAvatar.colorFor(
+                            people[i]['gender'] ?? ''),
+                        borderWidth: 1.6,
                       ),
                       title: Text(people[i]['name'] ?? '?',
                           style: AppText.bodySmall),
