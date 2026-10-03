@@ -409,7 +409,7 @@ ke user asli). Dikunci: `supabase/tests/schema_sync_test.sql`.
 | `private_messages.*` | chat, notif, AI enqueue, admin monitor — **policy `private_messages_admin_select`** (2026-09-29): admin boleh SELECT (syarat realtime monitor); user biasa tetap policy peserta; admin sudah baca semua via RPC |
 | `messages.mentions`, `private_messages.mentions` | highlight mention + push terarah mention (room/grup); `@all` hanya grup/private room (owner/admin), mati di global room. **Notif mention (room) via OUTBOX:** trigger `notify_mention_room` menulis `public.outbox`; dikirim oleh edge `outbox-worker` + cron `chatyuk-outbox-worker` (*/1m). Kalau worker/cron mati → notif mention tidak terkirim (pesan tetap aman). Lihat `20260927140000` & `20260927150000`. |
 | `private_chats.last_read_at` (map uid→ts) | centang-2 di chat, unread badge, mark_chat_read, admin monitor |
-| Registrasi: 12 kolom `profiles` wajib tulis | `id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen` harus tetap `INSERT`+`UPDATE` untuk `authenticated` — pola tulis **split-write** (`upsert ignoreDuplicates` + `PATCH`), JANGAN `merge-duplicates` (butuh SELECT → 42501 bila kolom di-revoke). Insiden: `docs/INCIDENT_ANON_REGISTER_42501.md`. Dikunci: `supabase/tests/auth_write_path_test.sql` + `scripts/smoke_anon_register.sh` |
+| Registrasi: 12 kolom `profiles` wajib tulis | `id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen` harus tetap `INSERT`+`UPDATE` untuk `authenticated` — pola tulis **split-write**: **INSERT polos** (`insert()`, TANPA `on_conflict`/`upsert` → tidak butuh SELECT sama sekali) lalu `PATCH` terpisah untuk kolom pasca-insert + kolom sensitif. Duplikat (23505) ditangani klien → lanjut PATCH. JANGAN pakai `upsert` `merge-duplicates` MAUPUN `ignore-duplicates` (keduanya `ON CONFLICT` → butuh SELECT → 42501 bila kolom di-revoke). Insiden: `docs/INCIDENT_ANON_REGISTER_42501.md`. Dikunci: `supabase/tests/auth_write_path_test.sql` + `scripts/smoke_anon_register.sh` |
 | `private_chats.last_message_at` | urutan list chat, pinned sort, cache warm |
 
 ---
@@ -460,6 +460,14 @@ mis. `story_service`).
 ### 10d. Widget bersama (jangan bikin salinan baru)
 `lib/widgets/`: `detail_row.dart` (DetailRow), `sheet_drag_handle.dart`
 (SheetDragHandle), `initial_avatar.dart` (InitialAvatarBox/Circle),
+`profile_avatar.dart` (ProfileAvatar — avatar by uid, resolve via
+`AvatarB64Service`), `user_avatar.dart` (**UserAvatar** — avatar FOTO
+berbasis-`src` yang MODULAR untuk semua halaman user-facing: daftar
+Pengguna Online, Nearby, panel admin. Menangani base64 ATAU path storage
+`avatars/...`, decode isolate, cap `ResizeImage(96)`, `gaplessPlayback`,
+anti-kedip/anti-hilang. Opsi `borderRadius` (0=lingkaran, >0=kotak rounded)
+dan `keepRingForPhoto` (ring transparan saat foto, gaya Nearby). **Jangan
+menyalin logika `_AsyncAvatar` lama — pakai `UserAvatar`.**),
 `admin_error_view.dart` (AdminErrorView), `toggle_tile.dart` (ToggleTile),
 `search_field.dart` (SearchField), `filter_chip_pill.dart` (FilterChipPill).
 Utilitas bersama: `utils.matchesQuery`, `admin/admin_grouping.dart`

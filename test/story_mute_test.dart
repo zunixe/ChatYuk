@@ -5,6 +5,8 @@ import 'package:chatyuk/models/story_model.dart';
 import 'package:chatyuk/providers/story_provider.dart';
 import 'package:chatyuk/services/story_service.dart';
 
+import 'test_helper.dart';
+
 class MockStoryService extends Mock implements StoryService {}
 
 StoryTrayItem trayItem(String id, {bool muted = false, bool unseen = true}) =>
@@ -17,6 +19,13 @@ StoryTrayItem trayItem(String id, {bool muted = false, bool unseen = true}) =>
 
 /// Mute story ala IG: optimistis pindah + transparan, server menyusul.
 void main() {
+  setUpAll(() async {
+    await initSupabaseForTest();
+    // `StoryProvider.refresh()` membaca cache disk dulu (MediaDiskCache) —
+    // tanpa prewarm, waitReady() menjadwalkan timer pending → test hang.
+    await prewarmMediaForTest();
+  });
+
   group('StoryTrayItem', () {
     test('fromMap membaca muted', () {
       final it = StoryTrayItem.fromMap({
@@ -58,10 +67,10 @@ void main() {
 
     tearDown(() => provider.dispose());
 
-    testWidgets('mute → flag + pindah belakang', (t) async {
-      // Tray diisi lewat refresh dengan stub fetchTray.
-      when(() => service.fetchTray()).thenAnswer(
-        (_) async => [trayItem('a'), trayItem('b'), trayItem('c')],
+    test('mute → flag + pindah belakang', () async {
+      // Tray diisi lewat refresh dengan stub fetchTrayRaw (kontrak provider).
+      when(() => service.fetchTrayRaw()).thenAnswer(
+        (_) async => [trayItem('a'), trayItem('b'), trayItem('c')].map((e) => e.toMap()).toList(),
       );
       await provider.refresh();
       expect(provider.tray.map((e) => e.authorId), ['a', 'b', 'c']);
@@ -73,9 +82,9 @@ void main() {
       verify(() => service.setStoryMuted('b', true)).called(1);
     });
 
-    testWidgets('unmute → flag hilang', (t) async {
-      when(() => service.fetchTray()).thenAnswer(
-        (_) async => [trayItem('a', muted: true, unseen: false)],
+    test('unmute → flag hilang', () async {
+      when(() => service.fetchTrayRaw()).thenAnswer(
+        (_) async => [trayItem('a', muted: true, unseen: false)].map((e) => e.toMap()).toList(),
       );
       await provider.refresh();
 
@@ -85,8 +94,8 @@ void main() {
       verify(() => service.setStoryMuted('a', false)).called(1);
     });
 
-    testWidgets('author tak dikenal → no-op', (t) async {
-      when(() => service.fetchTray()).thenAnswer((_) async => []);
+    test('author tak dikenal → no-op', () async {
+      when(() => service.fetchTrayRaw()).thenAnswer((_) async => []);
       await provider.refresh();
 
       expect(await provider.toggleStoryMute('x', true), isTrue);

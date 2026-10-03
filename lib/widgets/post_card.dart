@@ -28,6 +28,43 @@ import 'profile_avatar.dart';
 import 'gender_avatar.dart';
 import '../screens/user_info_screen.dart';
 
+/// Kirim teks share ke chat pribadi user lain. Return true bila terkirim.
+/// Dipakai bersama oleh share post & share komentar (counter + snackbar
+/// diurus masing-masing pemanggil supaya tidak dobel).
+Future<bool> sendShareToUser(
+  BuildContext context,
+  UserModel user,
+  String content,
+) async {
+  final auth = context.read<AuthProvider>();
+  final chat = context.read<ChatProvider>();
+  final myUid = auth.uid ?? '';
+  if (myUid.isEmpty || user.uid.isEmpty) return false;
+  try {
+    final myName = auth.profile?.nickname ?? '';
+    final chatId = await chat.startPrivateChat(
+      myUid: myUid,
+      otherUid: user.uid,
+      myName: myName,
+      otherName: user.nickname,
+      myGender: auth.profile?.gender ?? '',
+      otherGender: user.gender,
+    );
+    if (chatId.isEmpty) return false;
+    final msgId = await chat.sendPrivateMessage(
+      chatId: chatId,
+      senderId: myUid,
+      senderName: myName,
+      senderGender: auth.profile?.gender ?? '',
+      text: content,
+    );
+    return msgId != null;
+  } catch (e) {
+    dlog('[PostCard] share ke user error: $e');
+    return false;
+  }
+}
+
 /// Kartu postingan timeline: header + foto + caption + like/comment/share.
 class PostCard extends StatefulWidget {
   final Map<String, dynamic> post;
@@ -624,40 +661,15 @@ class _PostCardState extends State<PostCard> {
   /// Bagikan post ke user ChatYuk lain via chat pribadi. Return true bila
   /// terkirim (sheet menutup diri + snackbar "Dibagikan ke X").
   Future<bool> _shareToUser(UserModel user, String content) async {
-    final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
+    final ok = await sendShareToUser(context, user, content);
+    if (!ok) return false;
+    await _bumpShareCount();
+    if (!mounted) return true;
     final s = context.read<LocaleProvider>().s;
-    final myUid = auth.uid ?? '';
-    if (myUid.isEmpty || user.uid.isEmpty) return false;
-    try {
-      final myName = auth.profile?.nickname ?? '';
-      final chatId = await chat.startPrivateChat(
-        myUid: myUid,
-        otherUid: user.uid,
-        myName: myName,
-        otherName: user.nickname,
-        myGender: auth.profile?.gender ?? '',
-        otherGender: user.gender,
-      );
-      if (chatId.isEmpty) return false;
-      final msgId = await chat.sendPrivateMessage(
-        chatId: chatId,
-        senderId: myUid,
-        senderName: myName,
-        senderGender: auth.profile?.gender ?? '',
-        text: content,
-      );
-      if (msgId == null) return false;
-      await _bumpShareCount();
-      if (!mounted) return true;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.shareSentTo(user.nickname))));
-      return true;
-    } catch (e) {
-      dlog('[PostCard] share ke user error: $e');
-      return false;
-    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(s.shareSentTo(user.nickname))));
+    return true;
   }
 
   /// Counter HANYA bertambah saat user benar-benar menyelesaikan share
@@ -1472,25 +1484,48 @@ class _CommentsListState extends State<_CommentsList> {
   Future<void> _share(Map<String, dynamic> c) async {
     final id = (c['id'] as num?)?.toInt() ?? 0;
     final s = context.read<LocaleProvider>().s;
-    final tp = context.read<TimelineProvider>();
     final author = c['authorName'] as String? ?? 'Anon';
     final text = (c['text'] as String? ?? '').trim();
     // Komentar = teks komentar + link ChatYuk (bilingual via strings).
-    // Sama seperti share post: sheet sistem dulu, counter + snackbar
-    // hanya bila user benar-benar menyelesaikan share.
+    // Sheet yang sama seperti share post: preview penulis + search user +
+    // aplikasi. Counter + snackbar hanya bila benar-benar terkirim.
     final content = s.commentShareMsg(author, text);
-    final result = await Share.share(content, subject: author);
-    if (result.status != ShareResultStatus.success) return;
-    if (!mounted) return;
+    final snippet = text.length > 120 ? '${text.substring(0, 120)}…' : text;
+    await showPostShareSheet(
+      context: context,
+      authorUid: '${c['authorId'] ?? ''}',
+      authorName: author,
+      authorGender: '${c['authorGender'] ?? ''}',
+      snippet: snippet,
+      shareText: content,
+      shareSubject: author,
+      // Komentar teks saja — tidak ada file foto.
+      buildFiles: () async => const [],
+      onShareToUser: (user) => _shareCommentToUser(user, content),
+      onExternalShared: () => _bumpCommentShareCount(c, id),
+    );
+  }
+
+  /// Bagikan komentar ke user ChatYuk lain via chat pribadi.
+  Future<bool> _shareCommentToUser(UserModel user, String content) async {
+    final ok = await sendShareToUser(context, user, content);
+    if (!ok || !mounted) return ok;
+    final s = context.read<LocaleProvider>().s;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(s.shareSentTo(user.nickname))));
+    return true;
+  }
+
+  /// Counter share komentar — hanya bila benar-benar terkirim.
+  Future<void> _bumpCommentShareCount(Map<String, dynamic> c, int id) async {
+    final tp = context.read<TimelineProvider>();
     try {
       final res = await tp.shareComment(id);
       final count = (res['share_count'] as num?)?.toInt();
       if (!mounted) return;
       if (count != null) {
         setState(() => c['shareCount'] = count);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.msgShared)));
       }
     } catch (_) {}
   }
