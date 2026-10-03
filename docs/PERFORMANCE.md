@@ -2382,3 +2382,26 @@ avatar di luar list. Pola sama dengan `_elapsed` di CallScreen.
 
 **Verifikasi:** analyze bersih (hanya lint lama use_build_context_sync);
 test private chat + typing lulus; build+install 2 device untuk uji.
+
+### 27i. Fix hapus akun: tidak logout + bisa back ke Pengaturan (2026-10-05)
+
+Dilaporkan user: setelah hapus akun berhasil, app TIDAK logout & user bisa
+menekan back ke Pengaturan/Akun.
+
+**Dua akar:**
+1. `_confirmDelete` (account_screen) memanggil `await auth.signOut()` dan
+   TIDAK pop route. Berbeda dari `_confirmLogout` yang sudah memakai
+   `popUntil((r) => r.isFirst)` di `finally`.
+2. Setelah RPC `delete_my_account` menghapus `auth.users` server-side,
+   `signOut()` biasa (memanggil endpoint /logout dgn JWT yang sudah mati)
+   bisa THROW → dulu tidak tertangani → app tetap di halaman.
+
+**Fix:**
+- `auth_service_auth.signOut()`: bungkus `_sb.auth.signOut()` dgn try/catch →
+  fallback `signOut(scope: SignOutScope.local)` (buang sesi lokal) bila
+  /logout gagal (user sudah terhapus).
+- `account_screen._confirmDelete`: bungkus signOut dgn timeout 8s (tahan
+  error), lalu `Navigator.popUntil((r) => r.isFirst)` → gate menampilkan
+  EntryScreen, route lama (Pengaturan/Akun) dibuang.
+
+**Verifikasi:** analyze bersih; test delete-account lulus; build+install 2 device.
