@@ -149,4 +149,34 @@ void main() {
       );
     });
   });
+
+  group('Keputusan relay-only ICE (percepat connect + fallback)', () {
+    test('peer belum fallback → relay-only (config tercepat)', () {
+      expect(
+        RoomVoiceSession.relayOnlyFor(
+          peerUid: 'A',
+          allCandTried: const {},
+        ),
+        isTrue,
+      );
+    });
+
+    test('peer sudah fallback all-candidates → relay-only OFF (tak ping-pong)', () {
+      expect(
+        RoomVoiceSession.relayOnlyFor(
+          peerUid: 'A',
+          allCandTried: const {'A'},
+        ),
+        isFalse,
+      );
+    });
+
+    test('fallback HANYA berlaku untuk peer itu (peer lain tetap relay-only)', () {
+      const tried = {'A'};
+      expect(RoomVoiceSession.relayOnlyFor(peerUid: 'A', allCandTried: tried),
+          isFalse);
+      expect(RoomVoiceSession.relayOnlyFor(peerUid: 'B', allCandTried: tried),
+          isTrue);
+    });
+  });
 }

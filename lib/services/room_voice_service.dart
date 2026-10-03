@@ -237,6 +237,27 @@ class RoomVoiceSession extends ChangeNotifier {
   // uid yang sudah kukirimi v_join (hindari spam join dobel).
   final Set<String> _joinSentTo = {};
 
+  // ── ICE policy per-peer (relay-only dulu, fallback all-candidates) ──
+  // Default relay-only bila Cloudflare TURN tersedia = koneksi deterministik
+  // & cepat (pola call 1:1, terukur 1-3 dtk). Bila relay tak menjangkau,
+  // `_retryPeerAllCandidates` membuka kandidat host/srflx SEKALI per peer
+  // (perbaikan "mic hijau tapi bisu" saat TURN mati / NAT sama).
+  // Key = uid peer (dipakai bersama oleh pc uplink `uid` & downlink `dn_uid`
+  // karena relay-only yang benar harus KONSISTEN dua arah).
+  final Set<String> _allCandTriedPeers = {};
+  bool _relayOnlyFor(String peerUid) =>
+      relayOnlyFor(peerUid: peerUid, allCandTried: _allCandTriedPeers);
+
+  /// Murni & testable: keputusan relay-only untuk sebuah peer. Relay-only
+  /// (true) = config terbaik & cepat; setelah fallback all-candidates
+  /// (false, peer ada di [allCandTried]) jangan kembali ke relay-only agar
+  /// tak ping-pong.
+  @visibleForTesting
+  static bool relayOnlyFor({
+    required String peerUid,
+    required Set<String> allCandTried,
+  }) => !allCandTried.contains(peerUid);
+
   // Generasi sesi (monotonik per proses): teardown sesi LAMA mengirim v_bye
   // yang bisa tiba SETELAH v_speak sesi BARU bila user keluar-masuk cepat
   // (stop() async tak sempat selesai). Tanpa gate, v_bye basi itu memutus
@@ -319,10 +340,15 @@ class RoomVoiceSession extends ChangeNotifier {
     _burstSync();
   }
 
-  /// Kejar sinyal + daftar speaker 2× cepat setelah join (cadangan realtime).
-  /// Idempoten (dedup _seenSignalIds) — aman dipanggil berulang.
+  /// Kejar sinyal + daftar speaker beberapa kali cepat setelah join (cadangan
+  /// realtime). Idempoten (dedup `_seenSignalIds`) — aman dipanggil berulang.
+  ///
+  /// Tick RAPAT di fase awal (400/1200/2500 ms) supaya handshake
+  /// v_speak→v_join→v_offer tak tertahan menunggu realtime/`_syncTimer` (dulu
+  /// hanya 1.5s/4s → connect terasa lambat vs call 1:1). Tick terakhir 4s
+  /// sebagai jaring pengaman.
   void _burstSync() {
-    for (final ms in [1500, 4000]) {
+    for (final ms in [400, 1200, 2500, 4000]) {
       Future.delayed(Duration(milliseconds: ms), () {
         if (_closed) return;
         unawaited(_syncMissedSignals());
@@ -393,6 +419,16 @@ class RoomVoiceSession extends ChangeNotifier {
       'ts': DateTime.now().toIso8601String(),
       'sess': sessId,
     });
+    // OPSI B — percepat handshake: selain menunggu `v_join` dari pendengar,
+    // langsung tawarkan uplink ke speaker lain yang SUDAH diketahui dari
+    // daftar stage. Memotong 1 round-trip (v_join) sebelum offer pertama.
+    // Idempoten & aman duplikat: `_makeOfferTo` di-guard `_offerBusy` +
+    // cek connectionState; sisi lawan juga mengirim v_join/offer sendiri →
+    // `_handleOffer` mengabaikan offer saat pc sudah Connecting/Connected.
+    for (final uid in _speakers.toList()) {
+      if (uid == myUid) continue;
+      unawaited(_makeOfferTo(uid));
+    }
     _burstSync();
     // Re-offer watchdog: pc mati / answer macet >8 dtk / macet total >30 dtk.
     _reOfferTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
@@ -421,6 +457,18 @@ class RoomVoiceSession extends ChangeNotifier {
         // siklus "putus-nyambung" (~8 dtk) yang memutus audio. Ini akar
         // "kadang ada suara, kadang muter".
         if (st == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          continue;
+        }
+        // FALLBACK relay→all-candidates: relay-only belum Connected >6 dtk
+        // (TURN tak menjangkau / NAT sama) → buka kandidat host/srflx SEKALI
+        // per peer. Meniru grace-timeout fallback call 1:1 ("P2P jalan walau
+        // TURN mati"). Dilakukan SEBELUM re-offer biasa supaya negosiasi
+        // dibangun ulang dengan config baru (bukan menambah offer di pc lama).
+        final since2 = _uplinkSince[entry.key];
+        if (_relayOnlyFor(entry.key) &&
+            since2 != null &&
+            now.difference(since2) > const Duration(seconds: 6)) {
+          unawaited(_retryPeerAllCandidates(entry.key));
           continue;
         }
         // Failed/Disconnected benar-benar mati → bangun ulang.
@@ -547,6 +595,7 @@ class RoomVoiceSession extends ChangeNotifier {
     _pcIds.clear();
     _offerSentAt.clear();
     _joinSentTo.clear();
+    _allCandTriedPeers.clear();
     onEnded?.call();
     // dispose() memanggil stop() lalu super.dispose() — notify di sini
     // akan melempar "used after dispose". Lewati bila sudah dispose.
@@ -817,7 +866,7 @@ class RoomVoiceSession extends ChangeNotifier {
         _pendingCands.remove(peerUid);
       }
       final pc = await createPeerConnection(
-        await CallConfig.getPeerConfig(relayOnly: false),
+        await CallConfig.getPeerConfig(relayOnly: _relayOnlyFor(peerUid)),
       );
       _peers[peerUid] = pc;
       // Set pcId LEBIH DULU: onIceCandidate di bawah membacanya saat kandidat
@@ -889,6 +938,10 @@ class RoomVoiceSession extends ChangeNotifier {
       await _sendSignal(type: 'v_offer', toUid: peerUid, payload: {
         'sdp': (desc ?? offer).toMap(),
         'pcId': pcId,
+        // Beritahu policy ICE-ku agar penerima MIRROR (dua arah konsisten).
+        // Bila aku sudah fallback all-candidates, penerima ikut melepas
+        // relay-only → negosiasi punya kandidat yang bisa berpasangan.
+        'relay': _relayOnlyFor(peerUid),
       });
       notifyListeners();
     } catch (e) {
@@ -902,6 +955,13 @@ class RoomVoiceSession extends ChangeNotifier {
     final sdp = payload['sdp'] as Map<String, dynamic>?;
     if (sdp == null || _closed) return;
     final offerPcId = '${payload['pcId'] ?? ''}';
+    // MIRROR policy ICE pengirim: bila dia offer dengan all-candidates
+    // (relay=false), tandai peer ini juga → pc jawabanku pakai all-candidates
+    // agar kandidat dua arah bisa berpasangan (mencegah mixed relay/host
+    // yang tak pernah connect).
+    if (payload['relay'] == false) {
+      _allCandTriedPeers.add(from);
+    }
     try {
       // Downlink selalu key 'dn_$from' (terpisah dari uplink key `from`).
       final key = 'dn_$from';
@@ -920,7 +980,7 @@ class RoomVoiceSession extends ChangeNotifier {
         _peers.remove(key);
       }
       pc = await createPeerConnection(
-        await CallConfig.getPeerConfig(relayOnly: false),
+        await CallConfig.getPeerConfig(relayOnly: _relayOnlyFor(from)),
       );
       _peers[key] = pc;
       // Tandai arah downlink + pcId supaya routing kandidat ICE pasti
@@ -963,6 +1023,20 @@ class RoomVoiceSession extends ChangeNotifier {
           notifyListeners();
         }
       };
+      // FALLBACK relay→all-candidates untuk PENDENGAR (tanpa pc uplink —
+      // watchdog `_reOfferTimer` hanya iterasi uplink). Bila downlink ini
+      // belum Connected setelah 6 dtk & masih relay-only → buka semua
+      // kandidat. `_retryPeerAllCandidates` menutup pc ini & minta offer
+      // ulang (v_join) → dibangun lagi dengan config all-candidates.
+      final dnPc = pc;
+      Future.delayed(const Duration(seconds: 6), () {
+        if (_closed || !identical(_peers[key], dnPc)) return;
+        if (dnPc.connectionState ==
+            RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          return;
+        }
+        if (_relayOnlyFor(from)) unawaited(_retryPeerAllCandidates(from));
+      });
       pc.onTrack = (event) async {
         // Fallback: sebagian device tak mengirim event.streams → bikin
         // stream sendiri agar audio tetap disimpan & diputar (pola call).
@@ -1105,6 +1179,43 @@ class RoomVoiceSession extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Fallback relay-only → semua kandidat (host/srflx/relay) UNTUK SATU PEER.
+  /// Dipakai bila relay-only belum juga Connected (TURN tak terjangkau / NAT
+  /// sama) — menyelamatkan audio mesh walau Cloudflare TURN mati. SEKALI per
+  /// peer (guard `_allCandTriedPeers`). Beda dari call 1:1 (pc tunggal): di
+  /// mesh, satu peer punya pc uplink (`uid`) & downlink (`dn_uid`) — keduanya
+  /// dibangun ulang dengan config all-candidates supaya konsisten dua arah.
+  Future<void> _retryPeerAllCandidates(String peerUid) async {
+    if (_closed) return;
+    if (!_allCandTriedPeers.add(peerUid)) return; // sudah pernah → stop
+    dlog('[VOICE] fallback relay→all-candidates untuk $peerUid');
+    // Tutup pc uplink + downlink peer ini agar negosiasi dibangun ulang
+    // dengan config baru (bukan menambah offer di pc relay lama).
+    for (final k in [peerUid, 'dn_$peerUid']) {
+      final pc = _peers.remove(k);
+      try {
+        await pc?.close();
+      } catch (_) {}
+      _pendingCands.remove(k);
+      _pcIds.remove(k);
+      _offerSentAt.remove(k);
+    }
+    _uplinkOk.remove(peerUid);
+    _uplinkSince[peerUid] = DateTime.now();
+    if (_closed) return;
+    // Uplink: aku (jika di stage) tawarkan ulang dengan all-candidates.
+    if (_onStage && _speakers.contains(peerUid)) {
+      unawaited(_makeOfferTo(peerUid));
+    }
+    // Downlink: minta speaker menawarkan ulang (dia pegang uplink ke aku).
+    if (_speakers.contains(peerUid)) {
+      unawaited(_sendSignal(type: 'v_join', toUid: peerUid, payload: {
+        'ts': DateTime.now().toIso8601String(),
+        'sess': sessId,
+      }));
+    }
+  }
+
   Future<void> _dropPeer(String uid) async {
     _uplinkOk.remove(uid);
     _uplinkSince.remove(uid);
@@ -1119,6 +1230,10 @@ class RoomVoiceSession extends ChangeNotifier {
     }
     _remoteStreams.remove(uid);
     _speakingNow.remove(uid);
+    // Peer benar-benar lepas → reset fallback agar koneksi berikutnya ke peer
+    // ini mencoba relay-only dulu lagi (config terbaik), bukan terjebak
+    // all-candidates dari sesi sebelumnya.
+    _allCandTriedPeers.remove(uid);
     notifyListeners();
   }
 
