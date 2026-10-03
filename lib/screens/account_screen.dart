@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
+import '../models/user_model.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/social_provider.dart';
@@ -40,10 +41,36 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    // PERF (§26b): dulu `watch<AuthProvider>()` → SELURUH halaman rebuild
+    // tiap `notifyListeners` AuthProvider (heartbeat presence berkala) →
+    // lag saat masuk menu Akun. Sekarang: `read` untuk memanggil method
+    // (setPassword/signOut), `select` snapshot utk field yang dirender —
+    // rebuild hanya bila field itu berubah.
+    final (
+      :isAnonymous,
+      :signingOut,
+      :emailConfirmed,
+      :userEmail,
+      :hasPassword,
+      :profile,
+    ) = context.select<AuthProvider, ({
+      bool isAnonymous,
+      bool signingOut,
+      bool emailConfirmed,
+      String? userEmail,
+      bool hasPassword,
+      UserModel? profile,
+    })>((a) => (
+      isAnonymous: a.isAnonymous,
+      signingOut: a.signingOut,
+      emailConfirmed: a.emailConfirmed,
+      userEmail: a.userEmail,
+      hasPassword: a.hasPassword,
+      profile: a.profile,
+    ));
     // Jangan tampilkan banner anon saat proses keluar (signingOut) —
     // sesi belum kosong & isAnonymous masih true sekejap → banner berkedip.
-    final isAnon = auth.isAnonymous && !auth.signingOut;
+    final isAnon = isAnonymous && !signingOut;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -169,21 +196,21 @@ class _AccountScreenState extends State<AccountScreen> {
                 if (!isAnon) ...[
                   // Email + status verifikasi.
                   SettingsMenuTile(
-                    icon: auth.emailConfirmed
+                    icon: emailConfirmed
                         ? Icons.verified_user
                         : Icons.warning_amber_rounded,
-                    iconColor: auth.emailConfirmed
+                    iconColor: emailConfirmed
                         ? Colors.green
                         : Colors.orange,
-                    title: auth.emailConfirmed
+                    title: emailConfirmed
                         ? s.labelEmailVerified
                         : s.labelEmailUnverified,
-                    desc: auth.userEmail ?? '-',
+                    desc: userEmail ?? '-',
                   ),
                   const Divider(height: 1, indent: 52),
                   // Password: set (akun Google) / ganti (akun email).
                   SettingsMenuTile(
-                    icon: auth.hasPassword
+                    icon: hasPassword
                         ? Icons.password
                         : Icons.lock_outline,
                     title: _hasPassword
@@ -207,8 +234,8 @@ class _AccountScreenState extends State<AccountScreen> {
                   SettingsMenuTile(
                     icon: Icons.cake_outlined,
                     title: s.labelBirthDate,
-                    desc: auth.profile?.birthDate != null
-                        ? _formatDate(auth.profile!.birthDate!, s.isId)
+                    desc: profile?.birthDate != null
+                        ? _formatDate(profile!.birthDate!, s.isId)
                         : s.hintBirthDateNotSet,
                     onTap: () => _pickBirthDate(context),
                   ),
@@ -217,8 +244,8 @@ class _AccountScreenState extends State<AccountScreen> {
                   SettingsMenuTile(
                     icon: Icons.phone_iphone_rounded,
                     title: s.labelPhone,
-                    desc: (auth.profile?.phone ?? '').isNotEmpty
-                        ? auth.profile!.phone
+                    desc: (profile?.phone ?? '').isNotEmpty
+                        ? profile!.phone
                         : s.hintPhoneNotSet,
                     onTap: () => _editPhone(context),
                   ),
@@ -588,8 +615,22 @@ class _AccountScreenState extends State<AccountScreen> {
         await context.read<SocialProvider>().clearAnonSocial();
       }
       await context.read<AuthProvider>().deleteMyAccount();
-      await auth.signOut();
-      chat.reset();
+      // Sesi: setelah profil+auth user dihapus server-side, signOut() biasa
+      // bisa gagal (token sudah mati). signOut provider tahan-error & paksa
+      // buang sesi lokal, tapi tetap dibungkus timeout agar tak menggantung.
+      try {
+        await auth.signOut().timeout(const Duration(seconds: 8));
+      } catch (e) {
+        dlog('[ACCOUNT] signOut setelah hapus akun error: $e', tag: 'ACCOUNT');
+      }
+      try {
+        chat.reset();
+      } catch (_) {}
+      if (!mounted) return;
+      // Paksa kembali ke root — gate menampilkan EntryScreen. Tanpa ini,
+      // route lama (Pengaturan/Akun) tetap di stack → user bisa "back" ke
+      // Pengaturan walau sudah terhapus (BUG dilaporkan user).
+      Navigator.of(context).popUntil((r) => r.isFirst);
       if (mounted) {
         ScaffoldMessenger.of(
           context,

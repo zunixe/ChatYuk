@@ -320,6 +320,20 @@ mixin AuthServiceAuthMx on AuthBase {
     } catch (e) {
       dlog('[AuthService] realtime teardown error: $e');
     }
-    await _sb.auth.signOut();
+    try {
+      await _sb.auth.signOut();
+    } catch (e) {
+      // signOut() memanggil endpoint /logout dengan JWT. Bila user SUDAH
+      // dihapus server-side (hapus akun: RPC menghapus auth.users), token
+      // tidak valid → /logout gagal → dulu signOut() throw → app TIDAK
+      // logout & user bisa back ke Pengaturan. Paksa buang sesi LOKAL
+      // supaya app tetap keluar.
+      dlog('[AuthService] signOut gagal (user mungkin terhapus) → clear lokal: $e');
+      try {
+        await _sb.auth.signOut(scope: SignOutScope.local);
+      } catch (e2) {
+        dlog('[AuthService] clear sesi lokal juga gagal: $e2');
+      }
+    }
   }
 }

@@ -2,6 +2,28 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-05 — HENTIKAN pembuatan profil otomatis (semua user)
+
+- **Status:** SUDAH TERAPPLIED via Management API (`20261006010000
+  _trigger_registered_no_autoprofile.sql`).
+- **Keputusan user:** "semua ga boleh bikin akun otomatis" — user anon
+  MAUPUN registered (email/Google) WAJIB mengisi nickname sendiri.
+- **Perubahan:**
+  1. `handle_new_user_profile` jadi **no-op** (`return new`) — TIDAK lagi
+     INSERT profil untuk siapa pun. Baris profil dibuat `registerProfile`
+     (client) setelah user isi nama.
+  2. `_anon_write_ok()` diperluas: user yang punya email di auth
+     (`auth.email() <> ''`) boleh menulis profilnya sendiri (cegah
+     chicken-and-egg: `profiles_insert_own` menolak user baru yang barisnya
+     belum ada).
+- **Test langsung (server prod):**
+  - anon baru → trigger TIDAK buat profil; user bisa INSERT/UPDATE sendiri ✓
+  - registered (email) baru → trigger TIDAK buat profil; user bisa INSERT ✓
+  - registered tanpa claim email → tetap bisa INSERT (require_registration=false) ✓
+- **Catatan:** akun placeholder lama (`PenggunaXXXXXX`/`AnonXXXXXXXX`,
+  `needs_onboarding=true`) BELUM dibersihkan — mayoritas punya device
+  (user nyata yang buka app tapi belum set nama). Perlu keputusan lanjutan.
+
 ## 2026-10-05 — Call 1:1/video: hardening RLS calls_update + gerbang billing
 
 - **Status:** SUDAH TERAPPLIED via Management API (version `20261005130000`,
