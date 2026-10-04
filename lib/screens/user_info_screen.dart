@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
 import '../core/nav_guard.dart';
 import '../utils.dart';
 import '../models/user_model.dart';
@@ -17,6 +18,7 @@ import '../providers/auth_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../services/avatar_service.dart';
 import '../widgets/async_photo.dart';
+import '../widgets/social_actions.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../core/call/call_permissions.dart';
 import '../providers/theme_provider.dart';
@@ -231,11 +233,131 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           .showSnackBar(SnackBar(content: Text(s.btnFriends)));
     } else if (status == 'pending') {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+          .showSnackBar(SnackBar(content: Text(s.friendRequestSentMutual)));
     } else {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(s.errGeneric)));
     }
+  }
+
+  /// Putus pertemanan: konfirmasi dulu, lalu unfollow (yang juga menghapus
+  /// relasi friend_requests kedua arah di server → benar-benar putus).
+  /// Dialog & snackbar lewat helper bersama `social_actions.dart`.
+  Future<void> _unfriend() async {
+    final name = _profile?.nickname ?? '';
+    final social = context.read<SocialProvider>();
+    setState(() => _busySocial = true);
+    final ok = await runUnfriend(context, social, widget.userId, name);
+    if (!mounted) return;
+    setState(() {
+      if (ok) {
+        _friend = false;
+        _following = false;
+      }
+      _busySocial = false;
+    });
+  }
+
+  /// Batalkan permintaan teman yang sudah dikirim (id diambil dari outbox).
+  Future<void> _cancelFriendRequest() async {
+    final name = _profile?.nickname ?? '';
+    final social = context.read<SocialProvider>();
+    setState(() => _busySocial = true);
+    final ok = await runCancelRequest(context, social, widget.userId, name);
+    if (!mounted) return;
+    setState(() {
+      if (ok) _friendRequestSent = false;
+      _busySocial = false;
+    });
+  }
+
+  /// Bottom sheet penjelasan beda "Ikuti" (Follow) vs "Tambah Teman".
+  void _showFollowVsFriendInfo(BuildContext context, S s) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                s.sheetFollowVsFriendTitle,
+                style: AppText.title.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 16),
+              _followFriendInfoRow(
+                icon: Icons.person_add_alt_1_rounded,
+                color: AppTheme.primary,
+                title: s.sheetFollowLabel,
+                desc: s.sheetFollowDesc,
+              ),
+              const SizedBox(height: 14),
+              _followFriendInfoRow(
+                icon: Icons.group_add_rounded,
+                color: Colors.green,
+                title: s.sheetFriendLabel,
+                desc: s.sheetFriendDesc,
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Icon(
+                    Icons.swap_horiz_rounded,
+                    size: 20,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      s.hintFriendMutual,
+                      style: AppText.caption.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _followFriendInfoRow({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String desc,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 22, color: color),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: AppText.label.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                desc,
+                style: AppText.caption.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _subscribe() async {
@@ -691,12 +813,20 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final profile = _profile;
-    final pointsEnabled = context.watch<PointsProvider>().enabled;
+    final pointsEnabled = context.select<PointsProvider, bool>(
+      (p) => p.enabled,
+    );
     // Tombol sosial (pengikut/mengikuti/subscriber + ikuti/tambah teman)
     // SELALU tampil — viewer anon yang mengetuk diberi snackbar daftar
     // (guard di _toggleFollow/_addFriend). Jangan disembunyikan.
-    final auth = context.watch<AuthProvider>();
-    final isAnonViewer = auth.isAnonymous;
+    // PERF (§26b): dulu `watch<AuthProvider>()` penuh → seluruh halaman
+    // rebuild tiap AuthProvider notify. `select` snapshot field yang dipakai
+    // render (value-type) saja.
+    final authSnap = context.select<AuthProvider,
+        ({bool isAnon, bool callAll, String? uid})>(
+      (a) => (isAnon: a.isAnonymous, callAll: a.callAllEnabled, uid: a.uid),
+    );
+    final isAnonViewer = authSnap.isAnon;
 
     final name = profile?.nickname ?? widget.fallbackName;
     final genderLabel = profile?.gender == 'male'
@@ -719,7 +849,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           // Tombol call: default hanya untuk viewer terdaftar & target
           // terdaftar. Admin bisa membukanya ke SEMUA user via panel
           // (app_settings.call_all_enabled).
-          if (auth.callAllEnabled ||
+          if (authSnap.callAll ||
               (!isAnonViewer && profile?.isRegistered == true)) ...[
             PopupMenuButton<String>(
               icon: Icon(Icons.call, size: 22),
@@ -821,7 +951,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       // Ikon chat kecil di samping username — klik langsung chat.
                       // Anon BOLEH chat (sama dengan perilaku menu online) —
                       // dulu disembunyikan untuk anon = inkonsisten.
-                      if (auth.uid != widget.userId) ...[
+                      if (authSnap.uid != widget.userId) ...[
                         SizedBox(width: 8),
                         _ChatIconButton(onTap: _startChat),
                       ],
@@ -957,15 +1087,15 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                   label: s.btnFriends,
                                   color: Colors.green,
                                   active: true,
-                                  onTap: () {},
+                                  onTap: _unfriend,
                                 )
                               : _friendRequestSent
                               ? _iconActionBtn(
                                   icon: Icons.schedule_rounded,
-                                  label: s.btnFriendRequested,
+                                  label: s.btnCancelRequest,
                                   color: Colors.orange,
                                   active: true,
-                                  onTap: () {},
+                                  onTap: _cancelFriendRequest,
                                 )
                               : _iconActionBtn(
                                   icon: Icons.group_add_rounded,
@@ -975,16 +1105,37 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                   onTap: _addFriend,
                                 ),
                           const SizedBox(width: 12),
+                          // Saat berteman, tombol ini = "Putus Teman" (unfollow
+                          // juga memutus friend_requests di server).
                           _iconActionBtn(
-                            icon: _following
-                                ? Icons.check_rounded
-                                : Icons.person_add_alt_1_rounded,
-                            label: _following ? s.btnUnfollow : s.btnFollow,
-                            color: _following
-                                ? AppTheme.textSecondary
-                                : AppTheme.primary,
-                            active: _following,
-                            onTap: _toggleFollow,
+                            icon: _friend
+                                ? Icons.group_remove_rounded
+                                : (_following
+                                      ? Icons.check_rounded
+                                      : Icons.person_add_alt_1_rounded),
+                            label: _friend
+                                ? s.btnUnfriend
+                                : (_following ? s.btnUnfollow : s.btnFollow),
+                            color: _friend
+                                ? AppTheme.danger
+                                : (_following
+                                      ? AppTheme.textSecondary
+                                      : AppTheme.primary),
+                            active: _friend || _following,
+                            onTap: _friend ? _unfriend : _toggleFollow,
+                          ),
+                          const SizedBox(width: 6),
+                          // Info: beda Follow vs Tambah Teman.
+                          IconButton(
+                            tooltip: s.sheetFollowVsFriendTitle,
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(
+                              Icons.info_outline_rounded,
+                              size: 20,
+                              color: AppTheme.textSecondary,
+                            ),
+                            onPressed: () =>
+                                _showFollowVsFriendInfo(context, s),
                           ),
                           if (pointsEnabled &&
                               profile.subscriptionPrice > 0) ...[

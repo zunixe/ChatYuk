@@ -235,13 +235,20 @@ mixin ChatServiceRoomMx on ChatBase {
       }
     }
 
-    fetch();
+    // PERF: jangan tembak RPC berat (count_room_presence_by_country bisa
+    // ~1.5s) TEPAT saat stream dibuka (frame transisi/boot). Tunda sedikit
+    // agar frame pertama layar bersih; badge jumlah menyusul.
+    Timer(const Duration(milliseconds: 600), () => fetch());
     // 30 detik cukup untuk badge jumlah online per room — realtime
     // presence list tab Online adalah jalur utama; 15s seumur sesi
     // terlalu boros RPC hanya untuk angka.
     timer = Timer.periodic(const Duration(seconds: 30), (_) => fetch());
-    // Cleanup stale presence di background (idempotent)
-    measuredRpc(_sb, 'cleanup_room_presence', params: {'p_minutes': 10}).catchError((_) {});
+    // Cleanup stale presence di background (idempotent) — DEFER supaya tidak
+    // bersaing dengan RPC frame pertama (dulu langsung saat buka).
+    Timer(const Duration(seconds: 2), () {
+      measuredRpc(_sb, 'cleanup_room_presence', params: {'p_minutes': 10})
+          .catchError((_) {});
+    });
     controller.onCancel = () {
       closed = true;
       timer?.cancel();

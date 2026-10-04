@@ -35,7 +35,9 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final masterOn = context.watch<AuthProvider>().notificationsEnabled;
+    final masterOn = context.select<AuthProvider, bool>(
+      (a) => a.notificationsEnabled,
+    );
     if (_loading) {
       return Scaffold(
         appBar: AppBar(title: Text(s.notifDetailTitle)),

@@ -87,6 +87,22 @@ class RoomProvider extends ChangeNotifier {
 
   bool get exploreLoading => _exploreLoading;
 
+  /// Signature isi `_explore` (bukan list hasil `.where().toList()` yang
+  /// identity-nya selalu baru). Dipakai `context.select` di layar explore
+  /// agar rebuild HANYA saat data room benar-benar berubah — bukan tiap
+  /// notifyListeners (realtime counts/presence bisa sering).
+  String get exploreSig {
+    final parts = <String>[];
+    for (final r in _explore) {
+      parts.add(
+        '${r.id}\u0001${r.onlineCount}\u0001${r.category}\u0001'
+        '${r.lastAt?.millisecondsSinceEpoch ?? 0}\u0001${r.name}',
+      );
+    }
+    parts.sort();
+    return '$exploreCategory\u0002${parts.join('\u0003')}';
+  }
+
   void setExploreCategory(String id) {
     if (_exploreCategory == id) return;
     _exploreCategory = id;

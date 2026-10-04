@@ -1,4 +1,22 @@
 ﻿
+## 2026-10-06 — get_online_users: optimasi perf (BELUM APPLY — perlu Management API)
+
+- **Minta user:** fix lag RPC `get_online_users` (~1.46s terukur di HP).
+- **Akar:** RPC memanggil `public.privacy_can_view()` **4x PER USER**
+  (photo/seen/presence/about) → limit 200 = 800 eksekusi fungsi multi-SELECT
+  per request. Tiap call menyentuh app_settings/private_chats/room_members/
+  profiles/profile_privacy_exclusions/_privacy_are_friends.
+- **Migrasi** `20261006090000_get_online_users_perf.sql`: evaluasi privasi 4
+  field **sekali per user** (CTE: candidates→chat_partners/room_mates/excl/
+  friends→resolved→flags), TANPA 4x function call. Semantik SAMA dengan
+  `privacy_can_view` versi 20261006030000 (presence/last_seen/profile_photo/
+  about + bypass admin + mitra chat/room untuk foto). Signature tak berubah.
+- **Status: BELUM APPLY.** `check_migrations` OK; apply via Management API /
+  SQL editor (CLI `db push` HANG di Mac ini). Setelah apply → ukur ulang
+  `online.rpc` (target < 300ms).
+- **Client (SUDAH):** defer RPC berat saat buka layar (get_online_users 400ms,
+  count_room_presence 600ms, cleanup_room_presence 2s) → frame pertama bersih.
+
 ## 2026-10-05 — Daftar user admin: flag Fake GPS vs GPS asli
 
 - **Minta user:** di "Per User" admin, tahu MANA Fake GPS vs GPS asli;

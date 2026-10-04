@@ -57,7 +57,20 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final points = context.watch<PointsProvider>();
+    // PERF: `watch` penuh → seluruh riwayat rebuild tiap PointsProvider
+    // notify (refresh berkala). `select` snapshot nilai yang dirender;
+    // aksi dipanggil via `read`.
+    final pointsSnap = context
+        .select<PointsProvider,
+            ({int total, bool topup, bool v2, bool ghost})>(
+          (p) => (
+            total: p.points,
+            topup: p.topupPathOpen,
+            v2: p.yukcoinV2Active,
+            ghost: p.ghostMode,
+          ),
+        );
+    final points = context.read<PointsProvider>();
     return Scaffold(
       appBar: AppBar(title: Text(s.yukcoinTitle)),
       body: _loading
@@ -73,18 +86,19 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
                   SliverToBoxAdapter(
                     child: YukcoinHeader(
                       s: s,
-                      total: points.points,
-                      showTopup: AppFlavor.topupEnabled ||
+                      total: pointsSnap.total,
+                      showTopup:
+                          AppFlavor.topupEnabled ||
                           AdminGate.enabled ||
-                          points.topupPathOpen,
+                          pointsSnap.topup,
                     ),
                   ),
                   // Cara dapat & cara pakai.
                   SliverToBoxAdapter(
                     child: YukcoinHowTo(
                       s: s,
-                      v2Active: points.yukcoinV2Active,
-                      ghostActive: points.ghostMode,
+                      v2Active: pointsSnap.v2,
+                      ghostActive: pointsSnap.ghost,
                     ),
                   ),
                   // Riwayat.

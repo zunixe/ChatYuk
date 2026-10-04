@@ -5,6 +5,7 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/room_model.dart';
 import '../core/nav_guard.dart';
+import '../core/perf/perf_probe.dart';
 import '../providers/locale_provider.dart';
 import '../providers/room_provider.dart';
 import '../providers/theme_provider.dart';
@@ -66,9 +67,23 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('RoomsExplore');
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final rp = context.watch<RoomProvider>();
+    // PERF: `exploreRooms` mengembalikan list BARU tiap akses (`.where()
+    // .toList()` + sort) → TIDAK boleh di-select langsung (identity selalu
+    // beda = rebuild tiap notify). `select` signature `exploreSig` (murni,
+    // dari isi `_explore`) + category + loading → rebuild hanya saat data
+    // benar-benar berubah. Data aktual dibaca via `read` (snapshot terbaru
+    // saat rebuild dipicu).
+    context.select<RoomProvider, String>((rp) => rp.exploreSig);
+    final exploreCategory = context.select<RoomProvider, String>(
+      (rp) => rp.exploreCategory,
+    );
+    final exploreLoading = context.select<RoomProvider, bool>(
+      (rp) => rp.exploreLoading,
+    );
+    final rp = context.read<RoomProvider>();
     final q = (widget.externalQuery ?? '').trim().toLowerCase();
     final searching = q.isNotEmpty;
     final rooms = searching
@@ -81,7 +96,7 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
                 r.lastSenderName.toLowerCase().contains(q);
           }).toList()
         : rp.exploreRooms;
-    final isRame = rp.exploreCategory == 'rame' && !searching;
+    final isRame = exploreCategory == 'rame' && !searching;
 
     return Stack(
       children: [
@@ -89,12 +104,12 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
           children: [
             const SizedBox(height: 8),
             CategoryChips(
-              selected: rp.exploreCategory,
+              selected: exploreCategory,
               onSelect: (id) => rp.setExploreCategory(id),
             ),
             const SizedBox(height: 4),
             Expanded(
-              child: _buildList(s, rp, rooms, isRame, searching),
+              child: _buildList(s, rp, rooms, isRame, searching, exploreLoading),
             ),
           ],
         ),
@@ -107,7 +122,7 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
               borderRadius: BorderRadius.circular(22),
               onTap: () => showCreateExploreRoomDialog(
                 context,
-                rp.exploreCategory,
+                exploreCategory,
               ),
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -162,8 +177,9 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
     List<RoomModel> rooms,
     bool isRame,
     bool searching,
+    bool exploreLoading,
   ) {
-    if (rp.exploreLoading && rooms.isEmpty && !searching) {
+    if (exploreLoading && rooms.isEmpty && !searching) {
       return const Center(
         child: SizedBox(
           width: 24,
