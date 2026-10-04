@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
-import '../services/avatar_service.dart';
 import '../utils.dart';
-import '../utils/bounded_cache.dart';
 
 /// Avatar user (berbasis FOTO) yang MODULAR untuk semua halaman user-facing:
 /// daftar "Pengguna Online", monitor admin, detail user, leaderboard, dsb.
@@ -72,7 +70,12 @@ class UserAvatar extends StatefulWidget {
 // Cache byte avatar per-UID GLOBAL — bertahan antar state/widget rebuild.
 // Urutan list bisa berubah tiap event presence; tanpa cache global, state
 // widget ter-recycle → decode ulang → inisial sebentar = kedip.
-final _avatarCache = BoundedCache<String, Uint8List>(80);
+//
+// SATU-SATUNYA penyimpan bytes ter-decode (single source of truth).
+// Dulu ada 2 salinan lagi untuk bytes yang SAMA (`_avatarCache` src→bytes
+// di sini + `_bytesCache` di ProfileAvatar) → foto yang sama ditahan 2-3×
+// di memori native (Uint8List) → bloat ratusan MB + GC storm = lag progresif
+// yang pulih setelah restart. Keduanya DIHAPUS; semua widget berbagi map ini.
 final Map<String, Uint8List> _avatarBytesByUid = {};
 final Map<String, String> _avatarLastSrcByUid = {};
 
@@ -96,7 +99,6 @@ ImageProvider _cappedAvatarImage(Uint8List bytes) =>
 
 /// Bersihkan seluruh cache avatar modul ini (dipanggil saat logout/ganti akun).
 void clearAllAvatarCaches() {
-  _avatarCache.clear();
   _avatarBytesByUid.clear();
   _avatarLastSrcByUid.clear();
   _avatarImageByUid.clear();
@@ -224,12 +226,11 @@ class _UserAvatarState extends State<UserAvatar> {
     }
     // Decode sinkron (murah — server sudah q70/300px) lalu simpan
     // instance ImageProvider sekali selamanya untuk uid ini.
+    // Bytes disimpan HANYA di `_avatarBytesByUid` (single source) — dulu ada
+    // salinan kedua per-src (`_avatarCache`) yang menggandakan retensi.
     if (_avatarBytesByUid[widget.uid] == null) {
       Uint8List? b;
-      final cached = _avatarCache.get(src);
-      if (cached != null) {
-        b = cached;
-      } else if (src.length > 100000 && _asyncResolvingFor != src) {
+      if (src.length > 100000 && _asyncResolvingFor != src) {
         // B64 besar dari network batch → decode di isolate agar scroll
         // tidak jank; poll initState menampilkan hasilnya saat siap.
         _asyncResolvingFor = src;
@@ -247,7 +248,6 @@ class _UserAvatarState extends State<UserAvatar> {
             dlog('[AVATAR] $_uid8 STALE-DECODE dropped');
             return;
           }
-          _avatarCache.putIfAbsent(src, () => decoded);
           _avatarBytesByUid[widget.uid] ??= decoded;
           _avatarImageByUid.putIfAbsent(
             widget.uid,
@@ -264,9 +264,7 @@ class _UserAvatarState extends State<UserAvatar> {
         return;
       } else {
         try {
-          final decoded = base64Decode(src);
-          _avatarCache.putIfAbsent(src, () => decoded);
-          b = decoded;
+          b = base64Decode(src);
         } catch (_) {
           b = null;
         }
@@ -397,31 +395,15 @@ class _UserAvatarState extends State<UserAvatar> {
 }
 
 /// Helper: bytes avatar (mentah base64-decoded) untuk uid tertentu bila sudah
-/// ada di cache render modul ini — dipakai fitur zoom (layar online/admin).
+/// ada di cache render modul ini — dipakai fitur zoom (layar online/admin)
+/// dan `ProfileAvatar` (agar tidak menyimpan salinan bytes sendiri).
 Uint8List? cachedUserAvatarBytes(String uid) => _avatarBytesByUid[uid];
 
-/// Helper: bytes avatar yang sudah di-decode dari BASE64 (bukan path), untuk
-/// fitur zoom halaman yang menerima `avatarB64` langsung. Mengembalikan null
-/// bila belum tersedia (biar pemanggil fallback ke inisial/inisial).
-Uint8List? cachedUserAvatarBytesBySrc(String src) => _avatarCache.get(src);
-
-/// Prefetch avatar satu uid ke cache render (opsional). Membaca via
-/// `AvatarB64Service` (RAM→disk→network) lalu men-decode + menyimpan provider
-/// STABIL supaya kartu yang muncul kemudian langsung terisi tanpa kedip.
-Future<void> warmUserAvatar(String uid, String src) async {
-  if (uid.isEmpty || src.isEmpty) return;
-  if (_avatarImageByUid.containsKey(uid)) return;
-  try {
-    final b64 = src.startsWith('avatars/')
-        ? await AvatarB64Service.instance.getByPath(src)
-        : src;
-    if (b64.isEmpty) return;
-    final bytes = await compute(_decodeAvatarB64Iso, b64);
-    if (bytes == null || bytes.isEmpty) return;
-    _avatarBytesByUid[uid] = bytes;
-    _avatarImageByUid[uid] = _cappedAvatarImage(bytes);
-    _avatarLastSrcByUid[uid] = src;
-    _boundAvatarMap(_avatarBytesByUid);
-    _boundAvatarMap(_avatarImageByUid);
-  } catch (_) {}
+/// Simpan bytes ter-decode ke cache bersama (bounded via [_boundAvatarMap]).
+/// Dipakai `ProfileAvatar` agar bytes yang SAMA tidak ditahan 2× (dulu
+/// `_bytesCache` 60 entri di sana + map di sini = retensi ganda native).
+void rememberAvatarBytes(String uid, Uint8List bytes) {
+  if (uid.isEmpty || bytes.isEmpty) return;
+  _avatarBytesByUid[uid] ??= bytes;
+  _boundAvatarMap(_avatarBytesByUid);
 }

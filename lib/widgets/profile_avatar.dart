@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../services/avatar_service.dart';
+import 'user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes;
 
 Uint8List? _decodeAvatarB64(String b64) {
   try {
@@ -48,7 +49,6 @@ class ProfileAvatar extends StatefulWidget {
 
 class _ProfileAvatarState extends State<ProfileAvatar> {
   Uint8List? _bytes;
-  static final _bytesCache = <String, Uint8List>{};
 
   @override
   void initState() {
@@ -60,17 +60,21 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
   /// Fast-path SINKRON: kalau base64 sudah ada di RAM (mis. dibuka dari
   /// daftar chat lalu masuk profil), tampilkan pada frame pertama tanpa
   /// menunggu compute/get async — anti-kedip.
+  ///
+  /// Bytes dibaca/ditulis ke cache BERSAMA `UserAvatar` (per-uid) — dulu
+  /// widget ini menyimpan salinan sendiri (`_bytesCache` 60 entri) sehingga
+  /// foto yang sama ditahan 2× di memori native.
   void _applySyncCache() {
-    final ram = AvatarB64Service.instance.cachedSync(widget.uid);
-    if (ram == null) return;
-    final cached = _bytesCache[ram];
-    if (cached != null) {
-      _bytes = cached;
+    final shared = cachedUserAvatarBytes(widget.uid);
+    if (shared != null) {
+      _bytes = shared;
       return;
     }
+    final ram = AvatarB64Service.instance.cachedSync(widget.uid);
+    if (ram == null) return;
     final decoded = _decodeAvatarB64(ram);
     if (decoded != null) {
-      if (_bytesCache.length < 60) _bytesCache[ram] = decoded;
+      rememberAvatarBytes(widget.uid, decoded);
       _bytes = decoded;
     }
   }
@@ -101,14 +105,14 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
       final b64 = await AvatarB64Service.instance.get(uid);
       if (!mounted || widget.uid != uid) return;
       if (b64.isNotEmpty) {
-        final cached = _bytesCache[b64];
+        final cached = cachedUserAvatarBytes(uid);
         if (cached != null) {
           setState(() => _bytes = cached);
           return;
         }
         final bytes = await compute(_decodeAvatarB64, b64);
         if (!mounted || widget.uid != uid || bytes == null) return;
-        if (_bytesCache.length < 60) _bytesCache[b64] = bytes;
+        rememberAvatarBytes(uid, bytes);
         setState(() => _bytes = bytes);
         return;
       }
