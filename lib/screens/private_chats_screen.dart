@@ -476,44 +476,6 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     super.dispose();
   }
 
-  /// Hangatkan cache pesan chat teratas di background — tap chat yang
-  /// sudah panas langsung emit dari memori (ala WhatsApp), tanpa tunggu SQLite.
-  /// 6 → 2: prefetch = query DB per chat; 6 chat sekaligus di jalur frame
-  /// pertama tab Pesan terbukti menahan frame. 2 sudah cukup untuk chat
-  /// yang paling mungkin ditekan user pertama kali.
-  ///
-  /// FIX jank buka chat (2026-10-06): perubahan default jadi 2 → 4 untuk 2
-  /// teratas (langsung) + sisanya dihangatkan IDLE (setelah jeda) supaya
-  /// chat yang jarang dibuka pun cache-nya siap saat ditekan — mengingat data
-  /// logcat membuktikan chat tanpa cache harus nunggu `server=~120-148ms`.
-  void _warmTopChats(List<PrivateChatInfo> chats) {
-    if (chats.isEmpty) return;
-    final svc = context.read<ChatProvider>();
-    // 2 teratas: langsung (kandidat terkuat ditekan pertama).
-    for (final c in chats.take(2)) {
-      svc.prefetchPrivateChat(c.chatId);
-    }
-    if (chats.length <= 2) return;
-    _idleWarmTimer?.cancel();
-    // Sisanya (maks 8 berikutnya): tunggu idle 1.2 dtk dulu agar tidak
-    // bersaing dengan frame pertama daftar chat. Tiap chat dijadwalkan
-    // berjarak supaya tidak menembak server beruntun.
-    _idleWarmTimer = Timer(const Duration(milliseconds: 1200), () {
-      if (!mounted) return;
-      final rest = chats.skip(2).take(8).toList();
-      var i = 0;
-      void warmNext() {
-        if (!mounted || i >= rest.length) return;
-        svc.prefetchPrivateChat(rest[i].chatId);
-        i++;
-        if (i < rest.length) {
-          Future.delayed(const Duration(milliseconds: 220), warmNext);
-        }
-      }
-      warmNext();
-    });
-  }
-
   Timer? _idleWarmTimer;
 
   bool _pageDebounce = false;
@@ -788,7 +750,13 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                       (chats.isNotEmpty && _lastChats != chats)) {
                     _lastChats = chats;
                     _recomputeDirty = true;
-                    _warmTopChats(chats);
+                    // JANGAN preload pesan SQLite proaktif di sini. Tiap
+                    // preload = query SQLCipher (terukur ~1s untuk query
+                    // pertama yang dingin). Dulu `_warmTopChats` memanggil ini
+                    // TIAP data list berubah → query menumpuk & SQLCipher
+                    // serialize → "buka chat / tutup keyboard ngelag".
+                    // Prefetch yang BENAR hanya saat user MEN-TAP chat
+                    // (lihat _openChat) — tepat 1 chat yang benar dibuka.
                     // Reset page jika data berubah total
                     if (chats.length != _lastTotal) {
                       _lastTotal = chats.length;

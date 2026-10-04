@@ -103,7 +103,6 @@ class MessageStore {
   }
 
   /// Pesan ASC (terlama → terbaru), window [limit] TERBARU.
-  ///
   /// [before] = kursor paging: kembalikan [limit] pesan TERAKHIR yang
   /// `ts`-nya LEBIH LAMA dari [before] (buka riwayat chat yang lebih lama).
   /// Menggunakan idx_chat_ts(chat_key, ts DESC) supaya query tetap cepat.

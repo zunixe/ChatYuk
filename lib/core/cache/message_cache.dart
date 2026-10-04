@@ -383,6 +383,14 @@ class MessageCache {
 
   /// Ambil pesan cache (null jika tidak ada).
   /// Fast path: mem-cache. Slow path: SQLite terenkripsi (satu query).
+  ///
+  /// DEDUPE IN-FLIGHT: beberapa pemanggil bisa minta chatKey SAMA bersamaan
+  /// (StreamBuilder replay + preload + reload). Tanpa dedupe, SQLCipher
+  /// men-serialize query-nya → tiap pemanggil menunggu lock (terukur 500-1300ms
+  /// per query saat 3 panggilan konkuren untuk chat yang sama). Kini yang
+  /// sedang jalan di-share → satu query saja.
+  final Map<String, Future<List<MessageModel>>> _loadInflight = {};
+
   Future<List<MessageModel>> loadMessages(
     String chatKey, {
     DateTime? before,
@@ -394,7 +402,25 @@ class MessageCache {
         _memCacheUpdate(chatKey, mem); // refresh urutan LRU
         return mem;
       }
+      final running = _loadInflight[chatKey];
+      if (running != null) return running;
     }
+    final fut = _loadMessagesImpl(chatKey, before: before);
+    if (before == null) {
+      _loadInflight[chatKey] = fut;
+      fut.whenComplete(() {
+        if (identical(_loadInflight[chatKey], fut)) {
+          _loadInflight.remove(chatKey);
+        }
+      });
+    }
+    return fut;
+  }
+
+  Future<List<MessageModel>> _loadMessagesImpl(
+    String chatKey, {
+    DateTime? before,
+  }) async {
     try {
       final sw = Stopwatch()..start();
       await _ensureDb();

@@ -2933,3 +2933,40 @@ keep-all — tervalidasi user "lancar" setelah fix. Uji "ketik di private chat"
 pada build RILIS setiap mengubah konfigurasi shrink/minify.
 
 **Verifikasi:** user konfirmasi lancar; APK user 172MB + admin 176MB terinstall.
+
+---
+
+## 34. Private chat RILIS "tutup keyboard ngelag" — akar: preload SQLite tumpuk (2026-10-06)
+
+**Keluhan (user):** "kadang pas mau ngetik pertama kali ngelag; tutup keyboard
+jadi lambat; pas diinstall udah agak lama."
+
+**Diagnosa (build debug + PERF_PROBE, instrumentasi `[CACHE-SPLIT]`):
+** query SQLite pertama per chat terukur **1055-2141ms** untuk n=2 pesan
+(DB cuma 290KB!) — murni senjata SQLCipher decrypt + **kontensi lock** karena
+BANYAK query konkuren.
+
+**Akar:** `_warmTopChats` (private_chats_screen) mem-preload **2 + 8 chat**
+via `prefetchPrivateChat` → `loadMessages` (SQLCipher). Dipanggil **tiap data
+list chat berubah** (+ 8 di-idle 220ms) → belasan query SQLite menumpuk →
+SQLCipher men-serialize → tiap chat nunggu ~1-2s. Terasa saat buka chat /
+tutup keyboard.
+
+**Fix:**
+- HAPUS preload proaktif `_warmTopChats` (tak dipanggil lagi). Prefetch yang
+  benar hanya saat user **MEN-TAP** chat (`_openChat`) — tepat 1 chat.
+- `MessageCache.loadMessages`: **dedupe in-flight** per chatKey — pemanggil
+  konkuren untuk chat yang sama berbagi SATU query (bukan antri lock).
+
+**Hasil terukur (sebelum → sesudah):**
+| Metrik | Sebelum | Sesudah |
+|---|---|---|
+| query SQLite max | **2141ms** | **104ms** (−95%) |
+| jumlah query/sesi | 10+ (tumpuk) | **1** |
+| `[CHAT-BUILD]` | 123 | 35 |
+
+**Aturan turunan:** JANGAN preload cache SQLite (SQLCipher) proaktif untuk
+banyak chat di jalur render/rebuild — SQLCipher single-thread → menumpuk.
+Prefetch hanya untuk chat yang benar-benar ditekan user.
+
+Sisa `[CHAT-BUILD]` ~15/detik = pola §32 (parent rebuild), bukan SQLite.
