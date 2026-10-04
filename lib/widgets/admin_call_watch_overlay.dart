@@ -94,7 +94,15 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
             left: 0,
             right: 0,
             height: remoteH,
-            child: _mainPanel(s, sess, main),
+            // ClipRRect eksplisit: RTCVideoView = platform/texture view yang
+            // TIDAK selalu ter-clip oleh clipBehavior Container → pojok video
+            // tampak kotak. Bungkus ClipRRect agar sudut rounded rapi.
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(16),
+              ),
+              child: _mainPanel(s, sess, main),
+            ),
           ),
           AnimatedPositioned(
             duration: const Duration(milliseconds: 220),
@@ -305,39 +313,47 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
             );
           });
         },
-        child: Container(
-          width: w,
-          height: h,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white30, width: 1),
-            color: const Color(0xFF10201A),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              RTCVideoView(
-                p.renderer,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-              ),
-              if (!_showVideo(p))
-                ColoredBox(
-                  color: const Color(0xFF10201A),
-                  child: ProfileAvatar(
-                    uid: p.uid,
-                    name: p.name,
-                    size: 44,
-                    borderRadius: 22,
+        child: ClipRRect(
+          // ClipRRect EKSPLISIT (bukan hanya clipBehavior Container):
+          // RTCVideoView sering lolos dari clipBehavior → pojok kotak.
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: w,
+            height: h,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white30, width: 1),
+              color: const Color(0xFF10201A),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                RTCVideoView(
+                  p.renderer,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                ),
+                if (!_showVideo(p))
+                  ColoredBox(
+                    color: const Color(0xFF10201A),
+                    child: ProfileAvatar(
+                      uid: p.uid,
+                      name: p.name,
+                      size: 44,
+                      borderRadius: 22,
+                    ),
                   ),
-                ),
-              if (!p.micOn)
-                Positioned(
-                  left: 6,
-                  bottom: 6,
-                  child: Icon(Icons.mic_off, color: Colors.redAccent, size: 14),
-                ),
-            ],
+                if (!p.micOn)
+                  Positioned(
+                    left: 6,
+                    bottom: 6,
+                    child: Icon(
+                      Icons.mic_off,
+                      color: Colors.redAccent,
+                      size: 14,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -496,46 +512,49 @@ class _AdminCallWatchFullScreenState extends State<AdminCallWatchFullScreen> {
                         pos.dy + d.delta.dy,
                       );
                     }),
-                    child: Container(
-                      width: w,
-                      height: h,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.65),
-                          width: 1.5,
+                    child: ClipRRect(
+                      // ClipRRect eksplisit (RTCVideoView lolos clipBehavior).
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        width: w,
+                        height: h,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                          color: const Color(0xFF10201A),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                        color: const Color(0xFF10201A),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          RTCVideoView(
-                            other.renderer,
-                            objectFit: RTCVideoViewObjectFit
-                                .RTCVideoViewObjectFitCover,
-                          ),
-                          if (!_showVideo(other))
-                            ColoredBox(
-                              color: const Color(0xFF10201A),
-                              child: Center(
-                                child: ProfileAvatar(
-                                  uid: other.uid,
-                                  name: other.name,
-                                  size: (_pipScale > 1 ? 56 : 40),
-                                  borderRadius: (_pipScale > 1 ? 28 : 20),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            RTCVideoView(
+                              other.renderer,
+                              objectFit: RTCVideoViewObjectFit
+                                  .RTCVideoViewObjectFitCover,
+                            ),
+                            if (!_showVideo(other))
+                              ColoredBox(
+                                color: const Color(0xFF10201A),
+                                child: Center(
+                                  child: ProfileAvatar(
+                                    uid: other.uid,
+                                    name: other.name,
+                                    size: (_pipScale > 1 ? 56 : 40),
+                                    borderRadius: (_pipScale > 1 ? 28 : 20),
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
