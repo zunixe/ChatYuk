@@ -6,10 +6,12 @@ import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/strings.dart';
+import 'package:chatyuk/config/theme.dart';
 import 'package:chatyuk/models/privacy_settings.dart';
 import 'package:chatyuk/providers/privacy_provider.dart';
 import 'package:chatyuk/screens/online_users_screen.dart';
 import 'package:chatyuk/services/privacy_service.dart';
+import 'package:chatyuk/widgets/user_avatar.dart';
 
 import 'test_helper.dart';
 
@@ -104,6 +106,7 @@ void main() {
       required PrivacySettings st,
       String status = 'online',
       bool invisible = false,
+      String gender = 'male',
     }) async {
       stubSettings(st);
       await privacy.load();
@@ -114,8 +117,10 @@ void main() {
             home: Scaffold(
               body: MyStatusSheet(
                 s: s,
+                uid: 'u-me',
                 nickname: 'Budi',
                 avatar: '',
+                gender: gender,
                 status: status,
                 invisible: invisible,
                 privacy: privacy,
@@ -134,6 +139,20 @@ void main() {
       expect(find.text(s.myStatusVisibleEveryone), findsWidgets);
       // Ghost tidak aktif → tak ada label mode hantu.
       expect(find.text(s.myStatusGhostActive), findsNothing);
+    });
+
+    testWidgets('avatar header pakai UserAvatar + warna gender male',
+        (t) async {
+      await pump(t, st: const PrivacySettings(), gender: 'male');
+      final av = t.widget<UserAvatar>(find.byType(UserAvatar));
+      expect(av.color, AppTheme.male);
+      expect(av.borderColor, AppTheme.male);
+    });
+
+    testWidgets('avatar header warna gender female', (t) async {
+      await pump(t, st: const PrivacySettings(), gender: 'female');
+      final av = t.widget<UserAvatar>(find.byType(UserAvatar));
+      expect(av.color, AppTheme.female);
     });
 
     testWidgets('ghost aktif → label mode hantu + tetap tampil Online',
