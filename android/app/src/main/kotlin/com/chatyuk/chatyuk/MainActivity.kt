@@ -43,16 +43,38 @@ class MainActivity : FlutterActivity() {
         // keduanya, di-fade-out setelah Dart sinyal konten siap, fallback 6s.
         if (savedInstanceState == null) {
             val overlay = FrameLayout(this)
-            // Splash branded: pakai launch_background PERSIS (layer-list
-            // bg gelap + logo 120dp tengah) — identik dengan system splash
-            // sebelumnya, jadi cold start menyatu: splash system → overlay
-            // (logo sama) → konten. Tidak ada lagi layar hitam polos.
-            overlay.setBackgroundResource(R.drawable.launch_background)
+            // Splash branded: launch_background PERSIS (layer-list bg gelap +
+            // logo 120dp tengah) — identik dengan system splash sebelumnya,
+            // jadi cold start menyatu: splash system → overlay → konten.
+            // TAMBAHAN: strip bawah setinggi sistem nav bar diwarnai warna
+            // FOOTER (nav_bg = bgCard #1E1E1E). Pada edge-to-edge Android 15+
+            // atribut theme `navigationBarColor` DIABAIKAN, sehingga nav bar
+            // menampilkan apa yang digambar app di belakangnya — tanpa strip
+            // ini area nav tampil #121212 (screen) lalu berubah ke #1E1E1E
+            // (footer) = terlihat blink. Sekarang langsung warna footer.
+            val bg = getDrawable(R.drawable.launch_background)
+            val navStrip = android.graphics.drawable.ColorDrawable(
+                androidx.core.content.ContextCompat.getColor(this, R.color.nav_bg)
+            )
+            val layers = android.graphics.drawable.LayerDrawable(arrayOf(bg, navStrip))
+            overlay.background = layers
             overlay.isClickable = true
+            // Tinggi nav bar HANYA diketahui setelah insets tersedia → pasang
+            // listener insets, set tinggi strip saat itu. Fallback: strip
+            // setinggi 0 (nav bar tak terlihat = tak masalah).
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(overlay) { v, insets ->
+                val navH = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.navigationBars()
+                ).bottom
+                layers.setLayerGravity(1, android.view.Gravity.BOTTOM)
+                layers.setLayerHeight(1, navH)
+                insets
+            }
             window.addContentView(overlay, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
+            androidx.core.view.ViewCompat.requestApplyInsets(overlay)
             bootOverlay = overlay
             window.decorView.postDelayed({ hideBootOverlay(false) }, 6000)
         }

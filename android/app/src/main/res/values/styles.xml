@@ -5,6 +5,8 @@
         <!-- Show a splash screen on the activity. Automatically removed when
              the Flutter engine draws its first frame -->
         <item name="android:windowBackground">@drawable/launch_background</item>
+        <!-- Nav bar cold start = warna footer (bgCard). Cegah blink putih. -->
+        <item name="android:navigationBarColor">@color/nav_bg</item>
     </style>
     <!-- Theme applied to the Android Window as soon as the process has started.
          This theme determines the color of the Android Window while your
@@ -14,6 +16,7 @@
           This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@color/launch_bg</item>
+        <item name="android:navigationBarColor">@color/nav_bg</item>
     </style>
     <!-- uCrop (image_cropper 12.x / UCrop 2.2.11): library SUDAH
          edge-to-edge mandiri (EdgeToEdge.enable + inset listener toolbar
