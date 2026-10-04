@@ -621,7 +621,11 @@ mixin ChatServicePrivateChatListMx on ChatBase {
       if (err != null) dlog('[Chat] chatlist msg realtime error: $err');
     });
 
-    reload();
+    // PERF: defer reload pertama ~250ms supaya frame boot bersih. List sudah
+    // tampil dari cache disk (di atas) → tak perlu nunggu RPC. RPC network
+    // (listFetch+hiddenFetch, 1 RTT) tetap jalan, sekadar tidak menyerobot
+    // frame pertama. Dedupe in-flight tetap berlaku.
+    Timer(const Duration(milliseconds: 250), reload);
 
     controller.onCancel = () {
       _chatReloaders[myUid]?.remove(reload);

@@ -2819,3 +2819,38 @@ list admin yang belum punya — `admin_chat_list_screen` (`_AdminChatCard`),
 
 **Verifikasi:** analyze 0 error/warning; build adminProd release sukses &
 terinstall.
+
+---
+
+## 31. Audit RPC boot lambat (hiddenFetch/list_my_groups) (2026-10-06)
+
+**Konteks:** RPC `chat.hiddenFetch` 935ms & `list_my_groups` 747ms saat boot
+terlihat lambat di logcat HP.
+
+**Audit — ukur server (EXPLAIN ANALYZE):**
+- `getHiddenChats` (`hidden_by @> [uid]`): **Seq Scan** private_chats (1728
+  rows, "Rows Removed by Filter: 1728") = 1.2ms server. Kecil tapi tumbuh
+  linear (tanpa index).
+- `list_my_groups`: 3.3ms server.
+- Chat list: `listFetch` + `hiddenFetch` **sudah paralel** (1 RTT).
+
+**Kesimpulan:** 935/747ms = **latensi network HP→DB**, BUKAN query (server
+1-3ms). Server-side tak ada masalah.
+
+**Optimasi:**
+- **Server:** tambah `idx_private_chats_hidden_by` (GIN, migrasi
+  `20261006100000`, **SUDAH APPLY**) → seq scan 1.2ms → bitmap index 0.02ms
+  (pencegahan saat data besar; konsisten dgn pinned_by/muted_by/archived_by).
+- **Client:** `getMyPrivateChats` reload pertama **di-defer 250ms** — list
+  sudah tampil dari cache disk (`loadRawList`) → frame boot bersih tanpa
+  nunggu RPC. Reload RPC tetap jalan (dedupe in-flight).
+- Catatan: `loadMyGroups` sudah punya cache disk + TTL 30s + guard loading;
+  dipanggil dari prewarm (defer 3s) — tak blokir boot.
+
+**Sisa (infrastruktur, bukan kode):** RPC 500-1050ms saat cold start =
+network/HP latency + `online.diskLoad` (SQLite decrypt native). Mitigasi
+sudah ada (cache-dulu: list/chat/grup tampil instan dari disk, server
+menyusul). Percepat lagi = naik compute / region DB lebih dekat.
+
+**Verifikasi:** analyze 0 error/warning; 24 test chat/room lulus; index
+terpasang & dipakai (EXPLAIN konfirmasi Bitmap Index Scan).
