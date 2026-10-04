@@ -6,6 +6,7 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../widgets/admin_error_view.dart';
 import '../models/active_call_model.dart';
+import '../core/perf/perf_probe.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/admin_err.dart';
@@ -302,6 +303,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('AdminChatList');
     context.watch<ThemeProvider>();
     // GRANULAR: layar ini menampilkan dua domain sekaligus — daftar chat
     // (revChats) DAN badge call aktif (revCalls) — jadi harus bergantung ke

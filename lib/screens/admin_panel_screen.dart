@@ -8,6 +8,7 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../config/strings_docs.dart';
 import '../widgets/admin_error_view.dart';
+import '../core/perf/perf_probe.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
@@ -292,6 +293,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('AdminPanel');
     context.watch<ThemeProvider>();
     // GRANULAR: JANGAN select revStats di root — dulu itu membuat SELURUH
     // panel + semua tab yang dibangun ikut rebuild tiap statistik berubah

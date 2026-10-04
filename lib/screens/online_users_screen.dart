@@ -683,7 +683,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     ),
                     child: invisible
                         ? const Center(
-                            child: Text('👻', style: TextStyle(fontSize: 9)),
+                            child: Text('👻',
+                                style: TextStyle(fontSize: AppGlyph.nano)),
                           )
                         : null,
                   ),
@@ -2138,10 +2139,16 @@ class _OnlinePillState extends State<_OnlinePill>
     final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final isTimeline = _mode == OnlinePillMode.timeline;
     // Mode Global Room menampilkan jumlah online kategori General (ringkas).
-    final rp = context.watch<RoomProvider>();
-    final online = rp.exploreRooms
-        .where((r) => r.category == 'general')
-        .fold<int>(0, (a, r) => a + r.onlineCount);
+    // PERF: `exploreRooms` = list baru tiap akses; `select` ANGKA (value-type)
+    // supaya pill hanya rebuild saat jumlah online benar-benar berubah —
+    // bukan tiap notify RoomProvider (realtime counts/presence sering).
+    final online = context.select<RoomProvider, int>((rp) {
+      var n = 0;
+      for (final r in rp.exploreRooms) {
+        if (r.category == 'general') n += r.onlineCount;
+      }
+      return n;
+    });
     final label = isTimeline ? s.titleTimeline : s.titleRooms;
     final glyph = isTimeline ? '📰' : '💬';
     final showCount = !isTimeline && online > 0;
@@ -2935,54 +2942,59 @@ class _UserCard extends StatelessWidget {
                           builder: (_, sp, __) {
                             final isFriend = sp.isFriend(user.uid);
                             final pending = sp.isPendingFriendRequest(user.uid);
-                            final done = isFriend || pending;
                             final tip = isFriend
-                                ? s.btnFriends
+                                ? s.btnUnfriend
                                 : (pending
-                                      ? s.btnFriendRequested
-                                      : s.btnAddFriend);
+                                      ? s.btnCancelRequest
+                                      : '${s.btnAddFriend} · ${s.sheetFriendDesc}');
                             return Tooltip(
                               message: tip,
                               child: Material(
                                 color: Colors.transparent,
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(16),
-                                  // Sudah teman / permintaan terkirim → tidak
-                                  // bisa dikirim ulang (ikon jadi status).
-                                  onTap: done
-                                      ? null
-                                      : () async {
-                                          final messenger =
-                                              ScaffoldMessenger.of(context);
-                                          final res = await sp
-                                              .sendFriendRequest(user.uid);
-                                          if (!context.mounted) return;
-                                          // 'pending' = terkirim; 'friends' =
-                                          // sudah teman (bukan error). Selain
-                                          // itu = gagal → jangan bilang sukses.
-                                          if (res == 'pending' ||
-                                              res == 'friends') {
-                                            messenger.showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  s.friendRequestSent,
-                                                ),
-                                              ),
-                                            );
-                                          } else {
-                                            messenger.showSnackBar(
-                                              SnackBar(content: Text(s.errGeneric)),
-                                            );
-                                          }
-                                        },
+                                  // Sudah teman → putus teman; terkirim →
+                                  // batalkan; belum → kirim permintaan.
+                                  onTap: () async {
+                                    if (isFriend) {
+                                      await runUnfriend(context, sp, user.uid,
+                                          user.nickname);
+                                    } else if (pending) {
+                                      await runCancelRequest(context, sp,
+                                          user.uid, user.nickname);
+                                    } else {
+                                      final messenger =
+                                          ScaffoldMessenger.of(context);
+                                      final res = await sp
+                                          .sendFriendRequest(user.uid);
+                                      if (!context.mounted) return;
+                                      // 'pending' = terkirim; 'friends' = sudah
+                                      // teman (bukan error). Selain itu gagal.
+                                      if (res == 'pending' ||
+                                          res == 'friends') {
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              s.friendRequestSentMutual,
+                                            ),
+                                          ),
+                                        );
+                                      } else {
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                              content: Text(s.errGeneric)),
+                                        );
+                                      }
+                                    }
+                                  },
                                   child: SizedBox(
                                     width: 32,
                                     height: 32,
                                     child: Icon(
                                       isFriend
-                                          ? Icons.how_to_reg_rounded
+                                          ? Icons.group_remove_rounded
                                           : (pending
-                                                ? Icons.schedule_rounded
+                                                ? Icons.cancel_rounded
                                                 : Icons.person_add_alt_rounded),
                                       size: 20,
                                       color: Colors.white,

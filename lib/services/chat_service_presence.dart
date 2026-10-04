@@ -518,8 +518,11 @@ mixin ChatServicePresenceMx on ChatBase {
         .subscribe((status, err) {
           if (err != null) dlog('[Presence] online realtime error: $err');
         });
-    // initial sync
-    syncFromPresence();
+    // initial sync — DEFER: RPC get_online_users bisa ~1.5s (query DB berat).
+    // Dulu dipanggil langsung saat stream dibuka → menyerobot frame pertama
+    // layar Online/chat (jank build max ~324ms terukur). Tunda 400ms supaya
+    // frame pertama bersih; list tetap tampil dulu dari cache disk (provider).
+    Timer(const Duration(milliseconds: 400), syncFromPresence);
     // also periodic fallback if presence empty (cold start before track)
     // + TRUTH-CHECK berkala: socket realtime bisa mati diam-diam (blip
     // jaringan) sehingga event join/update tidak pernah sampai — dulu

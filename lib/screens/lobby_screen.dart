@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/admin_gate.dart';
+import '../core/perf/perf_probe.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
@@ -69,9 +70,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('Lobby');
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final roomProvider = context.watch<RoomProvider>();
+    // PERF: build utama hanya butuh `country` — daftar room ada di
+    // RoomsExploreScreen (baca sendiri). Dulu `watch<RoomProvider>()` penuh
+    // → seluruh layar rebuild tiap notify RoomProvider (sering).
+    final country = context.select<RoomProvider, String>((rp) => rp.country);
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: widget.embedded
@@ -128,7 +133,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
           Padding(
             padding: EdgeInsets.fromLTRB(10, 12, 10, 4),
             child: SearchDropdown(
-              value: roomProvider.country,
+              value: country,
               label: s.lobbyCountryHint,
               icon: Icons.public_rounded,
               items: allCountries,

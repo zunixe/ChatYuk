@@ -2708,3 +2708,77 @@ tersisa berasal dari **animasi transisi route** (bukan kode kita) — biayanya
 kini kecil setelah §27n (transisi 150ms) + fix di atas. Profil `[PERF]` frame
 timing menunjukkan build p50≈1.5ms (sehat); jangan kejar jumlah rebuild tanpa
 melihat biayanya (banyak rebuild murah ≠ jank).
+
+---
+
+## 29. Review storm menyeluruh (user + admin) — select granular (2026-10-06)
+
+**Konteks:** lanjutan §28. Auditing SEMUA layar untuk pola storm (rebuild
+berlebih) di ChatYuk user + admin.
+
+**Temuan (pola sama, `watch<Provider>()` penuh di root build):**
+
+| Layar | Dulu | Sumber notify sering |
+|---|---|---|
+| `group_screen` | `watch<RoomProvider>()` | RoomProvider 4 realtime sub (counts/private/membership/presence) |
+| `lobby_screen` | `watch<RoomProvider>()` | sama (build utama cuma butuh `country`) |
+| `rooms_explore_screen` | `watch<RoomProvider>()` | sama; `exploreRooms` = list BARU tiap akses |
+| `online_users` `_OnlinePill` | `watch<RoomProvider>()` | sama |
+| `settings_screen` | `watch<AuthProvider>()` | Auth notify (avatar/location/heartbeat) |
+| `point_history_screen` | `watch<PointsProvider>()` | Points refresh berkala |
+| `user_info_screen` | `watch<AuthProvider>()` + `watch<PointsProvider>().enabled` | Auth |
+| `notification_settings_screen` | `watch<AuthProvider>()` (1 field) | Auth |
+
+**Fix (semua `select` field yang benar-benar dirender):**
+- `group_screen`: `select(myGroups)` + `select(myGroupsLoading)` — `_visibleGroups`
+  kini terima `List<RoomModel>` (bukan provider).
+- `lobby_screen`: `select(country)` (daftar room ada di RoomsExploreScreen).
+- `rooms_explore_screen`: **JEBAKAN** — `exploreRooms` mengembalikan list BARU
+  (`.where().toList()` + sort) → identity selalu beda, TIDAK boleh di-select
+  langsung. Solusi: getter baru `RoomProvider.exploreSig` (signature murni dari
+  isi `_explore`) + `select(exploreSig/exploreCategory/exploreLoading)`; data
+  aktual dibaca via `read` saat rebuild dipicu. `exploreLoading` di-pass ke
+  `_buildList` agar spinner tetap akurat.
+- `online_users` pill: `select` **ANGKA** count general online (value-type).
+- `settings_screen`: `select` record `(isAnonymous, dummySessionActive,
+  isRealAdmin, notificationsEnabled)`.
+- `point_history_screen`: `select` record `(points, topupPathOpen,
+  yukcoinV2Active, ghostMode)`; aksi via `read`.
+- `user_info_screen`: `select` record `(isAnonymous, callAllEnabled, uid)`.
+- `notification_settings_screen`: `select(notificationsEnabled)`.
+
+**Admin:** `admin_chat_list_screen` — `select(revChats)` + `select(revCalls)`
+di root **DIPERTAHANKAN** (bukan storm): `activeCallsByChat` dipakai untuk
+**SORT** (call aktif di atas) → rebuild saat call berubah memang diperlukan.
+Tab admin lain sudah `select(revXxx)` per-domain (benar).
+
+**PerfProbe.buildCount ditambah** di: `Group`, `Lobby`, `RoomsExplore`,
+`AdminPanel`, `AdminChatList` (untuk verifikasi terukur).
+
+**Hasil terukur (HP 24129PN74G, build debug + PERF_PROBE):**
+
+| Metrik | Sebelum | Sesudah |
+|---|---|---|
+| `[AVATAR]` total/sesi | 1058 | **120** (−89%) |
+| Storm avatar/detik | 272 | **16** (−94%) |
+| `[CHAT-BUILD]` | 100 | **28** |
+| Tab switch `tap→frame` | — | **10-20ms** (di bawah 16ms; 1 one-off 522ms saat RPC online 1457ms) |
+
+`build Group=10 / Lobby=9 / RoomsExplore=13` sepanjang sesi multi-buka-tutup
+(dulu 100+).
+
+**Aturan turunan (PENTING):**
+- **Getter List/Map yang membuat objek BARU tiap akses** (`.where()...toList()`,
+  `.map()`, sort) **JANGAN di-`select` langsung** — identity selalu berubah →
+  rebuild tiap notify (bug §26). Pakai **signature value-type** (String/int)
+  atau select field tersimpan.
+- Aksi provider (mis. `refreshWallet`, `setExploreCategory`) panggil lewat
+  `read`, nilai untuk render lewat `select` — pisahkan keduanya.
+
+**Sisa jank (di luar scope storm):** `janky(build)=81` + `max=324ms` berasal
+dari **RPC server lambat** (`online.diskLoad 837ms`, `count_room_presence
+1464ms`, `online.rpc 1457ms`) — bukan rebuild. Optimasi berikutnya (jika perlu)
+= cache/defer RPC tersebut, bukan select.
+
+**Verifikasi:** analyze 0 error/warning; 88 test (room/points/settings/privacy/
+online) lulus; build debug user + release admin sukses & terinstall.

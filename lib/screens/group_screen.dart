@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../core/admin_gate.dart';
 import '../core/nav_guard.dart';
+import '../core/perf/perf_probe.dart';
 import '../models/room_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
@@ -65,10 +66,10 @@ class _GroupListState extends State<_GroupList> {
     await context.read<RoomProvider>().loadMyGroups(refresh: refresh);
   }
 
-  List<RoomModel> _visibleGroups(RoomProvider rp) {
+  List<RoomModel> _visibleGroups(List<RoomModel> myGroups) {
     final myUid = context.read<RoomProvider>().prvUid ?? '';
     final now = DateTime.now();
-    return rp.myGroups.where((m) {
+    return myGroups.where((m) {
       final expired = m.expiresAt != null && m.expiresAt!.isBefore(now);
       return !(expired && m.ownerId != myUid);
     }).toList();
@@ -76,16 +77,27 @@ class _GroupListState extends State<_GroupList> {
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('Group');
     final s = context.watch<LocaleProvider>().s;
-    final rp = context.watch<RoomProvider>();
+    // PERF: dulu `watch<RoomProvider>()` penuh → SELURUH daftar grup rebuild
+    // tiap RoomProvider notify (4 realtime sub: counts/private/membership/
+    // presence → sering). `select` hanya field yang dirender; `myGroups`
+    // adalah field tersimpan (identity stabil) → rebuild hanya saat benar
+    // berubah.
+    final myGroups = context.select<RoomProvider, List<RoomModel>>(
+      (rp) => rp.myGroups,
+    );
+    final myGroupsLoading = context.select<RoomProvider, bool>(
+      (rp) => rp.myGroupsLoading,
+    );
     final q = (widget.externalQuery ?? '').trim().toLowerCase();
     final rooms = q.isEmpty
-        ? _visibleGroups(rp)
-        : _visibleGroups(rp)
+        ? _visibleGroups(myGroups)
+        : _visibleGroups(myGroups)
             .where((r) => r.name.toLowerCase().contains(q))
             .toList();
     final searching = q.isNotEmpty;
-    if (rp.myGroupsLoading && rooms.isEmpty && !searching) {
+    if (myGroupsLoading && rooms.isEmpty && !searching) {
       return const Center(
         child: SizedBox(
           width: 24,

@@ -22,10 +22,21 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    // PERF (§26b): dulu `watch<AuthProvider>()` penuh → SELURUH halaman
+    // Settings rebuild tiap AuthProvider notify (avatar/location/heartbeat).
+    // `select` snapshot field yang dirender (value-type) saja.
+    final authSnap = context.select<AuthProvider,
+        ({bool isAnon, bool dummyActive, bool isRealAdmin, bool notif})>(
+      (a) => (
+        isAnon: a.isAnonymous,
+        dummyActive: a.dummySessionActive,
+        isRealAdmin: a.isRealAdmin,
+        notif: a.notificationsEnabled,
+      ),
+    );
     final locale = context.watch<LocaleProvider>();
-    final isAnon = auth.isAnonymous;
-    final dummyActive = auth.dummySessionActive;
+    final isAnon = authSnap.isAnon;
+    final dummyActive = authSnap.dummyActive;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -41,7 +52,7 @@ class SettingsScreen extends StatelessWidget {
         children: [
           // Admin: tile buka panel — hanya ada di build admin
           // (di-inject lewat AdminGate oleh entry lib/main_admin.dart).
-          if (!dummyActive && auth.isRealAdmin)
+          if (!dummyActive && authSnap.isRealAdmin)
             ...?AdminGate.profileSettingsHeader?.call(context),
           Material(
             color: AppTheme.bgCard,
@@ -66,7 +77,7 @@ class SettingsScreen extends StatelessWidget {
                   title: s.labelNotifications,
                   desc: s.notifEnabledDesc,
                   trailing: Switch(
-                    value: auth.notificationsEnabled,
+                    value: authSnap.notif,
                     onChanged: (v) => context
                         .read<AuthProvider>()
                         .setNotificationsEnabled(v),
@@ -133,7 +144,7 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           // Admin: toggle khusus build admin (via AdminGate).
-          if (!dummyActive && auth.isRealAdmin)
+          if (!dummyActive && authSnap.isRealAdmin)
             ...?AdminGate.profileSettingsTail?.call(context),
         ],
       ),
