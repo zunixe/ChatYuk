@@ -18,6 +18,7 @@ import '../providers/locale_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
+import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
@@ -621,6 +622,7 @@ class _PostCardState extends State<PostCard> {
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('PostCard');
     final s = context.watch<LocaleProvider>().s;
     final uid = context.select<AuthProvider, String?>((a) => a.uid);
     final authorId = _p['authorId'] as String? ?? '';
@@ -636,7 +638,12 @@ class _PostCardState extends State<PostCard> {
     final commentCount = (_p['commentCount'] as num?)?.toInt() ?? 0;
     final shareCount = (_p['shareCount'] as num?)?.toInt() ?? 0;
     final isBoosted = _p['isBoosted'] == true;
-    final isFriend = _p['isFriend'] == true;
+    // Status teman: set global (realtime) ATAU bawaan server saat load.
+    // Realtime stream `posts` tidak membawa is_friend (computed di RPC), jadi
+    // sumber utama = SocialProvider.isFriend(authorId).
+    final isFriend =
+        context.select<SocialProvider, bool>((sp) => sp.isFriend(authorId)) ||
+        _p['isFriend'] == true;
 
     // Konten (nama, teks, foto, tombol aksi) diberi padding kiri/kanan
     // supaya sejajar dengan tepi kanan avatar di header. Pemisah antar
@@ -680,15 +687,19 @@ class _PostCardState extends State<PostCard> {
                             ),
                             GestureDetector(
                               onTap: _followBusy ? null : _toggleFollow,
-                              child: Text(
-                                following
-                                    ? s.socialFollowing
-                                    : s.btnFollow,
-                                style: AppText.label.copyWith(
-                                  color: following
-                                      ? AppTheme.textSecondary
-                                      : AppTheme.primary,
-                                  fontWeight: FontWeight.w700,
+                              child: Tooltip(
+                                message:
+                                    '${following ? s.btnUnfollow : s.btnFollow} · ${s.sheetFollowDesc}',
+                                child: Text(
+                                  following
+                                      ? s.socialFollowing
+                                      : s.btnFollow,
+                                  style: AppText.label.copyWith(
+                                    color: following
+                                        ? AppTheme.textSecondary
+                                        : AppTheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ),
