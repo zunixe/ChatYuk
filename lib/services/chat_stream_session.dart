@@ -61,6 +61,11 @@ class ChatMessageStream {
 /// `_cachedMessagesStream` lama dipindahkan ke sini; `ChatService` hanya
 /// menjadi wrapper tipis yang membuat instance ini.
 class ChatStreamSession {
+  /// Jumlah foto terbaru yang di-decrypt upfront saat chat dibuka (lazy
+  /// penuh). Cukup untuk mengisi viewport awal + margin scroll; foto lama
+  /// di-load saat bubble-nya di-build.
+  static const int _lazyPhotoHeadCount = 20;
+
   final SupabaseClient _sb;
   final String cacheKey;
   final bool isPrivate;
@@ -305,24 +310,28 @@ class ChatStreamSession {
             m.type == 'view_once_expired';
       }).toList();
       if (photos.isEmpty) return;
+      // LAZY PENUH: hanya decrypt upfront untuk foto terbaru yang terlihat
+      // saat chat dibuka. Sisanya di-load on-demand saat bubble-nya di-build
+      // (MessageImage._decode: thumb disk → download). Dulu SEMUA foto
+      // di-decrypt saat buka chat → buka chat berisi ratusan foto terasa
+      // berat (ratusan baca file + decrypt + rebuild list per pesan).
+      final head = photos.take(_lazyPhotoHeadCount).toList();
       _photoLoadGate.run(() async {
-        for (var i = 0; i < photos.length; i += 20) {
-          if (controller.isClosed) return;
-          final chunk = photos.skip(i).take(20).map((m) => m.id).toList();
-          final map = await PhotoCache.instance.loadMany(cacheKey, chunk);
-          if (controller.isClosed) return;
-          for (final m in photos.skip(i).take(20)) {
-            final data = map[m.id];
-            if (data == null || data.isEmpty) {
-              queuePhotoDownload(m);
-              continue;
-            }
-            final idx = _current.indexWhere((x) => x.id == m.id);
-            if (idx >= 0 && _needsPhotoFill(_current[idx])) {
-              _current[idx] = _current[idx].copyWith(imageData: data);
-              controller.add(List.unmodifiable(_current));
-              scheduleCacheSave();
-            }
+        if (controller.isClosed) return;
+        final chunk = head.map((m) => m.id).toList();
+        final map = await PhotoCache.instance.loadMany(cacheKey, chunk);
+        if (controller.isClosed) return;
+        for (final m in head) {
+          final data = map[m.id];
+          if (data == null || data.isEmpty) {
+            queuePhotoDownload(m);
+            continue;
+          }
+          final idx = _current.indexWhere((x) => x.id == m.id);
+          if (idx >= 0 && _needsPhotoFill(_current[idx])) {
+            _current[idx] = _current[idx].copyWith(imageData: data);
+            controller.add(List.unmodifiable(_current));
+            scheduleCacheSave();
           }
         }
       });

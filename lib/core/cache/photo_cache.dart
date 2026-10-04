@@ -134,16 +134,26 @@ class PhotoCache {
 
   /// Baca foto FULL-RES dari file lokal (null jika belum ada / gagal decrypt).
   Future<String?> load(String chatKey, String messageId) async {
+    final t0 = DateTime.now();
     final mem = _memGet(messageId);
-    if (mem != null) return mem;
+    if (mem != null) {
+      dlog('[PHOTO-TIME] load mem-hit ${DateTime.now().difference(t0).inMilliseconds}ms');
+      return mem;
+    }
     try {
       final folder = await _folder();
       final f = _fileFor(folder, chatKey, messageId);
       if (!await f.exists()) return null;
+      final t1 = DateTime.now();
+      final raw = await f.readAsString();
+      final t2 = DateTime.now();
       // Decrypt di background isolate agar UI tidak freeze saat load banyak foto
-      final dec = await MessageCache.instance.decryptStringAsync(
-        await f.readAsString(),
-      );
+      final dec = await MessageCache.instance.decryptStringAsync(raw);
+      final t3 = DateTime.now();
+      dlog('[PHOTO-TIME] load disk file=${(raw.length / 1024).round()}KB '
+          'read=${t2.difference(t1).inMilliseconds}ms '
+          'decrypt=${t3.difference(t2).inMilliseconds}ms '
+          'total=${t3.difference(t0).inMilliseconds}ms');
       if (dec != null) _memPut(messageId, dec);
       return dec;
     } catch (_) {

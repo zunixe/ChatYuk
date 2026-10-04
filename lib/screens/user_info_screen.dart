@@ -66,10 +66,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   // selama layar terbuka).
   String _avatarPath = '';
   bool _avatarRetried = false;
-  // True selama avatar (path) SEDANG dimuat dari cache/disk. Dipakai supaya
-  // placeholder menampilkan latar KOSONG (bukan huruf inisial) — mencegah
-  // kedip "inisial → foto" saat user punya foto tapi bytes belum siap.
-  bool _avatarLoading = false;
   List<UserPhoto> _photos = [];
   // Bytes galeri per photo-id — decode SEKALI, bukan tiap build.
   // `galleryPage()` dulu `base64Decode` di dalam build → tiap rebuild
@@ -117,13 +113,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           context.read<AuthProvider>().cachedAvatarSyncDeep(widget.userId) ?? '';
     }
     if (_avatarB64.isEmpty && seedIsPath) {
-      _avatarLoading = true;
+      // Foto ada sebagai path → muat (inisial tampil sampai bytes siap).
       _loadAvatar(seedAvatar);
     } else if (_avatarB64.isEmpty) {
-      // Belum tahu ada foto atau tidak → jangan tampilkan inisial dulu;
-      // tunggu _load() menentukan (cegah kedip inisial → foto).
-      _avatarLoading = true;
-      // Fallback cache/disk per-uid setelah prewarm (async, murah).
+      // Belum tahu ada foto atau tidak → coba cache RAM/disk per-uid.
       _ensureAvatarFromCache();
     }
     _load();
@@ -141,12 +134,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     try {
       final b64 = await AvatarB64Service.instance.get(uid);
       if (!mounted) return;
-      if (b64.isNotEmpty) {
-        setState(() {
-          _avatarB64 = b64;
-          _avatarLoading = false;
-        });
-      }
+      if (b64.isNotEmpty) setState(() => _avatarB64 = b64);
     } catch (_) {}
   }
 
@@ -705,10 +693,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             .timeout(_loadTimeout);
         if (!mounted) return;
         if (b64.isNotEmpty) {
-          setState(() {
-            _avatarB64 = b64;
-            _avatarLoading = false;
-          });
+          setState(() => _avatarB64 = b64);
           dlog('[AVATAR] info ${widget.userId.substring(0, 8)} load OK '
               'len=${b64.length} attempt=$attempt');
           return;
@@ -724,8 +709,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       }
     }
     _avatarRetried = true;
-    // Selesai mencoba tapi tidak dapat foto → boleh tampil inisial.
-    if (mounted) setState(() => _avatarLoading = false);
+    // Selesai mencoba tapi tidak dapat foto → tampil inisial (lihat carousel).
   }
 
   /// Bytes avatar ter-decode, cache per-string — decode SEKALI saat b64
@@ -1186,20 +1170,18 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final Uint8List? avatarBytes = _decodedAvatarBytes();
     final pageCount = (avatarBytes != null ? 1 : 0) + unlocked.length;
     if (pageCount == 0) {
-      // Foto sedang dimuat (path diketahui, bytes menyusul) → latar KOSONG,
-      // JANGAN huruf inisial — mencegah kedip "inisial → foto".
-      if (_avatarLoading) {
-        return CircleAvatar(radius: 60, backgroundColor: avatarBg);
-      }
+      // Tidak ada foto → tampilkan INISIAL (gaya sama dgn avatar Top Aktif:
+      // latar AppTheme.avatarBg, teks textPrimary). Berlaku saat loading
+      // maupun tidak — tidak ada lagi lingkaran abu kosong.
       return CircleAvatar(
         radius: 60,
-        backgroundColor: avatarBg,
+        backgroundColor: AppTheme.avatarBg,
         child: Text(
           initial,
           style: TextStyle(
-            color: Colors.white,
+            color: AppTheme.textPrimary,
             fontSize: AppGlyph.avatarInitial(120),
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
       );
@@ -1209,19 +1191,17 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       final b = avatarBytes;
       final img = b == null
           ? Container(
-              color: avatarBg,
-              child: _avatarLoading
-                  ? null // foto menyusul → latar kosong, jangan inisial
-                  : Center(
-                      child: Text(
-                        initial,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: AppGlyph.avatarInitial(120),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
+              color: AppTheme.avatarBg,
+              child: Center(
+                child: Text(
+                  initial,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: AppGlyph.avatarInitial(120),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             )
           // Carousel 280px — cap 720px (bukan full-res).
           : Image.memory(
