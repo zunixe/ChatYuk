@@ -106,6 +106,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       _chat.deleteRoomMessage(id);
 
   @override
+  Future<bool> chatUndeleteMessage(String id) =>
+      _chat.undeleteRoomMessage(id);
+
+  @override
   String chatDeletedLabel(S s) => s.msgDeletedRoom;
 
   @override

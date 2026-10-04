@@ -50,9 +50,13 @@ class SelHostState extends State<SelHost> with ChatSelectionMixin<SelHost> {
   int focusCount = 0;
   int scrollCount = 0;
   final List<String> deleted = [];
+  final List<String> undeleted = [];
 
   /// Hasil hapus per-id (untuk kunci cabang failCount). Default sukses.
   static final Map<String, bool> deleteResults = {};
+
+  /// Hasil batal-hapus per-id. Default sukses.
+  static final Map<String, bool> undeleteResults = {};
   @override
   void chatFocusComposer() => focusCount++;
   @override
@@ -61,6 +65,12 @@ class SelHostState extends State<SelHost> with ChatSelectionMixin<SelHost> {
   Future<bool> chatDeleteMessage(String id) async {
     deleted.add(id);
     return deleteResults[id] ?? true;
+  }
+
+  @override
+  Future<bool> chatUndeleteMessage(String id) async {
+    undeleted.add(id);
+    return undeleteResults[id] ?? true;
   }
 
   @override
@@ -413,6 +423,7 @@ void main() {
       final auth = AuthProvider(authService: mockSvc, autoInit: false);
       final chat = ChatProvider();
       SelHostState.deleteResults.clear();
+      SelHostState.undeleteResults.clear();
       SharedPreferences.setMockInitialValues({});
       final lp = LocaleProvider();
       await lp.setLang(lang);
@@ -430,26 +441,8 @@ void main() {
       return tester.state<SelHostState>(find.byType(SelHost));
     }
 
-    Future<void> confirmDialog(WidgetTester tester) async {
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-        final deleteBtn = find.text('Hapus');
-        if (deleteBtn.evaluate().isNotEmpty) {
-          await tester.tap(deleteBtn.last);
-          await tester.pump(const Duration(milliseconds: 100));
-          return;
-        }
-        final enBtn = find.text('Delete');
-        if (enBtn.evaluate().isNotEmpty) {
-          await tester.tap(enBtn.last);
-          await tester.pump(const Duration(milliseconds: 100));
-          return;
-        }
-      }
-      fail('dialog konfirmasi hapus tidak muncul');
-    }
-
-    testWidgets('semua sukses → snackbar messageDeleted (x)', (tester) async {
+    testWidgets('1-tap hapus langsung + snackbar UNDO (tanpa dialog)',
+        (tester) async {
       final s = await pumpSelWithUid(tester, 'u-me');
       s.toggleSelect(msg(id: 'm1', senderId: 'u-me'));
       s.toggleSelect(msg(id: 'm2', senderId: 'u-me'));
@@ -458,15 +451,34 @@ void main() {
 
       SelHostState.deleteResults['m1'] = true;
       SelHostState.deleteResults['m2'] = true;
-      final fut = s.deleteSelected();
-      await confirmDialog(tester);
-      await fut;
+      await s.deleteSelected();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(s.deleted, containsAll(['m1', 'm2']));
       expect(find.text('x'), findsOneWidget);
+      expect(find.text('Urungkan'), findsOneWidget);
       expect(s.selectedIds, isEmpty);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('tap UNDO → pesan dikembalikan', (tester) async {
+      final s = await pumpSelWithUid(tester, 'u-me');
+      s.toggleSelect(msg(id: 'm1', senderId: 'u-me'));
+      await tester.pump();
+
+      SelHostState.deleteResults['m1'] = true;
+      SelHostState.undeleteResults['m1'] = true;
+      await s.deleteSelected();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text('Urungkan'), findsOneWidget);
+
+      await tester.tap(find.text('Urungkan'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(s.undeleted, contains('m1'));
       await tester.pump(const Duration(seconds: 5));
     });
 
@@ -480,9 +492,7 @@ void main() {
 
         SelHostState.deleteResults['m1'] = true;
         SelHostState.deleteResults['m2'] = false;
-        final fut = s.deleteSelected();
-        await confirmDialog(tester);
-        await fut;
+        await s.deleteSelected();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 200));
 
@@ -492,6 +502,9 @@ void main() {
           ),
           findsOneWidget,
         );
+        // Gagal parsial → tidak ada UNDO.
+        expect(find.text('Urungkan'), findsNothing);
+        expect(find.text('Undo'), findsNothing);
         await tester.pump(const Duration(seconds: 5));
       });
     }
@@ -504,6 +517,7 @@ void main() {
       final auth = AuthProvider(authService: mockSvc, autoInit: false);
       final chat = ChatProvider();
       SelHostState.deleteResults.clear();
+      SelHostState.undeleteResults.clear();
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -518,25 +532,14 @@ void main() {
       return tester.state<SelHostState>(find.byType(SelHost));
     }
 
-    Future<void> tapBatal(WidgetTester tester) async {
-      // Settle + retry: tap tunggal saat animasi bisa miss diam-diam
-      // (down/up tidak di tombol) → fut menggantung selamanya. Ulangi
-      // sampai dialog benar-benar tertutup.
-      for (var i = 0; i < 5; i++) {
-        await tester.pumpAndSettle();
-        if (find.text('Batal').evaluate().isEmpty) return;
-        await tester.tap(find.widgetWithText(TextButton, 'Batal'));
-      }
-      fail('dialog konfirmasi hapus tidak tertutup');
-    }
-
-    testWidgets('seleksi kosong → diam, tanpa dialog', (tester) async {
+    testWidgets('seleksi kosong → diam, tanpa snackbar', (tester) async {
       final s = await pumpUid(tester, 'u-me');
       await s.deleteSelected();
       await tester.pump();
 
       expect(s.selectedIds, isEmpty);
-      expect(find.textContaining('Hapus pesan ini?'), findsNothing);
+      expect(s.deleted, isEmpty);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('hanya pesan orang → dibersihkan, tanpa hapus', (tester) async {
@@ -552,22 +555,19 @@ void main() {
       expect(s.deleted, isEmpty, reason: 'pesan orang tak dihapus');
     });
 
-    testWidgets('batal dialog → tidak hapus', (tester) async {
+    testWidgets('hapus 1-tap tanpa dialog konfirmasi', (tester) async {
       final s = await pumpUid(tester, 'u-me');
       s.toggleSelect(msg(id: 'm1', senderId: 'u-me'));
       await tester.pump();
 
-      final fut = s.deleteSelected();
-      await tapBatal(tester);
-      debugPrint('DBG dialog open=${find.textContaining('Hapus pesan ini?').evaluate().isNotEmpty}');
-      await fut.timeout(const Duration(seconds: 10), onTimeout: () {
-        debugPrint('DBG FUT TIMEOUT');
-      });
-      debugPrint('DBG fut done');
+      SelHostState.deleteResults['m1'] = true;
+      await s.deleteSelected();
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
 
-      expect(s.deleted, isEmpty);
-      expect(s.selectedIds, isNotEmpty, reason: 'seleksi dipertahankan');
+      expect(s.deleted, contains('m1'));
+      expect(s.selectedIds, isEmpty, reason: 'seleksi langsung tertutup');
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('copy → clipboard terisi + snackbar + seleksi bersih',

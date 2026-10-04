@@ -73,6 +73,14 @@ class ChatProvider extends ChangeNotifier {
     return _service.deletePrivateMessage(messageId);
   }
 
+  Future<bool> undeletePrivateMessage(String messageId) async {
+    return _service.undeletePrivateMessage(messageId);
+  }
+
+  Future<bool> undeleteRoomMessage(String messageId) async {
+    return _service.undeleteRoomMessage(messageId);
+  }
+
   // Private chat
   Future<bool> isUserActive(String uid) => _service.isUserActive(uid);
 

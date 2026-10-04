@@ -241,6 +241,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     return ok;
   }
 
+  @override
+  Future<bool> chatUndeleteMessage(String id) async {
+    final ok = await context.read<ChatProvider>().undeletePrivateMessage(id);
+    if (ok && mounted) {
+      setState(() => _localDeletedIds.remove(id));
+    }
+    return ok;
+  }
+
   /// Id pesan yang baru dihapus secara lokal — jaring supaya UI langsung
   /// menyembunyikannya walau stream realtime belum sempat memperbarui.
   final Set<String> _localDeletedIds = {};

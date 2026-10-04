@@ -44,6 +44,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   void chatFocusComposer();
   void chatScrollToBottom();
   Future<bool> chatDeleteMessage(String id);
+  Future<bool> chatUndeleteMessage(String id);
   String chatDeletedLabel(S s);
   Map<String, String> get chatReactionKnownNames;
 
@@ -273,9 +274,11 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     clearSelection();
   }
 
+  /// Hapus 1-tap (tanpa dialog konfirmasi, ala reply): seleksi langsung
+  /// ditutup + hapus jalan, snackbar menawarkan UNDO. Aman karena hapus =
+  /// soft-delete (is_deleted) yang bisa dikembalikan.
   Future<void> deleteSelected() async {
     if (selectedIds.isEmpty) return;
-    final s = context.read<LocaleProvider>().s;
     final auth = chatAuth;
     final mine = selectedMsgs.values
         .where((m) => m.senderId == auth.uid)
@@ -284,41 +287,41 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
       clearSelection();
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.btnDelete),
-        content: Text(s.confirmDeleteMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(s.btnCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s.btnDelete, style: TextStyle(color: AppTheme.danger)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
     // Salin id LEBIH DULU (defensif): stream refetch dari hapus pertama bisa
     // membangun ulang daftar & state seleksi. Iterasi daftar id lokal ini
     // menjamin SEMUA pesan terpilih benar-benar diproses (dulu ada kasus
     // hanya 1 terhapus).
     final ids = mine.map((m) => m.id).toList();
-    var failCount = 0;
+    // Tutup seleksi DULU supaya UI langsung responsif (ikon hilang seketika).
+    clearSelection();
     // Hapus PARALEL (dulu berurutan): server menerima semuanya sekaligus,
     // tidak saling menunggu round-trip.
     final results = await Future.wait(ids.map(chatDeleteMessage));
-    failCount = results.where((ok) => !ok).length;
-    if (mounted) {
+    final failCount = results.where((ok) => !ok).length;
+    if (!mounted) return;
+    final s = context.read<LocaleProvider>().s;
+    if (failCount == 0) {
       showChatSnack(
         context,
-        failCount == 0 ? chatDeletedLabel(s) : s.msgDeleteFailed,
+        chatDeletedLabel(s),
+        action: SnackBarAction(
+          label: s.btnUndo,
+          onPressed: () => unawaited(_undeleteMany(ids)),
+        ),
       );
+    } else {
+      showChatSnack(context, s.msgDeleteFailed);
     }
-    clearSelection();
+  }
+
+  /// Kembalikan pesan yang baru dihapus (aksi UNDO di snackbar).
+  Future<void> _undeleteMany(List<String> ids) async {
+    for (final id in ids) {
+      try {
+        await chatUndeleteMessage(id);
+      } catch (_) {}
+      if (!mounted) return;
+    }
   }
 
   /// Undo pesan berbayar YukCoin (kirim → batalkan). Hanya saat v2 aktif.
