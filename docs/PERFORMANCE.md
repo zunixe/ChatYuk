@@ -3103,3 +3103,46 @@ me-rebuild subtree terkecil yang benar-benar bergantung padanya. `watch` penuh
 di item list / root build = storm saat provider notify.
 
 **Verifikasi:** analyze 0 error; 53 test (chat/room/points) lulus.
+
+---
+
+## 36. Private chat RILIS lag ngetik/scroll — akar: IME frame storm MIUI (2026-10-05)
+
+**Keluhan (user):** private chat lag pas masuk dari list, pas ngetik, pas
+scroll, pas tutup keyboard — minta semulus mungkin.
+
+**Diagnosa (logcat HP + PERF_PROBE):**
+```
+onNewImeFrame ... ~26-47x/DETIK (terus-menerus)
+CHAT-BUILD       ~14-15x/detik  (storm rebuild PrivateChatScreen)
+frames build[p50=3.4 p90=10 max=410ms] janky(build)=142 (7%)
+```
+MIUI (Xiaomi) mengirim `onNewImeFrame` TERUS-MENERUS walau tinggi keyboard
+TIDAK berubah (`Rect(0,0-0,0)`). Tiap frame → Flutter `didChangeMetrics` →
+`MediaQueryData` baru (objek beda, nilai sama).
+
+**AKAR:** `build()` `PrivateChatScreen` membaca
+`MediaQuery.viewInsetsOf(context)` (di `Padding` composer). Membaca MediaQuery
+di build() mendaftarkan **element `PrivateChatScreen`** sebagai DANGEROUS
+depend → tiap IME frame redundan me-rebuild **SELURUH layar chat** (appbar +
+list + semua bubble + composer). Karena MIUI kirim puluhan/detik → storm.
+
+**FIX:** pindahkan pembacaan `MediaQuery.viewInsetsOf` dari `build()`
+PrivateChatScreen ke **widget kecil terpisah** `_KeyboardInset` — depend hanya
+melekat pada element kecil itu → IME frame redundan hanya (paling banyak)
+me-rebuild composer, bukan seluruh layar. Keyboard tetap berfungsi (padding
+tetap ikut nilai insets asli).
+
+**Hasil terukur (sebelum → sesudah):**
+| Metrik | Sebelum | Sesudah |
+|---|---|---|
+| `[CHAT-BUILD]`/detik | **14-15** | **2-4** (−75-80%) |
+| total `[CHAT-BUILD]` | ~100+ | **15** |
+| `build PrivateChat` | 76 | **4** (−95%) |
+| `janky(build)` | 142 | **54** |
+
+**Aturan turunan:** JANGAN baca `MediaQuery.viewInsetsOf`/`MediaQuery.of` di
+`build()` layar panjang (chat/room/timeline) — bungkus pembacaannya di widget
+paling kecil yang benar-benar butuh (composer). OEM (MIUI) bisa mengirim
+`onNewImeFrame` redundan puluhan/detik → jika depend melekat di layar, seluruh
+layar rebuild tiap frame.

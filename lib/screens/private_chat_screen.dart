@@ -2736,12 +2736,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                               ],
                             ),
                           ),
-                        // Insets keyboard HANYA di composer → list pesan tak
-                        // rebuild saat keyboard muncul (buka keyboard cepat).
-                        Padding(
-                          padding: EdgeInsets.only(
-                            bottom: MediaQuery.viewInsetsOf(context).bottom,
-                          ),
+                        // Insets keyboard HANYA di composer. PENTING:
+                        // `MediaQuery.viewInsetsOf` JANGAN dibaca di build
+                        // PrivateChatScreen — itu mendaftarkan ELEMENT layar
+                        // sebagai depend → tiap IME frame MIUI (puluhan/detik)
+                        // rebuild SELURUH layar. `_KeyboardInset` membacanya di
+                        // element kecil sendiri → hanya composer yang rebuild.
+                        _KeyboardInset(
                           child: ChatComposerInput(
                           controller: _msgCtrl,
                           focusNode: _inputFocus,
@@ -2837,7 +2838,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         ],
       ),
       ),
-      ),
+      ), // RepaintBoundary
     );
   }
 
@@ -3006,4 +3007,19 @@ class _SearchNavButton extends StatelessWidget {
 
 
 
-// ── View Once / Photo Viewer — pindah ke ../widgets/private_chat_message.dart ──
+
+/// Padding bawah = tinggi keyboard (viewInsets). Dibuat widget TERPISAH
+/// supaya `MediaQuery.viewInsetsOf` hanya mendaftarkan element INI sebagai
+/// depend — bukan element `PrivateChatScreen`. Tanpa ini, IME frame MIUI yang
+/// redundan (puluhan/detik) me-rebuild SELURUH layar chat.
+class _KeyboardInset extends StatelessWidget {
+  final Widget child;
+  const _KeyboardInset({required this.child});
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: child,
+    );
+  }
+}
