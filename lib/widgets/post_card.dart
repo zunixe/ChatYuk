@@ -26,8 +26,10 @@ import '../services/storage_photo_service.dart';
 import '../utils.dart';
 import 'post_photo_viewer.dart';
 import 'post_share_sheet.dart';
-import 'profile_avatar.dart';
 import 'gender_avatar.dart';
+import 'person_avatar.dart';
+import 'user_avatar.dart'
+    show cachedUserAvatarBytes, rememberAvatarBytes;
 import '../screens/user_info_screen.dart';
 
 /// Kirim teks share ke chat pribadi user lain. Return true bila terkirim.
@@ -1899,9 +1901,13 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
   // Resolve SATU tahap langsung ke bytes per identitas avatar (fetch +
   // decode) — tanpa FutureBuilder dua tahap (fallback → future → decode
   // → foto) yang terlihat kedip. Rebuild/scroll tidak memicu kerja ulang.
-  static final _bytesCache = <String, Uint8List>{};
+  //
+  // Bytes disimpan di cache BERSAMA UserAvatar (per-uid), BUKAN map statis
+  // sendiri — dulu tiap kelas avatar menyimpan salinan bytes yang SAMA
+  // (retensi ganda native → bloat). Lihat user_avatar.dart.
   Uint8List? _bytes;
   String? _resolvedFor;
+  String get _uid => widget.post['authorId'] as String? ?? '';
 
   @override
   void initState() {
@@ -1929,7 +1935,7 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
     if (avatar.isEmpty) return false;
     _resolvedFor = avatar;
     try {
-      final cached = _bytesCache[avatar];
+      final cached = cachedUserAvatarBytes(_uid);
       if (cached != null) {
         _bytes = cached;
         return true;
@@ -1937,7 +1943,7 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
       if (StoragePhotoService.instance.isAvatarPath(avatar)) {
         final disk = MediaDiskCache.instance.readSync(avatar);
         if (disk != null && disk.isNotEmpty) {
-          if (_bytesCache.length < 60) _bytesCache[avatar] = disk;
+          rememberAvatarBytes(_uid, disk);
           _bytes = disk;
           return true;
         }
@@ -1947,7 +1953,7 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
       if (avatar.length < 200000) {
         final b = base64Decode(avatar);
         if (b.isNotEmpty) {
-          if (_bytesCache.length < 60) _bytesCache[avatar] = b;
+          rememberAvatarBytes(_uid, b);
           _bytes = b;
           return true;
         }
@@ -1961,7 +1967,7 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
     if (avatar.isEmpty) return;
     if (_resolvedFor == avatar && _bytes != null) return;
     _resolvedFor = avatar;
-    final cached = _bytesCache[avatar];
+    final cached = cachedUserAvatarBytes(_uid);
     if (cached != null) {
       if (mounted) setState(() => _bytes = cached);
       return;
@@ -1973,24 +1979,29 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
     if (_resolvedFor != avatar) return;
     final bytes = await compute(_decodeAvatarB64, b64);
     if (bytes == null || !mounted || _resolvedFor != avatar) return;
-    if (_bytesCache.length < 60) _bytesCache[avatar] = bytes;
+    rememberAvatarBytes(_uid, bytes);
     setState(() => _bytes = bytes);
   }
 
-  Widget _fallback(String uid) => ProfileAvatar(
+  /// Tanpa foto di payload → PersonAvatar (standar yang sama dengan
+  /// Pengguna Online: latar tint + ring warna gender; foto di-resolve
+  /// sendiri by uid bila ada).
+  Widget _fallback(String uid) => PersonAvatar(
         uid: uid,
         name: widget.name,
+        gender: widget.post['authorGender'] as String? ?? '',
         size: widget.size,
-        borderRadius: widget.size / 2,
       );
 
   @override
   Widget build(BuildContext context) {
     final uid = widget.post['authorId'] as String? ?? '';
     final avatar = widget.post['authorAvatar'] as String? ?? '';
+    // Zoom: pakai bytes resolve-sendiri bila ada, else bytes dari cache
+    // render PersonAvatar/UserAvatar (fallback path me-load foto sendiri).
     final tap = widget.onAvatarTap == null
         ? null
-        : () => widget.onAvatarTap!(_bytes);
+        : () => widget.onAvatarTap!(cachedUserAvatarBytes(uid) ?? _bytes);
     if (avatar.isEmpty) {
       return tap == null
           ? _fallback(uid)
@@ -2051,7 +2062,8 @@ class _CommentAvatar extends StatefulWidget {
 }
 
 class _CommentAvatarState extends State<_CommentAvatar> {
-  static final _bytesCache = <String, Uint8List>{};
+  // Bytes memakai cache BERSAMA UserAvatar (per-uid) — bukan map statis
+  // sendiri (retensi ganda). Lihat user_avatar.dart.
   Uint8List? _bytes;
   String? _resolvedFor;
 
@@ -2076,7 +2088,7 @@ class _CommentAvatarState extends State<_CommentAvatar> {
     if (avatar.isEmpty) return false;
     _resolvedFor = avatar;
     try {
-      final cached = _bytesCache[avatar];
+      final cached = cachedUserAvatarBytes(widget.uid);
       if (cached != null) {
         _bytes = cached;
         return true;
@@ -2084,7 +2096,7 @@ class _CommentAvatarState extends State<_CommentAvatar> {
       if (StoragePhotoService.instance.isAvatarPath(avatar)) {
         final disk = MediaDiskCache.instance.readSync(avatar);
         if (disk != null && disk.isNotEmpty) {
-          if (_bytesCache.length < 60) _bytesCache[avatar] = disk;
+          rememberAvatarBytes(widget.uid, disk);
           _bytes = disk;
           return true;
         }
@@ -2093,7 +2105,7 @@ class _CommentAvatarState extends State<_CommentAvatar> {
       if (avatar.length < 200000) {
         final b = base64Decode(avatar);
         if (b.isNotEmpty) {
-          if (_bytesCache.length < 60) _bytesCache[avatar] = b;
+          rememberAvatarBytes(widget.uid, b);
           _bytes = b;
           return true;
         }
@@ -2107,7 +2119,7 @@ class _CommentAvatarState extends State<_CommentAvatar> {
     if (avatar.isEmpty) return;
     if (_resolvedFor == avatar && _bytes != null) return;
     _resolvedFor = avatar;
-    final cached = _bytesCache[avatar];
+    final cached = cachedUserAvatarBytes(widget.uid);
     if (cached != null) {
       if (mounted) setState(() => _bytes = cached);
       return;
@@ -2118,7 +2130,7 @@ class _CommentAvatarState extends State<_CommentAvatar> {
     if (b64.isEmpty || !mounted || _resolvedFor != avatar) return;
     final bytes = await compute(_decodeAvatarB64, b64);
     if (bytes == null || !mounted || _resolvedFor != avatar) return;
-    if (_bytesCache.length < 60) _bytesCache[avatar] = bytes;
+    rememberAvatarBytes(widget.uid, bytes);
     setState(() => _bytes = bytes);
   }
 
