@@ -219,6 +219,7 @@ class S {
             'joke': 'Joke & Meme',
             'belajar': 'Belajar',
             'flirt': 'Flirt',
+            'jualbeli': 'Jual Beli',
           }[id] ??
           id;
     return const {
@@ -232,6 +233,7 @@ class S {
           'joke': 'Jokes & Memes',
           'belajar': 'Study',
           'flirt': 'Flirt',
+          'jualbeli': 'Buy & Sell',
         }[id] ??
         id;
   }
@@ -249,6 +251,7 @@ class S {
             'joke': 'Yang bikin ngakak',
             'belajar': 'Diskusi belajar & kuliah',
             'flirt': 'Ngobrol santai & asyik',
+            'jualbeli': 'Jual beli barang & jasa',
           }[id] ??
           '';
     return const {
@@ -262,6 +265,7 @@ class S {
           'joke': 'All the funny stuff',
           'belajar': 'Study & college discussions',
           'flirt': 'Casual & fun conversations',
+          'jualbeli': 'Buy & sell goods & services',
         }[id] ??
         '';
   }

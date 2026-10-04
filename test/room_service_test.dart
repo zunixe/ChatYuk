@@ -114,6 +114,19 @@ void main() {
       expect(p['p_password'], 'secret');
     });
 
+    test('createGlobalRoom kategori jualbeli → p_category diteruskan',
+        () async {
+      handler.on('create_private_room', (_) => {'id': 'new2'});
+      await svc.createGlobalRoom(
+        name: 'Jual Beli',
+        icon: '🛒',
+        country: 'Indonesia',
+        category: 'jualbeli',
+      );
+      expect(rpcParamsOf(handler, 'create_private_room')['p_category'],
+          'jualbeli');
+    });
+
     test('joinPrivateRoom → params p_room_id + p_password', () async {
       handler.on('join_private_room', (_) => {'ok': true, 'charged': 5});
       final res = await svc.joinPrivateRoom('r1', password: 'pw');

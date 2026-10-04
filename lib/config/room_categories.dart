@@ -22,4 +22,10 @@ const List<Map<String, String>> roomCategories = [
   {'id': 'joke', 'name': 'Joke & Meme', 'icon': '😂', 'desc': 'Bikin ngakak'},
   {'id': 'belajar', 'name': 'Belajar', 'icon': '📚', 'desc': 'Diskusi belajar'},
   {'id': 'flirt', 'name': 'Flirt', 'icon': '💘', 'desc': 'Ngobrol asyik'},
+  {
+    'id': 'jualbeli',
+    'name': 'Jual Beli',
+    'icon': '🛒',
+    'desc': 'Jual beli barang',
+  },
 ];
