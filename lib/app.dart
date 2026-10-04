@@ -457,6 +457,9 @@ class _AuthGateState extends State<_AuthGate> {
       context.read<RoomProvider>().warmFuture,
       context.read<OnlineUsersProvider>().warmup(),
       if (warmUid != null) MessageCache.instance.preloadRawList(warmUid),
+      // Preload semua cache bintang ke memori → bias tampil instan di cold
+      // start tanpa menunggu disk per-chat (anti-glich).
+      context.read<MessageReactionProvider>().preloadAllStarred(),
     ]).timeout(_warmTimeout, onTimeout: () async => const <void>[]);
     return FutureBuilder<void>(
       future: _warmFuture,
@@ -583,6 +586,47 @@ class _MainNav extends StatefulWidget {
 
   @override
   State<_MainNav> createState() => _MainNavState();
+}
+
+/// Menahan (freeze) subtree tab yang TIDAK aktif agar tidak ikut rebuild
+/// saat parent (_MainNav / IndexedStack) rebuild.
+///
+/// Masalah: IndexedStack membangun SEMUA tab yang pernah dikunjungi. Setiap
+/// `_MainNav` rebuild (badge/anonymous/select berubah) → seluruh tab ikut
+/// di-build ulang, termasuk tab Online yang berisi puluhan `UserAvatar` —
+/// inilah yang membuat buka-tutup private chat makin lama makin berat
+/// ([AVATAR] 100+ resolve/detik saat storm transisi).
+///
+/// Solusi: simpan instance `child` TERAKHIR saat tab ini tidak aktif; bila
+/// parent memberi `child` baru sementara `active == false`, kita abaikan
+/// child baru itu (pakai yang lama) sehingga subtree tidak di-build ulang.
+/// Saat tab kembali aktif, child terbaru langsung dipakai.
+class _TabFreeze extends StatefulWidget {
+  final bool active;
+  final Widget child;
+  const _TabFreeze({required this.active, required this.child});
+
+  @override
+  State<_TabFreeze> createState() => _TabFreezeState();
+}
+
+class _TabFreezeState extends State<_TabFreeze> {
+  late Widget _frozenChild = widget.child;
+
+  @override
+  void didUpdateWidget(covariant _TabFreeze old) {
+    super.didUpdateWidget(old);
+    // Update child (build ulang) HANYA saat tab aktif, atau tepat saat baru
+    // berubah aktif→non-aktif (tangkap keadaan terakhir). Saat non-aktif
+    // stabil, pertahankan instance lama → subtree berat tak di-build ulang.
+    if (widget.active || old.active) {
+      _frozenChild = widget.child;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      TickerMode(enabled: widget.active, child: _frozenChild);
 }
 
 class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
@@ -915,12 +959,10 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
                   children: [
                     for (var i = 0; i < _pages!.length; i++)
                       _visitedTabs.contains(i)
-                          // TickerMode: animasi halaman yang TIDAK aktif
-                          // dimatikan. Sebelum ini _sharePulse di menu
-                          // Online (repeat selamanya) + animasi lain terus
-                          // minta frame walau tab tersembunyi → compositor
-                          // tidak pernah idle → semua tab terasa berat.
-                          ? TickerMode(enabled: tab == i, child: _pages![i])
+                          // _TabFreeze: tab non-aktif TIDAK ikut rebuild saat
+                          // _MainNav rebuild (cegah storm avatar/list di
+                          // belakang → buka-tutup chat tak makin berat).
+                          ? _TabFreeze(active: tab == i, child: _pages![i])
                           : const SizedBox.shrink(),
                   ],
                 ),
