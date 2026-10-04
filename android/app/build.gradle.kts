@@ -142,6 +142,14 @@ android {
             manifestPlaceholders["appName"] = "ChatYuk Dev"
         }
     }
+
+    // Lint crash internal (Kotlin LLFirModuleData, Flutter 3.47 + KGP 2.3.20)
+    // menggagalkan build RILIS secara acak — tidak terkait kode kita. Jangan
+    // abortOnError supaya build tak tumble karena bug lint toolchain.
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
 }
 
 // Jaminan nama: build dev (variant mengandung "Dev") SELALU dapat nama
