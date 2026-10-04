@@ -32,6 +32,7 @@ import 'group_info_screen.dart';
 import 'group_media_screen.dart';
 import '../widgets/app_gesture.dart';
 import '../widgets/date_chip.dart';
+import '../widgets/gender_avatar.dart';
 import '../widgets/private_chat_message.dart';
 import 'room_chat/widgets/room_widgets.dart';
 import 'room_chat/widgets/room_message_bubble.dart';
@@ -2743,20 +2744,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 },
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      backgroundColor: Color(
-                        userColorPalette[colorHashForUid(msg.senderId) %
-                            userColorPalette.length],
-                      ),
-                      child: Text(
-                        msg.senderName.isNotEmpty
-                            ? msg.senderName[0].toUpperCase()
-                            : '?',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                    // FOTO profil asli user (bukan sekadar inisial) + ring warna
+                    // gender — konsisten dgn bubble room & daftar Online.
+                    // Dulu pakai CircleAvatar inisial saja → foto tak pernah
+                    // tampil walau user punya foto.
+                    GenderAvatar(
+                      uid: msg.senderId,
+                      name: msg.senderName,
+                      gender: msg.senderGender,
+                      size: 40,
+                      borderRadius: 20,
                     ),
                     SizedBox(width: 12),
                     Expanded(
