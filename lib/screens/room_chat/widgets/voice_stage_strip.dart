@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../config/theme.dart';
 import '../../../models/user_model.dart';
 import '../../../services/room_voice_service.dart';
+import '../../../widgets/gender_avatar.dart';
 
 /// Tombol mic voice stage di AppBar room global.
 /// - Belum join: mic mati (tap = masuk + langsung naik stage).
@@ -72,11 +73,16 @@ class _SpeakingAvatar extends StatefulWidget {
   final bool speaking;
   final Color bg;
   final String label;
+  /// Foto asli user (lazy via [GenderAvatar]) + ring warna gender.
+  final String uid;
+  final String gender;
 
   const _SpeakingAvatar({
     required this.speaking,
     required this.bg,
     required this.label,
+    required this.uid,
+    required this.gender,
   });
 
   @override
@@ -134,17 +140,14 @@ class _SpeakingAvatarState extends State<_SpeakingAvatar>
               ],
             )
           : null,
-      child: CircleAvatar(
-        radius: 22,
-        backgroundColor: widget.bg,
-        child: Text(
-          widget.label,
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: AppGlyph.avatarInitial(44),
-          ),
-        ),
+      // FOTO asli user (lazy) + ring warna gender — dulu CircleAvatar inisial
+      // saja sehingga foto speaker tak pernah tampil.
+      child: GenderAvatar(
+        uid: widget.uid,
+        name: widget.label,
+        gender: widget.gender,
+        size: 44,
+        borderRadius: 22,
       ),
     );
     if (!widget.speaking) return avatar;
@@ -217,6 +220,8 @@ class VoiceStageStrip extends StatelessWidget {
                             label: name.isNotEmpty
                                 ? name[0].toUpperCase()
                                 : '?',
+                            uid: uid,
+                            gender: user?.gender ?? '',
                           ),
                           if (muted)
                             Positioned(
