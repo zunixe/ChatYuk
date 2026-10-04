@@ -21,6 +21,7 @@ class StoryProvider extends ChangeNotifier {
   List<StoryTrayItem> _tray = [];
   bool _loading = false;
   String? _error;
+  DateTime? _lastTrayRefreshAt; // gate TTL refresh silent
 
   /// Kunci cache disk tray story (offline tetap tampil).
   static const String _kTrayKey = 'story_tray';
@@ -82,6 +83,15 @@ class StoryProvider extends ChangeNotifier {
 
   /// Muat tray. [silent] = tanpa state loading (dipakai realtime debounce).
   Future<void> refresh({bool silent = false}) async {
+    // PERF: gate TTL untuk refresh SILENT (dipanggil tiap buka tab Online).
+    // Tray nyaris tak berubah dalam hitungan detik — skip RPC bila baru saja
+    // dimuat (<45s) agar buka Online berulang tidak menembak `story_tray`
+    // tiap kali. Refresh non-silent (pull/manual) tetap selalu jalan.
+    if (silent &&
+        _lastTrayRefreshAt != null &&
+        DateTime.now().difference(_lastTrayRefreshAt!).inSeconds < 45) {
+      return;
+    }
     if (!silent) {
       _loading = true;
       if (!_disposed) notifyListeners();
@@ -106,6 +116,7 @@ class StoryProvider extends ChangeNotifier {
       if (fresh != null) {
         _tray = fresh.map(StoryTrayItem.fromMap).toList();
         _error = null;
+        _lastTrayRefreshAt = DateTime.now();
         MessageCache.instance.saveRawList(
           _kTrayKey,
           fresh.map((e) => e).toList(),
@@ -392,13 +403,25 @@ class StoryProvider extends ChangeNotifier {
     return true;
   }
 
-  /// Hapus slide milik sendiri → refresh tray + cache.
+  /// "Hapus" slide milik sendiri → jadikan PRIVAT (owner_only) server-side.
+  /// Slide TIDAK hilang (pembuat tetap lihat); cukup tandai ownerOnly lokal
+  /// supaya badge "Private" langsung tampil tanpa flicker, lalu refresh tray.
   Future<bool> deleteSlide(String storyId, String authorId) async {
     // Sumber kebenaran = hasil RPC (ok), BUKAN path — slide video punya
     // image_path poster/kosong sehingga dulu selalu dianggap gagal.
     final res = await _service.deleteStory(storyId);
     if (!res.ok) return false;
-    _slidesByAuthor.remove(authorId);
+    // Tandai slide terlokal ownerOnly=true (bukan buang list — kalau dibuang,
+    // refresh akan memuatnya lagi dan author melihat "kok masih ada").
+    final slides = _slidesByAuthor[authorId];
+    if (slides != null) {
+      for (var i = 0; i < slides.length; i++) {
+        if (slides[i].id == storyId) {
+          slides[i] = slides[i].copyWith(ownerOnly: true);
+          break;
+        }
+      }
+    }
     unawaited(refresh(silent: true));
     return true;
   }

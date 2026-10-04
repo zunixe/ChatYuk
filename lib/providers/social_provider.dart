@@ -235,14 +235,15 @@ class SocialProvider extends ChangeNotifier {
 
   // ── Passthrough (Fase 9b) ──
   String? get uid => _service.uid;
-  Future<Map<String, dynamic>> mySocialStatus(String otherUid) =>
-      _service.mySocialStatus(otherUid);
+  Future<Map<String, dynamic>> mySocialStatus(String otherUid, {bool force = false}) =>
+      _service.mySocialStatus(otherUid, force: force);
   Future<List<Map<String, dynamic>>> socialList(String kind, String uid) =>
       _service.socialList(kind, uid);
   Future<Map<String, dynamic>> unsubscribeCreator(String uid) =>
       _service.unsubscribeCreator(uid);
   Future<Map<String, dynamic>> respondFriendRequest(int id, bool accept) async {
     final res = await _service.respondFriendRequest(id, accept);
+    _service.invalidateSocialStatus();
     // Sinkron state lokal tanpa menunggu refresh realtime: inbox layar lain
     // langsung berubah (tombol "Tambah Teman" → "Teman" setelah accept).
     try {
@@ -266,6 +267,7 @@ class SocialProvider extends ChangeNotifier {
     try {
       final res = await _service.cancelFriendRequest(id);
       if (res['ok'] == true) {
+        _service.invalidateSocialStatus(targetUid.isNotEmpty ? targetUid : null);
         if (targetUid.isNotEmpty) _pendingFriendRequests.remove(targetUid);
         if (!_disposed) notifyListeners();
         return true;
@@ -287,6 +289,7 @@ class SocialProvider extends ChangeNotifier {
     try {
       final res = await _service.followUser(targetUid);
       if (res['ok'] == true) {
+        _service.invalidateSocialStatus(targetUid);
         _following.add(targetUid);
         onFollowGraphChanged?.call();
         if (!_disposed) notifyListeners();
@@ -303,6 +306,7 @@ class SocialProvider extends ChangeNotifier {
     try {
       final res = await _service.unfollowUser(targetUid);
       if (res['ok'] == true) {
+        _service.invalidateSocialStatus(targetUid);
         _following.remove(targetUid);
         _friends.remove(targetUid);
         onFollowGraphChanged?.call();
@@ -331,6 +335,7 @@ class SocialProvider extends ChangeNotifier {
     try {
       final res = await _service.sendFriendRequest(targetUid);
       if (res['already_friends'] == true) {
+        _service.invalidateSocialStatus(targetUid);
         _friends.add(targetUid);
         _pendingFriendRequests.remove(targetUid);
         if (!_disposed) notifyListeners();
@@ -338,6 +343,7 @@ class SocialProvider extends ChangeNotifier {
       }
       // Sukses kirim → server balas {ok:true, status:'pending'}.
       if (res['ok'] == true) {
+        _service.invalidateSocialStatus(targetUid);
         // Optimistic: tombol langsung jadi "Requested" tanpa spinner.
         _pendingFriendRequests.add(targetUid);
         if (!_disposed) notifyListeners();

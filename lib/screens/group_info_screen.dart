@@ -36,17 +36,18 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
   Future<void> _load() async {
     try {
-      final members =
-          await context.read<RoomProvider>().listMembers(widget.room.id);
-      String? token;
-      if (_isOwner) {
-        final row = await context.read<RoomProvider>().fetchRoomById(widget.room.id);
-        token = '${row?['join_token'] ?? ''}';
-      }
+      // PARALEL: listMembers & fetchRoomById independen — jangan berurutan
+      // (dulu 2 RTT). Satu RTT.
+      final rp = context.read<RoomProvider>();
+      final membersF = rp.listMembers(widget.room.id);
+      final roomF = _isOwner ? rp.fetchRoomById(widget.room.id) : null;
+      final members = await membersF;
+      final row = roomF != null ? await roomF : null;
+      final token = row == null ? '' : '${row['join_token'] ?? ''}';
       if (!mounted) return;
       setState(() {
         _members = members;
-        _joinToken = (token != null && token.isNotEmpty) ? token : null;
+        _joinToken = token.isNotEmpty ? token : null;
         _loading = false;
       });
     } catch (_) {
