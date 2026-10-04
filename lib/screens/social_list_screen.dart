@@ -3,8 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/social_provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
-import '../widgets/user_avatar.dart';
-import '../widgets/gender_avatar.dart';
+import '../widgets/person_avatar.dart';
 import '../providers/theme_provider.dart';
 import 'user_info_screen.dart';
 import '../core/perf/perf_probe.dart';
@@ -104,10 +103,6 @@ class _SocialTile extends StatelessWidget {
     final name = '${entry['nickname'] ?? 'Anon'}';
     final uid = '${entry['uid'] ?? ''}';
     final registered = entry['is_registered'] == true;
-    // Warna avatar per-gender — SAMA seperti menu Pengguna Online (border/ring
-    // biru=laki, pink=perempuan) supaya seragam.
-    final genderColor = GenderAvatar.colorFor('${entry['gender'] ?? ''}');
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -139,24 +134,15 @@ class _SocialTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
-                // Avatar seragam dgn menu Online: warna gender + ring gender.
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: genderColor.withValues(alpha: 0.15),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: UserAvatar(
-                    key: ValueKey(uid),
-                    uid: uid,
-                    avatarB64: '${entry['avatar'] ?? ''}',
-                    initial: initial,
-                    color: genderColor,
-                    borderColor: genderColor,
-                    borderWidth: 1.5,
-                  ),
+                // Avatar seragam seluruh app via PersonAvatar (foto + latar
+                // tint & ring warna gender). Gender dari RPC social_list.
+                PersonAvatar(
+                  key: ValueKey(uid),
+                  uid: uid,
+                  name: name,
+                  gender: '${entry['gender'] ?? ''}',
+                  avatarB64: '${entry['avatar'] ?? ''}',
+                  size: 40,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
