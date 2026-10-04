@@ -2229,15 +2229,38 @@ class _MessageImageState extends State<MessageImage> {
     );
   }
 
-  void _openFullscreen() {    final decoded = _decoded;
+  void _openFullscreen() {
+    final decoded = _decoded;
     if (decoded == null || !mounted) return;
+    // Route KHUSUS viewer (fade + scale 200ms) — BUKAN slide global. Slide
+    // horizontal terasa "berat/menunggu" untuk foto; zoom-in ala WhatsApp/M3
+    // jauh lebih halus & tidak ada jeda. Thumbnail sudah tampil instan
+    // (bytes bubble ada di ImageCache), full-res menyusul tanpa delay buatan.
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PhotoViewerScreen(
+      PageRouteBuilder<void>(
+        opaque: true,
+        barrierColor: null,
+        transitionDuration: const Duration(milliseconds: 200),
+        reverseTransitionDuration: const Duration(milliseconds: 160),
+        pageBuilder: (_, __, ___) => PhotoViewerScreen(
           bytes: decoded.bytes,
           fullLoader: () =>
               PhotoCache.instance.load(widget.chatKey, widget.messageId),
         ),
+        transitionsBuilder: (_, anim, __, child) {
+          final curved = CurvedAnimation(
+            parent: anim,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.94, end: 1.0).animate(curved),
+              child: child,
+            ),
+          );
+        },
       ),
     );
   }
@@ -2476,8 +2499,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     _tick.viewerOpen = true;
     Navigator.of(context)
         .push(
-          MaterialPageRoute(
-            builder: (_) => PhotoViewerScreen(
+          // Route viewer sama dengan foto biasa (fade+scale halus), bukan slide.
+          PageRouteBuilder<void>(
+            opaque: true,
+            transitionDuration: const Duration(milliseconds: 200),
+            reverseTransitionDuration: const Duration(milliseconds: 160),
+            pageBuilder: (_, __, ___) => PhotoViewerScreen(
               bytes: _decoded!.bytes,
               fullLoader: () {
                 final id = widget.messageId;
@@ -2487,6 +2514,20 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               },
               countdown: _tick.totalSecs > 0 ? _tick.countdown : null,
             ),
+            transitionsBuilder: (_, anim, __, child) {
+              final curved = CurvedAnimation(
+                parent: anim,
+                curve: Curves.easeOutCubic,
+                reverseCurve: Curves.easeInCubic,
+              );
+              return FadeTransition(
+                opacity: curved,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.94, end: 1.0).animate(curved),
+                  child: child,
+                ),
+              );
+            },
           ),
         )
         .whenComplete(() {
@@ -2939,12 +2980,12 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   @override
   void initState() {
     super.initState();
-    // Jangan tembak disk+decrypt+decode full SELAMA transisi push: kerja itu
-    // berebut frame dengan animasi route → buka terasa lambat, dan bila user
-    // langsung menutup, pop ikut tersendat ("close ga sensitif"). Tunda
-    // sampai transisi selesai (~300ms); thumbnail tampil instan meanwhile.
-    // Bila user sudah menutup sebelum itu, mounted=false → diskip.
-    Future.delayed(const Duration(milliseconds: 350), () {
+    // Muat full-res MULAI frame pertama (post-frame) — BUKAN delay tetap
+    // 350ms yang dulu bikin "nunggu dulu baru buka". Thumbnail sudah tampil
+    // instan (bytes bubble ada di ImageCache); decode full dilakukan di
+    // isolate (compute) sehingga TIDAK memblok frame transisi. Jadi foto
+    // tampil seketika, ketajaman penuh menyusul begitu siap.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _loadFull();
     });
   }
