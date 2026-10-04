@@ -14,7 +14,7 @@ import '../utils.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../widgets/chat_info_snack.dart';
-import '../widgets/profile_avatar.dart';
+import '../widgets/person_avatar.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
 
@@ -34,6 +34,7 @@ class CallHistoryScreen extends StatefulWidget {
 class _CallHistoryScreenState extends State<CallHistoryScreen> {
   List<CallHistoryEntry>? _entries;
   Map<String, String> _names = const {};
+  Map<String, String> _genders = const {};
   bool _loading = true;
 
   @override
@@ -65,15 +66,20 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
       // Nama lawan bicara (batch, hindari N+1).
       final uids = list.map((e) => e.otherUid).toSet().toList();
       Map<String, String> names = const {};
+      Map<String, String> genders = const {};
       if (uids.isNotEmpty) {
         try {
           names = await call.lookupNames(uids);
+        } catch (_) {}
+        try {
+          genders = await call.lookupGenders(uids);
         } catch (_) {}
       }
       if (mounted) {
         setState(() {
           _entries = list;
           _names = names;
+          _genders = genders;
           _loading = false;
         });
       }
@@ -234,6 +240,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                   return _CallHistoryTile(
                     entry: e,
                     name: _nameFor(e.otherUid, s),
+                    gender: _genders[e.otherUid] ?? '',
                     onTap: () => _openChat(e),
                     onRedial: () => _redial(e),
                   );
@@ -247,12 +254,14 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
 class _CallHistoryTile extends StatelessWidget {
   final CallHistoryEntry entry;
   final String name;
+  final String gender;
   final VoidCallback onTap;
   final VoidCallback onRedial;
 
   const _CallHistoryTile({
     required this.entry,
     required this.name,
+    this.gender = '',
     required this.onTap,
     required this.onRedial,
   });
@@ -277,7 +286,15 @@ class _CallHistoryTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            ProfileAvatar(uid: entry.otherUid, name: name, size: 44),
+            // Avatar seragam dgn seluruh app via PersonAvatar (satu sumber
+            // kebenaran: foto/path + latar tint & ring warna gender).
+            PersonAvatar(
+              key: ValueKey(entry.otherUid),
+              uid: entry.otherUid,
+              name: name,
+              gender: gender,
+              size: 44,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

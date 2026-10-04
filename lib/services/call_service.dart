@@ -173,6 +173,27 @@ class CallService {
     return out;
   }
 
+  /// Gender batch (uid → gender) untuk riwayat panggilan — dipakai mewarnai
+  /// avatar agar seragam dgn menu Online (biru=laki, pink=perempuan).
+  Future<Map<String, String>> lookupGenders(List<String> uids) async {
+    if (uids.isEmpty) return const {};
+    try {
+      final rows = await _sb
+          .from('profiles')
+          .select('id, gender')
+          .inFilter('id', uids);
+      final out = <String, String>{};
+      for (final r in rows) {
+        final id = r['id'] as String?;
+        final g = r['gender'] as String?;
+        if (id != null && g != null && g.isNotEmpty) out[id] = g;
+      }
+      return out;
+    } catch (_) {
+      return const {};
+    }
+  }
+
   /// Heartbeat peserta call (fire-and-forget) — dipakai admin monitor
   /// untuk membedakan call hidup vs zombie.
   void touchCall(String callId) {

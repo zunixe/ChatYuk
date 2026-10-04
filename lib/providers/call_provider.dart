@@ -155,6 +155,9 @@ class CallProvider extends ChangeNotifier {
   /// Nama tampilan batch (uid → nickname) untuk riwayat panggilan.
   Future<Map<String, String>> lookupNames(List<String> uids) =>
       _service.lookupNicknames(uids);
+  /// Gender batch (uid → gender) untuk mewarnai avatar riwayat panggilan.
+  Future<Map<String, String>> lookupGenders(List<String> uids) =>
+      _service.lookupGenders(uids);
   Future<String?> getNickname(String uid) => _service.getNickname(uid);
   Stream<String> onCallStatus(String callId) => _service.onCallStatus(callId);
   void releaseCallStatus(String callId) => _service.releaseCallStatus(callId);
