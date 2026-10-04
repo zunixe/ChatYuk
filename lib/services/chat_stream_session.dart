@@ -804,18 +804,26 @@ class ChatStreamSession {
       pollTimer.cancel();
       saveDebounce?.cancel();
       reloadDebounce?.cancel();
-      // Flush cache pending kalau ada data yang belum tersimpan.
-      if (_current.isNotEmpty) {
-        final sig = _current.isEmpty
-            ? ''
-            : '${_current.length}:${_current.last.id}';
-        if (sig != lastSavedSig) {
+      // Snapshot list saat ini (referensi ringan) — kerja disk & teardown
+      // channel DITUNDA ke microtask berikutnya agar TIDAK jatuh di frame
+      // transisi pop (tutup chat). Dulu keduanya sinkron di sini → "tutup
+      // private chat ngelag".
+      final snapshot = _current;
+      final sig = snapshot.isEmpty
+          ? ''
+          : '${snapshot.length}:${snapshot.last.id}';
+      final needSave = snapshot.isNotEmpty && sig != lastSavedSig;
+      final ch = channel;
+      scheduleMicrotask(() {
+        if (needSave) {
           MessageCache.instance
-              .saveMessages(cacheKey, _current)
+              .saveMessages(cacheKey, snapshot)
               .catchError((_) {});
         }
-      }
-      _sb.removeChannel(channel);
+        try {
+          _sb.removeChannel(ch);
+        } catch (_) {}
+      });
     };
 
     return ChatMessageStream(

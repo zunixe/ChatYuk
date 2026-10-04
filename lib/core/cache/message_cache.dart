@@ -194,21 +194,30 @@ class MessageCache {
   /// cache pesan tetap kecil dan cepat dibaca.
   ///
   /// Layer disk = SQLite terenkripsi (MessageStore), bukan lagi blob prefs.
+  ///
+  /// PERF: penulisan disk (SQLCipher encrypt + tulis, bisa ratusan baris)
+  /// DITUNDA ke microtask berikutnya — TIDAK memblok frame saat ini. Saat
+  /// dipanggil dari `onCancel` stream (tutup chat), dulu tulis ini jatuh di
+  /// frame transisi pop → "tutup chat ngelag". Memori (sinkron) tetap di-set
+  /// segera supaya pembacaan berikutnya instan.
   Future<void> saveMessages(String chatKey, List<MessageModel> messages) async {
     _memCacheUpdate(chatKey, messages);
+    // Salin ringan (strip imageData) SEKARANG (di frame pemanggil), lalu
+    // tulis disk di microtask agar tidak berebut dengan transisi.
+    final rows = messages
+        .map((m) {
+          final map = m.toMap();
+          map['imageData'] = '';
+          return MessageModel.fromMap(m.id, map);
+        })
+        .toList();
+    await Future<void>.delayed(Duration.zero);
     try {
       await _ensureDb();
-      if (messages.isEmpty) {
+      if (rows.isEmpty) {
         await MessageStore.instance.clearChat(chatKey);
       } else {
-        await MessageStore.instance.saveMessages(
-          chatKey,
-          messages.map((m) {
-            final map = m.toMap();
-            map['imageData'] = '';
-            return MessageModel.fromMap(m.id, map);
-          }).toList(),
-        );
+        await MessageStore.instance.saveMessages(chatKey, rows);
       }
     } catch (e) {
       dlog('[MessageCache] saveMessages $chatKey ignored: $e');
