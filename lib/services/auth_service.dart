@@ -43,6 +43,34 @@ abstract class AuthBase {
 
   User? get currentUser => _sb.auth.currentUser;
   String? get uid => _sb.auth.currentUser?.id;
+
+  // ── Cache foto galeri per-uid (TTL 60s, cap 8) ──
+  // `get_user_photos_access` (profil ORANG LAIN) dipanggil tiap buka profil →
+  // RPC + download foto. Hasil jarang berubah (kecuali unlock/upload). Cap
+  // kecil supaya memori aman (tiap entry bisa memuat base64 foto).
+  static const Duration galleryTtl = Duration(seconds: 60);
+  static const int galleryCacheCap = 8;
+  final Map<String, ({List<UserPhoto> val, DateTime at})> _galleryCache = {};
+  void invalidateGallery([String? userId]) {
+    if (userId == null) {
+      _galleryCache.clear();
+    } else {
+      _galleryCache.remove(userId);
+    }
+  }
+  void _galleryPut(String userId, List<UserPhoto> v) {
+    _galleryCache.remove(userId);
+    _galleryCache[userId] = (val: v, at: DateTime.now());
+    while (_galleryCache.length > galleryCacheCap) {
+      _galleryCache.remove(_galleryCache.keys.first);
+    }
+  }
+  List<UserPhoto>? _galleryGet(String userId) {
+    final e = _galleryCache[userId];
+    if (e == null) return null;
+    if (DateTime.now().difference(e.at) >= galleryTtl) return null;
+    return e.val;
+  }
   bool get isSignedIn => _sb.auth.currentUser != null;
   bool get isAnonymous => _sb.auth.currentUser?.isAnonymous ?? true;
   String? get userEmail => _sb.auth.currentUser?.email;

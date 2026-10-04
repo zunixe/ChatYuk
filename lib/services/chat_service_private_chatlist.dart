@@ -3,8 +3,22 @@ part of 'chat_service.dart';
 /// Domain **private-chatlist** — list chat 1:1, read, pin/mute/archive,
 /// hide, block. Dipisah dari `chat_service_private.dart` (Fase 8).
 mixin ChatServicePrivateChatListMx on ChatBase {
+  // Throttle markAsRead per chat — chat aktif dengan banyak pesan masuk
+  // memanggil ini tiap pesan; cukup sekali per ~2.5s (read state jarang
+  // berubah & RPC-nya berat di jaringan). Emit lokal tetap jalan.
+  final Map<String, DateTime> _lastMarkReadAt = {};
+
   Future<void> markAsRead(String chatId, String uid) async {
     try {
+      final now = DateTime.now();
+      final last = _lastMarkReadAt[chatId];
+      if (last != null && now.difference(last).inMilliseconds < 2500) {
+        // Masih dalam window throttle → tetap update snapshot lokal (murah,
+        // UI centang-2 instan) tanpa RPC.
+        _applyLocalRead(uid, chatId);
+        return;
+      }
+      _lastMarkReadAt[chatId] = now;
       await measuredRpc(_sb, 
         'mark_chat_read',
         params: {'p_chat_id': chatId, 'p_uid': uid},

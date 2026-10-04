@@ -220,7 +220,10 @@ mixin AuthServiceAuthMx on AuthBase {
     await _sb.auth.signOut();
   }
 
-  Future<bool> fetchHasPassword() async {
+  Future<bool> fetchHasPassword({bool force = false}) async {
+    // PERF: hasil di-cache — tiap buka layar Akun tak perlu RPC ulang.
+    // `force` untuk kasus yang benar-benar butuh kesegaran.
+    if (_hasPasswordFetched && !force) return _cachedHasPassword;
     try {
       final res = await _sb.rpc('has_password');
       if (res is bool) {

@@ -431,6 +431,8 @@ mixin AuthServiceProfileMx on AuthBase {
     // Hanya untuk foto sendiri — pengguna lain WAJIB lewat
     // getPhotosWithAccess (yang menerapkan paywall).
     if (userId != uid) return getPhotosWithAccess(userId);
+    final cached = _galleryGet(userId);
+    if (cached != null) return cached;
     final res = await _sb.rpc('my_photos');
     final list = res is List ? res : <dynamic>[];
     final result = <UserPhoto>[];
@@ -459,6 +461,8 @@ mixin AuthServiceProfileMx on AuthBase {
   /// Foto terbuka: field photo = path/base64 asli. Terkunci: photo = preview.
   Future<List<UserPhoto>> getPhotosWithAccess(String userId) async {
     if (userId.isEmpty) return [];
+    final cached = _galleryGet(userId);
+    if (cached != null) return cached;
     final res = await _sb.rpc(
       'get_user_photos_access',
       params: {'p_user_id': userId},
@@ -486,6 +490,7 @@ mixin AuthServiceProfileMx on AuthBase {
         }),
       );
     }
+    _galleryPut(userId, result);
     return result;
   }
 
@@ -519,6 +524,7 @@ mixin AuthServiceProfileMx on AuthBase {
       'photo': path,
       if (preview != null && preview.isNotEmpty) 'photo_preview': preview,
     });
+    invalidateGallery(id); // foto berubah -> cache basi
   }
 
   /// Hapus foto galeri (hanya punya sendiri, RLS menjamin).
@@ -537,6 +543,7 @@ mixin AuthServiceProfileMx on AuthBase {
       }
     } catch (_) {}
     await _sb.from('user_photos').delete().eq('id', photoId);
+    invalidateGallery(); // foto berubah -> buang cache (uid tak diketahui di sini)
   }
 
   /// Hapus akun sendiri (Google Play account deletion requirement).

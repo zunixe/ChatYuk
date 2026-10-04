@@ -3146,3 +3146,33 @@ tetap ikut nilai insets asli).
 paling kecil yang benar-benar butuh (composer). OEM (MIUI) bisa mengirim
 `onNewImeFrame` redundan puluhan/detik → jika depend melekat di layar, seluruh
 layar rebuild tiap frame.
+
+---
+
+## 37. Optimasi RPC client-side — cache/TTL/invalidate (2026-10-05)
+
+**Konteks:** audit RPC. SEMUA RPC **server-side cepat** (EXPLAIN: 1-18ms).
+Yang lambat di HP (ratusan ms-2s) = **network latency**. Jadi optimasi = CLIENT
+(cache/defer/paralel/invalidate), bukan query.
+
+**Fix (9 file):**
+| RPC | Dulu | Sekarang |
+|---|---|---|
+| `has_password` | RPC tiap buka layar Akun | guard `_hasPasswordFetched` — 0 RPC bila sudah |
+| `my_social_status` (profil orang) | RPC tiap buka | TTL cache 60s/uid + invalidate saat follow/friend/subscribe |
+| `my_photos` / `get_user_photos_access` | RPC tiap buka | TTL cache 60s/uid (cap 8) + invalidate upload/delete |
+| `story_tray` | RPC tiap buka Online | TTL gate `refresh(silent)` 45s |
+| `my_subscriptions` | RPC tiap buka Langganan | TTL 30s + invalidate subscribe/unsubscribe |
+| `points_quests` | RPC tiap buka Misi | TTL 45s + invalidate setelah claim |
+| `list_topup_packages` | RPC tiap buka sheet | TTL 45s |
+| `mark_chat_read` | tiap pesan masuk (11×) | throttle 2.5s/chat (snapshot lokal tetap update) |
+| `group_info._load` | listMembers+fetchRoomById SERIAL (2 RTT) | `Future.wait` (1 RTT) |
+
+**Hasil terukur (logcat HP):** `my_social_status` & photos **0 RPC** saat buka
+ulang (cache hit); `story.tray` & `my_subscriptions` turun; `mark_chat_read`
+11→7; RPC warm semua 100-180ms. Sisa lambat = cold-start network (mitigasi:
+cache-dulu + warm-up).
+
+**Aturan turunan:** RPC read-idempoten yang hasilnya jarang berubah WAJIB
+cache TTL + invalidate berbasis-aksi (bukan andalkan waktu). Buka layar
+berulang tidak boleh menembak RPC yang sama tanpa cache.

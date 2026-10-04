@@ -17,11 +17,24 @@ class PointsService {
   final Map<String, Future<Object?>> _inflight = {};
   final Map<String, ({Object? value, DateTime at})> _ttlCache = {};
   static const _ttl = Duration(seconds: 3);
+  // TTL lebih panjang untuk data yang jarang berubah (quests/topup).
+  static const _ttlLong = Duration(seconds: 45);
 
-  Future<T> _coalesce<T>(String key, Future<T> Function() fn, {bool ttl = false}) {
+  /// Invalidasi cache TTL untuk 1 key (mis. setelah claim quest).
+  void invalidateTtl(String key) => _ttlCache.remove(key);
+  void invalidateTtlPrefix(String prefix) =>
+      _ttlCache.removeWhere((k, _) => k.startsWith(prefix));
+
+  Future<T> _coalesce<T>(
+    String key,
+    Future<T> Function() fn, {
+    bool ttl = false,
+    Duration? ttlDuration,
+  }) {
+    final ttlDur = ttlDuration ?? _ttl;
     if (ttl) {
       final c = _ttlCache[key];
-      if (c != null && DateTime.now().difference(c.at) < _ttl) {
+      if (c != null && DateTime.now().difference(c.at) < ttlDur) {
         return Future<T>.value(c.value as T);
       }
     }
@@ -80,18 +93,27 @@ class PointsService {
   }
 
   /// Katalog paket topup (id, coins, price_idr, bonus_label, play_product_id).
-  Future<List<Map<String, dynamic>>> listTopupPackages() async {
-    try {
-      final res = await measuredRpc(_sb, 'list_topup_packages');
-      if (res is List) {
-        return res
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-      }
-    } catch (e) {
-      dlog('[PointsService] listTopupPackages error: $e');
-    }
-    return const [];
+  Future<List<Map<String, dynamic>>> listTopupPackages() {
+    // PERF: paket topup nyaris tak berubah → TTL cache (kurangi RPC tiap
+    // buka sheet topup / TopupService._loadPackages).
+    return _coalesce<List<Map<String, dynamic>>>(
+      'list_topup_packages',
+      () async {
+        try {
+          final res = await measuredRpc(_sb, 'list_topup_packages');
+          if (res is List) {
+            return res
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList();
+          }
+        } catch (e) {
+          dlog('[PointsService] listTopupPackages error: $e');
+        }
+        return const <Map<String, dynamic>>[];
+      },
+      ttl: true,
+      ttlDuration: _ttlLong,
+    );
   }
 
   /// Verifikasi pembelian Play ke server (edge function play-topup-verify).
@@ -463,13 +485,28 @@ class PointsService {
   }
 
   /// Status semua misi (harian/mingguan/sekali). tzOffset = menit offset lokal.
-  Future<Map<String, dynamic>> quests(int tzOffsetMinutes) async {
-    final res = await measuredRpc(_sb, 
-      'points_quests',
-      params: {'tz_offset_minutes': tzOffsetMinutes},
+  Future<Map<String, dynamic>> quests(int tzOffsetMinutes) {
+    // PERF: TTL cache 30s — buka layar Misi berulang tak RPC tiap kali.
+    // Di-invalidate setelah claimWeeklyQuest.
+    return _coalesce<Map<String, dynamic>>(
+      'points_quests:$tzOffsetMinutes',
+      () async {
+        final res = await measuredRpc(_sb, 
+          'points_quests',
+          params: {'tz_offset_minutes': tzOffsetMinutes},
+        );
+        if (res is Map) return Map<String, dynamic>.from(res);
+        return {
+          'points': 0,
+          'streak': 0,
+          'daily': [],
+          'weekly': [],
+          'oneTime': [],
+        };
+      },
+      ttl: true,
+      ttlDuration: _ttlLong,
     );
-    if (res is Map) return Map<String, dynamic>.from(res);
-    return {'points': 0, 'streak': 0, 'daily': [], 'weekly': [], 'oneTime': []};
   }
 
   /// Klaim misi mingguan. Return {points, claimed}.
@@ -481,6 +518,8 @@ class PointsService {
       'claim_weekly_quest',
       params: {'quest_key': key, 'tz_offset_minutes': tzOffsetMinutes},
     );
+    // Cache quests basi setelah klaim.
+    invalidateTtlPrefix('points_quests:');
     if (res is Map) return Map<String, dynamic>.from(res);
     return {'points': 0, 'claimed': false};
   }

@@ -15,6 +15,27 @@ class SocialService {
   /// social_list ×4, inbox/outbox ×2, subscriptions ×2 bersamaan. Cukup 1
   /// RPC per key dalam satu window singkat; sisanya menunggu future sama.
   final Map<String, Future<Object?>> _inflight = {};
+
+  // ── TTL cache my_social_status per-uid (jarang berubah: hanya saat
+  // follow/unfollow/friend/block). Buka profil orang berulang tak perlu RPC
+  // tiap kali. `invalidateSocialStatus` dipanggil saat aksi sosial.
+  static const Duration _socialStatusTtl = Duration(seconds: 60);
+  final Map<String, ({Map<String, dynamic> val, DateTime at})>
+      _socialStatusCache = {};
+
+  void invalidateSocialStatus([String? uid]) {
+    if (uid == null) {
+      _socialStatusCache.clear();
+    } else {
+      _socialStatusCache.remove(uid);
+    }
+  }
+
+  // ── TTL cache my_subscriptions (jarang berubah: hanya saat subscribe/
+  // unsubscribe). Buka layar Langganan berulang tak RPC tiap kali.
+  static const Duration _subsTtl = Duration(seconds: 30);
+  ({List<Map<String, dynamic>> val, DateTime at})? _subsCache;
+  void invalidateSubscriptions() => _subsCache = null;
   Future<T> _coalesce<T>(String key, Future<T> Function() fn) {
     final running = _inflight[key];
     if (running != null) return running.then((v) => v as T);
@@ -71,7 +92,10 @@ class SocialService {
     String creatorUid, {
     int periods = 1,
   }) async {
-    return subscribeCreatorRpc(_sb, creatorUid, periods: periods);
+    final r = await subscribeCreatorRpc(_sb, creatorUid, periods: periods);
+    invalidateSubscriptions();
+    invalidateSocialStatus(creatorUid);
+    return r;
   }
 
   Future<Map<String, dynamic>> unsubscribeCreator(String creatorUid) async {
@@ -79,6 +103,8 @@ class SocialService {
       'unsubscribe_creator',
       params: {'p_creator': creatorUid},
     );
+    invalidateSubscriptions();
+    invalidateSocialStatus(creatorUid);
     return _map(res);
   }
 
@@ -90,12 +116,24 @@ class SocialService {
     return _map(res);
   }
 
-  Future<Map<String, dynamic>> mySocialStatus(String otherUid) async {
+  Future<Map<String, dynamic>> mySocialStatus(
+    String otherUid, {
+    bool force = false,
+  }) async {
+    // PERF: TTL cache per-uid — buka profil orang berulang tak RPC tiap kali.
+    final cached = _socialStatusCache[otherUid];
+    if (!force &&
+        cached != null &&
+        DateTime.now().difference(cached.at) < _socialStatusTtl) {
+      return cached.val;
+    }
     final res = await measuredRpc(_sb, 
       'my_social_status',
       params: {'p_other': otherUid},
     );
-    return _map(res);
+    final val = _map(res);
+    _socialStatusCache[otherUid] = (val: val, at: DateTime.now());
+    return val;
   }
 
   Future<List<Map<String, dynamic>>> socialList(
@@ -163,10 +201,17 @@ class SocialService {
   }
 
   Future<List<Map<String, dynamic>>> mySubscriptions() {
+    // TTL 30s — buka layar Langganan berulang tak RPC tiap kali.
+    final c = _subsCache;
+    if (c != null && DateTime.now().difference(c.at) < _subsTtl) {
+      return Future.value(c.val);
+    }
     return _coalesce<List<Map<String, dynamic>>>('my_subscriptions', () async {
       try {
         final res = await measuredRpc(_sb, 'my_subscriptions');
-        return _list(res);
+        final v = _list(res);
+        _subsCache = (val: v, at: DateTime.now());
+        return v;
       } catch (e) {
         dlog('[SocialService] mySubscriptions error: $e');
         return [];
