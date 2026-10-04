@@ -2782,3 +2782,40 @@ dari **RPC server lambat** (`online.diskLoad 837ms`, `count_room_presence
 
 **Verifikasi:** analyze 0 error/warning; 88 test (room/points/settings/privacy/
 online) lulus; build debug user + release admin sukses & terinstall.
+
+---
+
+## 30. Admin panel — audit storm + RPC (2026-10-06)
+
+**Audit menyeluruh semua menu admin** (Global Setting/Overview/Poin/Monitor
+Chat/Dummy/Kontak/Perangkat/Terhapus/Atribusi/Docs).
+
+**Hasil ukur (HP 24129PN74G, adminProd release + PERF_PROBE):**
+- `frames=3236 build[p50=0.6 p90=1.8 max=35.5ms] janky(build)=11` = **0.34%**
+  jank — SANGAT SEHAT.
+- Tab switch `tap→frame 5-8ms` (instan).
+- RPC admin **server-side cepat** (EXPLAIN ANALYZE): `admin_stats` 22ms,
+  `admin_active_calls` 6ms, `admin_registration_kpis` 12ms,
+  `admin_list_devices` 14ms, `admin_list_deleted` 25ms,
+  `admin_storage_stats` 28ms, `admin_get_chat_org` 2ms.
+
+**Kesimpulan:** tidak ada storm di admin. Struktur sudah benar:
+- `AdminProvider` = 1 ChangeNotifier, tiap domain bump counter (`revXxx`) →
+  tab `select(revXxx)` (rebuild granular, §26).
+- Polling guarded: `fetchActiveCalls` diam bila sidik sama (§17.5);
+  `_statsTimer`/`_notifyTimer` 60 dtk + cancel saat background.
+- `TabBarView` admin lazy (`_visitedTabs`).
+
+**Peningkatan (konsistensi + pencegahan):** tambah `RepaintBoundary` di kartu
+list admin yang belum punya — `admin_chat_list_screen` (`_AdminChatCard`),
+`admin_devices_tab` (`DeviceCard`/user-only), `admin_deleted_tab`
+(`DeletedCard`), `admin_dummy_tab` (`DummyCard`) — agar satu kartu berubah
+(badge call/unread/GPS/status) tidak merepaint seluruh list panjang
+(konsisten dgn menu Online & daftar chat user).
+
+**RPC lambat sisa (bukan admin, umum saat boot):** `chat.hiddenFetch 935ms`,
+`list_my_groups 747ms`, `count_room_presence 515ms` — latensi network/HP
+(server-side sudah diukur cepat). Kandidat optimasi berikutnya jika perlu.
+
+**Verifikasi:** analyze 0 error/warning; build adminProd release sukses &
+terinstall.

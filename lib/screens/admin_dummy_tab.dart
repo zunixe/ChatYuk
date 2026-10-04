@@ -582,24 +582,26 @@ class _AdminDummyTabState extends State<AdminDummyTab>
         itemBuilder: (ctx, i) {
           if (i < _headerCount) return _headerChild(i, s);
           final item = _filtered[i - _headerCount];
-          return DummyCard(
-            item: item,
-            s: s,
-            onSchedule: () => showScheduleInfoDialog(context, item, s),
-            onStories: () => showDummyStorySheet(context, item, s),
-            onStatus: (v) => _setStatus(item, v, s),
-            onWake: () => _wake(item, s),
-            onToggleInvisible: () => _setStatus(
-              item,
-              (item['status'] as String? ?? 'offline') == 'invisible'
-                  ? 'online'
-                  : 'invisible',
-              s,
+          return RepaintBoundary(
+            child: DummyCard(
+              item: item,
+              s: s,
+              onSchedule: () => showScheduleInfoDialog(context, item, s),
+              onStories: () => showDummyStorySheet(context, item, s),
+              onStatus: (v) => _setStatus(item, v, s),
+              onWake: () => _wake(item, s),
+              onToggleInvisible: () => _setStatus(
+                item,
+                (item['status'] as String? ?? 'offline') == 'invisible'
+                    ? 'online'
+                    : 'invisible',
+                s,
+              ),
+              onEdit: () => _openDummySheet(item: item, s: s),
+              onChatAs: () => _chatAs(item, s),
+              onDelete: () => _delete(item, s),
+              onAiSheet: () => _openAiSheet(item, s),
             ),
-            onEdit: () => _openDummySheet(item: item, s: s),
-            onChatAs: () => _chatAs(item, s),
-            onDelete: () => _delete(item, s),
-            onAiSheet: () => _openAiSheet(item, s),
           );
         },
       ),
