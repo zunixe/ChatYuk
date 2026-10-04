@@ -293,17 +293,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
-    // GRANULAR: panel hanya bergantung pada domain STATS. Dulu
-    // `context.watch<AdminProvider>()` → setiap notify (polling 60 dtk,
-    // realtime call, fetch device) me-rebuild SELURUH panel + semua tab
-    // yang sudah dibangun → jank tak stabil. `select` pada revStats saja
-    // membuat panel rebuild HANYA saat statistik berubah; domain lain
-    // (devices/chats/deleted/…) di-rebuild oleh tab masing-masing.
-    context.select<AdminProvider, int>((p) => p.revStats);
+    // GRANULAR: JANGAN select revStats di root — dulu itu membuat SELURUH
+    // panel + semua tab yang dibangun ikut rebuild tiap statistik berubah
+    // (polling 60 dtk / realtime). Hanya tab Overview & Poin yang butuh
+    // stats; keduanya membungkus dirinya dengan Consumer<AdminProvider>
+    // (lihat body) sehingga tab lain (Perangkat/Terhapus/Chat) tak tersentuh.
     // Nilai non-reaktif dibaca via read (tidak menambah dependency).
     final admin = context.read<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final stats = admin.stats;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -375,11 +372,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(1))
-            _buildOverviewTab(admin, s, stats)
+            Consumer<AdminProvider>(
+              builder: (_, ap, __) =>
+                  _buildOverviewTab(ap, s, ap.stats),
+            )
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(2))
-            _buildPointTab(admin, s, stats)
+            Consumer<AdminProvider>(
+              builder: (_, ap, __) => _buildPointTab(ap, s, ap.stats),
+            )
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(3))

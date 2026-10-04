@@ -2559,3 +2559,152 @@ ngetik ketahan. Restart kosongkan → normal.
 **Verifikasi:** analyze bersih; test (mention, link_preview, timeline,
 photo_bubble, message_cache, leaderboard_cache, post_card) lulus; ukur heap
 scroll chat berfoto 515MB→55MB.
+
+### 27m. Private chat — jank "buka chat" (warm cache + koalesensi rebuild) 2026-10-06
+
+Dilaporkan: "barusan masuk private chat ngelag lagi". Diukur via build
+`--profile` + logcat (metode §25) di Xiaomi 15.
+
+**Data sebelum (logcat):** rata-rata **3.47 `[CHAT-BUILD]` per buka** (push→pop);
+**16 `[CACHE-TIME] server=` vs 10 `sqlite=`** — chat yang belum di cache harus
+tunggu `server=~120-148ms` di jalur frame pertama. Tampak pasangan
+`[CHAT-BUILD]` berjarak 16-17ms (rebuild-storm). Memory PSS 378 MB / swap 34 MB.
+
+**Tiga akar:**
+1. `_warmTopChats` hanya menghangatkan 2 chat teratas → chat lain (jarang
+   dibuka) belum ada di cache SQLite → buka harus fetch server ~120-148ms.
+2. Pekerjaan pasca-buka (timer 220ms reaksi/starred, 280ms channel+profil)
+   masing-masing `setState` → layar penuh di-build 2-3× beruntun.
+3. `_onCallChanged` setState SELALU saat `sess == null` (chat tanpa call =
+   selalu true) tiap `CallProvider.notify` — rebuild penuh tak perlu.
+
+**Fix:**
+- `_warmTopChats` (private_chats_screen): 2 teratas langsung + **8 berikutnya
+  di-idle** (jeda 1.2 dtk, berjarak 220ms) → cache siap sebelum ditekan.
+- Helper `_scheduleRebuild()` (koalesensi via `scheduleFrameCallback`) di
+  `private_chat_screen` — dipakai untuk setState pasca-buka (reaksi, starred,
+  chatInfo stream, status lawan, getOtherProfile); rebuild yang jatuh di frame
+  sama jadi SATU setState.
+- `_onCallChanged` difilter signature (`callId|phase` / `_none`): rebuild
+  hanya bila state call relevan berubah.
+
+**Hasil terukur (setelah, logcat baru):**
+- **build/pop 3.47 → 2.56** (−26%).
+- **cache: 10 sqlite/16 server → 25 sqlite/9 server** (mayoritas buka dari
+  cache lokal; server fetch turun ~44%).
+- **Rebuild-storm HILANG**: jarak minimum antar `[CHAT-BUILD]` 16ms → **98ms**
+  (tidak ada lagi burst <40ms).
+
+**Verifikasi:** analyze 0 error; 73 test chat/reaksi/stream lulus (4 gagal di
+`user_info_seed_test.dart` PRE-EXISTING, sudah gagal di HEAD). Catatan #3
+(avatar/foto) sudah aman: semua `Image.memory` punya `cacheWidth`/`ResizeImage`
++ cache pesan LRU-bounded 8.
+
+### 27n. Navigasi "back" konsisten di semua halaman — slide 150/120ms global 2026-10-06
+
+Dilaporkan: back dari room (masuk topic) terasa lebih lambat dari private chat
+(dari chat list). Permintaan: konsisten seperti private chat di SEMUA halaman.
+
+**Akar (terverifikasi):** private chat cepat HANYA di 2 dari 11 tempat buka —
+pakai `PageRouteBuilder` manual 150ms masuk / 120ms keluar + `SlideTransition`
+(`private_chats_screen.dart:110`, `online_users_screen.dart:805`). **93 tempat
+lain** (termasuk 8 tempat buka `RoomChatScreen`) pakai `MaterialPageRoute`
+default ~300ms (Zoom). Tidak ada `pageTransitionsTheme` global. Akibat: room &
+halaman lain back ~2.5× lebih lambat (dulu 120ms vs ~300ms).
+
+**Temuan kunci (Flutter 3.47):** `PageTransitionsBuilder` mengekspos
+`transitionDuration`/`reverseTransitionDuration` yang bisa di-override, dan
+`MaterialPageRoute` membacanya dari theme (`material/page.dart:91-97`). Jadi
+SATU custom builder global cukup mengubah 93 rute sekaligus.
+
+**Fix (1 file: `lib/config/theme.dart`):**
+- Kelas `AppSlidePageTransitionsBuilder extends PageTransitionsBuilder`:
+  `transitionDuration=150ms`, `reverseTransitionDuration=120ms`,
+  `buildTransitions` → `SlideTransition` `Offset(1,0)→0` dengan
+  `Curves.easeOutCubic`/`easeInCubic` (identik private chat). Bila
+  `route.fullscreenDialog` (Call/IncomingCall) → delegasi ke
+  `ZoomPageTransitionsBuilder` (bottom-up, TIDAK slide).
+- Daftarkan di `_buildTheme` → `pageTransitionsTheme` untuk SEMUA platform
+  (android/iOS/macOS/windows/linux) → berlaku seluruh app (room, profil,
+  setelan, auth/onboarding, admin).
+
+**Tidak diubah (sengaja):** 8 tempat push room (otomatis ikut), 2
+`PageRouteBuilder` manual private chat (hasil identik); bottom sheet/dialog
+bukan page route.
+
+**Verifikasi:** analyze 0 error (sisa 2 info `deprecated_member_use` lama);
+test baru `test/page_transition_test.dart` 5 lulus — termasuk bukti objektif
+`MaterialPageRoute.transitionDuration == 150ms` &
+`reverseTransitionDuration == 120ms` (bukan 300ms), plus fullscreenDialog
+tetap bottom-up. Suite regression/functional/widgets/chat 86 lulus; logcat HP
+tanpa error Dart.
+
+Catatan: `PredictiveBackPageTransitionsBuilder` (default Android) tergantikan
+— back gesture tetap jalan tanpa animasi predictive (diterima user).
+
+---
+
+## 28. Tab non-aktif tidak rebuild (IndexedStack) + admin panel granular (2026-10-06)
+
+**Keluhan (user):** "di private chat ada foto chat sama user, serasa ngelag
+pas ada foto"; "klik tiap card di menu Online masuk-keluar private chat
+berulang, makin lama makin lambat"; "buat ringan build, yang penting aja
+ketika chat".
+
+**Ukur (build DEBUG + logcat, karena `dlog` di-gate kDebugMode di rilis):
+** 1058 `[AVATAR]` dalam satu sesi singkat, storm hingga **272 resolve/detik**.
+Tiap buka-tutup chat, tab **Online** (di `IndexedStack`) ikut di-build ulang
+walau tak terlihat → semua `UserAvatar` di-resolve ulang.
+
+**Akar:** `IndexedStack` membangun SEMUA tab yang pernah dikunjungi. Setiap
+`_MainNav` rebuild (badge unread/anon/select berubah) → SELURUH tab (termasuk
+Online yang berisi puluhan `UserAvatar`) ikut di-build ulang. `TickerMode`
+dulu hanya mematikan ANIMASI, **bukan** mencegah rebuild. Sama di admin:
+`context.select<AdminProvider,int>((p) => p.revStats)` di ROOT `build()` →
+tiap stats berubah (polling 60 dtk / realtime) SELURUH panel + semua tab
+yang dibangun ikut rebuild.
+
+**Fix:**
+1. **`_TabFreeze`** (`lib/app.dart`) — widget yang menahan subtree tab yang
+   TIDAK aktif: instance `child` terakhir dipertahankan (`didUpdateWidget`
+   hanya update child saat tab aktif atau tepat transisi aktif→non-aktif),
+   dibungkus `TickerMode(enabled: active)`. Jadi parent rebuild tak menyentuh
+   tab belakang; saat tab dibuka, child terbaru langsung dipakai (data fresh).
+   Dipakai di `IndexedStack` `_MainNav` (Online/Chat/Timeline/Profil).
+2. **`UserAvatar._resolve` fast-path EMPTY** (`lib/widgets/user_avatar.dart`) —
+   user tanpa foto (src kosong) yang sudah pernah diproses kosong → langsung
+   return (dulu tiap build jatuh ke cabang EMPTY + log).
+3. **Admin panel granular** (`lib/screens/admin_panel_screen.dart`) — buang
+   `select(revStats)` dari root; tab **Overview** & **Poin** membungkus diri
+   dengan `Consumer<AdminProvider>` (hanya keduanya yang butuh stats). Tab
+   Perangkat/Terhapus/Chat-monitor kini tak tersentuh saat stats berubah.
+
+**Hasil terukur (sebelum → sesudah, sesi mirip):**
+
+| Metrik | Sebelum | Sesudah |
+|---|---|---|
+| `[AVATAR]` total/sesi | **1058** | **83** (−92%) |
+| Storm avatar/detik | **272** | **30** (−89%) |
+| `[CHAT-BUILD]` | 100 | 41 |
+
+Session stream tetap **balance** (`start 29 / cancel 30`) — tidak ada leak.
+
+**Aturan turunan (JANGAN dibalik):**
+- **`IndexedStack` (atau container yang menahan banyak halaman hidup) WAJIB
+  membungkus setiap child non-aktif dengan penahan-rebuild** (`_TabFreeze`
+  pola). `TickerMode` saja TIDAK cukup — ia hanya mematikan animasi.
+- `TabBarView` hanya build tab terlihat (+ neighbor) — lebih aman, TAPI
+  pastikan tab tak mewarisi rebuild dari PARENT (root yang `select` domain
+  berat = semua tab ikut). Taruh `select`/`Consumer` **sedekat mungkin** ke
+  widget yang benar-benar memakai datanya.
+- `UserAvatar` untuk uid tanpa foto jangan resolve ulang tiap build.
+
+**Verifikasi:** analyze 0 error/warning; 32 test avatar/nav lulus; build
+apkpureProd & adminProd release sukses + terinstall. Log `[SESSION]`/`[AVATAR]`
+instrumentasi (dari penyelidikan) sudah DIHAPUS dari kode.
+
+**Catatan diagnosa:** storm `[CHAT-BUILD]` saat buka chat (~10× @40ms) yang
+tersisa berasal dari **animasi transisi route** (bukan kode kita) — biayanya
+kini kecil setelah §27n (transisi 150ms) + fix di atas. Profil `[PERF]` frame
+timing menunjukkan build p50≈1.5ms (sehat); jangan kejar jumlah rebuild tanpa
+melihat biayanya (banyak rebuild murah ≠ jank).
