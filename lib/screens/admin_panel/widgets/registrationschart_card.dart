@@ -695,7 +695,11 @@ class _TrendPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (counts.isEmpty) return;
-    const labelH = 12.0; // ruang untuk angka di atas bar tertinggi
+    // Ruang label angka di ATAS bar tertinggi. Bar digambar dari garis
+    // dasar (chartH) ke atas; tinggi maksimum dibatasi supaya label
+    // tertinggi TIDAK keluar dari area (dulu: bar setinggi penuh → label
+    // di atasnya negatif = nembus keluar grafik).
+    const labelH = 14.0;
     final chartH = size.height - labelH;
     final n = counts.length;
     final slot = size.width / n;
@@ -710,9 +714,14 @@ class _TrendPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
 
+    // Bar tertinggi = chartH - labelH (sisakan ruang label di atasnya).
+    final maxBarH = chartH - labelH;
+
     for (var i = 0; i < n; i++) {
       final c = counts[i];
-      final h = c == 0 ? 2.0 : (c / maxCount * (chartH - 4)).clamp(2.0, chartH - 4);
+      final h = c == 0
+          ? 2.0
+          : (c / maxCount * maxBarH).clamp(2.0, maxBarH);
       final cx = slot * i + slot / 2;
       final left = cx - barW / 2;
       final top = chartH - h;
@@ -739,7 +748,10 @@ class _TrendPainter extends CustomPainter {
           textDirection: TextDirection.ltr,
         )..layout();
         final tx = (cx - tp.width / 2).clamp(0.0, size.width - tp.width);
-        tp.paint(canvas, Offset(tx, (top - tp.height - 1).clamp(0.0, top)));
+        // Posisi Y label: tepat di atas bar, tapi di-clamp agar tak pernah
+        // negatif (nembus atas) walau bar setinggi maksimum.
+        final labelY = (top - tp.height - 1).clamp(0.0, chartH);
+        tp.paint(canvas, Offset(tx, labelY));
       }
     }
   }
