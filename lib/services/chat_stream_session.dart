@@ -146,6 +146,22 @@ class ChatStreamSession {
     var _hasMore = true;
     final _loadMoreReqs = <Completer<void>>[];
 
+    // Batas pesan yang ditahan di memori per chat. Tanpa ini `_current` tumbuh
+    // tak terbatas saat user scroll ke atas (loadOlder tak pernah memangkas) →
+    // tiap emit `controller.add(...)` menyalin list makin besar + ListView
+    // makin panjang → "ngelag makin lama dipakai", pulih setelah tutup-buka
+    // chat (state sesi dibuat ulang). 300 = jauh lebih dari cukup untuk
+    // viewport + scroll mundur wajar; pesan lebih lama dibaca ulang dari disk
+    // saat di-scroll (pagination tetap jalan).
+    const _maxMessages = 300;
+    void _trim() {
+      if (_current.length <= _maxMessages) return;
+      // Buang dari DEPAN (terlama) — pertahankan pesan terbaru + posisi
+      // scroll di bawah. Karena dipangkas dari atas, `_hasMore` dibiarkan
+      // (masih ada yang lebih lama di server).
+      _current = _current.sublist(_current.length - _maxMessages);
+    }
+
     // Private chat: cutoff waktu delete — pesan lama (<= cutoff) tidak
     // pernah ditampilkan lagi untuk user yang menghapus, meski ada di server.
     DateTime? _hiddenCutoff;
@@ -487,10 +503,11 @@ class ChatStreamSession {
           merged.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));
         }
         _current = merged;
+        _trim();
         controller.add(List.unmodifiable(_current));
         scheduleCacheSave();
         // Foto di-load background — teks tidak menunggu decrypt foto.
-        loadPhotosAsync(merged);
+        loadPhotosAsync(_current);
       } catch (e) {
         dlog('[_cachedMessagesStream] fetch error: $e');
         // Fallback: tampilkan cache hanya kalau server gagal.
@@ -590,6 +607,7 @@ class ChatStreamSession {
           } else {
             _current.insert(insertAt, msg);
           }
+          _trim();
           lastRealtime = DateTime.now();
           dlog(
             '[DEBUG-READ] realtime INSERT table=$table msg=${msg.id} filter=$filterVal',
@@ -677,6 +695,7 @@ class ChatStreamSession {
         // Sisipkan kronologis
         var idx = _current.indexWhere((m) => m.timestamp.isAfter(msg.timestamp));
         if (idx < 0) { _current.add(msg); } else { _current.insert(idx, msg); }
+        _trim();
         controller.add(List.unmodifiable(_current));
         scheduleCacheSave();
       } catch (_) {}
@@ -719,6 +738,7 @@ class ChatStreamSession {
             _hasMore = false;
           } else {
             _current = [...newMsgs, ..._current];
+            _trim();
             controller.add(List.unmodifiable(_current));
             scheduleCacheSave();
           }

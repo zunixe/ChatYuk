@@ -110,6 +110,60 @@ void main() {
       list = await found.timeout(const Duration(seconds: 3));
       expect(list.map((m) => m.text), ['lama', 'baru']);
     });
+
+    test('list DIBATASI 300 pesan (anti-tumbuh tak terbatas = lag)', () async {
+      final handler = FakeSupabaseHandler();
+      // Setiap paginasi (filter lt created_at) kembalikan 100 pesan lebih tua.
+      // Fetch awal = 100 terbaru → setelah 4× loadOlder total 500 → dipangkas
+      // jadi 300 (pertahankan yang TERBARU/terdekat viewport).
+      var page = 0;
+      int oldestFetched = 100000;
+      handler.on('/rest/v1/messages', (req) {
+        if (req.url.query.contains('created_at=lt.')) {
+          final base = DateTime.utc(2026, 1, 1);
+          final start = oldestFetched - 100 * (page + 1);
+          return [
+            for (var i = 0; i < 100; i++)
+              row(
+                start + i,
+                'old${start + i}',
+                createdAt: base
+                    .add(Duration(minutes: start + i - 100000))
+                    .toIso8601String(),
+              ),
+          ];
+        }
+        final base = DateTime.utc(2026, 1, 1);
+        return [
+          for (var i = 0; i < 100; i++)
+            row(
+              99900 + i,
+              'new$i',
+              createdAt: base
+                  .add(Duration(minutes: i))
+                  .toIso8601String(),
+            ),
+        ];
+      });
+
+      final handle = session(handler, 'room_cap').start();
+      var list = await handle.stream.first.timeout(const Duration(seconds: 3));
+      expect(list.length, 100);
+
+      // Tambah pesan lama berulang → melewati cap.
+      for (var k = 0; k < 5; k++) {
+        oldestFetched -= 100;
+        page = k;
+        final bigger = handle.stream.firstWhere(
+          (l) => l.length > list.length || l.length == 300,
+        );
+        await handle.loadOlder();
+        list = await bigger.timeout(const Duration(seconds: 3));
+      }
+      // Tidak boleh melebihi cap.
+      expect(list.length, lessThanOrEqualTo(300),
+          reason: 'list pesan harus dibatasi (anti tumbuh tak terbatas)');
+    });
   });
 
   // NOTE: timer poll 30 dtk & callback realtime tidak diuji di sini —
