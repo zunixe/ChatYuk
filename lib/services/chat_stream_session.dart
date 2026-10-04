@@ -154,6 +154,12 @@ class ChatStreamSession {
     // viewport + scroll mundur wajar; pesan lebih lama dibaca ulang dari disk
     // saat di-scroll (pagination tetap jalan).
     const _maxMessages = 300;
+    // Kursor paginasi TERPISAH dari `_current.first`: trim memangkas pesan
+    // terlama dari `_current`, tapi kursor harus tetap menunjuk ke pesan
+    // TERLAMA yang pernah dimuat sesi ini — kalau pakai `_current.first`
+    // (yang sudah kepangkas), `before` mundur → fetch duplikat → `_hasMore`
+    // mati palsu → history >300 tak bisa di-scroll (regresi trim).
+    DateTime? _oldestFetchedTs;
     void _trim() {
       if (_current.length <= _maxMessages) return;
       // Buang dari DEPAN (terlama) — pertahankan pesan terbaru + posisi
@@ -504,6 +510,12 @@ class ChatStreamSession {
         }
         _current = merged;
         _trim();
+        if (_current.isNotEmpty) {
+          final first = _current.first.timestamp;
+          _oldestFetchedTs = _oldestFetchedTs == null || first.isBefore(_oldestFetchedTs!)
+              ? first
+              : _oldestFetchedTs;
+        }
         controller.add(List.unmodifiable(_current));
         scheduleCacheSave();
         // Foto di-load background — teks tidak menunggu decrypt foto.
@@ -719,7 +731,10 @@ class ChatStreamSession {
         return;
       _loadingOlder = true;
       try {
-        final oldest = _current.first.timestamp;
+        // Pakai kursor sesi (`_oldestFetchedTs`), BUKAN `_current.first` —
+        // trim bisa memangkas depan `_current` sehingga first-nya lebih baru
+        // dari yang sebenarnya sudah dimuat (lihat komentar `_trim`).
+        final oldest = _oldestFetchedTs ?? _current.first.timestamp;
         var older = await fetchServer(before: oldest, limit: 100);
         if (controller.isClosed) return;
         // Pagination juga harus menghormati cutoff delete — pesan sebelum
@@ -739,6 +754,12 @@ class ChatStreamSession {
           } else {
             _current = [...newMsgs, ..._current];
             _trim();
+            // Majukan kursor ke pesan terlama batch ini (lebih tua dari
+            // kursor lama) agar paginasi berikutnya lanjut ke belakang.
+            final first = newMsgs.first.timestamp;
+            _oldestFetchedTs = _oldestFetchedTs == null || first.isBefore(_oldestFetchedTs!)
+                ? first
+                : _oldestFetchedTs;
             controller.add(List.unmodifiable(_current));
             scheduleCacheSave();
           }

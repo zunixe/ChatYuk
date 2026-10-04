@@ -169,6 +169,69 @@ void main() {
     test('GROUP: list DIBATASI 300 pesan (anti-tumbuh = lag)', () async {
       await capTest('group_cap_123');
     });
+
+    test('trim TIDAK merusak paginasi dalam (kursor sesi, bukan depan list)',
+        () async {
+      // Regresi: trim memangkas depan `_current`; kalau `loadOlder` memakai
+      // `_current.first` sebagai kursor, `before` mundur → fetch duplikat →
+      // history >300 tak bisa di-scroll. Kursor sesi harus terus mundur.
+      final handler = FakeSupabaseHandler();
+      final befores = <String>[];
+      handler.on('/rest/v1/messages', (req) {
+        final q = req.url.query;
+        if (q.contains('created_at=lt.')) {
+          final m = RegExp(r'created_at=lt\.([^&]+)').firstMatch(q);
+          befores.add(m?.group(1) ?? '');
+          // Tiap halaman: 100 pesan lebih tua dari `before`.
+          final beforeTs = DateTime.parse(Uri.decodeComponent(m!.group(1)!));
+          final base = beforeTs.subtract(const Duration(minutes: 100));
+          return [
+            for (var i = 0; i < 100; i++)
+              row(
+                befores.length * 1000 + i,
+                'old${befores.length}-$i',
+                createdAt:
+                    base.add(Duration(minutes: i)).toIso8601String(),
+              ),
+          ];
+        }
+        final base = DateTime.utc(2026, 1, 1);
+        return [
+          for (var i = 0; i < 100; i++)
+            row(
+              90000 + i,
+              'n$i',
+              createdAt: base.add(Duration(minutes: i)).toIso8601String(),
+            ),
+        ];
+      });
+
+      final handle = session(handler, 'room_deep').start();
+      var list = await handle.stream.first.timeout(const Duration(seconds: 3));
+      expect(list.length, 100);
+      // Paginasi 5× (total 600 > cap 300).
+      for (var k = 0; k < 5; k++) {
+        final prevLen = list.length;
+        final next = handle.stream.firstWhere(
+          (l) => l.length != prevLen || l.length == 300,
+        );
+        await handle.loadOlder();
+        list = await next.timeout(const Duration(seconds: 3));
+      }
+      expect(list.length, lessThanOrEqualTo(300));
+      // Kursor `before` harus MONOTON MUNDUR (tiap halaman lebih tua) —
+      // bukti paginasi jalan terus walau depan list kepangkas trim.
+      expect(befores.length, 5);
+      for (var i = 1; i < befores.length; i++) {
+        expect(
+          DateTime.parse(Uri.decodeComponent(befores[i])).isBefore(
+            DateTime.parse(Uri.decodeComponent(befores[i - 1])),
+          ),
+          isTrue,
+          reason: 'before[$i] harus lebih tua dari before[${i - 1}]',
+        );
+      }
+    });
   });
 
   // NOTE: timer poll 30 dtk & callback realtime tidak diuji di sini —
