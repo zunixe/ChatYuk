@@ -704,9 +704,16 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   /// hangat di 2800ms, padahal UI sudah interaktif ~1300ms. Jendela 1300-2800ms
   /// itulah sumber jank terukur saat tap: tab belum dibangun → build halaman
   /// jatuh di frame tap (tap@1.5-1.8s = 14-22ms/jank; tap tab hangat = 0 jank).
-  /// Percepat jadi mulai 300ms + interval 250ms → semua tab hangat ~800ms,
-  /// SEBELUM UI interaktif, jadi tap tak pernah membangun halaman. Jangan
-  /// perlambat tanpa mengukur ulang (metrik `tab{N} tap→frame` + `janky(build)`).
+  ///
+  /// UPDATE 2026-10-06 (keluhan "menu bawah lag diklik di awal, setelah
+  /// dipencet-pencet baru cepat"): prewarm bertahap 250ms MASIH menyisakan
+  /// jendela di mana tab belum siap saat user tap cepat (mis. tap Chat <300ms
+  /// atau Profil <800ms setelah app tampil). Tiap tab = 1 jank frame build.
+  /// Dipercepat: mulai 0ms (langsung setelah frame pertama) + interval 1 frame
+  /// (~16ms) → ketiga tab hangat ~50ms, SEBELUM jari user sempat tap. Biaya: 3
+  /// jank frame kecil di awal idle (tak terasa, layar baru tampil) — jauh lebih
+  /// baik daripada jank di frame tap. Jangan perlambat tanpa ukur ulang
+  /// (metrik `tab{N} tap→frame` + `janky(build)`).
   void _scheduleTabPrewarm() {
     const order = [1, 2, 3]; // Pesan/Chat, Timeline, Profil
     var step = 0;
@@ -718,10 +725,10 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
         return;
       }
       if (mounted) setState(() => _visitedTabs.add(i));
-      Future<void>.delayed(const Duration(milliseconds: 250), next);
+      Future<void>.delayed(const Duration(milliseconds: 16), next);
     }
 
-    Future<void>.delayed(const Duration(milliseconds: 300), next);
+    Future<void>.delayed(const Duration(milliseconds: 32), next);
   }
 
   @override
@@ -969,8 +976,8 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
               ),
             ),
           ),
-            ],
-          ),
+        ],
+      ),
           // Tombol melayang Admin Panel — KIRI BAWAH, di atas menu nav.
           // Admin sungguhan saja (bukan sesi dummy). Ikon saja, tanpa bulatan.
           if (showAdminFab)
