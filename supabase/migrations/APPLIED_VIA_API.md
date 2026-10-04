@@ -2,6 +2,20 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-05 — Pesan room user terhapus tampil "Pesan dihapus"
+
+- **Status:** SUDAH TERAPPLIED via Management API
+  (`20261006120000_room_deleted_user_placeholder.sql`). Tercatat di
+  `supabase_migrations.schema_migrations`.
+- **Permintaan user:** user yang dihapus (admin) / menghapus sendiri →
+  pesan-pesannya di room HARUS tampil terhapus.
+- `delete_my_account`: pesan room di-SOFT-delete (`is_deleted=true`),
+  bukan hard-delete. Klien sudah me-render placeholder dari flag ini.
+- `purge_onboarding_placeholders`: tambah soft-delete pesan room per-user.
+- **Backfill:** 56 pesan yatim (sender tanpa profiles) ditandai terhapus.
+- **Test:** `delete_account_test.sql` +2 assert (soft-delete ada,
+  hard-delete hilang) — 6/6 lolos via `run_sql_tests.sh`.
+
 ## 2026-10-05 — Daftar user admin: flag Fake GPS vs GPS asli
 
 - **Status:** SUDAH TERAPPLIED via Management API

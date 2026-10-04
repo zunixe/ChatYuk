@@ -38,5 +38,21 @@ select supabase_tests.check('komentar usang "FK SET NULL" sudah dikoreksi',
       and pg_get_functiondef(p.oid) like '%FK SET NULL%'
   ));
 
+select supabase_tests.check('pesan room di-SOFT-delete (tampil "Pesan dihapus")',
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'delete_my_account'
+      and pg_get_functiondef(p.oid)
+        like '%update public.messages set is_deleted = true where sender_id = v_uid%'
+  ));
+
+select supabase_tests.check('pesan room TIDAK di-hard-delete lagi',
+  not exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'delete_my_account'
+      and pg_get_functiondef(p.oid)
+        like '%delete from public.messages where sender_id = v_uid%'
+  ));
+
 select supabase_tests.report() as result;
 rollback;
