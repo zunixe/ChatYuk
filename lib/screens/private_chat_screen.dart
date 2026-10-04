@@ -1889,7 +1889,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       // Back menutup search dulu, lalu mode seleksi, baru keluar layar.
       canPop: !inSelection && !_searching,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
+        if (didPop) {
+          // Back benar-benar menutup layar: lepas fokus keyboard SEGERA
+          // supaya animasi tutup keyboard tidak berebut frame dengan
+          // transisi pop (dulu tombol back "kadang ngelag dikit").
+          FocusManager.instance.primaryFocus?.unfocus();
+          return;
+        }
         // Jejak diagnosa "back mati": catat kenapa back di-veto.
         debugPrint(
             '[NAV] back veto private-chat searching=$_searching selection=${selectedIds.length}');
@@ -2229,7 +2235,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           ),
         ],
       ),
-      body: Stack(
+      // RepaintBoundary AKAR: saat tombol back ditekan, transisi reverse
+      // menggeser seluruh layar. Dengan layer ter-cache, GPU tinggal
+      // meng-composite (tanpa re-raster list pesan + bubble + background)
+      // → tombol back konsisten mulus (dulu "kadang ngelag dikit").
+      body: RepaintBoundary(
+        child: Stack(
         children: [
           // Background chat — gambar 30% transparan, di-decode sekali di
           // startup (warmChatBackground) lalu render sinkron via RawImage
@@ -2765,6 +2776,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
               ),
             ),
         ],
+      ),
       ),
       ),
     );
