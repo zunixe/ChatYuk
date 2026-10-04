@@ -640,11 +640,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   final Set<String> _imgQueued = {};
   final Map<String, DateTime> _imgLastAttempt = {};
   static const int _maxImageFetches = 3;
+  // Penanda id pesan yang SUDAH pernah dipindai auto-load — supaya pemindaian
+  // tak mengulang SELURUH list tiap emit (dulu O(N) per emit → berat saat
+  // chat panjang / scroll). Hanya pesan BARU yang dicek.
+  final Set<String> _imgScannedIds = {};
+
   void _autoLoadMissingImages(List<MessageModel> msgs) {
     final now = DateTime.now();
     for (final m in msgs) {
-      if (m.type != 'image' || m.imageData.isNotEmpty) continue;
-      if (m.isDeleted) continue;
+      if (m.type != 'image') continue;
+      // Sudah pernah dipindai → lewati (anti scan ulang O(N) tiap emit).
+      if (!_imgScannedIds.add(m.id)) continue;
+      if (m.imageData.isNotEmpty || m.isDeleted) continue;
       if (_imgInFlight.contains(m.id) || _imgQueued.contains(m.id)) continue;
       final last = _imgLastAttempt[m.id];
       if (last != null && now.difference(last) < const Duration(seconds: 10)) {
@@ -653,6 +660,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       _imgLastAttempt[m.id] = now;
       _imgQueue.add(m.id);
       _imgQueued.add(m.id);
+    }
+    // Bound map penanda (cegah tumbuh seumur sesi).
+    if (_imgScannedIds.length > 2000) {
+      _imgScannedIds.removeAll(_imgScannedIds.take(500).toList());
+    }
+    if (_imgLastAttempt.length > 2000) {
+      _imgLastAttempt.remove(_imgLastAttempt.keys.first);
     }
     _drainImageQueue();
   }
@@ -722,6 +736,64 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   // Gema teks yang sudah memakai satu pending (lihat consumeConfirmedText).
   final Set<String> _confirmedTextIds = {};
   late final DateTime _openedAt;
+
+  // ── Memo derivasi list (anti-lag ngetik/scroll/buka) ──────────────────────
+  // `StreamBuilder.builder` ikut rebuild saat PARENT setState (ngetik, pilih
+  // teks, buka menu, dsb), bukan cuma saat stream emit. Dulu tiap rebuild itu
+  // menghitung ulang: salin list, set `deletedIds`, `searchChatMatches`, dan
+  // bangun `items` (satu ChatItem per pesan) → O(N) tiap ketikan → "ngetik
+  // ngelag" + scroll berat saat chat panjang.
+  //
+  // Sekarang derivasi (deletedIds + items) di-CACHE: dihitung ulang HANYA
+  // saat (a) referensi list pesan berubah, (b) jumlah `_pending` berubah,
+  // atau (c) label tanggal berubah (locale/hari). Rebuild parent lain = cache
+  // hit → O(1).
+  List<ChatItem> _cachedItems = const [];
+  Set<String> _cachedDeletedIds = const {};
+  List<MessageModel>? _cacheItemsMsgsSrc;
+  int _cacheItemsPendingLen = -1;
+  String _cacheItemsLocale = '';
+  DateTime? _cacheItemsDay;
+
+  /// Derivasikan `(items, deletedIds)` di-cache berbasis IDENTITAS list
+  /// pesan sumber ([msgsSrc], dari stream — referensinya stabil antar rebuild
+  /// parent) + jumlah `_pending` + locale + hari. [all] dipakai untuk hasil.
+  (List<ChatItem>, Set<String>) _deriveItems(
+    S s,
+    List<MessageModel> msgsSrc,
+    List<MessageModel> all, {
+    required DateTime day,
+  }) {
+    final locale = s.isId ? 'id' : 'en';
+    if (identical(_cacheItemsMsgsSrc, msgsSrc) &&
+        _cacheItemsPendingLen == _pending.length &&
+        _cacheItemsLocale == locale &&
+        _cacheItemsDay == day) {
+      return (_cachedItems, _cachedDeletedIds);
+    }
+    final deletedIds = <String>{
+      for (final m in all)
+        if (m.isDeleted) m.id,
+    };
+    final items = <ChatItem>[];
+    String? prevDateKey;
+    for (final m in all) {
+      final local = m.timestamp.toLocal();
+      final dateKey = '${local.year}-${local.month}-${local.day}';
+      if (prevDateKey != dateKey) {
+        items.add(ChatItem.date(dateChipLabel(m.timestamp, s)));
+      }
+      prevDateKey = dateKey;
+      items.add(ChatItem.message(m));
+    }
+    _cacheItemsMsgsSrc = msgsSrc;
+    _cacheItemsPendingLen = _pending.length;
+    _cacheItemsLocale = locale;
+    _cacheItemsDay = day;
+    _cachedItems = items;
+    _cachedDeletedIds = deletedIds;
+    return (items, deletedIds);
+  }
 
   @override
   void initState() {
@@ -2359,13 +2431,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           // Auto-load image deferred (di luar window 50) —
                           // fire-and-forget, hasil masuk via stream emit.
                           _autoLoadMissingImages(all);
-                          // Hitung sekali per emission, bukan sekali per
-                          // bubble. Ini mencegah scan O(N) berulang menjadi
-                          // O(N²) saat chat panjang direbuild.
-                          final deletedIds = {
-                            for (final m in all)
-                              if (m.isDeleted) m.id,
-                          };
+                          // Derivasikan deletedIds + items via CACHE (lihat
+                          // _deriveItems): hanya dihitung ulang saat list
+                          // pesan/pending/locale/hari berubah — bukan tiap
+                          // rebuild parent (ngetik/scroll/menu).
+                          final now0 = DateTime.now();
+                          final day0 = DateTime(now0.year, now0.month, now0.day);
+                          final (items, deletedIds) =
+                              _deriveItems(s, msgs, all, day: day0);
                           // Search chat: cocokkan sekali per emission juga
                           // (bukan per bubble). Urutan terbaru-dulu untuk
                           // navigasi ala WhatsApp.
@@ -2388,22 +2461,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           } else if (_searchKeys.isNotEmpty) {
                             _searchKeys.clear();
                           }
-                          // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
-                          // pola WhatsApp — item list berisi pesan + separator tanggal.
-                          final items = <ChatItem>[];
-                          String? prevDateKey;
-                          for (final m in all) {
-                            final local = m.timestamp.toLocal();
-                            final dateKey =
-                                '${local.year}-${local.month}-${local.day}';
-                            if (prevDateKey != dateKey) {
-                              items.add(
-                                ChatItem.date(dateChipLabel(m.timestamp, s)),
-                              );
-                            }
-                            prevDateKey = dateKey;
-                            items.add(ChatItem.message(m));
-                          }
+                          // `items` (pesan + chip tanggal) sudah dihitung di
+                          // _deriveItems (cache) — langsung pakai.
                           return ListView.builder(
                             controller: _scrollCtrl,
                             reverse: true,
