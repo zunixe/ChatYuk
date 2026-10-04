@@ -565,7 +565,7 @@ class _MonthlyTrendBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final counts = [
-      for (final m in list) ((m['count'] as num?)?.toInt() ?? 0),
+      for (final m in list) _toInt(m['count']),
     ];
     final maxC = counts.isEmpty ? 1 : counts.reduce(math.max);
     final total = counts.fold<int>(0, (a, b) => a + b);
@@ -592,12 +592,17 @@ class _MonthlyTrendBars extends StatelessWidget {
         SizedBox(
           height: 118,
           child: CustomPaint(
+            // WAJIB size: CustomPaint tanpa child default-nya Size.zero →
+            // tak menggambar apa pun (grafik tren tampak KOSONG walau data
+            // ada). size: Size.infinite → mengisi constraints SizedBox.
+            size: Size.infinite,
             painter: _TrendPainter(
               counts: counts,
               maxCount: maxC <= 0 ? 1 : maxC,
               barColor: AppTheme.primary,
               highlightColor: AppTheme.primaryDark,
               gridColor: AppTheme.divider,
+              textColor: AppTheme.textSecondary,
             ),
           ),
         ),
@@ -653,8 +658,17 @@ class _MonthlyTrendBars extends StatelessWidget {
     );
   }
 
+  /// Angka dari RPC bisa datang sebagai num ATAU String (PostgREST mengirim
+  /// `bigint` sebagai string bila > presisi int64 JSON). Tanpa handle string,
+  /// `(m['count'] as num?)` = null → dianggap 0 → grafik tren tampak KOSONG.
+  int _toInt(dynamic v) {
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? 0;
+    return 0;
+  }
+
   String _label(Map<String, dynamic> m) {
-    final month = (m['month'] as num?)?.toInt() ?? 1;
+    final month = _toInt(m['month']).clamp(1, 12);
     // Bulan terakhir pakai singkatan, sisanya titik (hemat ruang) — tapi
     // supaya jelas, tampilkan inisial bulan utk semua.
     return s.monthShort[(month - 1).clamp(0, 11)];
@@ -668,6 +682,7 @@ class _TrendPainter extends CustomPainter {
     required this.barColor,
     required this.highlightColor,
     required this.gridColor,
+    required this.textColor,
   });
 
   final List<int> counts;
@@ -675,11 +690,12 @@ class _TrendPainter extends CustomPainter {
   final Color barColor;
   final Color highlightColor;
   final Color gridColor;
+  final Color textColor;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (counts.isEmpty) return;
-    const labelH = 0.0;
+    const labelH = 12.0; // ruang untuk angka di atas bar tertinggi
     final chartH = size.height - labelH;
     final n = counts.length;
     final slot = size.width / n;
@@ -708,6 +724,23 @@ class _TrendPainter extends CustomPainter {
         const Radius.circular(3),
       );
       canvas.drawRRect(rrect, paint);
+
+      // Angka di atas bar — hanya bila > 0 (0 = bar tipis, label berisik).
+      if (c > 0) {
+        final tp = TextPainter(
+          text: TextSpan(
+            text: '$c',
+            style: TextStyle(
+              color: isLast ? highlightColor : textColor,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final tx = (cx - tp.width / 2).clamp(0.0, size.width - tp.width);
+        tp.paint(canvas, Offset(tx, (top - tp.height - 1).clamp(0.0, top)));
+      }
     }
   }
 
