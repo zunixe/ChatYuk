@@ -2970,3 +2970,91 @@ banyak chat di jalur render/rebuild — SQLCipher single-thread → menumpuk.
 Prefetch hanya untuk chat yang benar-benar ditekan user.
 
 Sisa `[CHAT-BUILD]` ~15/detik = pola §32 (parent rebuild), bukan SQLite.
+
+## 35. Private chat "ngelag makin lama dipakai / ngetik / scroll ke atas" — state sesi tumbuh tanpa batas (2026-10-06)
+
+**Keluhan (user):** "private chat masih kerasa ngelag; kalau udah ngelag saya
+close trus buka lagi lancar lagi" + "pas ngetik juga" + "scroll ke atas juga
+ngelag".
+
+**Pola kunci:** *tutup-buka chat = pulih* → bukan widget state (dispose sudah
+bersih), tapi **state SESI** yang tumbuh selama chat terbuka (sesi dibuat
+ulang tiap buka).
+
+**Akar (3 kebocoran, semuanya di `ChatStreamSession` + `MessageCache`):**
+
+1. **`_current` tumbuh tak terbatas.** `loadOlder()` men-*prepend* 100 pesan
+   lama tiap scroll ke atas **tanpa cap**, dan tiap emit meng-`controller.add(
+   List.unmodifiable(_current))` → makin besar list, makin mahal tiap emit;
+   `ListView` makin panjang. Tutup-buka = `_current` baru = lancar.
+
+2. **Derivasi O(N) tiap rebuild parent.** `StreamBuilder.builder` **ikut jalan
+   saat parent `setState`** (ngetik, pilih teks, buka menu) — bukan cuma saat
+   stream emit. Dulu tiap rebuild menghitung ulang: `[...msgs, ..._pending]`,
+   set `deletedIds`, `searchChatMatches`, dan membangun `items` (1 `ChatItem`
+   per pesan) → **O(N) tiap ketikan** = "ngetik ngelag".
+
+3. **`_autoLoadMissingImages(all)` scan SELURUH list tiap emit** (O(N)/emit) +
+   `_imgLastAttempt`/`_memRawObj` (starred/reactions per chat) tumbuh tanpa
+   batas → memori naik terus (GC pressure = glitch).
+
+**Fix:**
+- `ChatStreamSession`: **cap `_current` = 300** (pertahankan pesan terbaru);
+  `_trim()` dipanggil di semua titik tumbuh (loadOlder-prepend, merge awal,
+  realtime INSERT/UPDATE). Pesan lebih lama dibaca ulang dari disk saat scroll.
+- `private_chat_screen`: `_deriveItems()` — **cache** `(items, deletedIds)`
+  berbasis identitas list pesan sumber + jumlah `_pending` + locale + hari.
+  Rebuild parent lain = **cache hit (O(1))**.
+- `_autoLoadMissingImages`: guard `_imgScannedIds` → hanya pesan **BARU**
+  dipindai; map penanda dibatasi 2000.
+- `MessageCache._memRawObj`: **FIFO cap 60** (key `starred:<chat>` /
+  `reactions:<chat>` tumbuh per chat).
+
+**Bukti terukur (RSS app di HP, versi lama vs baru):**
+| | Sebelum | Sesudah |
+|---|---|---|
+| RSS ChatYuk (user) | **~767 MB** | **~365 MB** (−52%) |
+
+**Aturan turunan:**
+- List pesan di `ChatStreamSession` **WAJIB** dibatasi (`_maxMessages`) —
+  `loadOlder` tanpa cap = lag progresif + memori naik. ROOM & GROUP memakai
+  sesi yang SAMA → cap berlaku untuk keduanya (dikunci `chat_stream_session_test`).
+- **Jangan** menaruh derivasi O(N) langsung di `StreamBuilder.builder` bila
+  parent sering `setState` (ngetik/menu) — memo/simpan cache per-emission.
+- Guard scan berbasis "id sudah diproses" untuk loop yang dipanggil tiap emit.
+
+**Catatan diagnostik penting:** keluhan "admin lancar, user ngelag" **BUKAN**
+karena kode beda (keduanya `bootstrap()` sama) — user app menahan **data jauh
+lebih banyak** di memori. Bandingkan **RSS** (`adb shell ps -A | grep chatyuk`)
+untuk memastikan; versi lama user ~767 MB vs admin ~290 MB.
+
+## 36. Ngeganti avatar jadi satu widget `PersonAvatar` — warna/ring/border KONSISTEN per orang (2026-10-06)
+
+**Keluhan (user):** "di private chat kalo diklik ke profil, warna bulatan
+avatar di profil samain biar konsisten; di halaman lain juga sama — satu orang
+konsisten warna & bordernya."
+
+**Akar:** banyak implementasi avatar terpisah (`ProfileAvatar` manual dengan
+`bgColor: AppTheme.avatarBg` cyan, `CircleAvatar` inisial, `GenderAvatar`, …)
+→ orang yang sama tampil beda warna/ring di halaman berbeda; sebagian **tak
+menampilkan foto** (header chat & sheet tap-user pakai inisial saja).
+
+**Fix:** widget tunggal `lib/widgets/person_avatar.dart` (`PersonAvatar`) —
+foto (base64/path via `UserAvatar`) + latar tint **warna gender** + ring warna
+gender + titik presence opsional + **resolve by-uid** bila src kosong. Dipakai
+di: Pengguna Online, header private chat, daftar Pesan, profil user (inisial
+carousel), friend requests, langganan, sheet "Status kamu", riwayat panggilan,
+daftar sosial. Warna: male=biru, female=pink, lain=accent
+(`PersonAvatar.colorFor`). Ring hanya saat inisial (foto tampil bersih).
+Dikunci `test/person_avatar_test.dart`.
+
+## 37. Admin Ringkasan — chart sebaran negara → kota (2026-10-06)
+
+**Permintaan:** "chart negara mana yang paling banyak usernya; klik negara →
+kota apa saja + jumlahnya."
+
+**Implementasi:** RPC `admin_country_stats()` + `admin_city_stats(p_country)`
+(agregat, admin-only, aturan hitung = `admin_stats_compute`: exclude
+excluded-uids/dummy + placeholder onboarding). Widget `geo_stats_card.dart` di
+tab Ringkasan: bar horizontal top-10 negara + sheet kota saat diketuk.
+Provider cache `countryStats` per sesi & `cityStats` per negara.
