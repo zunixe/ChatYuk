@@ -2854,3 +2854,42 @@ menyusul). Percepat lagi = naik compute / region DB lebih dekat.
 
 **Verifikasi:** analyze 0 error/warning; 24 test chat/room lulus; index
 terpasang & dipakai (EXPLAIN konfirmasi Bitmap Index Scan).
+
+---
+
+## 32. Nav bawah "lag diklik di awal, setelah dipencet jadi cepat" (2026-10-06)
+
+**Keluhan (user):** "menu Online/Chat/Timeline/Profil lag untuk diklik di awal;
+kalau sudah dipencet-pencet jadi cepat lagi".
+
+**Diagnosa (PerfProbe `tab{N} tap→frame` di HP):**
+```
+tap pertama:  tab1=19-24ms  tab2=19ms  tab3=20-27ms  (jank, >16ms)
+tap ke-2+:    tab1=10-14ms  tab2=12ms  tab3=12-15ms  (mulus)
+```
+Jank HANYA di tap pertama tiap tab, hilang setelahnya.
+
+**Yang BUKAN penyebab (dibuktikan):**
+- Bukan `_MainNav.build`: instrumentasi Stopwatch penuh `build()` → **tak
+  pernah >5ms** (`[MAINNAV-SLOW]` tidak muncul).
+- Bukan tab belum ter-build: prewarm terverifikasi jalan (`[PREWARM] building
+  tab 1/2/3` selesai ~2 dtk setelah runApp, jauh sebelum tap ~6 dtk kemudian).
+- Bukan shader raster (`janky(raster)` rendah).
+
+**Akar:** `IndexedStack` hanya me-**layout+paint** child yang `index`-nya
+aktif; child lain di-`Offstage` (build, tapi TIDAK layout/paint). Jadi layout
++paint pertama tab tujuan jatuh di **frame tap** (~20ms = 1-2 frame drop),
+lalu ter-cache → tap berikutnya mulus.
+
+**Keputusan (trade-off arsitektur, SENGAJA):** tetap **lazy `IndexedStack`**.
+Alternatif (layout semua tab agar tap instan) = semua tab render tiap frame →
+berat + risiko storm (§26: tab belakang rebuild). Untuk 4 halaman berat, 1
+frame drop **sekali** di tap pertama per tab lebih baik daripada beban terus.
+Perbaikan pendukung: prewarm dipercepat (mulai 32ms + interval 16ms, tab hangat
+~50ms — hilangkan jank untuk user yang tap >50ms setelah boot).
+
+**Tidak diubah:** arsitektur lazy. Jangan "fix" dengan membuat semua tab
+selalu layout tanpa mengukur ulang `janky(build)` harian.
+
+**Verifikasi:** analyze 0 error; prewarm terverifikasi (`[PREWARM]` log);
+`tab{N} tap→frame` tap-2+ < 16ms.
