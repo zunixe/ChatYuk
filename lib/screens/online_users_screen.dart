@@ -3134,27 +3134,29 @@ class MyStatusSheet extends StatelessWidget {
             // user lain (male=biru / female=pink / lain=accent).
             Row(
               children: [
-                SizedBox(
+                // Avatar bulat — SAMA seperti kartu user di menu Online:
+                // wrapper circle + tint, dan UserAvatar TANPA keepRingForPhoto
+                // → ring warna hanya saat inisial; kalau ADA FOTO tampil tanpa
+                // ring/border. (Dulu keepRingForPhoto menyisakan border
+                // transparan → foto tampak tak bulat sempurna.)
+                Container(
                   width: 44,
                   height: 44,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _genderColor.withValues(alpha: 0.15),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: ua.UserAvatar(
-                      key: ValueKey(uid),
-                      uid: uid,
-                      avatarB64: avatar,
-                      initial: nickname.isNotEmpty
-                          ? nickname[0].toUpperCase()
-                          : '?',
-                      color: _genderColor,
-                      borderColor: _genderColor,
-                      borderWidth: 1.5,
-                      keepRingForPhoto: true,
-                    ),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _genderColor.withValues(alpha: 0.15),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: ua.UserAvatar(
+                    key: ValueKey(uid),
+                    uid: uid,
+                    avatarB64: avatar,
+                    initial: nickname.isNotEmpty
+                        ? nickname[0].toUpperCase()
+                        : '?',
+                    color: _genderColor,
+                    borderColor: _genderColor,
+                    borderWidth: 1.5,
                   ),
                 ),
                 const SizedBox(width: 10),

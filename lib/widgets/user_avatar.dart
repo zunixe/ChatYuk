@@ -373,8 +373,24 @@ class _UserAvatarState extends State<UserAvatar> {
             width: widget.borderWidth,
           ),
         ),
-        child: photo,
+        // WAJIB clip: `BoxShape.circle` hanya membentuk border, BUKAN
+        // memotong child. Tanpa ini, foto persegi menonjol keluar border →
+        // tampak "background kotak" padahal border-nya bulat (mis. avatar di
+        // sheet "Status kamu"). ClipOval untuk bulat, ClipRRect untuk kotak
+        // rounded — jaga sudut tetap sesuai `borderRadius`.
+        clipBehavior: Clip.antiAlias,
+        child: _isCircle
+            ? photo
+            : ClipRRect(
+                borderRadius: BorderRadius.circular(widget.borderRadius),
+                child: photo,
+              ),
       );
+    }
+    // Foto BULAT tanpa ring → tetap clip (jangan biarkan persegi menonjol
+    // bila pemanggil lupa membungkusnya ClipOval).
+    if (_isCircle) {
+      return ClipOval(child: photo);
     }
     return photo;
   }

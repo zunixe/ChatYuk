@@ -1953,6 +1953,20 @@ class _MessageImageState extends State<MessageImage> {
   Future<void> _decode(int key, int gen) async {
     var data = widget.imageData;
     dlog('[PHOTO-DBG] MessageImage ${widget.messageId} inLen=${data.length} isPath=${StoragePhotoService.instance.isPath(data)}');
+    // LAZY PENUH: imageData kosong tapi file lokal ada (foto lama yang tidak
+    // ikut bulk-decrypt saat buka chat) → pulihkan thumb dari disk. Tanpa ini
+    // foto lama tampil "ketuk untuk memuat" selamanya.
+    if (data.isEmpty &&
+        widget.chatKey.isNotEmpty &&
+        widget.messageId.isNotEmpty) {
+      try {
+        final diskThumb = await PhotoCache.instance.loadThumb(
+          widget.chatKey,
+          widget.messageId,
+        );
+        if (diskThumb != null && diskThumb.isNotEmpty) data = diskThumb;
+      } catch (_) {}
+    }
     // PATH storage (belum base64) → download dulu. decodeImageB64 melempar
     // null untuk input non-base64, jadi jangan memanggilnya dengan path.
     if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
@@ -2925,10 +2939,12 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   @override
   void initState() {
     super.initState();
-    // Jangan tembak disk+decrypt+decode full TEPAT saat transisi push (frame
-    // pertama viewer = animasi route). Tunda ke setelah frame pertama supaya
-    // transisi bersih; bytes thumbnail sudah tampil instan dari cache.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Jangan tembak disk+decrypt+decode full SELAMA transisi push: kerja itu
+    // berebut frame dengan animasi route → buka terasa lambat, dan bila user
+    // langsung menutup, pop ikut tersendat ("close ga sensitif"). Tunda
+    // sampai transisi selesai (~300ms); thumbnail tampil instan meanwhile.
+    // Bila user sudah menutup sebelum itu, mounted=false → diskip.
+    Future.delayed(const Duration(milliseconds: 350), () {
       if (mounted) _loadFull();
     });
   }
@@ -2951,13 +2967,31 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   Future<void> _loadFull() async {
     final loader = widget.fullLoader;
     if (loader == null) return;
-    try {
-      final b64 = await loader();
-      if (b64 == null || b64.isEmpty || !mounted) return;
-      final bytes = await compute(b64ToBytes, b64);
-      if (bytes == null || !mounted) return;
-      setState(() => _fullBytes = bytes);
-    } catch (_) {}
+    // File full bisa BELUM selesai di-download saat viewer dibuka (foto room
+    // berupa path storage → download on-demand). Sekali coba = gagal diam
+    // → viewer nyangkut di thumb/spinner. Coba ulang terbatas dengan backoff
+    // selama viewer masih terbuka.
+    for (var attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) {
+        await Future.delayed(Duration(seconds: attempt * 2));
+        if (!mounted || _fullBytes != null) return;
+      }
+      try {
+        final t0 = DateTime.now();
+        final b64 = await loader();
+        final t1 = DateTime.now();
+        if (b64 == null || b64.isEmpty || !mounted) continue;
+        final bytes = await compute(b64ToBytes, b64);
+        final t2 = DateTime.now();
+        if (bytes == null || !mounted) return;
+        dlog('[PHOTO-TIME] viewer full b64=${(b64.length / 1024).round()}KB '
+            'loader=${t1.difference(t0).inMilliseconds}ms '
+            'b64decode=${t2.difference(t1).inMilliseconds}ms '
+            'attempt=$attempt');
+        setState(() => _fullBytes = bytes);
+        return;
+      } catch (_) {}
+    }
   }
 
   void _applyScale(double next, {Offset? focal}) {

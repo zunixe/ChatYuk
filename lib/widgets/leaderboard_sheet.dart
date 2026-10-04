@@ -449,14 +449,16 @@ class LeaderboardRow extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: uid.isEmpty
                       ? null
-                      : () => _openProfile(
-                          context,
-                          uid: uid,
-                          nickname: nickname,
-                          gender: gender,
-                          registered: registered,
-                          avatar: entry['avatar']?.toString() ?? '',
-                        ),
+                      : () {
+                          _openProfile(
+                            context,
+                            uid: uid,
+                            nickname: nickname,
+                            gender: gender,
+                            registered: registered,
+                            avatar: entry['avatar']?.toString() ?? '',
+                          );
+                        },
                   child: Row(
                     children: [
                       Flexible(
@@ -507,20 +509,34 @@ class LeaderboardRow extends StatelessWidget {
     );
   }
 
-  void _openProfile(
+  Future<void> _openProfile(
     BuildContext context, {
     required String uid,
     required String nickname,
     required String gender,
     required bool registered,
     String avatar = '',
-  }) {
+  }) async {
     final now = DateTime.now();
-    // Foto B64 dari cache (kalau sudah tampil di baris leaderboard) → kirim
-    // sebagai avatar seed supaya halaman profil menampilkan FOTO pada frame
-    // pertama (anti-kedip "inisial → foto"). Fallback ke path mentah bila
-    // belum ter-cache (profil akan memuatnya sendiri).
-    final cached = AvatarB64Service.instance.cachedSync(uid);
+    // ANTI-BLINK: resolusi foto ke B64 SEBELUM membuka halaman, supaya frame
+    // pertama = foto (bukan versi "tanpa foto" dulu lalu ketimpa → kedip).
+    // Urutan: RAM+disk via PATH → RAM+disk via UID → getByPath (await,
+    // disk/network). Kalau tetap kosong, halaman memuat sendiri.
+    var cached = avatar.isNotEmpty
+        ? AvatarB64Service.instance.cachedByPathSync(avatar)
+        : null;
+    if (cached == null || cached.isEmpty) {
+      cached = AvatarB64Service.instance.cachedSyncIncludeDisk(uid);
+    }
+    if ((cached == null || cached.isEmpty) && avatar.isNotEmpty) {
+      try {
+        // Timeout: jangan menahan navigasi kalau jaringan lambat/menggantung.
+        cached = await AvatarB64Service.instance
+            .getByPath(avatar)
+            .timeout(const Duration(milliseconds: 1500));
+      } catch (_) {}
+    }
+    if (!context.mounted) return;
     final seedAvatar = (cached != null && cached.isNotEmpty) ? cached : avatar;
     final seed = UserModel(
       uid: uid,
