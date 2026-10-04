@@ -18,6 +18,7 @@ import '../providers/storage_provider.dart';
 import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../screens/user_info_screen.dart';
+import 'social_actions.dart';
 import 'profile_avatar.dart';
 import 'gender_avatar.dart';
 
@@ -499,7 +500,7 @@ class LeaderboardRow extends StatelessWidget {
           if (uid.isNotEmpty && !isSelf) ...[
             const SizedBox(width: 6),
             _FollowTextButton(uid: uid, s: s),
-            _AddFriendIconButton(uid: uid, s: s),
+            _AddFriendIconButton(uid: uid, name: nickname, s: s),
           ],
         ],
       ),
@@ -664,7 +665,8 @@ class _FollowTextButton extends StatelessWidget {
       builder: (ctx, sp, _) {
         final following = sp.isFollowing(uid);
         return Tooltip(
-          message: following ? s.btnUnfollow : s.btnFollow,
+          message:
+              '${following ? s.btnUnfollow : s.btnFollow} · ${s.sheetFollowDesc}',
           child: Material(
             color: Colors.transparent,
             child: InkWell(
@@ -705,53 +707,81 @@ class _FollowTextButton extends StatelessWidget {
 }
 
 /// Tombol TAMBAH TEMAN berbentuk IKON. Status ikut SocialProvider.
-class _AddFriendIconButton extends StatelessWidget {
+/// Saat sudah teman → tap = putus teman; saat permintaan terkirim → tap =
+/// batalkan. Guard `_busy` mencegah double-tap.
+class _AddFriendIconButton extends StatefulWidget {
   final String uid;
+  final String name;
   final S s;
-  const _AddFriendIconButton({required this.uid, required this.s});
+  const _AddFriendIconButton({
+    required this.uid,
+    required this.name,
+    required this.s,
+  });
+
+  @override
+  State<_AddFriendIconButton> createState() => _AddFriendIconButtonState();
+}
+
+class _AddFriendIconButtonState extends State<_AddFriendIconButton> {
+  bool _busy = false;
+
+  Future<void> _onTap(SocialProvider sp, bool isFriend, bool pending) async {
+    if (_busy) return;
+    final name = widget.name;
+    setState(() => _busy = true);
+    if (isFriend) {
+      await runUnfriend(context, sp, widget.uid, name);
+    } else if (pending) {
+      await runCancelRequest(context, sp, widget.uid, name);
+    } else {
+      final messenger = ScaffoldMessenger.of(context);
+      final res = await sp.sendFriendRequest(widget.uid);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            (res == 'pending' || res == 'friends')
+                ? widget.s.friendRequestSentMutual
+                : widget.s.errGeneric,
+          ),
+        ),
+      );
+    }
+    if (mounted) setState(() => _busy = false);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<SocialProvider>(
       builder: (ctx, sp, _) {
-        final isFriend = sp.isFriend(uid);
-        final pending = sp.isPendingFriendRequest(uid);
-        final done = isFriend || pending;
+        final s = widget.s;
+        final isFriend = sp.isFriend(widget.uid);
+        final pending = sp.isPendingFriendRequest(widget.uid);
         final tip = isFriend
-            ? s.btnFriends
-            : (pending ? s.btnFriendRequested : s.btnAddFriend);
+            ? s.btnUnfriend
+            : (pending
+                  ? s.btnCancelRequest
+                  : '${s.btnAddFriend} · ${s.sheetFriendDesc}');
         return Tooltip(
           message: tip,
           child: Material(
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
-              onTap: done
-                  ? null
-                  : () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      final res = await sp.sendFriendRequest(uid);
-                      if (res == 'pending' || res == 'friends') {
-                        messenger.showSnackBar(
-                          SnackBar(content: Text(s.friendRequestSent)),
-                        );
-                      } else {
-                        messenger.showSnackBar(
-                          SnackBar(content: Text(s.errGeneric)),
-                        );
-                      }
-                    },
+              onTap: _busy ? null : () => _onTap(sp, isFriend, pending),
               child: SizedBox(
                 width: 34,
                 height: 34,
                 child: Icon(
                   isFriend
-                      ? Icons.how_to_reg_rounded
+                      ? Icons.group_remove_rounded
                       : (pending
-                            ? Icons.schedule_rounded
+                            ? Icons.cancel_rounded
                             : Icons.person_add_alt_rounded),
                   size: 22,
-                  color: done ? AppTheme.textSecondary : AppTheme.primary,
+                  color: isFriend
+                      ? AppTheme.danger
+                      : (pending ? AppTheme.textSecondary : AppTheme.primary),
                 ),
               ),
             ),

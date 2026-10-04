@@ -21,7 +21,8 @@ import 'package:chatyuk/services/points_service.dart';
 import 'package:chatyuk/services/social_service.dart';
 
 import 'supabase_test_client.dart';
-import 'test_helper.dart' show initSupabaseForTest, resetFontForTest;
+import 'test_helper.dart'
+    show initSupabaseForTest, prewarmMediaForTest, resetFontForTest;
 
 class MockAuthService extends Mock implements AuthService {}
 
@@ -95,6 +96,10 @@ void main() {
     when(() => pointsSvc.meteredPricing()).thenAnswer((_) async => {});
     when(() => pointsSvc.featureFlags()).thenAnswer((_) async => {});
     when(() => pointsSvc.photoCosts()).thenAnswer((_) async => (5, 20));
+    // subscribeOwnPoints() → refreshWallet() memanggil getWallet +
+    // yukcoinV2Status; tanpa stub → error type-NoSuchMethod (noise log).
+    when(() => pointsSvc.getWallet()).thenAnswer((_) async => {});
+    when(() => pointsSvc.yukcoinV2Status()).thenAnswer((_) async => {});
     points = PointsProvider(service: pointsSvc);
 
     socialSvc = MockSocialService();
@@ -129,6 +134,10 @@ void main() {
 
   setUpAll(() async {
     await initSupabaseForTest();
+    // Prewarm cache media → MediaDiskCache.isReady = true sehingga
+    // AvatarB64Service.get() TIDAK menjadwalkan Future.delayed retry
+    // (penyebab "Pending timers" saat teardown). Pola sama post_card_test.
+    await prewarmMediaForTest();
     // Font sistem (tanpa GoogleFonts runtime-fetch) supaya test hermetik —
     // sandbox CI/offline tidak bisa mengunduh Poppins.
     AppFonts.current = AppFonts.systemKey;

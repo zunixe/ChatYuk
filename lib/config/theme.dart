@@ -414,6 +414,11 @@ class AppGlyph {
   static const double lg = 28; // emoji gift picker
   static const double xl = 40; // emoji empty state
 
+  /// Emoji badge sangat kecil (mis. 👻 penanda "invisible" status).
+  static const double nano = 9;
+  /// Emoji badge kecil (mis. 👻 di baris label status).
+  static const double micro = 13;
+
   /// Ukuran inisial avatar proporsional terhadap diameter bulatan.
   /// Rasio tetap 0.38 supaya konsisten di semua avatar.
   static double avatarInitial(double diameter) => diameter * 0.38;
@@ -730,6 +735,79 @@ class AppTheme {
         ),
         trackOutlineColor: WidgetStatePropertyAll(Colors.transparent),
       ),
+      // Transisi halaman GLOBAL: slide dari kanan 150ms masuk / 120ms keluar
+      // (sama seperti private chat) untuk SEMUA MaterialPageRoute — room,
+      // profil, setelan, admin, dst. Satu sumber kebenaran di sini; jangan
+      // lagi bikin PageRouteBuilder manual per layar. Dialog fullscreen
+      // (Call/IncomingCall) dikecualikan di dalam builder (tetap bottom-up).
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          TargetPlatform.android: AppSlidePageTransitionsBuilder(),
+          TargetPlatform.iOS: AppSlidePageTransitionsBuilder(),
+          TargetPlatform.macOS: AppSlidePageTransitionsBuilder(),
+          TargetPlatform.windows: AppSlidePageTransitionsBuilder(),
+          TargetPlatform.linux: AppSlidePageTransitionsBuilder(),
+        },
+      ),
+    );
+  }
+}
+
+/// Transisi halaman slide-dari-kanan yang cepat (150ms masuk / 120ms keluar)
+/// dipakai GLOBAL lewat [PageTransitionsTheme] — menyeragamkan back/masuk di
+/// seluruh app agar tak ada layar yang terasa lebih lambat (dulu private chat
+/// 120ms sedangkan room & halaman lain default ~300ms).
+///
+/// Durasi diambil dari [transitionDuration]/[reverseTransitionDuration] yang
+/// dibaca `MaterialPageRoute` (lihat Flutter `material/page.dart`).
+///
+/// Dialog fullscreen (`route.fullscreenDialog == true`, mis. panggilan) TIDAK
+/// ikut slide — didelegasikan ke [ZoomPageTransitionsBuilder] (bottom-up
+/// default) supaya tombol back panggilan tetap terasa seperti dialog.
+class AppSlidePageTransitionsBuilder extends PageTransitionsBuilder {
+  const AppSlidePageTransitionsBuilder();
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 150);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 120);
+
+  // Builder default untuk kasus fullscreen dialog (bottom-up) — dipakai apa
+  // adanya supaya panggilan tidak ikut slide horizontal.
+  static const PageTransitionsBuilder _dialogFallback =
+      ZoomPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    // Fullscreen dialog (panggilan) → perilaku bawaan (bottom-up).
+    if (route.fullscreenDialog) {
+      return _dialogFallback.buildTransitions<T>(
+        route,
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+      );
+    }
+    // Halaman biasa → slide dari kanan, sama seperti private chat.
+    final curved = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(1, 0),
+        end: Offset.zero,
+      ).animate(curved),
+      child: child,
     );
   }
 }

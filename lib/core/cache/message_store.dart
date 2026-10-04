@@ -299,6 +299,31 @@ class MessageStore {
     }
   }
 
+  /// Muat SEMUA kv yang key-nya berawalan [prefix] → map key→json. Dipakai
+  /// preload cache per-chat (mis. `starred:`) sekaligus saat bootstrap.
+  Future<Map<String, String>> loadKvPrefix(String prefix) async {
+    final db = _db;
+    if (db == null || !db.isOpen) return {};
+    try {
+      final rows = await db.query(
+        'kv',
+        columns: ['key', 'json'],
+        where: 'key LIKE ?',
+        whereArgs: ['$prefix%'],
+      );
+      final out = <String, String>{};
+      for (final r in rows) {
+        final k = r['key'] as String?;
+        final j = r['json'] as String?;
+        if (k != null && j != null) out[k] = j;
+      }
+      return out;
+    } catch (e) {
+      dlog('[STORE] kv loadPrefix $prefix error: $e');
+      return {};
+    }
+  }
+
   Future<void> removeKv(String key) async {
     final db = _db;
     if (db == null || !db.isOpen) return;

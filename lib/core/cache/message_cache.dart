@@ -307,9 +307,15 @@ class MessageCache {
 
   // â”€â”€ Objek generic (timeline, rooms) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+  /// Memori objek (sinkron) — supaya `peekRawObj` bisa dipakai baca
+  /// sebelum frame pertama (anti-glich: bintang/reaksi tampil instan).
+  final Map<String, Map<String, dynamic>> _memRawObj = {};
+
   Future<void> saveRawObj(String key, Map<String, dynamic> obj) async {
     try {
       if (obj.isEmpty) return;
+      // Memori dulu (sinkron untuk pembaca berikutnya), lalu disk.
+      _memRawObj[key] = Map<String, dynamic>.of(obj);
       await _ensureDb();
       await MessageStore.instance.saveKv(key, jsonEncode(obj));
     } catch (_) {}
@@ -317,13 +323,50 @@ class MessageCache {
 
   Future<Map<String, dynamic>> loadRawObj(String key) async {
     try {
+      final mem = _memRawObj[key];
+      if (mem != null && mem.isNotEmpty) return mem;
       final json = await _loadKvSafe(key);
       if (json == null || json.isEmpty) return {};
       final obj = jsonDecode(json);
-      return obj is Map<String, dynamic> ? obj : {};
+      if (obj is Map<String, dynamic>) {
+        _memRawObj[key] = obj;
+        return obj;
+      }
+      return {};
     } catch (_) {
       return {};
     }
+  }
+
+  /// Versi SINKRON: langsung dari memori, tanpa await. Kosong bila snapshot
+  /// belum pernah dimuat di sesi ini (pemanggil fallback ke jalur async).
+  Map<String, dynamic> peekRawObj(String key) =>
+      _memRawObj[key] ?? const {};
+
+  /// Muat objek dari SQLite ke memori (dipanggil saat prewarm/bootstrap)
+  /// supaya `peekRawObj` sudah terisi begitu user membuka chat pertama.
+  Future<void> preloadRawObj(String key) async {
+    try {
+      if ((_memRawObj[key]?.isNotEmpty ?? false)) return;
+      await loadRawObj(key);
+    } catch (_) {}
+  }
+
+  /// Preload SEMUA objek ber-key awalan [prefix] ke memori sekaligus
+  /// (mis. `starred:` per-chat) — supaya bintang tampil instan di cold start
+  /// tanpa menunggu disk per-chat.
+  Future<void> preloadObjPrefix(String prefix) async {
+    try {
+      await _ensureDb();
+      final rows = await MessageStore.instance.loadKvPrefix(prefix);
+      for (final e in rows.entries) {
+        if (_memRawObj.containsKey(e.key)) continue;
+        try {
+          final obj = jsonDecode(e.value);
+          if (obj is Map<String, dynamic>) _memRawObj[e.key] = obj;
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   Future<void> removeRawObj(String key) async {
@@ -411,12 +454,14 @@ class MessageCache {
   void trimMemCache() {
     _memCache.clear();
     _memRawList.clear();
+    _memRawObj.clear();
   }
 
   /// Hapus SEMUA cache (dipakai saat logout / reset).
   Future<void> clearAllLegacy() async {
     _memCache.clear();
     _memRawList.clear();
+    _memRawObj.clear();
     try {
       await MessageStore.instance.clearAll();
     } catch (_) {}

@@ -1808,7 +1808,9 @@ class S {
       ? 'Akun ini belum terdaftar, tidak bisa diikuti'
       : 'This account is not registered and cannot be followed';
   String get btnAddFriend => isId ? 'Tambah Teman' : 'Add Friend';
-  String get btnFriendRequested => isId ? 'Terkirim' : 'Sent';  String get btnFriendPending => isId ? 'Terima Permintaan' : 'Accept Request';
+  String get btnFriendRequested => isId ? 'Terkirim' : 'Sent';
+  String get btnFriendPending =>
+      isId ? 'Terima Permintaan' : 'Accept Request';
   String get btnFriends => isId ? 'Teman' : 'Friends';
   String get btnSubscribe => isId ? 'Subscribe' : 'Subscribe';
   String get btnSubscribed => isId ? 'Berlangganan' : 'Subscribed';
@@ -1879,7 +1881,44 @@ class S {
       ? 'YukCoin $paid · atau bonus $bonus'
       : 'Pro $paid · or bonus $bonus';
   String get menuFollow => isId ? 'Ikuti' : 'Follow';
+  String get menuUnfollow => isId ? 'Berhenti Ikuti' : 'Unfollow';
   String get menuAddFriend => isId ? 'Tambah Teman' : 'Add Friend';
+  // ── Penjelasan beda Follow vs Teman ──
+  String get hintFollowVsFriend => isId
+      ? 'Ikuti = lihat postingan mereka. Tambah Teman = lihat status, foto & story (butuh persetujuan).'
+      : 'Follow = see their posts. Add Friend = see status, photo & story (needs approval).';
+  String get hintFriendMutual => isId
+      ? 'Berteman otomatis saling mengikuti.'
+      : 'Becoming friends means you follow each other automatically.';
+  String get sheetFollowVsFriendTitle =>
+      isId ? 'Ikuti atau Berteman?' : 'Follow or Add Friend?';
+  String get sheetFollowLabel => isId ? 'Ikuti (Follow)' : 'Follow';
+  String get sheetFollowDesc => isId
+      ? 'Lihat postingan mereka di Feed "Mengikuti". Tanpa perlu persetujuan, cukup satu tap.'
+      : 'See their posts in your "Following" feed. No approval needed, just one tap.';
+  String get sheetFriendLabel => isId ? 'Tambah Teman (Friend)' : 'Add Friend';
+  String get sheetFriendDesc => isId
+      ? 'Lihat status online, foto profil, tentang, dan story mereka. Perlu disetujui. Berteman otomatis saling mengikuti.'
+      : 'See their online status, profile photo, about, and story. Needs their approval. Becoming friends means you follow each other automatically.';
+  String get friendRequestSentMutual => isId
+      ? 'Permintaan teman terkirim — berteman otomatis saling mengikuti.'
+      : 'Friend request sent — becoming friends means you follow each other.';
+  // ── Putus teman / batalkan permintaan ──
+  String get btnUnfriend => isId ? 'Putus Teman' : 'Unfriend';
+  String get btnCancelRequest => isId ? 'Batalkan' : 'Cancel';
+  String get unfriendConfirmTitle =>
+      isId ? 'Putus pertemanan?' : 'Unfriend?';
+  String unfriendConfirmBody(String name) => isId
+      ? 'Kamu dan $name tidak akan saling mengikuti lagi, dan tidak akan bisa melihat status, foto, atau story masing-masing.'
+      : 'You and $name will no longer follow each other, and will not be able to see each other\'s status, photos, or stories.';
+  String get unfriendDone => isId ? 'Pertemanan diputus' : 'Unfriended';
+  String get cancelRequestConfirmTitle =>
+      isId ? 'Batalkan permintaan teman?' : 'Cancel friend request?';
+  String cancelRequestConfirmBody(String name) => isId
+      ? 'Permintaan teman ke $name akan ditarik.'
+      : 'Your friend request to $name will be withdrawn.';
+  String get cancelRequestDone =>
+      isId ? 'Permintaan teman dibatalkan' : 'Friend request cancelled';
   String get needRegisteredForPaid => isId
       ? 'Fitur ini butuh akun terdaftar & YukCoin'
       : 'This feature needs a registered account & YukCoin';
