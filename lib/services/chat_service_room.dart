@@ -113,6 +113,25 @@ mixin ChatServiceRoomMx on ChatBase {
     }
   }
 
+  /// Batalkan hapus (aksi UNDO di snackbar): kembalikan is_deleted=false.
+  /// RLS update milik-sendiri mengizinkan (policy sama seperti delete).
+  Future<bool> undeleteRoomMessage(String messageId) async {
+    try {
+      final rows = await _sb
+          .from('messages')
+          .update({'is_deleted': false})
+          .eq('id', messageId)
+          .select('id');
+      if (rows.isEmpty) {
+        dlog('[ChatService] undeleteRoomMessage 0 rows: $messageId');
+        return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Edit teks pesan sendiri di room (global & private room). RLS menjamin
   /// hanya sender_id (auth.uid) yang boleh mengubah pesannya. `edited`
   /// ditandai bila kolom migrasi ada; kalau belum, fallback hanya ubah text.

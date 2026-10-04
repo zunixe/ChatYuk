@@ -93,6 +93,26 @@ mixin ChatServicePrivateMx on ChatBase {
     }
   }
 
+  /// Batalkan hapus (aksi UNDO di snackbar): kembalikan is_deleted=false.
+  /// RLS update milik-sendiri mengizinkan (policy sama seperti delete).
+  Future<bool> undeletePrivateMessage(String messageId) async {
+    try {
+      final rows = await _sb
+          .from('private_messages')
+          .update({'is_deleted': false})
+          .eq('id', messageId)
+          .select('id');
+      if (rows.isEmpty) {
+        dlog('[ChatService] undeletePrivateMessage 0 rows: $messageId');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      dlog('[ChatService] undeletePrivateMessage error: $e');
+      return false;
+    }
+  }
+
   Future<String> startPrivateChat({
     required String myUid,
     required String otherUid,
