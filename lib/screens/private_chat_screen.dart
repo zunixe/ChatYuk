@@ -29,7 +29,7 @@ import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
 import '../utils/mention.dart';
-import '../widgets/profile_avatar.dart';
+import '../widgets/person_avatar.dart';
 import '../widgets/chat_call_overlay.dart';
 import '../widgets/chat_ui_shared.dart';
 import '../main.dart';
@@ -1927,27 +1927,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                   ),
                 ).then((_) => releaseNav(navKey));
               },
-              child: ProfileAvatar(
+              // PersonAvatar: SAMA PERSIS dengan kartu daftar "Pengguna
+              // Online" (latar tint + ring WARNA GENDER) → warna orang yang
+              // sama konsisten di list Online, header chat, profil, dll.
+              // Badge: titik presence (atau ikon blokir bila diblokir).
+              child: PersonAvatar(
                 uid: widget.otherUid,
                 name: widget.otherName,
+                gender: effGender,
                 size: 40,
-                borderRadius: 0,
-                // Samakan dengan kartu list Pesan (beda ukuran saja):
-                // border warna gender, bg aksen 15%, teks primer, badge
-                // titik presence 11px (atau ikon blokir bila diblokir).
-                borderColor: isBlocked
-                    ? null
-                    : effGender == 'male'
-                    ? AppTheme.male
-                    : effGender == 'female'
-                    ? AppTheme.female
-                    : AppTheme.accent,
-                bgColor: isBlocked
-                    ? AppTheme.avatarBgBlocked
-                    : AppTheme.avatarBg,
-                textColor: isBlocked
-                    ? AppTheme.textSecondary
-                    : AppTheme.textPrimary,
+                status: isBlocked ? null : displayStatus,
                 badge: isBlocked
                     ? Container(
                         padding: EdgeInsets.all(2),
@@ -1961,18 +1950,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           color: Colors.white,
                         ),
                       )
-                    : Container(
-                        width: 11,
-                        height: 11,
-                        decoration: BoxDecoration(
-                          color: AppTheme.statusColor(displayStatus),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white,
-                            width: 1.5,
-                          ),
-                        ),
-                      ),
+                    : null,
               ),
             ),
             SizedBox(width: 10),

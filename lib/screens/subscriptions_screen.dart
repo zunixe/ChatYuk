@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/social_provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
-import '../widgets/profile_avatar.dart';
+import '../widgets/person_avatar.dart';
 import '../providers/theme_provider.dart';
 
 class SubscriptionsScreen extends StatefulWidget {
@@ -107,11 +107,12 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     ),
                     child: Row(
                       children: [
-                        ProfileAvatar(
+                        PersonAvatar(
                           uid: uid,
                           name: name,
+                          gender: '${e['gender'] ?? ''}',
+                          avatarB64: '${e['avatar'] ?? ''}',
                           size: 40,
-                          borderRadius: 20,
                         ),
                         SizedBox(width: 10),
                         Expanded(

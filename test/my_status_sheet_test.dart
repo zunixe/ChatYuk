@@ -11,7 +11,7 @@ import 'package:chatyuk/models/privacy_settings.dart';
 import 'package:chatyuk/providers/privacy_provider.dart';
 import 'package:chatyuk/screens/online_users_screen.dart';
 import 'package:chatyuk/services/privacy_service.dart';
-import 'package:chatyuk/widgets/user_avatar.dart';
+import 'package:chatyuk/widgets/person_avatar.dart';
 
 import 'test_helper.dart';
 
@@ -30,6 +30,9 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
     AppFonts.setLocal(AppFonts.systemKey);
     await initSupabaseForTest();
+    // PersonAvatar resolve by-uid bila src kosong → MediaDiskCache.waitReady
+    // menjadwalkan timer; prewarm supaya tidak "pending timer" saat teardown.
+    await prewarmMediaForTest();
   });
 
   tearDownAll(resetFontForTest);
@@ -141,18 +144,18 @@ void main() {
       expect(find.text(s.myStatusGhostActive), findsNothing);
     });
 
-    testWidgets('avatar header pakai UserAvatar + warna gender male',
+    testWidgets('avatar header pakai PersonAvatar + warna gender male',
         (t) async {
       await pump(t, st: const PrivacySettings(), gender: 'male');
-      final av = t.widget<UserAvatar>(find.byType(UserAvatar));
-      expect(av.color, AppTheme.male);
-      expect(av.borderColor, AppTheme.male);
+      final av = t.widget<PersonAvatar>(find.byType(PersonAvatar));
+      expect(av.gender, 'male');
+      expect(PersonAvatar.colorFor(av.gender), AppTheme.male);
     });
 
     testWidgets('avatar header warna gender female', (t) async {
       await pump(t, st: const PrivacySettings(), gender: 'female');
-      final av = t.widget<UserAvatar>(find.byType(UserAvatar));
-      expect(av.color, AppTheme.female);
+      final av = t.widget<PersonAvatar>(find.byType(PersonAvatar));
+      expect(PersonAvatar.colorFor(av.gender), AppTheme.female);
     });
 
     testWidgets('ghost aktif → label mode hantu + tetap tampil Online',
