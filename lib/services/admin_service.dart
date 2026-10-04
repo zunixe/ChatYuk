@@ -113,6 +113,27 @@ class AdminService {
     return (res as Map<String, dynamic>?) ?? const {};
   }
 
+  /// Sebaran user per NEGARA → [{country, count, registered}] desc.
+  Future<List<Map<String, dynamic>>> fetchCountryStats() async {
+    final res = await _rpc('admin_country_stats').timeout(_openTimeout);
+    return ((res as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  /// Sebaran user per KOTA dalam satu negara → [{city, count, registered}].
+  Future<List<Map<String, dynamic>>> fetchCityStats(String country) async {
+    final res = await _rpc(
+      'admin_city_stats',
+      params: {'p_country': country},
+    ).timeout(_openTimeout);
+    return ((res as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
   /// Total registrasi per bulan (tren N bulan terakhir) → map 'YYYY-MM' → n.
   Future<List<Map<String, dynamic>>> fetchRegistrationsMonthly([
     int months = 12,
