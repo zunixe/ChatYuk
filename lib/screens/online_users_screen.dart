@@ -505,8 +505,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       ),
       builder: (ctx) => MyStatusSheet(
         s: s,
+        uid: auth.uid ?? '',
         nickname: auth.profile?.nickname ?? '-',
         avatar: auth.profile?.avatar ?? '',
+        gender: auth.profile?.gender ?? '',
         status: auth.profile?.status ?? 'offline',
         invisible: auth.invisibleEnabled,
         privacy: privacy,
@@ -3064,16 +3066,20 @@ class _UserCard extends StatelessWidget {
 /// `_showMyStatusSheet`.
 class MyStatusSheet extends StatelessWidget {
   final S s;
+  final String uid;
   final String nickname;
   final String avatar;
+  final String gender;
   final String status;
   final bool invisible;
   final PrivacyProvider privacy;
   const MyStatusSheet({
     super.key,
     required this.s,
+    required this.uid,
     required this.nickname,
     required this.avatar,
+    required this.gender,
     required this.status,
     required this.invisible,
     required this.privacy,
@@ -3090,16 +3096,13 @@ class MyStatusSheet extends StatelessWidget {
     }
   }
 
-  /// Bytes avatar bila `avatar` base64 valid; null bila kosong / path
-  /// storage (fallback inisial). Aman terhadap base64 rusak.
-  Uint8List? _avatarBytes() {
-    if (avatar.isEmpty || avatar.contains('/')) return null;
-    try {
-      return base64Decode(avatar);
-    } catch (_) {
-      return null;
-    }
-  }
+  /// Warna gender — sama sumbernya dengan kartu user lain (GenderAvatar).
+  Color get _genderColor =>
+      gender == 'male'
+          ? AppTheme.male
+          : gender == 'female'
+          ? AppTheme.female
+          : AppTheme.accent;
 
   @override
   Widget build(BuildContext context) {
@@ -3113,27 +3116,34 @@ class MyStatusSheet extends StatelessWidget {
           children: [
             const SheetDragHandle(),
             const SizedBox(height: 6),
-            // Header: avatar + nama. Avatar bisa base64 (foto) atau path
-            // storage ('avatars/...') → path fallback ke inisial (sheet tak
-            // mengunduh; avatar sendiri umumnya sudah base64 di memori).
+            // Header: avatar + nama. Pakai UserAvatar MODULAR (menangani
+            // base64 ATAU path storage + cap + anti-kedip) supaya foto
+            // benar-benar tampil; warna+ring ikut GENDER sama seperti kartu
+            // user lain (male=biru / female=pink / lain=accent).
             Row(
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
-                  backgroundImage: _avatarBytes() != null
-                      ? MemoryImage(_avatarBytes()!)
-                      : null,
-                  child: _avatarBytes() == null
-                      ? Text(
-                          nickname.isNotEmpty
-                              ? nickname[0].toUpperCase()
-                              : '?',
-                          style: AppText.bodyStrong.copyWith(
-                            color: AppTheme.primary,
-                          ),
-                        )
-                      : null,
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _genderColor.withValues(alpha: 0.15),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: ua.UserAvatar(
+                      key: ValueKey(uid),
+                      uid: uid,
+                      avatarB64: avatar,
+                      initial: nickname.isNotEmpty
+                          ? nickname[0].toUpperCase()
+                          : '?',
+                      color: _genderColor,
+                      borderColor: _genderColor,
+                      borderWidth: 1.5,
+                      keepRingForPhoto: true,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -3156,7 +3166,8 @@ class MyStatusSheet extends StatelessWidget {
                   Text(_statusLabel(), style: AppText.bodyStrong),
                   if (invisible) ...[
                     const SizedBox(width: 6),
-                    const Text('👻', style: TextStyle(fontSize: 13)),
+                    const Text('👻',
+                        style: TextStyle(fontSize: AppGlyph.micro)),
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
