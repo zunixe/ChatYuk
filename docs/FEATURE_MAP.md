@@ -237,6 +237,11 @@ hanya `service_role` (user tak bisa mendebit orang lain); saldo = cache ledger
 **Invariant:** visibility story ikut follower; counter sosial konsisten
 (`follow_count_sync`); timeline hanya user terdaftar.
 
+> **Follow vs Teman vs Subscribe → lihat `docs/SOCIAL_GRAPH.md`.** Relasi sosial
+> (follow 1-arah, teman mutual+request, subscribe berbayar), **dua definisi
+> "teman"** (`_are_friends` vs `_privacy_are_friends`), aturan putus teman, dan
+> catatan `isFriend` realtime dibahas lengkap di sana.
+
 **Top Aktif (2026-10-05) — leaderboard keaktifan:** `activity_leaderboard()`
 menghitung **pesan private + pesan room + reaksi** (weekly=7 hari / alltime).
 Beda dari `points_leaderboard` (berbasis POIN, dibuka dari Profil). Dibuka

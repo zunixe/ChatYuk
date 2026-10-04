@@ -109,16 +109,18 @@ void main() {
         .thenAnswer((_) => const Stream.empty());
   });
 
-  Future<void> pump(WidgetTester tester, Map<String, dynamic> post) async {
+  Future<void> pump(WidgetTester tester, Map<String, dynamic> post,
+      {SocialProvider? social}) async {
     final locale = LocaleProvider();
     final tp = TimelineProvider(service: timeline, autoInit: false);
     final ap = AuthProvider(authService: auth, autoInit: false);
-    // PostCard baca status follow global (SocialProvider.isFollowing).
-    final sp = SocialProvider(
-      service: MockSocialService(),
-      sb: fakeSupabaseClientNoTicker(),
-      autoInit: false,
-    );
+    // PostCard baca status follow/teman global (SocialProvider).
+    final sp = social ??
+        SocialProvider(
+          service: MockSocialService(),
+          sb: fakeSupabaseClientNoTicker(),
+          autoInit: false,
+        );
     addTearDown(() {
       tp.dispose();
       ap.dispose();
@@ -169,6 +171,40 @@ void main() {
       (tester) async {
     await pump(tester, _post(boosted: true, friend: true));
     expect(tester.takeException(), isNull);
+  });
+
+  // REGRESI: post dari realtime TIDAK membawa `isFriend` (computed di RPC
+  // list_posts, bukan kolom tabel). Dulu TimelineProvider._mapRow hardcode
+  // 'isFriend': false → badge Teman hilang sampai feed di-refresh. Badge harus
+  // muncul dari SocialProvider.isFriend(authorId) walau post['isFriend']=false.
+  testWidgets('badge Teman muncul dari SocialProvider walau post.isFriend=false',
+      (tester) async {
+    final svc = MockSocialService();
+    final sp = SocialProvider(
+      service: svc,
+      sb: fakeSupabaseClientNoTicker(),
+      autoInit: false,
+    );
+    // Simulasi author 'a1' sudah jadi teman (state global terisi).
+    when(() => svc.sendFriendRequest('a1'))
+        .thenAnswer((_) async => {'ok': true, 'already_friends': true});
+    await sp.sendFriendRequest('a1');
+    expect(sp.isFriend('a1'), isTrue, reason: 'prasyarat: a1 teman');
+
+    // post.isFriend = false (seperti payload realtime yang tak punya field ini).
+    await pump(tester, _post(friend: false), social: sp);
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byIcon(Icons.people_alt_rounded),
+      findsWidgets,
+      reason: 'badge Teman harus muncul dari SocialProvider, bukan post map',
+    );
+  });
+
+  testWidgets('tanpa friend (bukan teman) → badge Teman tidak muncul',
+      (tester) async {
+    await pump(tester, _post(friend: false));
+    expect(find.byIcon(Icons.people_alt_rounded), findsNothing);
   });
 
   testWidgets('foto single 1:1 → lebar PENUH area konten (736)', (tester) async {

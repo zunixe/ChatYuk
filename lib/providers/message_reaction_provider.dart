@@ -56,6 +56,12 @@ class MessageReactionProvider extends ChangeNotifier {
       service.watchStarred(chatId);
   Future<Set<String>> loadCachedStarred(String chatId) =>
       service.loadCachedStarred(chatId);
+  /// Versi SINKRON — untuk mengisi bintang sebelum frame pertama (anti-glich).
+  Set<String> peekCachedStarred(String chatId) =>
+      service.peekCachedStarred(chatId);
+  Future<void> preloadCachedStarred(String chatId) =>
+      service.preloadCachedStarred(chatId);
+  Future<void> preloadAllStarred() => service.preloadAllStarred();
   Future<void> saveCachedStarred(String chatId, Set<String> ids) =>
       service.saveCachedStarred(chatId, ids);
 }

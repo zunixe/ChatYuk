@@ -357,7 +357,10 @@ class TimelineProvider extends ChangeNotifier {
       'authorAvatar': '',
       'isLiked': false,
       'isFollowing': row['is_following'] == true,
-      'isFriend': false,
+      // `is_friend` BUKAN kolom tabel posts (computed di RPC list_posts/get_post),
+      // jadi TIDAK ada di payload realtime. Jangan hardcode `false` — PostCard
+      // me-resolve status teman lewat SocialProvider.isFriend(authorId).
+      // (Dulu `'isFriend': false` di sini → badge Teman post realtime hilang.)
     };
   }
 

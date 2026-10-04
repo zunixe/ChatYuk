@@ -66,4 +66,35 @@ void main() {
     await cache.clearAll();
     expect(cache.peekRawList(uid), isEmpty);
   });
+
+  // ── peekRawObj (bintang/reaksi tampil instan, anti-glich) ──
+  // `saveRawObj` mengisi MEMORI sinkron → PostCard/chat bisa baca sebelum
+  // frame pertama (tanpa hop async), lalu disk menyusul (gagal di test
+  // karena butuh Keystore — ditelan try/catch).
+  test('peekRawObj sinkron: kosong sebelum, terisi sesudah save', () {
+    const key = 'starred:chat-1';
+    expect(cache.peekRawObj(key), isEmpty);
+
+    // Fire-and-forget: memori diisi SINKRON sebelum await disk.
+    cache.saveRawObj(key, {
+      'ids': ['m1', 'm2'],
+    });
+
+    final peek = cache.peekRawObj(key);
+    expect(peek['ids'], ['m1', 'm2']);
+  });
+
+  test('peekRawObj: key tak ada = map kosong (bukan throw)', () {
+    expect(cache.peekRawObj('starred:tidak-ada'), isEmpty);
+  });
+
+  test('clearAll mengosongkan cache objek memori', () async {
+    const key = 'starred:chat-2';
+    cache.saveRawObj(key, {
+      'ids': ['m9'],
+    });
+    expect(cache.peekRawObj(key), isNotEmpty);
+    await cache.clearAll();
+    expect(cache.peekRawObj(key), isEmpty);
+  });
 }

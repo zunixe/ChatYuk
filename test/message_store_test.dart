@@ -163,6 +163,17 @@ void main() {
     expect(await MessageStore.instance.loadKv('rooms_ID'), isNull);
   });
 
+  test('loadKvPrefix: hanya key berawalan prefix, exact match dikecualikan',
+      () async {
+    await MessageStore.instance.saveKv('starred:chat-a', '{"ids":["m1"]}');
+    await MessageStore.instance.saveKv('starred:chat-b', '{"ids":["m2"]}');
+    await MessageStore.instance.saveKv('read:chat-a', '{"o":"t"}');
+    await MessageStore.instance.saveKv('starredish', '{"x":1}'); // bukan prefix
+    final rows = await MessageStore.instance.loadKvPrefix('starred:');
+    expect(rows.keys.toSet(), {'starred:chat-a', 'starred:chat-b'});
+    expect(rows['starred:chat-a'], '{"ids":["m1"]}');
+  });
+
   test('SELF-HEAL: open gagal (DB korup) → delete + buka ulang sukses',
       () async {
     // Tutup & reset store supaya open() dipanggil ulang.

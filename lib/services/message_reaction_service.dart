@@ -310,6 +310,34 @@ class MessageReactionService {
     }
   }
 
+  /// Versi SINKRON: langsung dari memori (tanpa await) — dipakai untuk
+  /// mengisi bintang SEBELUM frame pertama saat buka chat (anti-glich).
+  /// Kosong bila cache belum dimuat di sesi ini (pemanggil fallback async).
+  Set<String> peekCachedStarred(String chatId) {
+    try {
+      final raw = MessageCache.instance.peekRawObj(starredCacheKey(chatId));
+      return parseCachedStarred(raw);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Muat cache starred ke memori saat bootstrap — supaya `peekCachedStarred`
+  /// terisi untuk chat pertama yang dibuka.
+  Future<void> preloadCachedStarred(String chatId) async {
+    try {
+      await MessageCache.instance.preloadRawObj(starredCacheKey(chatId));
+    } catch (_) {}
+  }
+
+  /// Preload SEMUA cache starred (semua chat) ke memori saat bootstrap —
+  /// bintang tampil instan di cold start tanpa menunggu disk per-chat.
+  Future<void> preloadAllStarred() async {
+    try {
+      await MessageCache.instance.preloadObjPrefix('starred:');
+    } catch (_) {}
+  }
+
   /// Simpan tiap emission stream. Dibungkus `{'ids': [...]}` supaya kondisi
   /// "tak ada starred" tetap tersimpan (menimpa cache lama) — `saveRawObj`
   /// meng-skip map kosong, sehingga tanpa wrapper bintang yang di-unstar akan
