@@ -22,6 +22,14 @@
   (get_online_users 400ms, count_room_presence 600ms, cleanup_room_presence
   2s) → frame pertama bersih.
 
+## 2026-10-05 — Pesan room user terhapus tampil "Pesan dihapus"
+
+- **Migrasi** `20261006120000_room_deleted_user_placeholder.sql`:
+  `delete_my_account` soft-delete pesan room (`is_deleted=true`, bukan
+  hard-delete); `purge_onboarding_placeholders` ikut soft-delete per-user;
+  backfill 56 pesan yatim. Applied via Management API + tercatat di
+  `schema_migrations`. Test pgTAP `delete_account_test.sql` 6/6.
+
 ## 2026-10-05 — Daftar user admin: flag Fake GPS vs GPS asli
 
 - **Minta user:** di "Per User" admin, tahu MANA Fake GPS vs GPS asli;
