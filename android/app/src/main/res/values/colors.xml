@@ -5,4 +5,9 @@
      putih di HP dark mode. -->
 <resources>
     <color name="launch_bg">#121212</color>
+    <!-- Nav bar (system bar bawah) saat cold start = warna FOOTER ChatYuk
+         (AppTheme.bgCard dark = #1E1E1E), BUKAN putih. Tanpa ini, edge-to-edge
+         Android 15 menampilkan nav bar putih sekilas sebelum frame pertama
+         Flutter menggambar footer. -->
+    <color name="nav_bg">#1E1E1E</color>
 </resources>
