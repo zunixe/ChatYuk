@@ -771,7 +771,31 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     String myStatus,
     bool invisible,
   ) {
-    final sp = ctx.watch<StoryProvider>();
+    // PERF: dulu `ctx.watch<StoryProvider>()` dengan ctx = context SCREEN →
+    // seluruh halaman Online ikut rebuild tiap StoryProvider notify. Bungkus
+    // Consumer sempit: HANYA tray ini yang rebuild saat story berubah.
+    return Consumer<StoryProvider>(
+      builder: (ctx, sp, _) => _storyTrayContent(
+        ctx,
+        sp,
+        myAvatar,
+        myNickname,
+        myRegistered,
+        myStatus,
+        invisible,
+      ),
+    );
+  }
+
+  Widget _storyTrayContent(
+    BuildContext ctx,
+    StoryProvider sp,
+    String myAvatar,
+    String myNickname,
+    bool myRegistered,
+    String myStatus,
+    bool invisible,
+  ) {
     // Hanya item berisi slide (slideCount>0) yang tampil & bisa dibuka.
     final items = sp.tray.where((t) => t.slideCount > 0).toList();
     // Anon juga bisa bikin story (dipaksa public) → tile + selalu tampil.

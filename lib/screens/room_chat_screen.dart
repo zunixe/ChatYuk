@@ -32,7 +32,7 @@ import 'group_info_screen.dart';
 import 'group_media_screen.dart';
 import '../widgets/app_gesture.dart';
 import '../widgets/date_chip.dart';
-import '../widgets/gender_avatar.dart';
+import '../widgets/person_avatar.dart';
 import '../widgets/private_chat_message.dart';
 import 'room_chat/widgets/room_widgets.dart';
 import 'room_chat/widgets/room_message_bubble.dart';
@@ -319,6 +319,21 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   Timer? _livePoll;
   bool _isGrantedBroadcast = false;
   StreamSubscription<Map<String, Map<String, int>>>? _reactionsSub;
+
+  // PERF (pola private chat): stream reaksi/starred bisa emit sering (tiap
+  // orang reaksi di room). setState LANGSUNG = rebuild SELURUH RoomChatScreen
+  // (appbar + voice strip + semua bubble) tiap emission → jank saat room
+  // ramai. `_scheduleRebuild` mengoalesensi semua setState pasca-emit jadi
+  // SATU per frame (scheduleFrameCallback).
+  bool _rebuildScheduled = false;
+  void _scheduleRebuild() {
+    if (!mounted || _rebuildScheduled) return;
+    _rebuildScheduled = true;
+    WidgetsBinding.instance.scheduleFrameCallback((_) {
+      _rebuildScheduled = false;
+      if (mounted) setState(() {});
+    });
+  }
   StreamSubscription<Set<String>>? _starredSub;
   bool get isPrivateRoom => widget.room.isPrivate == true;
   bool get canModerate =>
@@ -702,12 +717,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         cached,
       ) {
         if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
-        setState(() => reactions = cached);
+        reactions = cached;
+        _scheduleRebuild();
       });
       _reactionsSub = context.read<MessageReactionProvider>()
           .watchReactions(widget.room.id)
           .listen((m) {
-        if (mounted) setState(() => reactions = m);
+        reactions = m;
+        _scheduleRebuild();
         context.read<MessageReactionProvider>().saveCachedReactions(widget.room.id, m);
       }, onError: (e) {
         // OFFLINE: reactions (.stream() mentah) error → jangan tak tertangkap.
@@ -716,7 +733,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       _starredSub = context.read<MessageReactionProvider>()
           .watchStarred(widget.room.id)
           .listen((m) {
-        if (mounted) setState(() => starredIds = m);
+        starredIds = m;
+        _scheduleRebuild();
       }, onError: (e) {
         debugPrint('[NAV] room starred stream error: $e');
       });
@@ -2748,16 +2766,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 },
                 child: Row(
                   children: [
-                    // FOTO profil asli user (bukan sekadar inisial) + ring warna
-                    // gender — konsisten dgn bubble room & daftar Online.
-                    // Dulu pakai CircleAvatar inisial saja → foto tak pernah
-                    // tampil walau user punya foto.
-                    GenderAvatar(
+                    // PersonAvatar = standar yang sama persis dengan Pengguna
+                    // Online (foto + latar tint + ring warna gender).
+                    PersonAvatar(
                       uid: msg.senderId,
                       name: msg.senderName,
                       gender: msg.senderGender,
                       size: 40,
-                      borderRadius: 20,
                     ),
                     SizedBox(width: 12),
                     Expanded(

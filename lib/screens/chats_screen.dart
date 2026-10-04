@@ -28,7 +28,10 @@ class _ChatsScreenState extends State<ChatsScreen>
   void initState() {
     super.initState();
     _tab.addListener(_onTabChanged);
-    _tab.animation!.addListener(_onTabAnimated);
+    // PERF: JANGAN `_tab.animation!.addListener(setState)` — itu me-rebuild
+    // SELURUH ChatsScreen tiap FRAME saat swipe/pindah tab (AppBar + TabBarView
+    // + 3 halaman). Yang bergantung posisi tab hanya hint search & menu
+    // actions → di-drive ValueListenableBuilder sempit di build().
   }
 
   void _onTabChanged() {
@@ -39,15 +42,14 @@ class _ChatsScreenState extends State<ChatsScreen>
     // Room (keputusan produk). Gate popup "lengkapi email" di sini DIHAPUS —
     // anon hanya dibatasi pada aksi tertentu (chat baru/call/room join),
     // bukan sekadar melihat tab.
-  }
-
-  void _onTabAnimated() {
+    //
+    // Rebuild SEKALI saat index tab berubah (bukan tiap frame animasi):
+    // dipakai memperbarui hint search & menu actions (isPesanTab).
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _tab.animation!.removeListener(_onTabAnimated);
     _tab.removeListener(_onTabChanged);
     _tab.dispose();
     _searchCtrl.dispose();

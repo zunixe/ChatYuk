@@ -18,6 +18,7 @@ class _MissionsScreenState extends State<MissionsScreen>
     with SingleTickerProviderStateMixin {
   PointsProvider get _service => context.read<PointsProvider>();
   late final TabController _tab = TabController(length: 3, vsync: this);
+  int _lastTabIndex = 0;
   int get _tzOffset => DateTime.now().timeZoneOffset.inMinutes;
 
   bool _loading = true;
@@ -31,7 +32,14 @@ class _MissionsScreenState extends State<MissionsScreen>
   @override
   void initState() {
     super.initState();
-    _tab.addListener(() => setState(() {}));
+    _tab.addListener(() {
+      // PERF: rebuild SEKALI saat index berubah (bukan tiap event
+      // TabController) — hilangkan rebuild berlebih saat animasi tab.
+      if (_tab.index != _lastTabIndex) {
+        _lastTabIndex = _tab.index;
+        setState(() {});
+      }
+    });
     _load();
   }
 
