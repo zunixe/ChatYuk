@@ -777,13 +777,18 @@ class _GroupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final roomProvider = context.watch<RoomProvider>();
+    // PERF: dulu `watch<RoomProvider>()` penuh di SETIAP kartu → semua kartu
+    // rebuild tiap provider notify (counts/presence/membership sering).
+    // Kartu hanya butuh SATU boolean: apakah aku anggota grup ini.
     final isOwner = room.ownerId == auth.uid;
     // Admin privilege hanya ada di build admin (flavor-gate) —
     // bukan lagi cek email runtime.
     final isAdmin = AdminGate.enabled;
     final canManage = isOwner || isAdmin;
-    final isMember = roomProvider.memberRoomIds.contains(room.id) || isOwner;
+    final isMember = context.select<RoomProvider, bool>(
+          (rp) => rp.memberRoomIds.contains(room.id),
+        ) ||
+        isOwner;
     final days = _daysLeft;
 
     final card = Container(

@@ -59,8 +59,12 @@ class _ForwardSheetState extends State<_ForwardSheet> {
     final auth = context.read<AuthProvider>();
     final myUid = auth.uid ?? '';
     final chats = context.read<ChatProvider>().lastPrivateChatsSnapshot(myUid) ?? const [];
-    final rooms = context.watch<RoomProvider>().rooms;
-    final groups = context.watch<RoomProvider>().myGroups;
+    // PERF: `read` (bukan `watch`) — sheet forward dibuka sesaat & langsung
+    // dipilih; tidak perlu rebuild tiap RoomProvider notify (provider besar,
+    // counts/presence sering). Menghindari storm rebuild saat sheet terbuka.
+    final rp = context.read<RoomProvider>();
+    final rooms = rp.rooms;
+    final groups = rp.myGroups;
 
     final q = _q.trim().toLowerCase();
     bool match(String v) => q.isEmpty || v.toLowerCase().contains(q);
@@ -129,96 +133,45 @@ class _ForwardSheetState extends State<_ForwardSheet> {
               ),
             ),
             Expanded(
-              child: ListView(
-                children: [
-                  if (chatTargets.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                      child: Text(
-                        s.titlePrivateChat,
-                        style: AppText.label.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ),
-                    for (final t in chatTargets)
-                      ListTile(
-                        dense: true,
-                        leading: ProfileAvatar(
-                          // PENTING: uid lawan (bukan chatId) — kalau pakai
-                          // chatId, key cache & fetch avatar salah → foto
-                          // tidak pernah muncul. Ring warna mengikuti gender
-                          // (aturan sama dgn daftar chat & Pengguna Online).
-                          uid: t.otherUid,
-                          name: t.title,
-                          size: 36,
-                          borderColor: t.gender == 'male'
-                              ? AppTheme.male
-                              : t.gender == 'female'
-                              ? AppTheme.female
-                              : AppTheme.accent,
-                          bgColor: AppTheme.avatarBg,
-                        ),
-                        title: Text(
-                          t.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: t.subtitle.isNotEmpty
-                            ? Text(
-                                t.subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppText.bodySmall.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                              )
-                            : null,
-                        onTap: () => Navigator.pop(context, t),
-                      ),
-                  ],
-                  if (allRooms.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                      child: Text(
-                        s.tabPrivateRoom,
-                        style: AppText.label.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ),
-                    for (final t in allRooms)
-                      ListTile(
-                        dense: true,
-                        leading: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: AppTheme.bgInput,
+              // ListView.builder (lazy): daftar bisa panjang (banyak chat +
+              // grup) — dulu `ListView(children:)` membangun SEMUA ListTile
+              // sekaligus di satu frame. Entries dibangun ringan (datanya
+              // sudah ada), widget-nya dibangun on-demand.
+              child: Builder(
+                builder: (_) {
+                  final entries = <Widget>[];
+                  if (chatTargets.isNotEmpty) {
+                    entries.add(_sectionHeader(s.titlePrivateChat));
+                    for (final t in chatTargets) {
+                      entries.add(_chatTile(t));
+                    }
+                  }
+                  if (allRooms.isNotEmpty) {
+                    entries.add(_sectionHeader(s.tabPrivateRoom));
+                    for (final t in allRooms) {
+                      entries.add(_roomTile(t));
+                    }
+                  }
+                  if (chatTargets.isEmpty && allRooms.isEmpty) {
+                    entries.add(
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Center(
                           child: Text(
-                            t.title.isNotEmpty ? t.title.characters.first : '?',
-                            style: TextStyle(fontSize: AppGlyph.sm),
-                          ),
-                        ),
-                        title: Text(
-                          t.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onTap: () => Navigator.pop(context, t),
-                      ),
-                  ],
-                  if (chatTargets.isEmpty && allRooms.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Center(
-                        child: Text(
-                          s.noResults,
-                          style: AppText.bodySmall.copyWith(
-                            color: AppTheme.textSecondary,
+                            s.noResults,
+                            style: AppText.bodySmall.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                    );
+                  }
+                  return ListView.builder(
+                    itemCount: entries.length,
+                    itemBuilder: (_, i) => entries[i],
+                  );
+                },
               ),
             ),
           ],
@@ -226,4 +179,56 @@ class _ForwardSheetState extends State<_ForwardSheet> {
       ),
     );
   }
+
+  Widget _sectionHeader(String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        child: Text(
+          text,
+          style: AppText.label.copyWith(color: AppTheme.textSecondary),
+        ),
+      );
+
+  Widget _chatTile(ForwardTarget t) => ListTile(
+        dense: true,
+        leading: ProfileAvatar(
+          // PENTING: uid lawan (bukan chatId) — kalau pakai chatId, key cache
+          // & fetch avatar salah → foto tidak pernah muncul. Ring warna
+          // mengikuti gender (aturan sama dgn daftar chat & Pengguna Online).
+          uid: t.otherUid,
+          name: t.title,
+          size: 36,
+          borderColor: t.gender == 'male'
+              ? AppTheme.male
+              : t.gender == 'female'
+              ? AppTheme.female
+              : AppTheme.accent,
+          bgColor: AppTheme.avatarBg,
+        ),
+        title: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: t.subtitle.isNotEmpty
+            ? Text(
+                t.subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              )
+            : null,
+        onTap: () => Navigator.pop(context, t),
+      );
+
+  Widget _roomTile(ForwardTarget t) => ListTile(
+        dense: true,
+        leading: CircleAvatar(
+          radius: 18,
+          backgroundColor: AppTheme.bgInput,
+          child: Text(
+            t.title.isNotEmpty ? t.title.characters.first : '?',
+            style: TextStyle(fontSize: AppGlyph.sm),
+          ),
+        ),
+        title: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        onTap: () => Navigator.pop(context, t),
+      );
 }

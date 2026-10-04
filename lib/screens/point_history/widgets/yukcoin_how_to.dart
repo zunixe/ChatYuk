@@ -20,7 +20,28 @@ class YukcoinHowTo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pp = context.watch<PointsProvider>();
+    // PERF: `select` record field harga (value-type) — dulu `watch` penuh →
+    // widget rebuild tiap PointsProvider notify (saldo/pricing sering).
+    final pp = context.select<PointsProvider,
+        ({
+          int callAudio,
+          int callVideo,
+          int filterGender,
+          int nearby,
+          int undo,
+          int edit,
+          int extraSlot,
+          int ghostDaily,
+        })>((p) => (
+          callAudio: p.callAudioCostPerMin,
+          callVideo: p.callVideoCostPerMin,
+          filterGender: p.filterGenderCost,
+          nearby: p.nearbyCost,
+          undo: p.costUndoMessage,
+          edit: p.costEditMessage,
+          extraSlot: p.costExtraPhotoSlot,
+          ghostDaily: p.costGhostModeDaily,
+        ));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -38,25 +59,25 @@ class YukcoinHowTo extends StatelessWidget {
             _row(
               Icons.call_outlined,
               s.yukcoinFeatureCallAudio,
-              '${pp.callAudioCostPerMin}',
+              '${pp.callAudio}',
               trailing: s.yukcoinPerMin,
             ),
             _row(
               Icons.videocam_outlined,
               s.yukcoinFeatureCallVideo,
-              '${pp.callVideoCostPerMin}',
+              '${pp.callVideo}',
               trailing: s.yukcoinPerMin,
             ),
             _row(
               Icons.person_outline,
               s.yukcoinFeatureFilterGender,
-              '${pp.filterGenderCost}',
+              '${pp.filterGender}',
               trailing: s.yukcoinPerDay,
             ),
             _row(
               Icons.explore_outlined,
               s.yukcoinFeatureNearby,
-              '${pp.nearbyCost}',
+              '${pp.nearby}',
               trailing: s.yukcoinPerDay,
             ),
           ],
@@ -68,25 +89,25 @@ class YukcoinHowTo extends StatelessWidget {
               _row(
                 Icons.undo,
                 s.yukcoinFeatureUndo,
-                '${pp.costUndoMessage}',
+                '${pp.undo}',
                 trailing: s.yukcoinPerUse,
               ),
               _row(
                 Icons.edit_outlined,
                 s.yukcoinFeatureEdit,
-                '${pp.costEditMessage}',
+                '${pp.edit}',
                 trailing: s.yukcoinPerUse,
               ),
               _row(
                 Icons.photo_library_outlined,
                 s.yukcoinFeatureExtraPhoto,
-                '${pp.costExtraPhotoSlot}',
+                '${pp.extraSlot}',
                 trailing: s.yukcoinOnce,
               ),
               _row(
                 Icons.visibility_off_outlined,
                 s.yukcoinFeatureGhost,
-                '${pp.costGhostModeDaily}',
+                '${pp.ghostDaily}',
                 trailing: ghostActive ? s.ghostModeActive : s.yukcoinPerDay,
               ),
             ],

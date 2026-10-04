@@ -3079,3 +3079,27 @@ interaksi; tutup-buka app pulih. Dart heap kecil (8MB) → yang bocor adalah
 
 **Aturan turunan:** bytes gambar JANGAN disimpan di >1 map. Satu map per-uid
 (`cachedUserAvatarBytes`/`rememberAvatarBytes`) + service b64 sebagai sumber.
+
+---
+
+## 35. Audit arsitektur storm tersisa (user + admin) (2026-10-06)
+
+Audit menyeluruh pola rebuild/lag. Sisa "kebocoran" (berbeda dgn §26/§28 yang
+sudah beres) — 8 titik:
+
+| # | File | Masalah | Fix |
+|---|---|---|---|
+| A | `chats_screen.dart` | `_tab.animation.addListener(setState)` → rebuild SELURUH layar tiap FRAME animasi tab | hapus listener animasi; rebuild via `TabController` index saja (1×/ganti tab) |
+| B | `room_chat_screen.dart` | stream reaksi/starred → `setState` lebar tiap orang reaksi | `_scheduleRebuild()` (coalesced, pola private chat) |
+| C | `group_screen.dart` | tiap `_GroupCard` `watch<RoomProvider>()` penuh → semua kartu rebuild tiap notify | `select<bool>(memberRoomIds.contains)` |
+| D | `profile_screen.dart` | `watch<PointsProvider>().extraPhotoSlots` di root build (padahal sudah `select` di atas) | pakai field `extraPhotoSlots` dari `select` |
+| E | `online_users_screen.dart` | tray story `watch<StoryProvider>()` (ctx screen) → seluruh halaman rebuild | bungkus `Consumer<StoryProvider>` sempit |
+| F | `forward_picker_sheet.dart` | `watch<RoomProvider>` penuh + `ListView(children:)` non-lazy | `read` + `ListView.builder` |
+| G | `yukcoin_how_to.dart` | `watch<PointsProvider>()` (subtree kecil) | `select` record field harga |
+| H | `missions_screen.dart` | `_tab.addListener(setState)` tanpa guard | rebuild hanya saat index berubah (`_lastTabIndex`) |
+
+**Prinsip:** perubahan `Animation`/provider yang sering notify **HANYA** boleh
+me-rebuild subtree terkecil yang benar-benar bergantung padanya. `watch` penuh
+di item list / root build = storm saat provider notify.
+
+**Verifikasi:** analyze 0 error; 53 test (chat/room/points) lulus.

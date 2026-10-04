@@ -1562,7 +1562,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ],
                                 ),
                                 if (_photos.length <
-                                    6 + context.watch<PointsProvider>().extraPhotoSlots)
+                                    6 + extraPhotoSlots)
                                   TextButton.icon(
                                     onPressed: _uploading
                                         ? null
