@@ -494,6 +494,23 @@ extension SAdminX on S {
   String get adminGlobalSettingTab =>
       isId ? 'Pengaturan Global' : 'Global Setting';
 
+  // ── Sebaran geografis (Ringkasan) ──
+  String get adminGeoTitle => isId ? 'Sebaran Negara' : 'Country Breakdown';
+  String get adminGeoSubtitle =>
+      isId ? 'Ketuk negara untuk lihat kota' : 'Tap a country to see cities';
+  String get adminGeoEmpty =>
+      isId ? 'Tidak ada data lokasi user' : 'No user location data';
+  String get adminGeoLoading =>
+      isId ? 'Memuat sebaran…' : 'Loading breakdown…';
+  String get adminGeoUserSuffix => isId ? 'user' : 'users';
+  String get adminGeoUnknown =>
+      isId ? 'Tidak diketahui' : 'Unknown';
+  String adminGeoCityTitle(String country) =>
+      isId ? 'Kota di $country' : 'Cities in $country';
+  String get adminGeoRegisteredSuffix =>
+      isId ? 'terdaftar' : 'registered';
+  String get adminGeoClose => isId ? 'Tutup' : 'Close';
+
   String get adminRegTitle => isId ? 'Registrasi Email' : 'Email Registrations';
 
   String get adminRegPerDay => isId ? 'Per hari' : 'Per day';

@@ -167,6 +167,49 @@ mixin AdminStatsMx on AdminBase {
     _notifyStats();
   }
 
+  // ── Sebaran geografis (negara → kota) ──
+  List<Map<String, dynamic>> _countryStats = const [];
+  final Map<String, List<Map<String, dynamic>>> _cityStatsCache = {};
+  bool _geoLoading = false;
+  bool _geoLoaded = false;
+
+  List<Map<String, dynamic>> get countryStats => _countryStats;
+  bool get geoLoading => _geoLoading;
+  bool get geoLoaded => _geoLoaded;
+
+  /// Muat sebaran user per negara (sekali, cache per sesi).
+  Future<void> fetchCountryStats({bool force = false}) async {
+    if (_geoLoaded && !force) return;
+    _geoLoading = true;
+    _notifyStats();
+    try {
+      _countryStats = await _service.fetchCountryStats();
+      _geoLoaded = true;
+    } catch (e) {
+      dlog('[ADMIN] fetchCountryStats error: $e');
+    }
+    _geoLoading = false;
+    _notifyStats();
+  }
+
+  /// Muat sebaran kota untuk satu negara (cache per negara).
+  Future<List<Map<String, dynamic>>> fetchCityStats(
+    String country, {
+    bool force = false,
+  }) async {
+    if (!force && _cityStatsCache.containsKey(country)) {
+      return _cityStatsCache[country]!;
+    }
+    try {
+      final list = await _service.fetchCityStats(country);
+      _cityStatsCache[country] = list;
+      return list;
+    } catch (e) {
+      dlog('[ADMIN] fetchCityStats error: $e');
+      return const [];
+    }
+  }
+
   Future<void> fetchRegistrationsDaily(int year, int month) async {
     final cacheKey = '${year}_$month';
     // Bulan lampau tidak berubah lagi → cache permanen; bulan berjalan

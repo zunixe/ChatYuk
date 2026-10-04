@@ -24,6 +24,7 @@ import 'admin_docs_tab.dart';
 import 'admin_panel/widgets/usermap_card.dart';
 import 'admin_panel/widgets/storageusage_card.dart';
 import 'admin_panel/widgets/registrationschart_card.dart';
+import 'admin_panel/widgets/geo_stats_card.dart';
 import 'admin_panel/widgets/stat_detail_sheet.dart';
 import 'admin_panel/widgets/point_tab_cards.dart';
 import 'admin_panel/widgets/overview_cards.dart';
@@ -458,6 +459,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 AdminStorageUsageCard(),
                 const SizedBox(height: 12),
                 const AdminRegistrationsChartCard(),
+                const SizedBox(height: 12),
+                const AdminGeoStatsCard(),
                 const SizedBox(height: 12),
                 AdminUserMapCard(),
                 const SizedBox(height: 12),

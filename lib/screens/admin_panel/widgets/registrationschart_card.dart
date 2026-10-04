@@ -741,7 +741,7 @@ class _TrendPainter extends CustomPainter {
             text: '$c',
             style: TextStyle(
               color: isLast ? highlightColor : textColor,
-              fontSize: 9,
+              fontSize: AppGlyph.nano,
               fontWeight: FontWeight.w700,
             ),
           ),
