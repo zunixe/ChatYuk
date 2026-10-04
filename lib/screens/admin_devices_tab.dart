@@ -406,12 +406,16 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
           }
           final u = users[i];
           final onTap = () => _showUserDetail(context, u);
+          // RepaintBoundary: kartu lain tidak ikut repaint saat satu kartu
+          // berubah (status GPS/online) — list panjang lebih hemat.
           // Punya device → kartu device biasa (info device lengkap).
           if (u['_hasDevice'] == true) {
-            return DeviceCard(device: u, s: s, onTap: onTap);
+            return RepaintBoundary(
+              child: DeviceCard(device: u, s: s, onTap: onTap),
+            );
           }
           // Tanpa device → kartu user ringkas (nickname + "tanpa perangkat").
-          return _userOnlyCard(s, u, onTap);
+          return RepaintBoundary(child: _userOnlyCard(s, u, onTap));
         },
       ),
     );

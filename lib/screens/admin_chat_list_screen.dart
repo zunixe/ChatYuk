@@ -575,15 +575,23 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                       }
                       final chat = visibleChats[i];
                       final chatId = '${chat['chat_id'] ?? ''}';
-                      return _AdminChatCard(
-                        chat: chat,
-                        s: s,
-                        adminUids: admin.adminUids,
-                        activeCall: admin.activeCallsByChat[chat['chat_id']],
-                        pinned: admin.isChatPinned(chatId),
-                        category: admin.chatCategoryOf(chatId),
-                        onLongPressMenu: () =>
-                            _chatActions(context, chat, label: _chatLabel(chat, s)),
+                      // RepaintBoundary: kartu lain tidak ikut repaint saat
+                      // satu kartu berubah (badge call/unread) — list monitor
+                      // panjang jadi lebih hemat (konsisten dgn menu Online).
+                      return RepaintBoundary(
+                        child: _AdminChatCard(
+                          chat: chat,
+                          s: s,
+                          adminUids: admin.adminUids,
+                          activeCall: admin.activeCallsByChat[chat['chat_id']],
+                          pinned: admin.isChatPinned(chatId),
+                          category: admin.chatCategoryOf(chatId),
+                          onLongPressMenu: () => _chatActions(
+                            context,
+                            chat,
+                            label: _chatLabel(chat, s),
+                          ),
+                        ),
                       );
                     },
                   ),

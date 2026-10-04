@@ -455,22 +455,24 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                       final uid = '${d['user_id'] ?? ''}';
                       final isPending = d['pending'] == true;
                       final isSelected = _selectedUids.contains(uid);
-                      return DeletedCard(
-                        key: ValueKey('del-$uid'),
-                        entry: d,
-                        s: s,
-                        pending: isPending,
-                        selected: isSelected,
-                        isSelectionMode: _isSelectionMode,
-                        reasonLabel: _reasonLabel(s, '${d['reason'] ?? ''}'),
-                        onTap: () {
-                          if (_isSelectionMode) {
-                            _toggleSelect(uid);
-                          } else {
-                            _showDetail(context, d);
-                          }
-                        },
-                        onLongPress: () => _toggleSelect(uid),
+                      return RepaintBoundary(
+                        child: DeletedCard(
+                          key: ValueKey('del-$uid'),
+                          entry: d,
+                          s: s,
+                          pending: isPending,
+                          selected: isSelected,
+                          isSelectionMode: _isSelectionMode,
+                          reasonLabel: _reasonLabel(s, '${d['reason'] ?? ''}'),
+                          onTap: () {
+                            if (_isSelectionMode) {
+                              _toggleSelect(uid);
+                            } else {
+                              _showDetail(context, d);
+                            }
+                          },
+                          onLongPress: () => _toggleSelect(uid),
+                        ),
                       );
                     },
                   ),
