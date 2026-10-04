@@ -10,7 +10,7 @@ import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
 import '../utils.dart';
-import '../widgets/profile_avatar.dart';
+import '../widgets/person_avatar.dart';
 import '../widgets/social_actions.dart';
 import 'private_chat_screen.dart';
 import '../providers/call_provider.dart';
@@ -1026,24 +1026,16 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                     ),
                                     child: Row(
                                       children: [
-                                        ProfileAvatar(
+                                        // PersonAvatar — SAMA warna/ring/badge
+                                        // dengan menu Online & header chat.
+                                        PersonAvatar(
                                           uid: otherUid,
                                           name: otherName,
+                                          gender: otherGender,
                                           size: 44,
-                                          borderRadius: 0,
-                                          borderColor: isBlocked
+                                          status: isBlocked
                                               ? null
-                                              : (otherGender == 'male'
-                                                    ? AppTheme.male
-                                                    : otherGender == 'female'
-                                                    ? AppTheme.female
-                                                    : AppTheme.accent),
-                                          bgColor: isBlocked
-                                              ? AppTheme.avatarBgBlocked
-                                              : AppTheme.avatarBg,
-                                          textColor: isBlocked
-                                              ? AppTheme.textSecondary
-                                              : AppTheme.textPrimary,
+                                              : (statusMap[otherUid] ?? 'offline'),
                                           badge: isBlocked
                                               ? Container(
                                                   padding: EdgeInsets.all(2),
@@ -1060,21 +1052,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                     color: Colors.white,
                                                   ),
                                                 )
-                                              : Container(
-                                                  width: 11,
-                                                  height: 11,
-                                                  decoration: BoxDecoration(
-                                                    color: AppTheme.statusColor(
-                                                      statusMap[otherUid] ??
-                                                          'offline',
-                                                    ),
-                                                    shape: BoxShape.circle,
-                                                    border: Border.all(
-                                                      color: Colors.white,
-                                                      width: 1.5,
-                                                    ),
-                                                  ),
-                                                ),
+                                              : null,
                                         ),
                                         SizedBox(width: 10),
                                         Expanded(

@@ -36,6 +36,7 @@ import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
 import '../widgets/leaderboard_sheet.dart';
 import '../widgets/user_avatar.dart' as ua;
+import '../widgets/person_avatar.dart';
 import 'room_chat_screen.dart';
 import 'lobby_screen.dart';
 import 'story_composer_screen.dart';
@@ -2871,42 +2872,16 @@ class _UserCard extends StatelessWidget {
                 children: [
                   GestureDetector(
                     onTap: () => onAvatarTap(color),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color.withValues(alpha: 0.15),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      // SELALU UserAvatar (jangan ternary inisial↔foto):
-                      // pergantian tipe widget menyebabkan State avatar
-                      // di-dispose/dibuat-ulang tiap emission → kedip.
-                      // Inisial dirender di dalam UserAvatar.
-                      // Ring warna digambar UserAvatar hanya saat
-                      // placeholder inisial — foto tampil tanpa ring.
-                      child: ua.UserAvatar(
-                        key: ValueKey(user.uid),
-                        uid: user.uid,
-                        avatarB64: user.avatar,
-                        initial: user.initial,
-                        color: color,
-                        borderColor: color,
-                        borderWidth: 1.5,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 11,
-                      height: 11,
-                      decoration: BoxDecoration(
-                        color: _statusColor(user.status),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
+                    // PersonAvatar: satu-satunya sumber bentuk avatar orang
+                    // (foto + tint & ring WARNA GENDER + titik presence) —
+                    // SAMA PERSIS dengan header chat, profil, dll.
+                    child: PersonAvatar(
+                      uid: user.uid,
+                      name: user.nickname,
+                      gender: user.gender,
+                      avatarB64: user.avatar,
+                      size: 40,
+                      status: user.status,
                     ),
                   ),
                   if (unreadCount > 0)
@@ -3204,14 +3179,6 @@ class MyStatusSheet extends StatelessWidget {
     }
   }
 
-  /// Warna gender — sama sumbernya dengan kartu user lain (GenderAvatar).
-  Color get _genderColor =>
-      gender == 'male'
-          ? AppTheme.male
-          : gender == 'female'
-          ? AppTheme.female
-          : AppTheme.accent;
-
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -3230,30 +3197,14 @@ class MyStatusSheet extends StatelessWidget {
             // user lain (male=biru / female=pink / lain=accent).
             Row(
               children: [
-                // Avatar bulat — SAMA seperti kartu user di menu Online:
-                // wrapper circle + tint, dan UserAvatar TANPA keepRingForPhoto
-                // → ring warna hanya saat inisial; kalau ADA FOTO tampil tanpa
-                // ring/border. (Dulu keepRingForPhoto menyisakan border
-                // transparan → foto tampak tak bulat sempurna.)
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _genderColor.withValues(alpha: 0.15),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: ua.UserAvatar(
-                    key: ValueKey(uid),
-                    uid: uid,
-                    avatarB64: avatar,
-                    initial: nickname.isNotEmpty
-                        ? nickname[0].toUpperCase()
-                        : '?',
-                    color: _genderColor,
-                    borderColor: _genderColor,
-                    borderWidth: 1.5,
-                  ),
+                // PersonAvatar — SAMA seperti kartu Online & header chat
+                // (tint + ring WARNA GENDER, foto bila ada, inisial bila tidak).
+                PersonAvatar(
+                  uid: uid,
+                  name: nickname,
+                  gender: gender,
+                  avatarB64: avatar,
+                  size: 44,
                 ),
                 const SizedBox(width: 10),
                 Expanded(

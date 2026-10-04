@@ -1170,16 +1170,22 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final Uint8List? avatarBytes = _decodedAvatarBytes();
     final pageCount = (avatarBytes != null ? 1 : 0) + unlocked.length;
     if (pageCount == 0) {
-      // Tidak ada foto → tampilkan INISIAL (gaya sama dgn avatar Top Aktif:
-      // latar AppTheme.avatarBg, teks textPrimary). Berlaku saat loading
-      // maupun tidak — tidak ada lagi lingkaran abu kosong.
-      return CircleAvatar(
-        radius: 60,
-        backgroundColor: AppTheme.avatarBg,
+      // Tidak ada foto → INISIAL dengan WARNA GENDER (tint + huruf + ring),
+      // konsisten dgn avatar orang yang sama di list Online/chat/leaderboard.
+      // `avatarBg` di sini = warna gender (dihitung pemanggil).
+      return Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: avatarBg.withValues(alpha: 0.15),
+          border: Border.all(color: avatarBg, width: 2),
+        ),
+        alignment: Alignment.center,
         child: Text(
           initial,
           style: TextStyle(
-            color: AppTheme.textPrimary,
+            color: avatarBg,
             fontSize: AppGlyph.avatarInitial(120),
             fontWeight: FontWeight.w700,
           ),
@@ -1191,12 +1197,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       final b = avatarBytes;
       final img = b == null
           ? Container(
-              color: AppTheme.avatarBg,
+              color: avatarBg.withValues(alpha: 0.15),
               child: Center(
                 child: Text(
                   initial,
                   style: TextStyle(
-                    color: AppTheme.textPrimary,
+                    color: avatarBg,
                     fontSize: AppGlyph.avatarInitial(120),
                     fontWeight: FontWeight.w700,
                   ),

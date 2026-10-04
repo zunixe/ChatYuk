@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../providers/social_provider.dart';
-import '../widgets/profile_avatar.dart';
+import '../widgets/person_avatar.dart';
 import '../providers/theme_provider.dart';
 
 class FriendRequestsScreen extends StatefulWidget {
@@ -192,6 +192,8 @@ class _RequestTile extends StatelessWidget {
     final name = '${entry['nickname'] ?? 'Anon'}';
     final uid = '${entry['uid'] ?? ''}';
     final registered = entry['is_registered'] == true;
+    final gender = '${entry['gender'] ?? ''}';
+    final avatar = '${entry['avatar'] ?? ''}';
     return Container(
       margin: EdgeInsets.only(bottom: 8),
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -201,7 +203,14 @@ class _RequestTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ProfileAvatar(uid: uid, name: name, size: 40, borderRadius: 20),
+          // Warna/ring gender — konsisten dgn menu Online & chat.
+          PersonAvatar(
+            uid: uid,
+            name: name,
+            gender: gender,
+            avatarB64: avatar,
+            size: 40,
+          ),
           SizedBox(width: 10),
           Expanded(
             child: Row(
