@@ -1,5 +1,5 @@
 ﻿
-## 2026-10-06 — get_online_users: optimasi perf (BELUM APPLY — perlu Management API)
+## 2026-10-06 — get_online_users: optimasi perf (SUDAH APPLY via Management API)
 
 - **Minta user:** fix lag RPC `get_online_users` (~1.46s terukur di HP).
 - **Akar:** RPC memanggil `public.privacy_can_view()` **4x PER USER**
@@ -11,11 +11,16 @@
   friends→resolved→flags), TANPA 4x function call. Semantik SAMA dengan
   `privacy_can_view` versi 20261006030000 (presence/last_seen/profile_photo/
   about + bypass admin + mitra chat/room untuk foto). Signature tak berubah.
-- **Status: BELUM APPLY.** `check_migrations` OK; apply via Management API /
-  SQL editor (CLI `db push` HANG di Mac ini). Setelah apply → ukur ulang
-  `online.rpc` (target < 300ms).
-- **Client (SUDAH):** defer RPC berat saat buka layar (get_online_users 400ms,
-  count_room_presence 600ms, cleanup_room_presence 2s) → frame pertama bersih.
+- **STATUS: SUDAH APPLY** (2026-10-06) via Management API
+  `POST /v1/projects/{ref}/database/query`. Verifikasi: `pg_proc.prosrc`
+  memuat CTE (bukan 4x privacy_can_view).
+- **Hasil terukur (EXPLAIN ANALYZE server):** `get_online_users(null,200)`
+  **12ms** (dulu ~1460ms → **~122x lebih cepat**). `count_room_presence_by_country`
+  3.8ms, `cleanup_room_presence` 1.8ms. Compute tetap **Micro** (1GB, 2 core —
+  cukup; server-side cepat, latensi 1.46s lama = network/HP, bukan DB).
+- **Client (SUDAH, commit 2a3e578):** defer RPC berat saat buka layar
+  (get_online_users 400ms, count_room_presence 600ms, cleanup_room_presence
+  2s) → frame pertama bersih.
 
 ## 2026-10-05 — Daftar user admin: flag Fake GPS vs GPS asli
 
