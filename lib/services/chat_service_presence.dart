@@ -142,6 +142,23 @@ mixin ChatServicePresenceMx on ChatBase {
     }
   }
 
+  /// Total user (agregat): {registered, anon} dari RPC publik `user_counts`.
+  /// Untuk header menu Online. Gagal → null (UI menyembunyikan baris ini).
+  Future<({int registered, int anon})?> userCounts() async {
+    try {
+      final res = await measuredRpc(_sb, 'user_counts');
+      if (res is Map) {
+        return (
+          registered: (res['registered'] as num?)?.toInt() ?? 0,
+          anon: (res['anon'] as num?)?.toInt() ?? 0,
+        );
+      }
+    } catch (e) {
+      dlog('[chat] userCounts error: $e');
+    }
+    return null;
+  }
+
   Stream<List<UserModel>> getOnlineUsers() {
     final controller = StreamController<List<UserModel>>.broadcast();
     List<UserModel> cached = [];

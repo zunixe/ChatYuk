@@ -260,4 +260,36 @@ void main() {
       expect(provider.isHidden('hidX'), isFalse);
     });
   });
+
+  group('fetchUserCounts (header total user)', () {
+    test('sukses → total registered + anon tersimpan & notify', () async {
+      var notified = 0;
+      provider.addListener(() => notified++);
+      when(() => service.userCounts())
+          .thenAnswer((_) async => (registered: 355, anon: 136));
+
+      expect(provider.totalRegistered, isNull);
+      expect(provider.totalAnon, isNull);
+
+      await provider.fetchUserCounts();
+      expect(provider.totalRegistered, 355);
+      expect(provider.totalAnon, 136);
+      expect(notified, 1);
+    });
+
+    test('di-cache: panggil kedua tidak memicu RPC lagi', () async {
+      when(() => service.userCounts())
+          .thenAnswer((_) async => (registered: 10, anon: 2));
+      await provider.fetchUserCounts();
+      await provider.fetchUserCounts();
+      verify(() => service.userCounts()).called(1);
+    });
+
+    test('gagal (null) → tetap null, tidak crash', () async {
+      when(() => service.userCounts()).thenAnswer((_) async => null);
+      await provider.fetchUserCounts();
+      expect(provider.totalRegistered, isNull);
+      expect(provider.totalAnon, isNull);
+    });
+  });
 }

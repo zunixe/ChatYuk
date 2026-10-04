@@ -52,6 +52,23 @@ class OnlineUsersProvider extends ChangeNotifier {
   String? get error => _error;
   bool get hasLoaded => _loaded;
 
+  // ── Total user (registered + anon) untuk header menu Online ──
+  int? _totalRegistered;
+  int? _totalAnon;
+  int? get totalRegistered => _totalRegistered;
+  int? get totalAnon => _totalAnon;
+
+  /// Ambil agregat total user (sekali per sesi; angka jarang berubah).
+  /// Dipanggil saat menu Online dibuka; gagal → abaikan (header tanpa total).
+  Future<void> fetchUserCounts() async {
+    if (_totalRegistered != null) return;
+    final c = await _service.userCounts();
+    if (c == null || _disposed) return;
+    _totalRegistered = c.registered;
+    _totalAnon = c.anon;
+    notifyListeners();
+  }
+
   // ── Sembunyikan (benam) pengguna online — per akun, lokal saja ──
   // Uid yang disembunyikan tetap di `_users` (supaya saat online lagi
   // langsung jatuh ke kotak bawah, tidak pernah naik ke atas), tapi
