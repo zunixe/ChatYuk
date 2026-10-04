@@ -3058,3 +3058,24 @@ kota apa saja + jumlahnya."
 excluded-uids/dummy + placeholder onboarding). Widget `geo_stats_card.dart` di
 tab Ringkasan: bar horizontal top-10 negara + sheet kota saat diketuk.
 Provider cache `countryStats` per sesi & `cityStats` per negara.
+
+## 38. Avatar: retensi ganda bytes di memori native (2026-10-06)
+
+**Gejala:** PSS 1.0-1.35GB, native heap 573MB, sawtooth ±400MB berulang saat
+interaksi; tutup-buka app pulih. Dart heap kecil (8MB) → yang bocor adalah
+`Uint8List` native.
+
+**Akar:** foto avatar yang SAMA ditahan **2-3×** di map berbeda:
+`UserAvatar._avatarBytesByUid` + `_avatarCache` (src→bytes) +
+`ProfileAvatar._bytesCache` (60) + `_AuthorAvatar`/`_CommentAvatar._bytesCache`
+(60+60 di post_card). Masing-masing menyimpan bytes ter-decode penuh.
+
+**Fix:** SATU sumber (`_avatarBytesByUid` per-uid + `rememberAvatarBytes()` /
+`cachedUserAvatarBytes()` bersama). Hapus `_avatarCache`,
+`ProfileAvatar._bytesCache`, kedua `_bytesCache` post_card, + dead code
+(`warmUserAvatar`, `cachedUserAvatarBytesBySrc`).
+
+**Hasil di HP:** native heap 573MB → 58MB; PSS stabil ~280MB.
+
+**Aturan turunan:** bytes gambar JANGAN disimpan di >1 map. Satu map per-uid
+(`cachedUserAvatarBytes`/`rememberAvatarBytes`) + service b64 sebagai sumber.
