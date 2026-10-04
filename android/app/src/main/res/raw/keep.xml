@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  JANGAN hapus. shrinkResources (R8) terbukti bikin private chat "ngelag saat
+  menulis" di build RILIS (terukur 2026-10-06: shrinkResources=true → lag,
+  false → lancar). Akar: resource yang diakses Dinamis/by-name (bukan literal
+  R.*) di-strip → lookup gagal/fallback berulang saat runtime.
+
+  keep.xml ini memaksa SEMUA resource tetap ada sehingga shrinkResources tidak
+  membuang yang dibutuhkan runtime. Alternatifnya (isShrinkResources=false)
+  memboroskan ukuran. Jangan hapus tanpa uji ulang "ketik di private chat"
+  pada build RILIS.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@*" />

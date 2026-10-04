@@ -2893,3 +2893,43 @@ selalu layout tanpa mengukur ulang `janky(build)` harian.
 
 **Verifikasi:** analyze 0 error; prewarm terverifikasi (`[PREWARM]` log);
 `tab{N} tap→frame` tap-2+ < 16ms.
+
+---
+
+## 33. RILIS lag "ngetik di private chat" — akar: shrinkResources (2026-10-06)
+
+**Keluhan (user):** "di private chat kadang pas mau ngetik pertama kali ngelag;
+pas nulis ngelag. **Tapi pake APK release lag, debug/profile lancar**."
+
+**Diagnosa (eliminasi build variant):**
+- profile/debug: `build[p50=1.5 p90=2.6] janky=7/4000` — LANCAR.
+- release+PERF_PROBE: `p50=1.0ms janky=1/3751` — frame SANGAT sehat, tapi user
+  tetap rasakan lag → lag **bukan** di render/build Dart (tidak terlihat di
+  frame timing).
+- Uji variant (build RILIS, tes "ketik di private chat"):
+  | isMinifyEnabled | isShrinkResources | hasil |
+  |---|---|---|
+  | false | false | **lancar** |
+  | true | true | ngelag |
+  | true (+`-dontoptimize`) | true | ngelag |
+  | true | **false** | **lancar** |
+  | true | true (+`keep.xml` keep @*) | **lancar** ✅ |
+
+**Akar:** `isShrinkResources=true` (R8 resource shrinker) men-strip resource
+yang diakses **Dinamis/by-name** (bukan literal `R.*`) → saat runtime lookup
+gagal & fallback berulang (terasa "ketik pertama tersendat"). Bukan optimisasi
+bytecode (`-dontoptimize` saja tidak cukup).
+
+**Fix:**
+- `android/app/src/main/res/raw/keep.xml` → `tools:keep="@*"` (lindungi semua
+  resource dari shrink). Ukuran APK TETAP 172MB (shrink non-asset tetap jalan).
+- `android/app/build.gradle.kts`: `lint { abortOnError=false; checkReleaseBuilds=false }`
+  — lint crash internal (Kotlin `LLFirModuleData`, Flutter 3.47 + KGP 2.3.20)
+  menggagalkan build RILIS acak (tidak terkait kode). Bukan penyebab lag,
+  tapi perlu agar build stabil.
+
+**Aturan turunan:** JANGAN set `isShrinkResources=true` TANPA `keep.xml`
+keep-all — tervalidasi user "lancar" setelah fix. Uji "ketik di private chat"
+pada build RILIS setiap mengubah konfigurasi shrink/minify.
+
+**Verifikasi:** user konfirmasi lancar; APK user 172MB + admin 176MB terinstall.
