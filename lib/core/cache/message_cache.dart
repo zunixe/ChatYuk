@@ -309,13 +309,26 @@ class MessageCache {
 
   /// Memori objek (sinkron) — supaya `peekRawObj` bisa dipakai baca
   /// sebelum frame pertama (anti-glich: bintang/reaksi tampil instan).
+  ///
+  /// BOUNDED: key `starred:<chat>`/`reactions:<chat>` tumbuh per chat yang
+  /// dibuka. Tanpa cap, sesi panjang menahan objek semua chat → memori naik
+  /// terus (GC pressure = lag seiring waktu). FIFO evict kalau lewat cap.
   final Map<String, Map<String, dynamic>> _memRawObj = {};
+  static const _memRawObjMax = 60;
+
+  void _putMemRawObj(String key, Map<String, dynamic> obj) {
+    if (obj.isEmpty) return;
+    if (!_memRawObj.containsKey(key) && _memRawObj.length >= _memRawObjMax) {
+      _memRawObj.remove(_memRawObj.keys.first);
+    }
+    _memRawObj[key] = obj;
+  }
 
   Future<void> saveRawObj(String key, Map<String, dynamic> obj) async {
     try {
       if (obj.isEmpty) return;
       // Memori dulu (sinkron untuk pembaca berikutnya), lalu disk.
-      _memRawObj[key] = Map<String, dynamic>.of(obj);
+      _putMemRawObj(key, Map<String, dynamic>.of(obj));
       await _ensureDb();
       await MessageStore.instance.saveKv(key, jsonEncode(obj));
     } catch (_) {}
@@ -329,7 +342,7 @@ class MessageCache {
       if (json == null || json.isEmpty) return {};
       final obj = jsonDecode(json);
       if (obj is Map<String, dynamic>) {
-        _memRawObj[key] = obj;
+        _putMemRawObj(key, obj);
         return obj;
       }
       return {};
@@ -363,7 +376,7 @@ class MessageCache {
         if (_memRawObj.containsKey(e.key)) continue;
         try {
           final obj = jsonDecode(e.value);
-          if (obj is Map<String, dynamic>) _memRawObj[e.key] = obj;
+          if (obj is Map<String, dynamic>) _putMemRawObj(e.key, obj);
         } catch (_) {}
       }
     } catch (_) {}
