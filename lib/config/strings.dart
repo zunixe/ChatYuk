@@ -1741,6 +1741,9 @@ class S {
   String get roomPrivateLabel => isId ? 'Privat' : 'Private';
   String get btnSend => isId ? 'Kirim' : 'Send';
   String get onlineActiveUsers => isId ? 'pengguna aktif' : 'active users';
+  // Header menu Online: total user (agregat) — compact.
+  String get onlineTotalRegistered => isId ? 'terdaftar' : 'registered';
+  String get onlineTotalAnon => isId ? 'anon' : 'anon';
   String get labelVerified => isId ? 'Terverifikasi' : 'Verified';
   String get lobbyCountryHint => isId ? 'Negara / Country' : 'Country / Negara';
   String get donateCopyAddress => isId ? 'Salin Alamat ' : 'Copy Address ';

@@ -198,6 +198,11 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       try {
         context.read<StoryProvider>().refresh(silent: true);
       } catch (_) {}
+      // Total user (registered + anon) — agregat ringan, ditunda ke
+      // post-frame supaya tak berebut dengan raster pertama.
+      try {
+        context.read<OnlineUsersProvider>().fetchUserCounts();
+      } catch (_) {}
     });
     _requestGpsOnce();
   }
@@ -1414,6 +1419,22 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               seenN.add(u.nickname.toLowerCase()),
                         )
                         .length;
+                    // Baris stat COMPACT (satu baris, pemisah '·'):
+                    //   ● 10 online · 355 terdaftar · 136 anon
+                    // Angka online diberi warna online (hijau) + dot supaya
+                    // jadi fokus; total registered/anon abu-abu (sekunder).
+                    // Total disembunyikan hingga termuat (null) → tetap rapi.
+                    final reg = prov.totalRegistered;
+                    final anon = prov.totalAnon;
+                    final base = AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    );
+                    final sep = TextSpan(
+                      text: '  ·  ',
+                      style: base.copyWith(
+                        color: AppTheme.textSecondary.withValues(alpha: 0.5),
+                      ),
+                    );
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
@@ -1424,11 +1445,66 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                             color: AppTheme.textPrimary,
                           ),
                         ),
-                        Text(
-                          '$n ${s.onlineActiveUsers}',
-                          style: AppText.bodySmall.copyWith(
-                            color: AppTheme.textSecondary,
+                        const SizedBox(height: 1),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: Container(
+                                  width: 7,
+                                  height: 7,
+                                  margin: const EdgeInsets.only(right: 4),
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.online,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                              TextSpan(
+                                text: '$n',
+                                style: base.copyWith(
+                                  color: AppTheme.online,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' ${s.onlineActiveUsers}',
+                                style: base,
+                              ),
+                              if (reg != null) ...[
+                                sep,
+                                TextSpan(
+                                  text: '$reg ',
+                                  style: base.copyWith(
+                                    color: AppTheme.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: s.onlineTotalRegistered,
+                                  style: base,
+                                ),
+                              ],
+                              if (anon != null) ...[
+                                sep,
+                                TextSpan(
+                                  text: '$anon ',
+                                  style: base.copyWith(
+                                    color: AppTheme.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: s.onlineTotalAnon,
+                                  style: base,
+                                ),
+                              ],
+                            ],
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     );
