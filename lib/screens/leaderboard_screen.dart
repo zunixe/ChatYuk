@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/avatar_provider.dart';
+import '../widgets/user_avatar.dart'
+    show cachedUserAvatarBytes, rememberAvatarBytes;
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
@@ -176,7 +178,11 @@ class _RankTile extends StatelessWidget {
         children: [
           SizedBox(width: 28, child: _RankBadge(rank: rank)),
           const SizedBox(width: 4),
-          _Avatar(base64: avatar, nickname: nickname),
+          _Avatar(
+            base64: avatar,
+            nickname: nickname,
+            uid: '${entry['uid'] ?? ''}',
+          ),
         ],
       ),
       title: Row(
@@ -244,12 +250,11 @@ class _RankBadge extends StatelessWidget {
 class _Avatar extends StatefulWidget {
   final String base64;
   final String nickname;
-  const _Avatar({required this.base64, required this.nickname});
+  final String uid;
+  const _Avatar({required this.base64, required this.nickname, this.uid = ''});
 
-  // Cache hasil decode lintas-instance — cegah spawn isolate berulang saat
-  // item di-recycle/di-rebuild (dulu compute() tiap build).
-  static final Map<String, Uint8List> _cache = {};
-
+  // Bytes memakai cache BERSAMA UserAvatar (per-uid) — bukan map statis
+  // sendiri (retensi ganda). Lihat user_avatar.dart.
   @override
   State<_Avatar> createState() => _AvatarState();
 }
@@ -278,14 +283,14 @@ class _AvatarState extends State<_Avatar> {
     final b64 = widget.base64;
     if (b64.isEmpty || _started) return;
     _started = true;
-    final cached = _Avatar._cache[b64];
+    final cached = cachedUserAvatarBytes(widget.uid);
     if (cached != null) {
       if (mounted) setState(() => _bytes = cached);
       return;
     }
     final b = await compute(_decodeAvatar, b64);
     if (b == null) return;
-    if (_Avatar._cache.length < 100) _Avatar._cache[b64] = b;
+    rememberAvatarBytes(widget.uid, b);
     if (mounted) setState(() => _bytes = b);
   }
 
