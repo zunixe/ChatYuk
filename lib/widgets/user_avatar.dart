@@ -170,6 +170,12 @@ class _UserAvatarState extends State<UserAvatar> {
       );
       return;
     }
+    // Fast-path EMPTY: user tanpa foto (src kosong) yang sudah pernah
+    // diproses sebagai kosong → tak ada kerja (dulu tiap rebuild jatuh ke
+    // cabang EMPTY + log, memicu 100+ resolve/detik saat storm transisi).
+    if (src.isEmpty && _avatarLastSrcByUid[widget.uid] == '' && _provider == null) {
+      return;
+    }
     _avatarLastSrcByUid[widget.uid] = src;
     if (src.isEmpty) {
       // Kosong → pertahankan provider lama (jangan kedip ke inisial).
