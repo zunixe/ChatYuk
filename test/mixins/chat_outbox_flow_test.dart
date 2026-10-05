@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -14,10 +16,21 @@ import 'package:chatyuk/mixins/chat_outbox_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/points_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/services/points_service.dart';
 
 class MockPointsService extends Mock implements PointsService {}
+
+class TestPoints extends PointsNotifier {
+  final int deductResult;
+  TestPoints({this.deductResult = 50});
+  @override
+  PointsState build() => const PointsState();
+  @override
+  Future<int> deductBeforeSend(String _) async => deductResult;
+  @override
+  Future<void> refundChatPoint(String _) async {}
+}
 
 /// Harness `ChatOutboxMixin` — mengunci antrean offline (AGENTS.md: modul
 /// bersama private ↔ room; dulu disalin-tempel dan mulai divergen).
@@ -96,19 +109,24 @@ Future<OutboxHostState> pumpOutbox(
 
   final auth = AuthProvider(autoInit: false);
 
+  final container = ProviderContainer(
+    overrides: [
+      pointsProvider.overrideWith(() => TestPoints(deductResult: deductResult))
+    ],
+  );
+  addTearDown(container.dispose);
   await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
-        ChangeNotifierProvider<AuthProvider>.value(value: auth),
-        // PointsProvider dibuat DI DALAM pumpWidget (di zona FakeAsync) supaya
-        // timed-nya milik test ini; Provider akan dispose otomatis.
-        ChangeNotifierProvider<PointsProvider>(
-          create: (_) => PointsProvider(service: svc),
+    UncontrolledProviderScope(
+      container: container,
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LocaleProvider>(
+              create: (_) => LocaleProvider()),
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+        ],
+        child: MaterialApp(
+          home: OutboxHost(online: online, sendThrows: sendThrows),
         ),
-      ],
-      child: MaterialApp(
-        home: OutboxHost(online: online, sendThrows: sendThrows),
       ),
     ),
   );

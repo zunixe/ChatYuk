@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/chat/chat_location.dart';
 import '../utils.dart' show capitalizeFirst;
@@ -267,7 +268,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
       return;
     }
 
-    final pp = context.read<PointsProvider>();
+    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final remaining = await pp.deductBeforeSend('text');
     if (remaining < 0) {
       if (remaining == -2) {

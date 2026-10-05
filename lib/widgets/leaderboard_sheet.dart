@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/user_model.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/riverpod/social_provider.dart';
@@ -78,7 +78,7 @@ class LeaderboardSheet extends StatefulWidget {
 }
 
 class _LeaderboardSheetState extends State<LeaderboardSheet> {
-  PointsProvider get _service => context.read<PointsProvider>();
+  PointsNotifier get _service => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
   String _scope = 'weekly';
   bool _loading = true;
   List<dynamic> _entries = [];

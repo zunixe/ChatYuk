@@ -13,7 +13,7 @@ import '../models/user_photo.dart';
 import '../providers/chat_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/storage_photo_service.dart';
@@ -28,7 +28,7 @@ import 'private_chat_screen.dart';
 import 'social_list_screen.dart';
 import '../core/perf/perf_probe.dart';
 
-class UserInfoScreen extends StatefulWidget {
+class UserInfoScreen extends ConsumerStatefulWidget {
   final String userId;
   final String fallbackName;
   // Seed profil awal (mis. dari baris Top Aktif yang sudah punya nickname /
@@ -43,10 +43,10 @@ class UserInfoScreen extends StatefulWidget {
   });
 
   @override
-  State<UserInfoScreen> createState() => _UserInfoScreenState();
+  ConsumerState<UserInfoScreen> createState() => _UserInfoScreenState();
 }
 
-class _UserInfoScreenState extends State<UserInfoScreen> {
+class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   UserModel? _profile;
   bool _loading = true;
   // Gagal total (timeout/network) saat profil masih null — tampilkan
@@ -124,7 +124,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     _loadPhotos();
     _loadSocial();
     // Ambil nominal biaya buka foto untuk label harga.
-    context.read<PointsProvider>().refreshPhotoCosts();
+    ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).refreshPhotoCosts();
   }
 
   /// Fallback anti-kedip: kalau belum ada b64 dari pemanggil, coba ambil
@@ -362,7 +362,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       ).showSnackBar(SnackBar(content: Text(s.msgVerifyToUsePaid)));
       return;
     }
-    final points = context.read<PointsProvider>();
+    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -444,8 +444,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final messenger = ScaffoldMessenger.of(ctx);
     // Nelp pakai COIN (tanpa gratis). Saldo < tarif 1 menit → edukasi + topup.
     {
-      final pp = context.read<PointsProvider>();
-      if (pp.callBillingPublished) {
+      final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+      if (pp.enabled && pp.callBillingPublished) {
         final ok = await pp.ensureEnoughForCall(context, callType, s.isId);
         if (!ok) return;
       }
@@ -488,8 +488,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         notifDesc: s.callNotifActiveAudio,
         chatId: chatId,
       );
+      final pp0 = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
       session.setBillingPerMinute(
-        context.read<PointsProvider>().callCostPerMin(callType),
+        (pp0.enabled && pp0.callBillingPublished)
+            ? pp0.callCostPerMin(callType)
+            : 0,
       );
       if (!mounted) return;
       final navKey = navKeyChat(chatId);
@@ -798,9 +801,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final profile = _profile;
-    final pointsEnabled = context.select<PointsProvider, bool>(
-      (p) => p.enabled,
-    );
+    final pointsEnabled =
+        ref.watch(pointsProvider.select((p) => p.enabled));
     // Tombol sosial (pengikut/mengikuti/subscriber + ikuti/tambah teman)
     // SELALU tampil — viewer anon yang mengetuk diberi snackbar daftar
     // (guard di _toggleFollow/_addFriend). Jangan disembunyikan.

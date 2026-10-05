@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
-import '../../../providers/points_provider.dart';
+import '../../../providers/riverpod/points_provider.dart';
 
 /// Section "Cara dapat" & "Cara pakai YukCoin". Harga diambil dari provider
 /// (default sesuai migration; sumber kebenaran tetap server).
-class YukcoinHowTo extends StatelessWidget {
+class YukcoinHowTo extends ConsumerWidget {
   final S s;
   final bool v2Active;
   final bool ghostActive;
@@ -19,20 +20,12 @@ class YukcoinHowTo extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // PERF: `select` record field harga (value-type) — dulu `watch` penuh →
     // widget rebuild tiap PointsProvider notify (saldo/pricing sering).
-    final pp = context.select<PointsProvider,
-        ({
-          int callAudio,
-          int callVideo,
-          int filterGender,
-          int nearby,
-          int undo,
-          int edit,
-          int extraSlot,
-          int ghostDaily,
-        })>((p) => (
+    final pp = ref.watch(
+      pointsProvider.select(
+        (p) => (
           callAudio: p.callAudioCostPerMin,
           callVideo: p.callVideoCostPerMin,
           filterGender: p.filterGenderCost,
@@ -41,7 +34,9 @@ class YukcoinHowTo extends StatelessWidget {
           edit: p.costEditMessage,
           extraSlot: p.costExtraPhotoSlot,
           ghostDaily: p.costGhostModeDaily,
-        ));
+        ),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

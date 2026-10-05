@@ -23,8 +23,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/location_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
+import '../core/admin_gate.dart';
 import '../core/nav_guard.dart';
 import '../utils.dart';
 import '../main.dart';
@@ -158,7 +159,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   void photoOnSent(String kind) {}
 
   @override
-  void photoFirstBonus(PointsProvider pp) {}
+  void photoFirstBonus(PointsNotifier pp) {}
 
   @override
   void photoSetPreview(String base64) {
@@ -260,7 +261,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   @override
   void sendOnSentText() {
-    final pp = context.read<PointsProvider>();
+    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     if (pp.enabled) {
       pp.showPointsToast(
         context,
@@ -276,7 +277,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   late AuthProvider _auth;
   late ChatProvider _chat;
   int _lastMsgCount = 0;
-  PointsProvider? _pointsProv;
+  PointsNotifier? _pointsProv;
   Timer? _presenceTimer;
   String? _pendingPhotoBase64;
 
@@ -693,7 +694,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     _msgsHandle = msgsHandle;
     _msgsStream = msgsHandle.stream;
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
-    _pointsProv = context.read<PointsProvider>();
+    _pointsProv = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     _msgsSub = _msgsStream.listen(_onMessagesForGift);
     // Kandidat mention room global butuh daftar user online walau strip
     // horizontal sedang disembunyikan — simpan snapshot di _lastRoomUsers.
@@ -1367,6 +1368,8 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   void _showMoreMenu() {
     final s = context.read<LocaleProvider>().s;
     final isOwner = _myRole == 'owner';
+    // Admin build boleh hapus SETIAP room (server cek owner/admin ulang).
+    final canDelete = isOwner || AdminGate.enabled;
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -1385,7 +1388,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                 _confirm(s.exitGroupTitle, s.exitGroupBody, _exitGroup);
               },
             ),
-            if (isOwner)
+            if (canDelete)
               ListTile(
                 leading:
                     Icon(Icons.delete_outline_rounded, color: AppTheme.danger),
@@ -1887,7 +1890,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     final s = context.watch<LocaleProvider>().s;
     // select (bukan watch penuh): perubahan saldo/poin tidak perlu
     // me-rebuild seluruh layar room — hanya flag enabled yang dipakai.
-    final points = context.select<PointsProvider, bool>((p) => p.enabled);
+    final points = ref.watch(pointsProvider.select((p) => p.enabled));
 
     return PopScope(
       canPop: !inSelection,

@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../../config/gifts.dart';
 import '../../config/theme.dart';
 import '../../providers/locale_provider.dart';
-import '../../providers/points_provider.dart';
+import '../../providers/riverpod/points_provider.dart';
 
 /// Panel pilih gift untuk room live (ala streaming).
 /// Return `GiftPick` (gift + qty) saat user tap item.
 class RoomGiftPanel extends StatefulWidget {
   const RoomGiftPanel({super.key, required this.points});
 
-  final PointsProvider points;
+  final PointsNotifier points;
 
   static Future<GiftPick?> show(BuildContext context) {
-    final points = context.read<PointsProvider>();
+    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     return showModalBottomSheet<GiftPick>(
       context: context,
       backgroundColor: AppTheme.bgCard,

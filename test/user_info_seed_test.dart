@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/models/user_photo.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/chat_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/points_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/providers/social_provider.dart';
 import 'package:chatyuk/providers/theme_provider.dart';
 import 'package:chatyuk/config/fonts.dart';
@@ -29,6 +31,12 @@ class MockAuthService extends Mock implements AuthService {}
 class MockChatService extends Mock implements ChatService {}
 
 class MockPointsService extends Mock implements PointsService {}
+
+class TestPoints extends PointsNotifier {
+  TestPoints(MockPointsService svc) : super(service: svc);
+  @override
+  PointsState build() => const PointsState(points: 50);
+}
 
 class MockSocialService extends Mock implements SocialService {}
 
@@ -64,7 +72,6 @@ void main() {
 
   late AuthProvider auth;
   late ChatProvider chat;
-  late PointsProvider points;
   late SocialProvider social;
 
   Future<void> pumpUserInfo(
@@ -100,7 +107,6 @@ void main() {
     // yukcoinV2Status; tanpa stub → error type-NoSuchMethod (noise log).
     when(() => pointsSvc.getWallet()).thenAnswer((_) async => {});
     when(() => pointsSvc.yukcoinV2Status()).thenAnswer((_) async => {});
-    points = PointsProvider(service: pointsSvc);
 
     socialSvc = MockSocialService();
     when(() => socialSvc.mySocialStatus(any())).thenAnswer((_) async => {});
@@ -110,21 +116,29 @@ void main() {
       autoInit: false,
     );
 
+    final container = ProviderContainer(
+      overrides: [pointsProvider.overrideWith(() => TestPoints(pointsSvc))],
+    );
+    addTearDown(container.dispose);
     await t.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: auth),
-          ChangeNotifierProvider<ChatProvider>.value(value: chat),
-          ChangeNotifierProvider<PointsProvider>.value(value: points),
-          ChangeNotifierProvider<SocialProvider>.value(value: social),
-          ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
-          ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
-        ],
-        child: MaterialApp(
-          home: UserInfoScreen(
-            userId: '11111111-2222-3333-4444-555555555555',
-            fallbackName: 'Sakti',
-            initialProfile: initialProfile,
+      UncontrolledProviderScope(
+        container: container,
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<ChatProvider>.value(value: chat),
+            ChangeNotifierProvider<SocialProvider>.value(value: social),
+            ChangeNotifierProvider<ThemeProvider>(
+                create: (_) => ThemeProvider()),
+            ChangeNotifierProvider<LocaleProvider>(
+                create: (_) => LocaleProvider()),
+          ],
+          child: MaterialApp(
+            home: UserInfoScreen(
+              userId: '11111111-2222-3333-4444-555555555555',
+              fallbackName: 'Sakti',
+              initialProfile: initialProfile,
+            ),
           ),
         ),
       ),
@@ -163,7 +177,6 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
       auth.dispose();
       chat.dispose();
-      points.dispose();
       social.dispose();
     });
 
@@ -187,7 +200,6 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
       auth.dispose();
       chat.dispose();
-      points.dispose();
       social.dispose();
     });
 
@@ -225,7 +237,6 @@ void main() {
       expect(find.byType(Image), findsWidgets);
       auth.dispose();
       chat.dispose();
-      points.dispose();
       social.dispose();
     });
 
@@ -247,7 +258,6 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
       auth.dispose();
       chat.dispose();
-      points.dispose();
       social.dispose();
     });
   });

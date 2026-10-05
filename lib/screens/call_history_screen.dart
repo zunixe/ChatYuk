@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:provider/provider.dart';
 
 import '../config/strings.dart';
@@ -10,6 +12,7 @@ import '../providers/auth_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../utils.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/call_permission_dialog.dart';
@@ -159,6 +162,15 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
       );
       return;
     }
+    // Nelp pakai COIN — sama seperti dari chat/profil. Koin OFF atau
+    // billing belum publish → gratis, jangan blokir.
+    {
+      final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+      if (pp.enabled && pp.callBillingPublished) {
+        final ok = await pp.ensureEnoughForCall(context, callType, s.isId);
+        if (!ok) return;
+      }
+    }
     final perm = await ensureCallPermissions(video: callType == 'video');
     if (!mounted) return;
     if (perm != CallPermissionResult.granted) {
@@ -194,6 +206,13 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
         notifChannel: s.callNotifActiveAudio,
         notifDesc: s.callNotifActiveAudio,
         chatId: chatId,
+      );
+      // Banner tarif: 0 = sembunyi saat koin OFF / billing belum publish.
+      final pp0 = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+      session.setBillingPerMinute(
+        (pp0.enabled && pp0.callBillingPublished)
+            ? pp0.callCostPerMin(callType)
+            : 0,
       );
       if (!mounted) return;
       if (callType != 'video') {

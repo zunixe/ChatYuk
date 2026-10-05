@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:chatyuk/core/cache/offline_outbox.dart';
 import 'package:chatyuk/core/chat/chat_location.dart';
@@ -12,7 +14,7 @@ import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/points_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/utils.dart' show capitalizeFirst;
 import 'package:chatyuk/utils/mention.dart';
@@ -21,6 +23,17 @@ class MockAuthService extends Mock implements AuthService {}
 
 /// Host mixin ASLI (`ChatSendMixin` + 2 syaratnya) dengan hook tercatat —
 /// perilaku di bawah diuji lewat `sendMessage()` beneran, bukan cermin.
+class TestPoints extends PointsNotifier {
+  final int deductResult;
+  TestPoints({this.deductResult = 50});
+  @override
+  PointsState build() => const PointsState();
+  @override
+  Future<int> deductBeforeSend(String _) async => deductResult;
+  @override
+  Future<void> refundChatPoint(String _) async {}
+}
+
 class SendHost extends StatefulWidget {
   final AuthProvider auth;
   const SendHost({super.key, required this.auth});
@@ -136,7 +149,7 @@ class SendHostState extends State<SendHost>
   @override
   void photoOnSent(String kind) {}
   @override
-  void photoFirstBonus(PointsProvider pp) {}
+  void photoFirstBonus(PointsNotifier pp) {}
   @override
   void photoSetPreview(String base64) {}
 
@@ -290,15 +303,22 @@ void main() {
       // `sendMessage` berhenti di guard `profile == null` sebelum dispatch.
       if (withProfile) auth.seedProfileForTest(profileForTest());
       addTearDown(auth.dispose);
+      final container = ProviderContainer(
+        overrides: [pointsProvider.overrideWith(TestPoints.new)],
+      );
+      addTearDown(container.dispose);
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<AuthProvider>.value(value: auth),
-            ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider(),
-            ),
-          ],
-          child: MaterialApp(home: Scaffold(body: SendHost(auth: auth))),
+        UncontrolledProviderScope(
+          container: container,
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<AuthProvider>.value(value: auth),
+              ChangeNotifierProvider<LocaleProvider>(
+                create: (_) => LocaleProvider(),
+              ),
+            ],
+            child: MaterialApp(home: Scaffold(body: SendHost(auth: auth))),
+          ),
         ),
       );
       await tester.pump();

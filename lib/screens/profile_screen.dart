@@ -21,7 +21,7 @@ import '../models/user_model.dart';
 import '../providers/riverpod/device_info_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../utils.dart';
@@ -83,14 +83,14 @@ Map<String, String>? _processPhotoWithPreview(Uint8List bytes) {
   return {'full': full, 'preview': previewB64};
 }
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _uploading = false;
 
   List<UserPhoto> _photos = [];
@@ -123,7 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     // Onboarding + daily login toast
     Future.microtask(() {
-      final pp = context.read<PointsProvider>();
+      final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
       final s = context.read<LocaleProvider>().s;
       pp.refreshEnabled().then((_) => pp.showOnboardingIfNeeded(context, s));
     });
@@ -325,7 +325,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Beli +5 slot foto tambahan (YukCoin v2). Refresh limit setelahnya.
   Future<void> _buyExtraSlots() async {
-    final pp = context.read<PointsProvider>();
+    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final s = context.read<LocaleProvider>().s;
     final ok = await showDialog<bool>(
       context: context,
@@ -953,16 +953,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // refresh selesai — sering menabrak frame tap tab → jank (diukur 2026-09-30:
     // tab3 = tab paling sering jank, max 21ms). Aturan §2.3: halaman penuh WAJIB
     // `select` per field untuk provider yang sering berubah.
-    final pointsEnabled = context.select<PointsProvider, bool>(
-      (p) => p.enabled,
-    );
-    final pointsValue = context.select<PointsProvider, int>((p) => p.points);
-    final extraPhotoSlots = context.select<PointsProvider, int>(
-      (p) => p.extraPhotoSlots,
-    );
-    final yukcoinV2Active = context.select<PointsProvider, bool>(
-      (p) => p.yukcoinV2Active,
-    );
+    final pointsEnabled =
+        ref.watch(pointsProvider.select((p) => p.enabled));
+    final pointsValue =
+        ref.watch(pointsProvider.select((p) => p.points));
+    final extraPhotoSlots =
+        ref.watch(pointsProvider.select((p) => p.extraPhotoSlots));
+    final yukcoinV2Active =
+        ref.watch(pointsProvider.select((p) => p.yukcoinV2Active));
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -1599,7 +1597,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     onPressed: _uploading ? null : _buyExtraSlots,
                                     icon: Icon(Icons.add_circle_outline, size: 16),
                                     label: Text(
-                                      '${s.extraPhotoBuy} · ${context.read<PointsProvider>().costExtraPhotoSlot}',
+                                      '${s.extraPhotoBuy} · ${ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).costExtraPhotoSlot}',
                                       style: AppText.bodySmall,
                                     ),
                                     style: TextButton.styleFrom(

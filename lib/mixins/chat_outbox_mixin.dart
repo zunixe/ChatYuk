@@ -2,12 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
 import '../utils/mention.dart';
@@ -138,7 +139,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
     if (entries.isEmpty) return;
     outboxIsFlushing = true;
     try {
-      final pp = context.read<PointsProvider>();
+      final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
       var sent = 0;
       for (final e in entries) {
         if (!mounted || !outboxIsOnline) break;

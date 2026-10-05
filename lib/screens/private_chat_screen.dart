@@ -17,7 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/location_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import 'story_camera_capture_screen.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../core/cache/message_cache.dart';
@@ -260,12 +260,12 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   // ── YukCoin v2 (berbayar) ──
   @override
-  bool get chatYukcoinV2Active => context.read<PointsProvider>().yukcoinV2Active;
+  bool get chatYukcoinV2Active => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).yukcoinV2Active;
 
   @override
   Future<bool> chatChargeYukcoin(String feature, int cost, String ref) async {
     try {
-      await context.read<PointsProvider>().spendYukcoin(feature, cost, ref: ref);
+      await ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).spendYukcoin(feature, cost, ref: ref);
       return true;
     } catch (e) {
       dlog('[PRIVATE] chargeYukcoin error: $e');
@@ -277,7 +277,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   Future<Map<String, dynamic>> chatUndoMessage(String id) async {
     final n = int.tryParse(id);
     if (n == null) return {};
-    return context.read<PointsProvider>().undoMessage(n);
+    return ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).undoMessage(n);
   }
 
   @override
@@ -472,7 +472,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   }
 
   @override
-  void photoFirstBonus(PointsProvider pp) {
+  void photoFirstBonus(PointsNotifier pp) {
     // Bonus "first photo" DIHAPUS (overhaul coin: tidak ada poin gratis).
   }
 
@@ -1529,7 +1529,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   void _maybeNewChatBonus() {
     if (_newChatBonusClaimed) return;
     _newChatBonusClaimed = true;
-    context.read<PointsProvider>().newChatBonus(widget.otherUid);
+    ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).newChatBonus(widget.otherUid);
   }
 
   /// Kandidat mention private 1:1 — hanya lawan bicara. `@all` tidak pernah.
@@ -1726,7 +1726,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   Future<void> _showSendCoinDialog() async {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final points = context.read<PointsProvider>();
+    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
 
     if (!auth.canUsePaid) {
       showChatSnack(
@@ -1751,7 +1751,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   Future<void> _sendCoins(int amount) async {
     final s = context.read<LocaleProvider>().s;
     final chat = context.read<ChatProvider>();
-    final points = context.read<PointsProvider>();
+    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final res = await chat.sendCoins(widget.chatId, widget.otherUid, amount);
@@ -1776,7 +1776,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   Future<void> _sendGift(String giftId, String name, int coins) async {
     final s = context.read<LocaleProvider>().s;
     final chat = context.read<ChatProvider>();
-    final points = context.read<PointsProvider>();
+    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final res = await chat.sendGift(widget.chatId, widget.otherUid, giftId);
@@ -1800,7 +1800,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   Future<void> _showGiftPicker() async {
     final s = context.read<LocaleProvider>().s;
-    final points = context.read<PointsProvider>();
+    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final auth = context.read<AuthProvider>();
 
     if (!auth.canUsePaid) {
@@ -1949,17 +1949,16 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       if (cityPart.isNotEmpty && cityPart != countryPart) cityPart,
       if (countryPart.isNotEmpty) countryPart,
     ].where((e) => e.isNotEmpty).join(', ');
-    final points = context.select<PointsProvider, int>((p) => p.points);
-    final pointsEnabled = context.select<PointsProvider, bool>(
-      (p) => p.enabled,
-    );
+    final points = ref.watch(pointsProvider.select((p) => p.points));
+    final pointsEnabled =
+        ref.watch(pointsProvider.select((p) => p.enabled));
 
     // Show online bonus toast jika ada yang nunggu (sekali per buka chat).
     if (!_bonusToastScheduled) {
       _bonusToastScheduled = true;
       Future.microtask(() {
         if (!mounted) return;
-        final pp = context.read<PointsProvider>();
+        final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
         pp.checkAndShowOnlineToast(context, s.isId);
         pp.checkAndShowStreakToast(context, s.isId);
       });
@@ -2896,8 +2895,8 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     // Nelp pakai COIN (tanpa gratis). Bila saldo < tarif 1 menit → edukasi +
     // topup, batalkan. Hanya untuk penelepon (isCaller).
     {
-      final pp = context.read<PointsProvider>();
-      if (pp.callBillingPublished) {
+      final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+      if (pp.enabled && pp.callBillingPublished) {
         final ok = await pp.ensureEnoughForCall(context, callType, s.isId);
         if (!ok) return;
       }
@@ -2937,8 +2936,12 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
         chatId: widget.chatId,
       );
       // Tarif per menit untuk banner (server kirim ulang tiap tick).
+      // Koin OFF (toggle admin) atau billing belum publish → 0 = banner sembunyi.
+      final pp0 = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
       session.setBillingPerMinute(
-        context.read<PointsProvider>().callCostPerMin(callType),
+        (pp0.enabled && pp0.callBillingPublished)
+            ? pp0.callCostPerMin(callType)
+            : 0,
       );
       if (!mounted) return;
       if (mode == CallMode.fullscreen) {

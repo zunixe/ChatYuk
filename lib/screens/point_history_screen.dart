@@ -1,10 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/app_flavor.dart';
 import '../core/admin_gate.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../config/theme.dart';
 import 'point_history/widgets/history_tile.dart';
 import 'point_history/widgets/yukcoin_header.dart';
@@ -15,15 +16,15 @@ import '../utils.dart';
 
 /// Halaman pusat YukCoin: saldo, cara dapat, cara pakai, dan riwayat.
 /// Dulu hanya "History Poin" — sekarang diperluas jadi hub YukCoin.
-class PointHistoryScreen extends StatefulWidget {
+class PointHistoryScreen extends ConsumerStatefulWidget {
   const PointHistoryScreen({super.key});
 
   @override
-  State<PointHistoryScreen> createState() => _PointHistoryScreenState();
+  ConsumerState<PointHistoryScreen> createState() => _PointHistoryScreenState();
 }
 
-class _PointHistoryScreenState extends State<PointHistoryScreen> {
-  PointsProvider get _service => context.read<PointsProvider>();
+class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
+  PointsNotifier get _service => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
   bool _loading = true;
   List<Map<String, dynamic>> _items = [];
 
@@ -60,17 +61,17 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
     // PERF: `watch` penuh → seluruh riwayat rebuild tiap PointsProvider
     // notify (refresh berkala). `select` snapshot nilai yang dirender;
     // aksi dipanggil via `read`.
-    final pointsSnap = context
-        .select<PointsProvider,
-            ({int total, bool topup, bool v2, bool ghost})>(
-          (p) => (
-            total: p.points,
-            topup: p.topupPathOpen,
-            v2: p.yukcoinV2Active,
-            ghost: p.ghostMode,
-          ),
-        );
-    final points = context.read<PointsProvider>();
+    final pointsSnap = ref.watch(
+      pointsProvider.select(
+        (p) => (
+          total: p.points,
+          topup: p.topupPathOpen,
+          v2: p.yukcoinV2Active,
+          ghost: p.ghostMode,
+        ),
+      ),
+    );
+    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     return Scaffold(
       appBar: AppBar(title: Text(s.yukcoinTitle)),
       body: _loading
