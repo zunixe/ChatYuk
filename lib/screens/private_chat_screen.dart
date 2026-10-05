@@ -13,7 +13,8 @@ import '../providers/auth_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
-import '../providers/connectivity_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/points_provider.dart';
@@ -712,8 +713,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   // Antrean offline: id pending yang belum terkirim ke server (centang-1).
   // Terkirim saat koneksi pulih → centang-2 (biru bila dibaca).
   final Set<String> _queuedIds = {};
-  ConnectivityProvider? _connProv;
-  VoidCallback? _connListener;
+  bool _connOnline = true;
+  ProviderSubscription<bool>? _connSub;
   bool _flushingOutbox = false;
   // LayerLink per pesan — dipakai anchor bar reaksi ala WA tepat di atas
   // bubble. CompositedTransformFollower ikut mengikuti bubble saat list
@@ -1113,11 +1114,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     });
     // Antrean offline: koneksi pulih → kirim otomatis; muat sisa antrean
     // sesi lalu (app sempat ditutup saat offline).
-    _connProv = context.read<ConnectivityProvider>();
-    _connListener = () {
-      if (mounted && (_connProv?.online ?? false)) flushOutbox();
-    };
-    _connProv!.addListener(_connListener!);
+    _connOnline = ProviderScope.containerOf(context, listen: false)
+        .read(connectivityProvider);
+    _connSub = ProviderScope.containerOf(context, listen: false)
+        .listen<bool>(connectivityProvider, (prev, next) {
+      _connOnline = next;
+      if (mounted && next) flushOutbox();
+    });
     loadQueuedForChat();
   }
 
@@ -1197,11 +1200,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     ChatTextScale.notifier.removeListener(_onFontScaleChanged);
     _pendingConfirmTimer?.cancel();
     try {
-      final l = _connListener;
-      if (l != null) _connProv?.removeListener(l);
+      _connSub?.close();
     } catch (_) {}
-    _connListener = null;
-    _connProv = null;
+    _connSub = null;
     CallProvider.instance.removeListener(_onCallChanged);
     // Keluar chat TIDAK memutus panggilan — call lanjut berjalan dan notifikasi
     // ongoing "sedang call" tetap tampil. Tap notifikasi → kembali ke chat ini.
@@ -1560,7 +1561,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   }
 
   // ── Antrean offline: implementasi BERSAMA di ChatOutboxMixin ──
-  bool get outboxIsOnline => _connProv?.online ?? true;
+  bool get outboxIsOnline => _connOnline;
 
   @override
   String get outboxKind => 'private';

@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../providers/connectivity_provider.dart';
+import '../providers/riverpod/connectivity_provider.dart';
 
 /// Kategori kegagalan operasi admin.
 ///
@@ -101,10 +101,8 @@ bool guardOfflineCtx(
 ) {
   bool online = true;
   try {
-    online = Provider.of<ConnectivityProvider>(
-      context,
-      listen: false,
-    ).online;
+    online = ProviderScope.containerOf(context, listen: false)
+        .read(connectivityProvider);
   } catch (_) {
     // Provider tidak tersedia (test/preview) → jangan blokir.
   }

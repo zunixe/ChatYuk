@@ -1,24 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
-import '../providers/connectivity_provider.dart';
+import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
 
 /// Banner "tidak ada koneksi" global — tampil di atas semua layar via
 /// MaterialApp.builder saat connectivity none. Non-blocking (IgnorePointer
 /// saat hidden) + animasi slide agar tidak mengganggu.
-class OfflineBanner extends StatelessWidget {
+class OfflineBanner extends ConsumerWidget {
   final Widget child;
   const OfflineBanner({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
-    // select (bukan watch): banner hanya peduli field `online` — perubahan
-    // field lain di ConnectivityProvider tidak perlu mer-rebuild seluruh
-    // subtree aplikasi (banner membungkus semua halaman).
-    final online = context.select<ConnectivityProvider, bool>(
-      (c) => c.online,
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    // ref.watch(connectivityProvider) — hanya bool `online`. Perubahan status
+    // lain tak ada (state = bool) → subtree hanya rebuild saat online berubah.
+    final online = ref.watch(connectivityProvider);
     return Stack(
       children: [
         child,

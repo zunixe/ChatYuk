@@ -2,10 +2,11 @@ import 'dart:async';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-import 'package:chatyuk/providers/connectivity_provider.dart';
+import 'package:chatyuk/providers/riverpod/connectivity_provider.dart';
 
 /// Fake platform connectivity: hasil `check` + stream event dikendalikan test.
 class FakeConnectivityPlatform extends ConnectivityPlatform
@@ -47,60 +48,62 @@ void main() {
 
   test('nilai awal online dari checkConnectivity', () async {
     fake.initial = [ConnectivityResult.wifi];
-    final p = ConnectivityProvider();
-    expect(p.online, isTrue); // default optimistis sebelum check selesai
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    var online = c.read(connectivityProvider);
+    c.listen<bool>(connectivityProvider, (_, n) => online = n, fireImmediately: true);
+    expect(online, isTrue); // default optimistis sebelum check selesai
     await Future<void>.delayed(Duration.zero);
-    expect(p.online, isTrue);
-    p.dispose();
+    expect(c.read(connectivityProvider), isTrue);
   });
 
-  test('checkConnectivity = none → offline + notify', () async {
+  test('checkConnectivity = none → offline', () async {
     fake.initial = [ConnectivityResult.none];
-    final p = ConnectivityProvider();
-    var notified = 0;
-    p.addListener(() => notified++);
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
     await Future<void>.delayed(Duration.zero);
-    expect(p.online, isFalse);
-    expect(notified, greaterThanOrEqualTo(1));
-    p.dispose();
+    expect(c.read(connectivityProvider), isFalse);
   });
 
   test('event none → offline, lalu wifi → online', () async {
     fake.initial = [ConnectivityResult.wifi];
-    final p = ConnectivityProvider();
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
     await Future<void>.delayed(Duration.zero);
-    expect(p.online, isTrue);
+    expect(c.read(connectivityProvider), isTrue);
 
     fake.emit([ConnectivityResult.none]);
     await Future<void>.delayed(Duration.zero);
-    expect(p.online, isFalse);
+    expect(c.read(connectivityProvider), isFalse);
 
     fake.emit([ConnectivityResult.mobile]);
     await Future<void>.delayed(Duration.zero);
-    expect(p.online, isTrue);
-    p.dispose();
+    expect(c.read(connectivityProvider), isTrue);
   });
 
   test('event sama berulang → tidak notify dobel', () async {
     fake.initial = [ConnectivityResult.wifi];
-    final p = ConnectivityProvider();
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
     await Future<void>.delayed(Duration.zero);
     var notified = 0;
-    p.addListener(() => notified++);
+    c.listen<bool>(connectivityProvider, (_, __) => notified++);
 
-    fake.emit([ConnectivityResult.wifi]);
     fake.emit([ConnectivityResult.wifi]);
     await Future<void>.delayed(Duration.zero);
     expect(notified, 0);
-    p.dispose();
   });
 
   test('dispose membatalkan subscription', () async {
     fake.initial = [ConnectivityResult.wifi];
-    final p = ConnectivityProvider();
+    final c = ProviderContainer();
+    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
     await Future<void>.delayed(Duration.zero);
-    p.dispose();
-    // Emit setelah dispose tidak boleh melempar / notify.
+    c.dispose();
+    // Emit setelah dispose tidak boleh melempar.
     fake.emit([ConnectivityResult.none]);
     await Future<void>.delayed(Duration.zero);
   });
@@ -109,28 +112,30 @@ void main() {
     // Regresi: cek awal menangkap `none` sesaat lalu tak ada event lagi →
     // banner offline nyangkut selamanya. revalidate() harus menyembuhkan.
     fake.initial = [ConnectivityResult.none];
-    final p = ConnectivityProvider();
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
     await Future<void>.delayed(Duration.zero);
-    expect(p.online, isFalse);
+    expect(c.read(connectivityProvider), isFalse);
 
     // Jaringan pulih tapi TIDAK ada event perubahan — hanya revalidate.
     fake.initial = [ConnectivityResult.wifi];
-    p.revalidate();
+    c.read(connectivityProvider.notifier).revalidate();
     await Future<void>.delayed(Duration.zero);
-    expect(p.online, isTrue);
-    p.dispose();
+    expect(c.read(connectivityProvider), isTrue);
   });
 
   test('revalidate nilai sama → tidak notify', () async {
     fake.initial = [ConnectivityResult.wifi];
-    final p = ConnectivityProvider();
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
     await Future<void>.delayed(Duration.zero);
     var notified = 0;
-    p.addListener(() => notified++);
+    c.listen<bool>(connectivityProvider, (_, __) => notified++);
 
-    p.revalidate();
+    c.read(connectivityProvider.notifier).revalidate();
     await Future<void>.delayed(Duration.zero);
     expect(notified, 0);
-    p.dispose();
   });
 }

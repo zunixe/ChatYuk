@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../providers/admin_provider.dart';
 import '../config/regions.dart';
@@ -17,7 +18,7 @@ import 'admin_dummy/widgets/dummy_story_sheet.dart';
 import 'admin_dummy/widgets/dummy_card.dart';
 import 'admin_dummy/widgets/dummy_form_sheet.dart';
 import '../providers/locale_provider.dart';
-import '../providers/connectivity_provider.dart';
+import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils.dart';
 import '../core/ui/scroll_pagination.dart';
@@ -461,7 +462,8 @@ class _AdminDummyTabState extends State<AdminDummyTab>
   bool _guardOffline(S s) {
     bool online = true;
     try {
-      online = context.read<ConnectivityProvider>().online;
+      online = ProviderScope.containerOf(context, listen: false)
+          .read(connectivityProvider);
     } catch (_) {}
     return blockIfOffline(
       online,

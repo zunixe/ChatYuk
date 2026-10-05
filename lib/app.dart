@@ -29,7 +29,7 @@ import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/image_cache_hygiene.dart';
 import 'models/user_model.dart';
-import 'providers/connectivity_provider.dart';
+import 'providers/riverpod/connectivity_provider.dart';
 import 'providers/call_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
 import 'providers/theme_provider.dart';
@@ -109,7 +109,7 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => UpdateProvider.instance),
         ChangeNotifierProvider(create: (_) => localeProvider),
-        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+        // ConnectivityProvider: MIGRASI ke Riverpod (connectivityProvider).
         ChangeNotifierProvider.value(value: CallProvider.instance),
       ],
       // Selector hanya pada appFontFamily → MaterialApp hanya rebuild saat
@@ -811,7 +811,7 @@ class _MainNavState extends ConsumerState<_MainNav>
       // menangkap `none` sesaat lalu tak ada event lagi → banner offline
       // nyangkut + kirim selalu masuk antrean padahal internet ada.
       try {
-        context.read<ConnectivityProvider>().revalidate();
+        ref.read(connectivityProvider.notifier).revalidate();
       } catch (_) {}
       // Catat ulang Device ID tiap resume — TIDAK tergantung guard goOnline
       // (invisible/banned) supaya device selalu tercatat di admin. Fire-and-
