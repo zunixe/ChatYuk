@@ -101,6 +101,15 @@ class PostPhotoCache {
 
   Uint8List? _memGet(String path) => _mem[path];
 
+  /// Buang SEMUA thumbnail dari RAM saja (file disk tetap). Dipakai saat OS
+  /// memberi sinyal memory-pressure: thumbnail timeline bisa menahan 30MB
+  /// (gambar RGBA/JPEG) → melepasnya mencegah GC storm saat app lama dipakai.
+  /// Gambar dibaca ulang dari disk (murah) saat kartu di-build lagi.
+  void trimMemCache() {
+    _mem.clear();
+    _memBytes = 0;
+  }
+
   Future<Directory> _folder() async {
     final dir = await getApplicationDocumentsDirectory();
     final folder = Directory('${dir.path}/$_folderName');

@@ -24,6 +24,8 @@ import 'providers/social_provider.dart';
 import 'core/admin_gate.dart';
 import 'providers/locale_provider.dart';
 import 'core/cache/message_cache.dart';
+import 'core/cache/photo_cache.dart';
+import 'core/cache/post_photo_cache.dart';
 import 'core/media/image_cache_hygiene.dart';
 import 'models/user_model.dart';
 import 'providers/connectivity_provider.dart';
@@ -771,11 +773,27 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
           : DateTime.now().difference(_pausedAt!);
       _pausedAt = null;
       if (pausedFor != null && pausedFor.inSeconds >= 60) {
+        // Background lama → buang SEMUA cache RAM (pesan + foto) + bitmap.
         try {
           MessageCache.instance.trimMemCache();
         } catch (_) {}
         try {
+          PhotoCache.instance.trimMemCache();
+        } catch (_) {}
+        try {
+          PostPhotoCache.instance.trimMemCache();
+        } catch (_) {}
+        try {
           ImageCacheHygiene.clearAll();
+        } catch (_) {}
+      } else if (pausedFor != null && pausedFor.inSeconds >= 15) {
+        // Background sedang (15-60 dtk) → trim RAM foto saja (paling besar,
+        // paling murah dimuat ulang). Pesan tetap di RAM supaya chat instan.
+        try {
+          PhotoCache.instance.trimMemCache();
+        } catch (_) {}
+        try {
+          PostPhotoCache.instance.trimMemCache();
         } catch (_) {}
       }
       // PERF: hangatkan koneksi HTTP Supabase DULUAN (fire-and-forget).
@@ -822,6 +840,31 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
         UpdateProvider.instance.check(navigatorKey: navigatorKey);
       });
     }
+  }
+
+  /// PERF (memory pressure): OS memberi tahu memori menipis. Ini satu-satunya
+  /// sinyal LANGSUNG dari sistem (beda dari lifecycle paused/resumed) �?"
+  /// tanpa handler ini cache hanya dibersihkan saat app di-background >=60 dtk,
+  /// jadi user yang memakai HP nonstop tidak pernah di-trim  memori naik
+  /// terus  GC storm  "ngetik ngelag setelah dipakai lama".
+  ///
+  /// Yang dibuang: SEMUA cache RAM (disk tetap)  pesan/foto dibaca ulang dari
+  /// SQLite/AES saat dibuka lagi (murah). TIDAK menyentuh data yang benar-benar
+  /// dibutuhkan sekarang (list pesan aktif tetap dirender dari stream).
+  @override
+  void didHaveMemoryPressure() {
+    try {
+      MessageCache.instance.trimMemCache();
+    } catch (_) {}
+    try {
+      PhotoCache.instance.trimMemCache();
+    } catch (_) {}
+    try {
+      PostPhotoCache.instance.trimMemCache();
+    } catch (_) {}
+    try {
+      ImageCacheHygiene.clearAll();
+    } catch (_) {}
   }
 
   /// Pindah tab utama (juga dipanggil NavProvider dari screen lain).

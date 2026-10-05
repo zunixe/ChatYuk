@@ -1109,6 +1109,7 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-30 | **Diagnosa sisa jank tap** (§2.17) — 4 eksperimen (diam/scroll/tap-cepat, n=192): frame render cuma **8ms** tapi tap→frame 16-18ms → jank = **frame scheduling (vsync)**, bukan build/raster/tab. Hipotesis raster-foto & alokasi `_imagePaths` GUGUR terukur (cache di-revert) | Bukan bug kode — batas platform. "Kadang delay" = frame pacing; jangan kejar dgn ubah build widget |
 | 2026-09-30 | **Memory audit** — PSS cold 233 MB → aktif puncak 267 MB → idle 60s **245 MB** → HOME 185 MB (kembali turun) | **Sehat, tanpa leak** (GC normal); PSS konsisten dgn §13 (~225 MB) |
 | 2026-09-30 | **QA Perf TAB TIMELINE** (§2.18) — ukur feed/komentar/like/composer (build probe); tambah metrik `timeline.getPost`/`timeline.createPost` + `buildCount('PostDetail')` | Semua jalur **normal**: `timeline.rpc` 118-211ms, komentar buka #2-3 = 0 RPC (cache §12.1 jalan), like 122-157ms, `build Timeline`=3, jank 0-2. Timeline SEHAT |
+| 2026-10-06 | **Batas memori private chat** (§19) — `didHaveMemoryPressure` (satu-satunya sinyal OS langsung), `MessageCache._memRawList` di-cap 20, mem-cache pesan simpan salinan strip base64 foto (path voice/video tetap), `trimMemCache()` publik di Photo/PostPhoto cache + indeks messageId→chatKey untuk purge presisi, prune `viewOnceStates` expired, memo ukur teks bubble (§3.1), setState bintang sekali (bukan per-id), guard alokasi `[...msgs, ..._pending]`, tile "Bersihkan Cache" + auto-trim startup/resume 15-60s | Konstruksi (build+test lolos); target: "ngetik ngelag setelah dipakai lama" hilang karena RAM tidak lagi mengakumulasi base64 foto |
 
 ### 2.18 QA Perf TAB TIMELINE (2026-09-30)
 
@@ -3176,3 +3177,63 @@ cache-dulu + warm-up).
 **Aturan turunan:** RPC read-idempoten yang hasilnya jarang berubah WAJIB
 cache TTL + invalidate berbasis-aksi (bukan andalkan waktu). Buka layar
 berulang tidak boleh menembak RPC yang sama tanpa cache.
+
+---
+
+## 19. Batas memori private chat / auto-clear cache (2026-10-06)
+
+### Konteks
+Keluhan: "private chat masih ngelag / kadang delay" setelah app dipakai lama.
+Audit menemukan akumulasi memori (bukan bug render): beberapa cache menyimpan
+base64 foto penuh di RAM tanpa batas yang membuat GC storm seiring waktu, dan
+TIDAK ADA handler `didHaveMemoryPressure` — jadi cache hanya dibersihkan kalau
+app di-background >=60 dtk (user yang pakai nonstop tidak pernah di-trim).
+
+### Akar masalah (terverifikasi baca kode)
+1. `MessageCache._memCache` (8 chat) menyimpan list `_current` yang SAMA
+   (shared ref) dengan sesi aktif — termasuk base64 foto hasil decrypt
+   `PhotoCache` (bisa ~2MB/foto). 8 chat penuh foto = ratusan MB di RAM.
+2. `MessageCache._memRawList` **unbounded** (beda dari `_memRawObj` cap 60).
+3. `PhotoCache._memCache`/`_thumbMem` di-key `messageId` saja → `clearChat`
+   tidak bisa purge RAM presisi (hanya file disk).
+4. Set `_confirmedPhotoIds/_confirmedVoiceIds/_confirmedVideoIds/
+   _confirmedTextIds` di layar chat tumbuh sepanjang sesi tanpa trim.
+5. `viewOnceStates` (global Map) menyimpan `ViewOnceTick` (Timer + DecodedImage)
+   selamanya — `dispose()` sengaja tidak dipanggil.
+6. `MessageTextWithTime.build` menjalankan `TextPainter..layout()` +
+   `computeLineMetrics()` sinkron tiap bubble di-rebuild.
+
+### Perbaikan
+| # | Perubahan | File |
+|---|---|---|
+| 1 | `didHaveMemoryPressure()` → trim Message/Photo/PostPhoto RAM + `ImageCacheHygiene.clearAll()` | `lib/app.dart` |
+| 2 | `_memRawList` di-cap FIFO 20 (pola `_memRawObj`) | `core/cache/message_cache.dart` |
+| 3 | Mem-cache pesan simpan SALINAN `_slimForMem`: base64 foto dibuang, path voice/video & teks tetap. Sesi aktif tidak dimutasi (pakai `copyWith`) | `core/cache/message_cache.dart` |
+| 4 | `_trimConfirmed` cap 200 per set | `screens/private_chat_screen.dart` |
+| 5 | `PhotoCache.trimMemCache()` + indeks `_memChatOf`/`_thumbChatOf` untuk purge RAM presisi di `clearChat` | `core/cache/photo_cache.dart` |
+| 6 | `PostPhotoCache.trimMemCache()` | `core/cache/post_photo_cache.dart` |
+| 7 | Prune `ViewOnceTick` expired saat dispose (guard `isAdminView`, cek `identical`) | `widgets/private_chat_message.dart` |
+| 8 | Memo `_textMeasureMemo` (cap 300) untuk `contentW`/`timeBottom` | `widgets/private_chat_message.dart` |
+| 9 | `starSelected`: 1 setState (bukan per-id) | `mixins/chat_selection_mixin.dart` |
+| 10 | `all = _pending.isEmpty ? msgs : [...]` (hindari alokasi list) | `screens/private_chat_screen.dart` |
+| 11 | Tile "Bersihkan Cache" (konfirmasi + RAM sinkron + disk lama) | `screens/settings_screen.dart`, `config/strings.dart` |
+| 12 | Auto-trim startup (RAM basis nol) + resume 15-60s (foto RAM), >=60s (semua) | `lib/main.dart`, `lib/app.dart` |
+
+### Kenapa BUKAN `clearAll()` periodik
+Auto-clear penuh tiap saat membuat chat **lebih lambat** (harus baca + decrypt
+ulang dari SQLCipher). Pendekatan dipilih: **evict reaktif bertingkat**
+(memory pressure > idle 15-60s > idle >=60s > LRU cap), plus tombol manual
+untuk user. RAM dibuang, disk tetap; foto/pesan dibaca ulang murah dari disk.
+
+### Test
+- `test/cache_memory_bounds_test.dart` (baru, 7 test): cap `_memRawList`,
+  strip base64 foto, path voice tetap, `trimMemCache` publik aman.
+- `flutter analyze lib` → 0 error/warning (312 info pra-ada).
+- `flutter test` → +1799 -3; 3 gagal = **pre-existing** (dibuktikan via
+  `git stash`: `storage_paths_test` + 2 `story_provider_test`, tidak terkait).
+
+### Aturan turunan
+Cache RAM yang menyimpan blob besar (base64 foto) WAJIB: (a) di-cap, (b) punya
+`trimMemCache()` publik, (c) dipanggil dari `didHaveMemoryPressure` &
+background-idle. JANGAN simpan base64 penuh di mem-cache lintas-chat — simpan
+path/thumb, baca full dari disk saat dibutuhkan.

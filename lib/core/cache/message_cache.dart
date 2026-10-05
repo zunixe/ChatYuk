@@ -6,6 +6,7 @@ import '../../utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/message_model.dart';
+import '../../services/storage_photo_service.dart';
 import 'message_store.dart';
 
 
@@ -264,13 +265,26 @@ class MessageCache {
   /// Snapshot in-memory list chat terakhir (per key) — supaya UI bisa
   /// membaca data (mis. `lastReadAt` untuk centang-2) TANPA await/decrypt:
   /// satu hop async yang hilang = centang-2 terisi sejak frame pertama.
+  ///
+  /// BOUNDED: dulu unbounded  key `chats_list_v1_<uid>` (per akun/device)
+  /// + key lain menumpuk sepanjang sesi  memori naik terus (GC pressure =
+  /// lag seiring waktu). FIFO evict kalau lewat cap (pola sama `_memRawObj`).
   final Map<String, List<Map<String, dynamic>>> _memRawList = {};
+  static const _memRawListMax = 20;
+
+  void _putMemRawList(String key, List<Map<String, dynamic>> rows) {
+    _memRawList.remove(key);
+    _memRawList[key] = rows;
+    while (_memRawList.length > _memRawListMax) {
+      _memRawList.remove(_memRawList.keys.first);
+    }
+  }
 
   Future<void> saveRawList(String key, List<Map<String, dynamic>> rows) async {
     try {
       if (rows.isEmpty) return;
       // Memori dulu (sinkron untuk pembaca berikutnya), lalu disk.
-      _memRawList[key] = List<Map<String, dynamic>>.of(rows);
+      _putMemRawList(key, List<Map<String, dynamic>>.of(rows));
       await _ensureDb();
       await MessageStore.instance.saveKv(key, jsonEncode(rows));
     } catch (_) {}
@@ -286,7 +300,7 @@ class MessageCache {
       final rows = list
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
-      _memRawList[key] = rows;
+      _putMemRawList(key, rows);
       return rows;
     } catch (_) {
       return [];
@@ -462,16 +476,53 @@ class MessageCache {
   }
 
   // LRU sederhana: list kosong = hapus; saat penuh buang yang paling lama.
+  //
+  // PERF/HEAP: yang DISIMPAN di mem-cache adalah SALINAN yang sudah "dikurus" �?"
+  // base64 foto full-res dibuang (diganti ''), path voice/video DIPERTAHANKAN.
+  // Alasan: `saveMessages(cacheKey, _current)` mengirim list `_current` yang
+  // SAMA (shared ref) dengan sesi aktif �?" kalau kita mutasi elemennya, sesi
+  // hidup ikut rusak. Jadi kita bikin list BARU berisi `copyWith` yang sudah
+  // dibuang base64-nya. Foto yang dibuang otomatis diisi ulang dari
+  // `PhotoCache` (disk) lewat `_needsPhotoFill`/`loadPhotosAsync` saat chat
+  // dibuka lagi (murah), sedangkan RAM turun drastis (tiap foto bisa ~2MB).
   void _memCacheUpdate(String chatKey, List<MessageModel> messages) {
     if (messages.isEmpty) {
       _memCache.remove(chatKey);
       return;
     }
     _memCache.remove(chatKey);
-    _memCache[chatKey] = messages;
+    _memCache[chatKey] = _slimForMem(messages);
     while (_memCache.length > _memCacheMax) {
       _memCache.remove(_memCache.keys.first);
     }
+  }
+
+  /// Salin list pesan untuk mem-cache dengan base64 FOTO dibuang ('').
+  /// Hanya tipe foto (image/view_once/video_once) yang base64-nya di-strip;
+  /// path storage (voice/video) dan teks tetap utuh �?" jangan sentuh, karena
+  /// `imageData` polimorfik (base64 ATAU path). Bila tidak ada yang perlu
+  /// dikurus, kembalikan list asli apa adanya (hindari alokasi sia-sia).
+  List<MessageModel> _slimForMem(List<MessageModel> messages) {
+    var changed = false;
+    final out = <MessageModel>[];
+    for (final m in messages) {
+      final isPhoto = m.type == 'image' ||
+          m.type == 'view_once' ||
+          m.type == 'view_once_expired' ||
+          m.type == 'video_once' ||
+          m.type == 'video_once_expired';
+      // Foto dengan base64 (bukan path storage) = kandidat strip.
+      if (isPhoto &&
+          m.imageData.isNotEmpty &&
+          !StoragePhotoService.instance.isPath(m.imageData) &&
+          !StoragePhotoService.instance.isVoicePath(m.imageData)) {
+        out.add(m.copyWith(imageData: ''));
+        changed = true;
+      } else {
+        out.add(m);
+      }
+    }
+    return changed ? out : messages;
   }
 
   /// Baca pesan dari RAM TANPA async/decrypt — untuk emit frame-pertama

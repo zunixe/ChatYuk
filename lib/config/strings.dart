@@ -1695,6 +1695,25 @@ class S {
       ? 'Resolusi tinggi (~1920px), file lebih besar'
       : 'High resolution (~1920px), larger files';
 
+  // ── Bersihkan cache (penyimpanan) ──
+  String get clearCacheTitle =>
+      isId ? 'Bersihkan Cache' : 'Clear Cache';
+  String get clearCacheDesc => isId
+      ? 'Kosongkan cache sementara (pesan & foto tetap aman)'
+      : 'Free up temporary cache (messages & photos stay safe)';
+  String get clearCacheConfirmTitle =>
+      isId ? 'Bersihkan cache?' : 'Clear cache?';
+  String get clearCacheConfirmBody => isId
+      ? 'Cache sementara (foto & pesan yang belum lama dibuka) akan dikosongkan '
+          'untuk mempercepat aplikasi. Pesan & foto kamu TIDAK terhapus — '
+          'hanya dimuat ulang saat dibuka lagi.'
+      : 'Temporary cache (recently viewed photos & messages) will be cleared '
+          'to speed up the app. Your messages & photos are NOT deleted — '
+          'they are just reloaded when opened again.';
+  String get clearCacheDone =>
+      isId ? 'Cache dibersihkan' : 'Cache cleared';
+  String get btnClear => isId ? 'Bersihkan' : 'Clear';
+
   // ── Popup update aplikasi ──
   String get updateTitle => isId ? 'Update Tersedia' : 'Update Available';
   String get updateRequiredTitle =>

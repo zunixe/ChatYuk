@@ -1608,6 +1608,18 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   unawaited(MessageCache.instance.clearLegacyV1Only());
   unawaited(PhotoCache.instance.cleanOldPhotos());
   unawaited(PostPhotoCache.instance.cleanOldPhotos());
+  // PERF: mulai sesi dengan cache RAM bersih (basis nol) supaya sisa data
+  // proses lama (hot-restart / restore) tidak menahan memori sia-sia.
+  // Murah: cache RAM memang belum terisi saat cold start.
+  try {
+    MessageCache.instance.trimMemCache();
+  } catch (_) {}
+  try {
+    PhotoCache.instance.trimMemCache();
+  } catch (_) {}
+  try {
+    PostPhotoCache.instance.trimMemCache();
+  } catch (_) {}
   if (_firebaseReady) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }

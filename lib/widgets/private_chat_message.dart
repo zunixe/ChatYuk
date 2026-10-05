@@ -518,6 +518,20 @@ class CodeBlock extends StatelessWidget {
 // Teks + waktu gaya WhatsApp: jam (+ centang) SELALU di bawah teks,
 // kanan-bawah, mepet nyaris nempel tanpa jeda baris — untuk pesan 1 baris
 // maupun multi-baris. Bubble hemat (tidak boros tinggi).
+/// PERF (Fase 3.1): memo hasil pengukuran teks bubble multi-baris.
+///
+/// `MessageTextWithTime.build` menjalankan beberapa `TextPainter..layout()` +
+/// `computeLineMetrics()` SINKRON untuk menentukan lebar bubble & posisi jam.
+/// Ini jalan tiap bubble di-rebuild �?" dan bubble di-rebuild cukup sering
+/// (setState parent: ngetik, pilih, reaction, dsb). Karena hasilnya hanya
+/// bergantung pada (teks, gaya, lebar tersedia, jam, trailing), cache-kan
+/// supaya rebuild berikutnya O(1).
+///
+/// Bounded FIFO 300 entri �?" cukup untuk viewport aktif + sedikit cache;
+/// tidak tumbuh tanpa batas di percakapan panjang.
+final _textMeasureMemo = <String, ({double contentW, double timeBottom})>{};
+const _textMeasureMemoMax = 300;
+
 class MessageTextWithTime extends StatelessWidget {
   final String text;
   final String timeStr;
@@ -877,18 +891,43 @@ class MessageTextWithTime extends StatelessWidget {
             );
         // Probe termasuk reserve: lebar bubble ngepas ke isi (bukan selebar
         // 80% layar) sekaligus cukup untuk reserve sebaris bila muat.
-        final probe = probeTp()..layout(maxWidth: available);
-        double longest = 0;
-        for (final lm in probe.computeLineMetrics()) {
-          if (lm.width > longest) longest = lm.width;
+        //
+        // PERF (Fase 3.1): hasil (contentW, timeBottom) di-memo �?" rebuild
+        // bubble yang sama (teks/gaya/lebar/jam/trailing tidak berubah) tidak
+        // lagi mengukur ulang. Ini memangkas kerja sinkron di frame.
+        final memoKey = '$available|$timeRowW|$t\u0000$timeStr'
+            '\u0000${textStyle.hashCode}|${trailing != null}';
+        final memo = _textMeasureMemo[memoKey];
+        if (memo != null) {
+          // sentuh ulang agar tidak ter-FIFO evict (semacam LRU).
+          _textMeasureMemo.remove(memoKey);
+          _textMeasureMemo[memoKey] = memo;
         }
-        final contentW = math.min(available, math.max(longest, timeRowW));
-        // Metrik baris terakhir layout final → jam 2px di bawah baseline
-        // teks (tidak sejajar) — sama untuk pengirim maupun penerima.
-        final fin = probeTp()..layout(maxWidth: contentW);
-        final lastLine = fin.computeLineMetrics().last;
-        final timeBottom =
-            math.max(0.0, lastLine.descent - timeDescent - 2);
+        final double contentW;
+        final double timeBottom;
+        if (memo != null) {
+          contentW = memo.contentW;
+          timeBottom = memo.timeBottom;
+        } else {
+          final probe = probeTp()..layout(maxWidth: available);
+          double longest = 0;
+          for (final lm in probe.computeLineMetrics()) {
+            if (lm.width > longest) longest = lm.width;
+          }
+          final cw = math.min(available, math.max(longest, timeRowW));
+          // Metrik baris terakhir layout final → jam 2px di bawah baseline
+          // teks (tidak sejajar) — sama untuk pengirim maupun penerima.
+          final fin = probeTp()..layout(maxWidth: cw);
+          final lastLine = fin.computeLineMetrics().last;
+          final tb = math.max(0.0, lastLine.descent - timeDescent - 2);
+          contentW = cw;
+          timeBottom = tb;
+          if (!_textMeasureMemo.containsKey(memoKey) &&
+              _textMeasureMemo.length >= _textMeasureMemoMax) {
+            _textMeasureMemo.remove(_textMeasureMemo.keys.first);
+          }
+          _textMeasureMemo[memoKey] = (contentW: cw, timeBottom: tb);
+        }
         return SizedBox(
           width: contentW > 0 ? contentW : null,
           child: Stack(
@@ -2397,7 +2436,23 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
 
   @override
   void dispose() {
-    // Jangan dispose _tick — timer harus terus jalan via viewOnceStates
+    // Jangan dispose _tick selagi aktif — timer harus terus jalan via
+    // viewOnceStates (mis. viewer masih terbuka / countdown berjalan, dan
+    // widget bisa di-rebuild sementara state tetap hidup).
+    //
+    // TAPI: kalau sudah EXPIRED, state tidak dibutuhkan lagi (media hilang,
+    // kartu terkunci permanen). Sebelumnya entri ini dibiarkan di map selamanya
+    // → `viewOnceStates` tumbuh tanpa batas (tiap view-once menahan Timer +
+    // DecodedImage=byte gambar) → memori naik terus sepanjang sesi. Sekarang
+    // entri expired dibersihkan saat widget-nya dibuang.
+    final id = widget.messageId;
+    // Mode admin tidak memakai `_tick` (lihat initState) — jangan sentuh.
+    if (!widget.isAdminView && id != null && _tick.state == ViewOnceState.expired) {
+      if (identical(viewOnceStates[id], _tick)) {
+        viewOnceStates.remove(id);
+      }
+      _tick.dispose();
+    }
     super.dispose();
   }
 

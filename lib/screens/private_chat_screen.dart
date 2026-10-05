@@ -737,6 +737,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   final Set<String> _confirmedTextIds = {};
   late final DateTime _openedAt;
 
+  // Batas id konfirmasi yang disimpan. Set ini HANYA dipakai untuk dedupe
+  // FIFO jangka-pendek; menahannya tanpa batas sepanjang sesi = memori naik
+  // terus (GC pressure = lag). LinkedHashSet menjaga urutan insert, jadi kita
+  // buang yang paling lama saat lewat cap.
+  static const _confirmedCap = 200;
+  void _trimConfirmed(Set<String> ids) {
+    while (ids.length > _confirmedCap) {
+      ids.remove(ids.first);
+    }
+  }
+
   // ── Memo derivasi list (anti-lag ngetik/scroll/buka) ──────────────────────
   // `StreamBuilder.builder` ikut rebuild saat PARENT setState (ngetik, pilih
   // teks, buka menu, dsb), bukan cuma saat stream emit. Dulu tiap rebuild itu
@@ -887,6 +898,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           consumedIds: _confirmedTextIds,
           pendings: _pending,
         );
+        _trimConfirmed(_confirmedTextIds);
         if (idx != -1) {
           _queuedIds.remove(_pending[idx].id);
           _pending.removeAt(idx);
@@ -926,6 +938,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                 m.type == 'view_once_expired') &&
             m.timestamp.isAfter(_openedAt) &&
             _confirmedPhotoIds.add(m.id)) {
+          _trimConfirmed(_confirmedPhotoIds);
           final idx = _pending.indexWhere(
             (p) =>
                 (p.type == 'image' ||
@@ -945,6 +958,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
             m.type == 'voice' &&
             m.timestamp.isAfter(_openedAt) &&
             _confirmedVoiceIds.add(m.id)) {
+          _trimConfirmed(_confirmedVoiceIds);
           final idx = _pending.indexWhere((p) => p.type == 'voice');
           if (idx != -1) {
             _pending.removeAt(idx);
@@ -963,6 +977,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                 m.type == 'video_once_expired') &&
             m.timestamp.isAfter(_openedAt) &&
             _confirmedVideoIds.add(m.id)) {
+          _trimConfirmed(_confirmedVideoIds);
           final idx = _pending.indexWhere(
             (p) =>
                 p.type == 'video' ||
@@ -2371,7 +2386,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                             const <MessageModel>[],
                         builder: (_, snap) {
                           final msgs = snap.data ?? [];
-                          final all = [...msgs, ..._pending];
+                          // PERF (Fase 3.3): `_pending` biasanya kosong. Jangan
+                          // alokasi list gabungan tiap build kalau tidak perlu —
+                          // pakai `msgs` apa adanya (identitasnya stabil dari
+                          // stream, jadi `_deriveItems` tetap cache-hit).
+                          final all = _pending.isEmpty
+                              ? msgs
+                              : [...msgs, ..._pending];
                           // Pesan baru dari lawan bicara = typing selesai.
                           // Matikan bubble via post-frame (anti setState saat build).
                           // Ini otoritatif: pulse telat dari invokasi lama yang

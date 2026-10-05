@@ -91,31 +91,55 @@ class PhotoCache {
   static const _thumbMemMaxChars = 8 * 1024 * 1024;
   int _thumbMemChars = 0;
 
-  void _memPut(String messageId, String b64) {
+  // Indeks messageId → chatKey. RAM cache di-key messageId saja (agar
+  // `loadMany` simpel), tapi dengan indeks ini `clearChat` bisa mem-purge
+  // RAM satu chat dengan PRESISI (dulu hanya file disk yang terhapus, RAM
+  // nyangkut sampai LRU menguap sendiri).
+  final Map<String, String> _memChatOf = {};
+  final Map<String, String> _thumbChatOf = {};
+
+  void _memPut(String messageId, String b64, [String? chatKey]) {
     _memCache.remove(messageId);
     _memCache[messageId] = b64;
+    if (chatKey != null) _memChatOf[messageId] = chatKey;
     _memChars += b64.length;
     while (chatMemShouldEvict(_memChars, _memMaxChars) &&
         _memCache.isNotEmpty) {
       final oldest = _memCache.keys.first;
       _memChars -= _memCache.remove(oldest)!.length;
+      _memChatOf.remove(oldest);
     }
   }
 
   String? _memGet(String messageId) => _memCache[messageId];
 
-  void _thumbPut(String messageId, String b64) {
+  void _thumbPut(String messageId, String b64, [String? chatKey]) {
     _thumbMem.remove(messageId);
     _thumbMem[messageId] = b64;
+    if (chatKey != null) _thumbChatOf[messageId] = chatKey;
     _thumbMemChars += b64.length;
     while (chatMemShouldEvict(_thumbMemChars, _thumbMemMaxChars) &&
         _thumbMem.isNotEmpty) {
       final oldest = _thumbMem.keys.first;
       _thumbMemChars -= _thumbMem.remove(oldest)!.length;
+      _thumbChatOf.remove(oldest);
     }
   }
 
   String? _thumbGet(String messageId) => _thumbMem[messageId];
+
+  /// Buang SEMUA foto/thumb dari RAM saja (file disk tetap). Dipakai saat OS
+  /// memberi sinyal memory-pressure & saat app lama di-background: tiap entri
+  /// menahan base64 foto (bisa ~2MB) → melepasnya mencegah GC storm. Foto
+  /// dibaca ulang dari disk (murah) saat dibutuhkan lagi.
+  void trimMemCache() {
+    _memCache.clear();
+    _memChars = 0;
+    _memChatOf.clear();
+    _thumbMem.clear();
+    _thumbMemChars = 0;
+    _thumbChatOf.clear();
+  }
 
   Future<Directory> _folder() async {
     final dir = await getApplicationDocumentsDirectory();
@@ -154,7 +178,7 @@ class PhotoCache {
           'read=${t2.difference(t1).inMilliseconds}ms '
           'decrypt=${t3.difference(t2).inMilliseconds}ms '
           'total=${t3.difference(t0).inMilliseconds}ms');
-      if (dec != null) _memPut(messageId, dec);
+      if (dec != null) _memPut(messageId, dec, chatKey);
       return dec;
     } catch (_) {
       return null;
@@ -172,7 +196,7 @@ class PhotoCache {
         final dec = await MessageCache.instance.decryptStringAsync(
           await tf.readAsString(),
         );
-        if (dec != null) _thumbPut(messageId, dec);
+        if (dec != null) _thumbPut(messageId, dec, chatKey);
         return dec;
       }
       // Belum ada thumbnail (foto lama) → decrypt full, buat thumb, simpan.
@@ -184,7 +208,7 @@ class PhotoCache {
       if (full == null) return null;
       final thumb = await genThumb({'b64': full});
       if (thumb != null) {
-        _thumbPut(messageId, thumb);
+        _thumbPut(messageId, thumb, chatKey);
         _writeThumbFileAsync(chatKey, messageId, thumb);
         return thumb;
       }
@@ -232,7 +256,7 @@ class PhotoCache {
         if (dec != null) {
           dec.forEach((id, b64) {
             result[id] = b64;
-            _thumbPut(id, b64);
+            _thumbPut(id, b64, chatKey);
           });
         }
       }
@@ -244,7 +268,7 @@ class PhotoCache {
           final thumbs = await _genThumbsLimited(dec);
           for (final e in thumbs.entries) {
             result[e.key] = e.value;
-            _thumbPut(e.key, e.value);
+            _thumbPut(e.key, e.value, chatKey);
             _writeThumbFileAsync(chatKey, e.key, e.value);
           }
         }
@@ -302,10 +326,10 @@ class PhotoCache {
     final f = _fileFor(folder, chatKey, messageId);
     final enc = await MessageCache.instance.encryptString(base64Image);
     await f.writeAsString(enc, flush: true);
-    _memPut(messageId, base64Image);
+    _memPut(messageId, base64Image, chatKey);
     final thumb = await genThumb({'b64': base64Image});
     if (thumb != null) {
-      _thumbPut(messageId, thumb);
+      _thumbPut(messageId, thumb, chatKey);
       _writeThumbFileAsync(chatKey, messageId, thumb);
     }
     return thumb;
@@ -313,10 +337,30 @@ class PhotoCache {
 
   /// Hapus file foto SATU chat (dipanggil saat chat di-hard-delete admin).
   /// Nama file = `${chatKey.hashCode}_$messageId(.enc|_thumb.enc)` — prefix
-  /// hash chatKey unik per chat. Mem-cache keyed by messageId saja (tanpa
-  /// chatKey) jadi tidak bisa di-purge presisi — dibiarkan LRU menguap.
+  /// hash chatKey unik per chat. RAM (keyed messageId) dipurge presisi lewat
+  /// indeks `_memChatOf`/`_thumbChatOf` supaya foto chat terhapus tidak
+  /// nyangkut di memori.
   Future<void> clearChat(String chatKey) async {
     try {
+      // RAM dulu (sinkron) — purge presisi via indeks chatKey.
+      final memIds = _memChatOf.entries
+          .where((e) => e.value == chatKey)
+          .map((e) => e.key)
+          .toList();
+      for (final id in memIds) {
+        _memChatOf.remove(id);
+        final val = _memCache.remove(id);
+        if (val != null) _memChars -= val.length;
+      }
+      final thumbIds = _thumbChatOf.entries
+          .where((e) => e.value == chatKey)
+          .map((e) => e.key)
+          .toList();
+      for (final id in thumbIds) {
+        _thumbChatOf.remove(id);
+        final val = _thumbMem.remove(id);
+        if (val != null) _thumbMemChars -= val.length;
+      }
       final folder = await _folder();
       if (!await folder.exists()) return;
       final prefix = '${chatKey.hashCode}_';
@@ -339,8 +383,10 @@ class PhotoCache {
   Future<void> clearAll() async {
     _memCache.clear();
     _memChars = 0;
+    _memChatOf.clear();
     _thumbMem.clear();
     _thumbMemChars = 0;
+    _thumbChatOf.clear();
     try {
       final folder = await _folder();
       if (await folder.exists()) {
