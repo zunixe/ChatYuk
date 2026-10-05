@@ -18,7 +18,8 @@ import '../providers/auth_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/nav_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
+import '../providers/riverpod/nav_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/room_provider.dart';
@@ -2015,7 +2016,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           Positioned.fill(
             child: _OnlinePill(
               onOpenRoom: () => _openGeneralRoom(context),
-              onOpenTimeline: () => context.read<NavProvider>().goTo(2),
+              onOpenTimeline: () => ProviderScope.containerOf(context, listen: false).read(navProvider.notifier).goTo(2),
               ownerUid: authUid,
             ),
           ),
