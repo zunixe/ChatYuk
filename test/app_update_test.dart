@@ -7,7 +7,8 @@ import 'package:in_app_update/in_app_update.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/services/app_update_service.dart';
-import 'package:chatyuk/providers/update_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chatyuk/providers/riverpod/update_provider.dart';
 
 import 'supabase_test_client.dart';
 
@@ -93,6 +94,25 @@ class _RejectClient implements AppUpdateClient {
   @override
   Stream<InstallStatus> get installStatusStream =>
       const Stream<InstallStatus>.empty();
+}
+
+
+
+/// Helper test: buat container Riverpod + updateNotifier (gantikan
+/// `UpdateProvider(service:)` lama). service = AppUpdateService.
+final List<ProviderContainer> _containers = [];
+UpdateNotifier _mk([AppUpdateService? service]) {
+  final c = ProviderContainer();
+  _containers.add(c);
+  if (service != null) {
+    // override provider dengan service test
+    final c2 = ProviderContainer(overrides: [
+      updateProvider.overrideWith(() => UpdateNotifier(service)),
+    ]);
+    _containers.add(c2);
+    return c2.read(updateProvider.notifier);
+  }
+  return c.read(updateProvider.notifier);
 }
 
 void main() {
@@ -191,14 +211,14 @@ void main() {
     });
 
     test('snooze menyimpan versi lalu check tidak popup lagi', () async {
-      final p = UpdateProvider(service: AppUpdateService.forTest());
+      final p = _mk(AppUpdateService.forTest());
       await p.snoozeForTest(version: '1.2.48');
       expect(await p.isSnoozedForTest('1.2.48'), isTrue);
       expect(await p.isSnoozedForTest('1.2.99'), isFalse);
     });
 
     test('snooze kedaluwarsa setelah 24 jam', () async {
-      final p = UpdateProvider(service: AppUpdateService.forTest());
+      final p = _mk(AppUpdateService.forTest());
       // Simulasi timestamp lama (2 hari lalu).
       await p.writeSnoozeForTest(
         version: '1.2.48',
@@ -217,17 +237,17 @@ void main() {
 
     test('non-Play → fase openStore (buka listing Play)', () async {
       final svc = AppUpdateService.forTest(client: _FakeClient());
-      final p = UpdateProvider(service: svc)
+      final p = _mk(svc)
         ..setFromPlayForTest(false)
         ..setForceForTest(false);
       await p.startUpdate();
-      expect(p.phase, UpdatePhase.openStore);
+      expect(p.state.phase, UpdatePhase.openStore);
     });
 
     test('Play + force → immediate update dipanggil', () async {
       final client = _FakeClient();
       final svc = AppUpdateService.forTest(client: client);
-      final p = UpdateProvider(service: svc)
+      final p = _mk(svc)
         ..setFromPlayForTest(true)
         ..setForceForTest(true);
       await p.startUpdate();
@@ -240,7 +260,7 @@ void main() {
       final client = _FakeClient()
         ..emitOnStart = [InstallStatus.downloading, InstallStatus.downloaded];
       final svc = AppUpdateService.forTest(client: client);
-      final p = UpdateProvider(service: svc)
+      final p = _mk(svc)
         ..setFromPlayForTest(true)
         ..setForceForTest(false);
       await p.startUpdate();
@@ -249,7 +269,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       // downloaded → completeFlexible otomatis, fase kembali idle.
       expect(client.flexibleCompleted, isTrue);
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
     });
 
     test('tap Update menandai versi → tidak popup lagi', () async {
@@ -264,34 +284,34 @@ void main() {
         )
         ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
         ..debugPlayAvailabilityOverride = PlayAvailability.available;
-      final p = UpdateProvider(service: svc);
+      final p = _mk(svc);
       await p.check();
-      expect(p.phase, UpdatePhase.available);
+      expect(p.state.phase, UpdatePhase.available);
       await p.startUpdate();
       expect(client.flexibleStarted, isTrue);
       // Download lanjut diam-diam di background (fase downloading, tanpa
       // dialog) dan versi ditandai.
-      expect(p.phase, UpdatePhase.downloading);
+      expect(p.state.phase, UpdatePhase.downloading);
       expect(await p.isSnoozedForTest('1.2.48'), isTrue);
       // Simulasi restart app (provider baru, prefs sama) → tetap diam.
-      final p2 = UpdateProvider(service: svc);
+      final p2 = _mk(svc);
       await p2.check();
-      expect(p2.phase, UpdatePhase.idle);
+      expect(p2.state.phase, UpdatePhase.idle);
     });
 
     test('Play menolak flexible (result gagal) → fase failed', () async {
       final client = _RejectClient();
       final svc = AppUpdateService.forTest(client: client);
-      final p = UpdateProvider(service: svc)
+      final p = _mk(svc)
         ..setFromPlayForTest(true)
         ..setForceForTest(false);
       await p.startUpdate();
-      expect(p.phase, UpdatePhase.failed);
+      expect(p.state.phase, UpdatePhase.failed);
     });
 
     test('Play + force → applyAndRestart memanggil completeFlexible', () async {
       final client = _FakeClient();
-      final p = UpdateProvider(service: AppUpdateService.forTest(client: client))
+      final p = _mk(AppUpdateService.forTest(client: client))
         ..setPhaseForTest(UpdatePhase.readyToInstall);
       await p.applyAndRestart();
       expect(client.flexibleCompleted, isTrue);
@@ -398,7 +418,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    UpdateProvider providerWith({
+    UpdateNotifier providerWith({
       required String local,
       required UpdatePolicy policy,
       PlayAvailability play = PlayAvailability.notFromPlay,
@@ -407,7 +427,7 @@ void main() {
         ..debugPolicyOverride = policy
         ..debugLocalVersionOverride = (version: local, buildNumber: 47)
         ..debugPlayAvailabilityOverride = play;
-      return UpdateProvider(service: svc);
+      return _mk(svc);
     }
 
     test('versi terbaru TANPA push manual → idle (tidak nag)', () async {
@@ -423,7 +443,7 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
     });
 
     test('versi terbaru + push manual segar → fase available', () async {
@@ -438,9 +458,9 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.available);
-      expect(p.latestVersion, '1.2.48');
-      expect(p.force, isFalse);
+      expect(p.state.phase, UpdatePhase.available);
+      expect(p.state.latestVersion, '1.2.48');
+      expect(p.state.force, isFalse);
     });
 
     test('versi sama → tetap idle', () async {
@@ -454,7 +474,7 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
     });
 
     test('fitur disabled → idle', () async {
@@ -468,7 +488,7 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
     });
 
     test('di bawah min_version → force true', () async {
@@ -482,8 +502,8 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.available);
-      expect(p.force, isTrue);
+      expect(p.state.phase, UpdatePhase.available);
+      expect(p.state.force, isTrue);
     });
 
     test('check kedua tidak double-popup (fase bukan idle)', () async {
@@ -498,10 +518,10 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.available);
+      expect(p.state.phase, UpdatePhase.available);
       // Panggil lagi → early-return karena fase != idle.
       await p.check();
-      expect(p.phase, UpdatePhase.available);
+      expect(p.state.phase, UpdatePhase.available);
     });
 
     test('snooze versi ini → check berikutnya idle', () async {
@@ -516,13 +536,13 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.available);
+      expect(p.state.phase, UpdatePhase.available);
       await p.snooze();
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
       // Fase kini idle → check boleh jalan lagi, tapi push sudah ditandai
       // dilihat + versi ter-snooze → idle (tidak nag).
       await p.check();
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
     });
 
     test('versi lokal lebih baru dari latest → idle', () async {
@@ -536,7 +556,7 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
     });
 
     test('push manual admin → popup walau versi sudah di-snooze', () async {
@@ -544,7 +564,7 @@ void main() {
       // menekan "Kirim Popup Update" (update_push_at berubah) → saat app
       // dibuka, popup HARUS muncul lagi.
       final pushAt = DateTime.now().toUtc();
-      UpdateProvider mk() => providerWith(
+      UpdateNotifier mk() => providerWith(
         local: '1.2.47',
         policy: UpdatePolicy(
           enabled: true,
@@ -557,7 +577,7 @@ void main() {
       // 1) Pertama: popup muncul + tandai push sudah dilihat.
       final p1 = mk();
       await p1.check();
-      expect(p1.phase, UpdatePhase.available, reason: 'push → popup');
+      expect(p1.state.phase, UpdatePhase.available, reason: 'push → popup');
 
       // 2) Push BERIKUTNYA (stempel lebih baru) → tetap muncul meski
       //    versi sama sudah di-snooze.
@@ -572,10 +592,10 @@ void main() {
         ),
       );
       await p2.snoozeForTest(version: '1.2.48'); // user "Nanti" di versi ini
-      expect(p2.phase, UpdatePhase.idle);
+      expect(p2.state.phase, UpdatePhase.idle);
       await p2.check();
       expect(
-        p2.phase,
+        p2.state.phase,
         UpdatePhase.available,
         reason: 'push manual mengalahkan snooze',
       );
@@ -583,7 +603,7 @@ void main() {
 
     test('push manual sudah dilihat → check berikutnya idle (tidak nag)', () async {
       final pushAt = DateTime.now().toUtc();
-      UpdateProvider mk() => providerWith(
+      UpdateNotifier mk() => providerWith(
         local: '1.2.47',
         policy: UpdatePolicy(
           enabled: true,
@@ -595,11 +615,11 @@ void main() {
       );
       final p = mk();
       await p.check();
-      expect(p.phase, UpdatePhase.available);
+      expect(p.state.phase, UpdatePhase.available);
       await p.snoozeForTest(version: '1.2.48'); // tandai versi + push dilihat
       await p.check();
       expect(
-        p.phase,
+        p.state.phase,
         UpdatePhase.idle,
         reason: 'push yang sama tidak boleh muncul berulang',
       );
@@ -621,7 +641,7 @@ void main() {
       );
       await p.check();
       expect(
-        p.phase,
+        p.state.phase,
         UpdatePhase.idle,
         reason: 'sudah versi terbaru → push manual tetap tidak memunculkan popup',
       );
@@ -639,7 +659,7 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
     });
 
     test('push manual TIDAK muncul bila fitur update dimatikan', () async {
@@ -654,7 +674,7 @@ void main() {
         ),
       );
       await p.check();
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
     });
 
     test('unduhan Play tertunda → auto-complete tanpa popup', () async {
@@ -680,10 +700,10 @@ void main() {
         )
         ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
         ..debugPlayAvailabilityOverride = PlayAvailability.available;
-      final p = UpdateProvider(service: svc);
+      final p = _mk(svc);
       await p.check();
       expect(client.flexibleCompleted, isTrue);
-      expect(p.phase, UpdatePhase.idle);
+      expect(p.state.phase, UpdatePhase.idle);
     });
   });
 
@@ -692,7 +712,7 @@ void main() {
       // Tidak ada navigatorKey valid → _presentDialog no-op, tapi kita uji
       // apel fase yang dianggap relevan lewat perilaku tidak throw.
       final key = GlobalKey<NavigatorState>();
-      final p = UpdateProvider(service: AppUpdateService.forTest());
+      final p = _mk(AppUpdateService.forTest());
 
       for (final phase in [
         UpdatePhase.idle,

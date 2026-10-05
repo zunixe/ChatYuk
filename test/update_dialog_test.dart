@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:provider/provider.dart';
@@ -8,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/update_provider.dart';
+import 'package:chatyuk/providers/riverpod/update_provider.dart';
 import 'package:chatyuk/services/app_update_service.dart';
 import 'package:chatyuk/widgets/update_dialog.dart';
 
@@ -53,48 +54,62 @@ class _FakePlayClient implements AppUpdateClient {
 }
 
 /// Widget hermetic `UpdateDialog`: memastikan judul/isi/tombol memakai
-/// string bilingual & mengikuti fase provider (available/downloading/
-/// readyToInstall/non-Play/force).
+/// string bilingual & mengikuti fase provider.
 void main() {
   final s = S(isId: true);
 
-  Widget wrap(UpdateProvider provider) => MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LocaleProvider>(
-            create: (_) => LocaleProvider(),
-          ),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (ctx) => ElevatedButton(
-                onPressed: () => showUpdateDialog(ctx, provider),
-                child: const Text('open'),
+  late ProviderContainer container;
+  late UpdateNotifier notifier;
+
+  ProviderContainer makeContainer([AppUpdateService? service]) {
+    final c = ProviderContainer(
+      overrides: [
+        if (service != null)
+          updateProvider.overrideWith(() => UpdateNotifier(service)),
+      ],
+    );
+    addTearDown(c.dispose);
+    return c;
+  }
+
+  Widget wrap(UpdateNotifier n) => UncontrolledProviderScope(
+        container: container,
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<LocaleProvider>(
+              create: (_) => LocaleProvider(),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () => showUpdateDialog(ctx, n),
+                  child: const Text('open'),
+                ),
               ),
             ),
           ),
         ),
       );
 
-  UpdateProvider makeProvider({bool fromPlay = true, bool force = false}) {
-    final p = UpdateProvider(service: AppUpdateService.forTest())
-      ..setFromPlayForTest(fromPlay)
-      ..setForceForTest(force);
-    return p;
-  }
-
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     debugResetUpdateDialogGuard();
   });
 
-  /// Pengganti pumpAndSettle: maju 2 detik waktu virtual dalam langkah
-  /// 100ms. Deterministik & cepat — tidak menunggu frame berhenti total
-  /// (indikator progress animasi selamanya).
   Future<void> pumpSettled(WidgetTester tester) async {
     for (var i = 0; i < 20; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
+  }
+
+  UpdateNotifier makeProvider({bool fromPlay = true, bool force = false}) {
+    container = makeContainer(AppUpdateService.forTest());
+    notifier = container.read(updateProvider.notifier);
+    notifier.setFromPlayForTest(fromPlay);
+    notifier.setForceForTest(force);
+    return notifier;
   }
 
   testWidgets('fase available → judul + versi + notes + tombol Update/Nanti',
@@ -109,10 +124,11 @@ void main() {
       )
       ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
       ..debugPlayAvailabilityOverride = PlayAvailability.available;
-    final p2 = UpdateProvider(service: svc);
-    await p2.check();
+    container = makeContainer(svc);
+    final p = container.read(updateProvider.notifier);
+    await p.check();
 
-    await tester.pumpWidget(wrap(p2));
+    await tester.pumpWidget(wrap(p));
     await tester.tap(find.text('open'));
     await pumpSettled(tester);
 
@@ -129,14 +145,15 @@ void main() {
       ..debugPolicyOverride = const UpdatePolicy(
         enabled: true,
         latestVersion: '1.2.48',
-        minVersion: '1.2.47', // local 1.2.40 < min → force
+        minVersion: '1.2.47',
         notes: '',
       )
       ..debugLocalVersionOverride = (version: '1.2.40', buildNumber: 40)
       ..debugPlayAvailabilityOverride = PlayAvailability.available;
-    final p = UpdateProvider(service: svc);
+    container = makeContainer(svc);
+    final p = container.read(updateProvider.notifier);
     await p.check();
-    expect(p.force, isTrue);
+    expect(container.read(updateProvider).force, isTrue);
 
     await tester.pumpWidget(wrap(p));
     await tester.tap(find.text('open'));
@@ -158,9 +175,10 @@ void main() {
       )
       ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
       ..debugPlayAvailabilityOverride = PlayAvailability.notFromPlay;
-    final p = UpdateProvider(service: svc);
+    container = makeContainer(svc);
+    final p = container.read(updateProvider.notifier);
     await p.check();
-    expect(p.fromPlay, isFalse);
+    expect(container.read(updateProvider).fromPlay, isFalse);
 
     await tester.pumpWidget(wrap(p));
     await tester.tap(find.text('open'));
@@ -196,8 +214,6 @@ void main() {
 
   testWidgets('tap Update → popup langsung tertutup (download background)',
       (tester) async {
-    // Jalur produksi: dialog dibuka lewat provider (check + navigatorKey),
-    // bukan showUpdateDialog langsung.
     final key = GlobalKey<NavigatorState>();
     final client = _FakePlayClient();
     final svc = AppUpdateService.forTest(client: client)
@@ -210,17 +226,21 @@ void main() {
       )
       ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
       ..debugPlayAvailabilityOverride = PlayAvailability.available;
-    final p = UpdateProvider(service: svc);
+    container = makeContainer(svc);
+    final p = container.read(updateProvider.notifier);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LocaleProvider>(
-            create: (_) => LocaleProvider(),
+      UncontrolledProviderScope(
+        container: container,
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<LocaleProvider>(
+              create: (_) => LocaleProvider(),
+            ),
+          ],
+          child: MaterialApp(
+            navigatorKey: key,
+            home: const Scaffold(body: Text('home')),
           ),
-        ],
-        child: MaterialApp(
-          navigatorKey: key,
-          home: const Scaffold(body: Text('home')),
         ),
       ),
     );
@@ -231,7 +251,7 @@ void main() {
     await tester.tap(find.text(s.btnUpdateNow));
     await pumpSettled(tester);
 
-    expect(p.phase, UpdatePhase.downloading,
+    expect(container.read(updateProvider).phase, UpdatePhase.downloading,
         reason: 'startUpdate harus jalan sampai downloading');
     expect(find.text(s.updateTitle), findsNothing);
     expect(find.text(s.btnUpdateNow), findsNothing);
@@ -242,15 +262,18 @@ void main() {
     final key = GlobalKey<NavigatorState>();
     final p = makeProvider();
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LocaleProvider>(
-            create: (_) => LocaleProvider(),
+      UncontrolledProviderScope(
+        container: container,
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<LocaleProvider>(
+              create: (_) => LocaleProvider(),
+            ),
+          ],
+          child: MaterialApp(
+            navigatorKey: key,
+            home: const Scaffold(body: Text('home')),
           ),
-        ],
-        child: MaterialApp(
-          navigatorKey: key,
-          home: const Scaffold(body: Text('home')),
         ),
       ),
     );
@@ -258,8 +281,6 @@ void main() {
       final ctx = key.currentContext;
       if (ctx == null) return;
       final nav = Navigator.of(ctx, rootNavigator: true);
-      // Hanya pop bila ADA dialog di atas home (tanpa guard ini pop()
-      // melempar Bad state saat tidak ada dialog terbuka).
       if (nav.canPop()) {
         nav.pop();
         await pumpSettled(tester);
@@ -277,7 +298,6 @@ void main() {
       debugResetUpdateDialogGuard();
       p.setPhaseForTest(phase);
       p.presentIfNeeded(key);
-      // pump sekali saja (tanpa settle): aman walau ada progress animasi.
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.text(s.updateTitle), findsNothing,
           reason: 'fase $phase tidak boleh memunculkan popup');
@@ -300,7 +320,6 @@ void main() {
     await tester.tap(find.text('open'));
     await pumpSettled(tester);
 
-    // Tidak ada elemen dialog yang tersisa.
     expect(find.text(s.updateTitle), findsNothing);
     expect(find.text(s.btnUpdateNow), findsNothing);
   });
