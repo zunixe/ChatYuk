@@ -86,6 +86,11 @@ dependencies:
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
 
+  # Editor WYSIWYG (admin Marketing email) — native, tanpa WebView.
+  # Delta Quill → HTML via vsc_quill_delta_to_html.
+  flutter_quill: ^11.5.0
+  vsc_quill_delta_to_html: ^1.0.5
+
   # Google SSO
   google_sign_in: ^6.2.1
   geocoding: ^4.0.0

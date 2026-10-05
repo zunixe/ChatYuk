@@ -10,8 +10,7 @@ import '../providers/locale_provider.dart';
 import '../providers/avatar_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../widgets/sheet_drag_handle.dart';
-import '../widgets/profile_avatar.dart';
-import '../widgets/gender_avatar.dart';
+import '../widgets/person_avatar.dart';
 
 /// Bottom sheet anggota private room: role, kick, jadikan admin,
 /// izinkan broadcast, dan antrean approval (untuk admin).
@@ -315,16 +314,13 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
                         final m = _members[i];
                         return ListTile(
                       dense: true,
-                      // Avatar: foto asli bila ada (lazy via ProfileAvatar),
-                      // kalau tidak → inisial + border WARNA GENDER
-                      // (male=biru/female=pink), selaras list Pengguna Online.
-                      leading: ProfileAvatar(
+                      // PersonAvatar = standar yang sama persis dengan
+                      // Pengguna Online (foto + latar tint + ring gender).
+                      leading: PersonAvatar(
                         uid: '${m['user_id'] ?? ''}',
                         name: '${m['nickname'] ?? '?'}',
+                        gender: '${m['gender'] ?? ''}',
                         size: 32,
-                        borderColor:
-                            GenderAvatar.colorFor('${m['gender'] ?? ''}'),
-                        borderWidth: 1.6,
                       ),
                       title: Text(
                         '${m['nickname'] ?? '?'}',
@@ -550,15 +546,13 @@ Future<void> showGroupInvitePicker({
                     itemCount: people.length,
                     itemBuilder: (_, i) => ListTile(
                       dense: true,
-                      // Avatar foto asli (lazy) + border gender; fallback
-                      // inisial bila tanpa foto — selaras list Online.
-                      leading: ProfileAvatar(
+                      // PersonAvatar = standar yang sama persis dengan
+                      // Pengguna Online (foto + latar tint + ring gender).
+                      leading: PersonAvatar(
                         uid: people[i]['uid']!,
                         name: people[i]['name'] ?? '?',
+                        gender: people[i]['gender'] ?? '',
                         size: 32,
-                        borderColor: GenderAvatar.colorFor(
-                            people[i]['gender'] ?? ''),
-                        borderWidth: 1.6,
                       ),
                       title: Text(people[i]['name'] ?? '?',
                           style: AppText.bodySmall),

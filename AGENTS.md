@@ -593,10 +593,17 @@ loop selamanya, tidak bisa hilang (kejadian 2026-09-22: `latest_version='1.2.48'
 padahal Play mentok `1.2.47`).
 
 Aturan:
-- Setelah upload versi `X.Y.Z+N` ke Play → set `app_settings.latest_version = 'X.Y.Z'`
+- Setelah upload versi `X.Y.Z+N` ke Play **DAN rilisnya benar-benar LIVE/published**
+  (review lolos + tombol Publish ditekan bila managed publishing; bukan sekadar
+  ter-upload) → set `app_settings.latest_version = 'X.Y.Z'`
   (versionName TANPA `+N`; banding `compareSemver` mengabaikan suffix build).
 - **JANGAN** set `latest_version` ke versi yang BELUM di-upload ke Play (mis. untuk
   "tes popup") — semua user di versi terbaru akan kena popup palsu.
+- **JANGAN** set `latest_version` langsung setelah upload kalau rilis BELUM publish
+  (review tertunda / managed publishing) — user di versi live dapat popup ke versi
+  yang belum bisa di-install → loop selamanya (kejadian 2026-10-04: `latest_version`
+  diset `1.2.69` padahal Play belum publish → revert ke `1.2.66`). Tunggu user
+  konfirmasi publish, baru sinkron.
 - `min_version` hanya diisi bila update WAJIB (force); kosongkan bila tidak force.
 - Cek nilai aktif via Management API sebelum/sesudah upload:
   ```bash

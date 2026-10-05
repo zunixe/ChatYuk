@@ -255,11 +255,12 @@ void main() {
     test('tap Update menandai versi → tidak popup lagi', () async {
       final client = _FakeClient();
       final svc = AppUpdateService.forTest(client: client)
-        ..debugPolicyOverride = const UpdatePolicy(
+        ..debugPolicyOverride = UpdatePolicy(
           enabled: true,
           latestVersion: '1.2.48',
           minVersion: '',
           notes: '',
+          pushAt: DateTime.now().toUtc(),
         )
         ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
         ..debugPlayAvailabilityOverride = PlayAvailability.available;
@@ -409,7 +410,9 @@ void main() {
       return UpdateProvider(service: svc);
     }
 
-    test('versi terbaru → fase available', () async {
+    test('versi terbaru TANPA push manual → idle (tidak nag)', () async {
+      // Kebijakan baru: selisih versi saja TIDAK memunculkan popup.
+      // Popup hanya bila admin baru menekan "Kirim Popup Update" / force.
       final p = providerWith(
         local: '1.2.47',
         policy: const UpdatePolicy(
@@ -417,6 +420,21 @@ void main() {
           latestVersion: '1.2.48',
           minVersion: '',
           notes: 'n',
+        ),
+      );
+      await p.check();
+      expect(p.phase, UpdatePhase.idle);
+    });
+
+    test('versi terbaru + push manual segar → fase available', () async {
+      final p = providerWith(
+        local: '1.2.47',
+        policy: UpdatePolicy(
+          enabled: true,
+          latestVersion: '1.2.48',
+          minVersion: '',
+          notes: 'n',
+          pushAt: DateTime.now().toUtc(),
         ),
       );
       await p.check();
@@ -471,11 +489,12 @@ void main() {
     test('check kedua tidak double-popup (fase bukan idle)', () async {
       final p = providerWith(
         local: '1.2.47',
-        policy: const UpdatePolicy(
+        policy: UpdatePolicy(
           enabled: true,
           latestVersion: '1.2.48',
           minVersion: '',
           notes: '',
+          pushAt: DateTime.now().toUtc(),
         ),
       );
       await p.check();
@@ -488,18 +507,20 @@ void main() {
     test('snooze versi ini → check berikutnya idle', () async {
       final p = providerWith(
         local: '1.2.47',
-        policy: const UpdatePolicy(
+        policy: UpdatePolicy(
           enabled: true,
           latestVersion: '1.2.48',
           minVersion: '',
           notes: '',
+          pushAt: DateTime.now().toUtc(),
         ),
       );
       await p.check();
       expect(p.phase, UpdatePhase.available);
       await p.snooze();
       expect(p.phase, UpdatePhase.idle);
-      // Fase kini idle → check boleh jalan lagi, tapi versi ter-snooze → idle.
+      // Fase kini idle → check boleh jalan lagi, tapi push sudah ditandai
+      // dilihat + versi ter-snooze → idle (tidak nag).
       await p.check();
       expect(p.phase, UpdatePhase.idle);
     });

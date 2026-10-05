@@ -453,4 +453,55 @@ void main() {
       rpcRequestOf(handler, 'admin_contact_delete');
     });
   });
+
+  group('story (tab admin)', () {
+    test('adminStoryAll → RPC admin_story_all + params filter/limit', () async {
+      handler.on('admin_story_all', (_) => [
+            {'id': 's1', 'author_name': 'A', 'owner_only': false},
+          ]);
+      final list = await svc.adminStoryAll(filter: 'private', limit: 50);
+      expect(list.length, 1);
+      final p = rpcParamsOf(handler, 'admin_story_all');
+      expect(p['p_filter'], 'private');
+      expect(p['p_limit'], 50);
+    });
+
+    test('adminStoryAll bukan-list → []', () async {
+      handler.on('admin_story_all', (_) => {'x': 1});
+      expect(await svc.adminStoryAll(), isEmpty);
+    });
+
+    test('adminSetStoryVisibility → params + ok', () async {
+      handler.on('admin_set_story_visibility', (_) => {'ok': true});
+      expect(await svc.adminSetStoryVisibility('s1', 'friends'), isTrue);
+      final p = rpcParamsOf(handler, 'admin_set_story_visibility');
+      expect(p['p_story_id'], 's1');
+      expect(p['p_state'], 'friends');
+    });
+
+    test('adminSetStoryVisibility error → false', () async {
+      handler.on('admin_set_story_visibility', (req) {
+        return http.Response('{"message":"Unauthorized"}', 400, request: req);
+      });
+      expect(await svc.adminSetStoryVisibility('s1', 'private'), isFalse);
+    });
+
+    test('adminStoryDelete → ok + image_path/video_path', () async {
+      handler.on('admin_story_delete', (_) => {
+            'ok': true,
+            'image_path': 'story/u/x.jpg',
+            'video_path': '',
+          });
+      final r = await svc.adminStoryDelete('s1');
+      expect(r.ok, isTrue);
+      expect(r.imagePath, 'story/u/x.jpg');
+      expect(rpcParamsOf(handler, 'admin_story_delete')['p_story_id'], 's1');
+    });
+
+    test('adminStoryDelete gagal → ok=false', () async {
+      handler.on('admin_story_delete', (_) => {'ok': false});
+      final r = await svc.adminStoryDelete('s1');
+      expect(r.ok, isFalse);
+    });
+  });
 }

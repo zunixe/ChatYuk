@@ -100,11 +100,12 @@ void main() {
   testWidgets('fase available → judul + versi + notes + tombol Update/Nanti',
       (tester) async {
     final svc = AppUpdateService.forTest(client: _FakePlayClient())
-      ..debugPolicyOverride = const UpdatePolicy(
+      ..debugPolicyOverride = UpdatePolicy(
         enabled: true,
         latestVersion: '1.2.48',
         minVersion: '',
         notes: 'Perbaikan bug',
+        pushAt: DateTime.now().toUtc(),
       )
       ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
       ..debugPlayAvailabilityOverride = PlayAvailability.available;
@@ -148,11 +149,12 @@ void main() {
 
   testWidgets('non-Play → tombol Buka Google Play', (tester) async {
     final svc = AppUpdateService.forTest()
-      ..debugPolicyOverride = const UpdatePolicy(
+      ..debugPolicyOverride = UpdatePolicy(
         enabled: true,
         latestVersion: '1.2.48',
         minVersion: '',
         notes: '',
+        pushAt: DateTime.now().toUtc(),
       )
       ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
       ..debugPlayAvailabilityOverride = PlayAvailability.notFromPlay;
@@ -199,11 +201,12 @@ void main() {
     final key = GlobalKey<NavigatorState>();
     final client = _FakePlayClient();
     final svc = AppUpdateService.forTest(client: client)
-      ..debugPolicyOverride = const UpdatePolicy(
+      ..debugPolicyOverride = UpdatePolicy(
         enabled: true,
         latestVersion: '1.2.48',
         minVersion: '',
         notes: '',
+        pushAt: DateTime.now().toUtc(),
       )
       ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
       ..debugPlayAvailabilityOverride = PlayAvailability.available;

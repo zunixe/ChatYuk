@@ -22,6 +22,13 @@
   (get_online_users 400ms, count_room_presence 600ms, cleanup_room_presence
   2s) → frame pertama bersih.
 
+## 2026-10-05 — Preview kartu ikut teks hasil edit (private chat)
+
+- **Migrasi** `20261006130000_private_last_message_on_edit.sql`: trigger
+  baru `trg_private_msg_edit` sinkronkan `private_chats.last_message` saat
+  teks pesan terakhir diedit. Applied via Management API + tercatat di
+  `schema_migrations`. `check_migrations` OK.
+
 ## 2026-10-05 — Pesan room user terhapus tampil "Pesan dihapus"
 
 - **Migrasi** `20261006120000_room_deleted_user_placeholder.sql`:

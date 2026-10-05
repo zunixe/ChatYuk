@@ -631,13 +631,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       ),
     );
     if (!ok) return;
-    // Slide terakhir milik orang ini → tutup viewer; else muat ulang.
-    if (_slides.length <= 1) {
-      Navigator.pop(context);
-    } else {
-      sp.invalidateSlides(_item.authorId);
-      _loadPerson();
+    // Slide TIDAK hilang (jadi privat) — biarkan viewer terbuka, tandai
+    // slide ini ownerOnly + rebuild supaya badge "Private" langsung tampil.
+    // (Dulu: pop saat slide terakhir — kini salah, slide masih ada.)
+    if (_slide >= 0 && _slide < _slides.length) {
+      setState(() => _slides[_slide] = _slides[_slide].copyWith(ownerOnly: true));
     }
+    sp.invalidateSlides(_item.authorId);
+    _loadPerson();
   }
 
   Future<void> _confirmDelete() async {
@@ -1075,11 +1076,15 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         ],
                       ),
                     ),
-                  // Visibilitas story milik sendiri — jawab "story ini
-                  // tayang untuk siapa" (Semua orang / Pengikut / Teman).
-                  if (_own && !_loading && _slides.isNotEmpty) ...[
+                  // Visibilitas story: oleh pembuat sendiri ATAU admin (mode
+                  // moderasi) — jawab "story ini tayang untuk siapa" /
+                  // "ini private" (badge kunci).
+                  if ((_own || _isAdmin) && !_loading && _slides.isNotEmpty) ...[
                     const SizedBox(width: 8),
-                    _VisibilityBadge(visibility: _slides[_slide].visibility),
+                    _VisibilityBadge(
+                      visibility: _slides[_slide].visibility,
+                      ownerOnly: _slides[_slide].ownerOnly,
+                    ),
                   ],
                 ],
               ),
@@ -1430,17 +1435,23 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 /// header (teks putih + shadow, tanpa kotak supaya tidak berat).
 class _VisibilityBadge extends StatelessWidget {
   final String visibility;
-  const _VisibilityBadge({required this.visibility});
+  /// Slide private (dulu "dihapus") — hanya pembuat (atau admin) yang lihat.
+  final bool ownerOnly;
+  const _VisibilityBadge({required this.visibility, this.ownerOnly = false});
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final isEveryone = visibility == 'everyone';
     final isFriends = visibility == 'friends';
-    final icon = isEveryone
+    final icon = ownerOnly
+        ? Icons.lock
+        : isEveryone
         ? Icons.public
         : (isFriends ? Icons.favorite_rounded : Icons.group_rounded);
-    final label = isEveryone
+    final label = ownerOnly
+        ? s.storyVisibilityPrivate
+        : isEveryone
         ? s.storyVisibilityEveryone
         : (isFriends ? s.storyVisibilityFriends : s.storyVisibilityFollowers);
     const shadows = [

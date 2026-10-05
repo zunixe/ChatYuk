@@ -22,6 +22,8 @@ class StorySlide {
   final String mediaType;
   final String videoPath;
   final int durationMs;
+  /// true = slide PRIVATE (dulu "dihapus") — hanya author (atau admin) lihat.
+  final bool ownerOnly;
 
   const StorySlide({
     required this.id,
@@ -43,6 +45,7 @@ class StorySlide {
     this.mediaType = 'image',
     this.videoPath = '',
     this.durationMs = 0,
+    this.ownerOnly = false,
   });
 
   bool get isVideo => mediaType == 'video' && videoPath.isNotEmpty;
@@ -68,11 +71,12 @@ class StorySlide {
       mediaType: '${m['media_type'] ?? 'image'}',
       videoPath: '${m['video_path'] ?? ''}',
       durationMs: _toInt(m['duration_ms'], 0),
+      ownerOnly: m['owner_only'] == true,
     );
   }
 
   /// Salinan dengan status like diubah (optimistic di viewer/provider).
-  StorySlide copyWith({int? likeCount, bool? liked}) {
+  StorySlide copyWith({int? likeCount, bool? liked, bool? ownerOnly}) {
     return StorySlide(
       id: id,
       authorId: authorId,
@@ -93,6 +97,7 @@ class StorySlide {
       likeCount: likeCount ?? this.likeCount,
       liked: liked ?? this.liked,
       createdAt: createdAt,
+      ownerOnly: ownerOnly ?? this.ownerOnly,
     );
   }
 
@@ -140,6 +145,8 @@ class StoryTrayItem {
   final bool muted;
   // Ada slide video (badge di tile).
   final bool hasVideo;
+  // Ada slide private (owner_only) di tray author ini — penanda admin.
+  final bool hasOwnerOnly;
 
   const StoryTrayItem({
     required this.authorId,
@@ -152,6 +159,7 @@ class StoryTrayItem {
     this.own = false,
     this.muted = false,
     this.hasVideo = false,
+    this.hasOwnerOnly = false,
   });
 
   factory StoryTrayItem.fromMap(Map<String, dynamic> m) {
@@ -166,6 +174,7 @@ class StoryTrayItem {
       own: m['own'] == true,
       muted: m['muted'] == true,
       hasVideo: m['has_video'] == true,
+      hasOwnerOnly: m['has_owner_only'] == true,
     );
   }
 
@@ -181,6 +190,7 @@ class StoryTrayItem {
       own: own,
       muted: muted ?? this.muted,
       hasVideo: hasVideo ?? this.hasVideo,
+      hasOwnerOnly: hasOwnerOnly,
     );
   }
 
@@ -197,6 +207,7 @@ class StoryTrayItem {
     'own': own,
     'muted': muted,
     'has_video': hasVideo,
+    'has_owner_only': hasOwnerOnly,
   };
 }
 
