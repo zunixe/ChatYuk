@@ -21,7 +21,7 @@ import '../providers/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import '../providers/riverpod/nav_provider.dart';
-import '../providers/online_users_provider.dart';
+import '../providers/riverpod/online_users_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/room_provider.dart';
 import '../widgets/search_dropdown.dart';
@@ -183,7 +183,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         context.read<StoryProvider>().refresh(silent: true);
       } catch (_) {}
       try {
-        context.read<OnlineUsersProvider>().resubscribeOnline();
+        ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).resubscribeOnline();
       } catch (_) {}
     }
   }
@@ -204,7 +204,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
       // Total user (registered + anon) — agregat ringan, ditunda ke
       // post-frame supaya tak berebut dengan raster pertama.
       try {
-        context.read<OnlineUsersProvider>().fetchUserCounts();
+        ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).fetchUserCounts();
       } catch (_) {}
     });
     _requestGpsOnce();
@@ -238,7 +238,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     if (_hiddenOwner != auth.uid) {
       _hiddenOwner = auth.uid;
       try {
-        context.read<OnlineUsersProvider>().setOwner(auth.uid);
+        ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).setOwner(auth.uid);
       } catch (_) {}
     }
     if (auth.uid != null) {
@@ -394,7 +394,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         try {
           final uid = pp.profile?.uid ?? '';
           if (uid.isNotEmpty) {
-            context.read<OnlineUsersProvider>().updateAvatarForUid(
+            ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).updateAvatarForUid(
               uid,
               processed,
             );
@@ -1005,7 +1005,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   Future<void> _hideUser(UserModel user) async {
     if (!mounted) return;
     try {
-      await context.read<OnlineUsersProvider>().hideUser(user.uid);
+      await ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).hideUser(user.uid);
     } catch (_) {}
     if (!mounted) return;
     // Langsung buka kotak bawah supaya user MELIHAT ke mana perginya.
@@ -1017,7 +1017,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     if (!mounted) return;
     // Box ikut rebuild lewat notify provider; tidak perlu setState khusus.
     try {
-      await context.read<OnlineUsersProvider>().unhideUser(user.uid);
+      await ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).unhideUser(user.uid);
     } catch (_) {}
   }
 
@@ -1425,9 +1425,10 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                   ),
                   ),
                 )
-              : Consumer<OnlineUsersProvider>(
+              : rv.Consumer(
                   key: const ValueKey('title'),
-                  builder: (_, prov, __) {
+                  builder: (ctx, ref, __) {
+                    final prov = ref.watch(onlineUsersProvider);
                     // Hitung sama seperti list: exclude self + blocked +
                     // hidden + dedupe by uid/nickname, supaya angka = kartu.
                     final chat = context.read<ChatProvider>();
@@ -1634,8 +1635,9 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
       ),
       body: Stack(
         children: [
-          Consumer<OnlineUsersProvider>(
-            builder: (_, provider, __) {
+          rv.Consumer(
+            builder: (ctx, ref, __) {
+              final provider = ref.watch(onlineUsersProvider);
               final chat = context.read<ChatProvider>();
               // Ukur biaya filter per emission (kandidat optimasi QA).
               // Partisi: utama = filter penuh + !hidden; kotak bawah =

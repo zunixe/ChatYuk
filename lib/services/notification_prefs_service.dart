@@ -58,7 +58,7 @@ class NotificationPrefsService {
     return list.contains(chatId);
   }
 
-  // ── Sembunyikan dari daftar Online (cermin lokal dari OnlineUsersProvider:
+  // ── Sembunyikan dari daftar Online (cermin lokal dari OnlineUsersNotifier:
   //    prefs `hidden_online_<myUid>`) ──
   // Dipakai gate notif "X online": user yang disembunyikan admin/user tidak
   // boleh memunculkan notifikasi online lagi.

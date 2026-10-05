@@ -9,7 +9,7 @@ import '../config/strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/online_users_provider.dart';
+import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
 import '../widgets/person_avatar.dart';
@@ -25,7 +25,7 @@ import '../core/chat/chat_filter.dart';
 import '../core/chat/chat_location.dart';
 import '../widgets/filter_chip_pill.dart';
 
-class PrivateChatsScreen extends StatefulWidget {
+class PrivateChatsScreen extends ConsumerStatefulWidget {
   final bool embedded;
   final String? externalQuery;
   const PrivateChatsScreen({
@@ -35,10 +35,10 @@ class PrivateChatsScreen extends StatefulWidget {
   });
 
   @override
-  State<PrivateChatsScreen> createState() => _PrivateChatsScreenState();
+  ConsumerState<PrivateChatsScreen> createState() => _PrivateChatsScreenState();
 }
 
-class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
+class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   Stream<List<PrivateChatInfo>>? _stream;
   List<PrivateChatInfo>? _initial;
   String? _boundUid;
@@ -653,8 +653,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
         )
         .where((u) => u.isNotEmpty)
         .toSet();
-    final onlineRelevant = context.select<OnlineUsersProvider,
-        ({Map<String, String> status, Map<String, String> name})>((o) {
+    final onlineRelevant = ref.watch(
+      onlineUsersProvider.select(
+        (o) {
+
       final st = <String, String>{};
       final nm = <String, String>{};
       for (final u in o.users) {
@@ -663,7 +665,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
         if (u.nickname.isNotEmpty) nm[u.uid] = u.nickname;
       }
       return (status: st, name: nm);
-    });
+        },
+      ),
+    );
     if (auth.uid == null) return const SizedBox();
 
     final effectiveQuery = widget.externalQuery ?? _query;
