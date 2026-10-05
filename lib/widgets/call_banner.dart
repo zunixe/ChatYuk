@@ -1,25 +1,26 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../core/nav_guard.dart';
 import '../main.dart';
-import '../providers/call_provider.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../screens/private_chat_screen.dart';
 import '../screens/call_screen.dart';
 import '../services/call_service.dart';
 import '../utils.dart';
 
-class CallBanner extends StatefulWidget {
+class CallBanner extends ConsumerStatefulWidget {
   const CallBanner({super.key});
 
   @override
-  State<CallBanner> createState() => _CallBannerState();
+  ConsumerState<CallBanner> createState() => _CallBannerState();
 }
 
-class _CallBannerState extends State<CallBanner> {
+class _CallBannerState extends ConsumerState<CallBanner> {
   Timer? _ticker;
   String _dur = '';
 
@@ -43,7 +44,7 @@ class _CallBannerState extends State<CallBanner> {
   }
 
   void _tick() {
-    final sess = CallProvider.instance.activeSession;
+    final sess = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).activeSession;
     if (sess == null || sess.connectedAt == null) {
       if (_dur.isNotEmpty && mounted) setState(() => _dur = '');
       return;
@@ -118,7 +119,7 @@ class _CallBannerState extends State<CallBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final prov = context.watch<CallProvider>();
+    final prov = ref.watch(callProvider);
     final s = context.watch<LocaleProvider>().s;
     final sess = prov.activeSession;
     final mode = prov.activeMode;

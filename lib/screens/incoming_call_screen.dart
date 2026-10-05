@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
-import '../providers/call_provider.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../widgets/profile_avatar.dart';
@@ -45,7 +45,7 @@ class IncomingCallScreen extends StatefulWidget {
 }
 
 class _IncomingCallScreenState extends State<IncomingCallScreen> {
-  CallProvider get _service => context.read<CallProvider>();
+  CallNotifier get _service => ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
   StreamSubscription<String>? _statusSub;
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   String _callerName = '';
@@ -56,10 +56,10 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   void initState() {
     super.initState();
     WakelockPlus.enable();
-    CallProvider.instance.registerCall(widget.callId);
+    ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).registerCall(widget.callId);
     // Tombol jawab/tolak dari UI panggilan SISTEM (layar kunci/headset/
     // Bluetooth) diteruskan ke layar ini — satu jalur aksi, tidak dobel.
-    CallProvider.instance.bindIncomingScreen(
+    ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).bindIncomingScreen(
       callId: widget.callId,
       onAccept: () => _accept(mode: CallMode.fullscreen),
       onDecline: _decline,
@@ -67,7 +67,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     _loadCaller();
     // Android ConnectionService memutar ring sendiri (system call UI);
     // memutar ringtone Dart juga = nada dering dobel.
-    if (!CallProvider.instance.callUi.usesSystemUi) _startRingtone();
+    if (!CallNotifier.callUi.usesSystemUi) _startRingtone();
     _statusSub = _service.onCallStatus(widget.callId).listen((status) {
       if (status == 'canceled' ||
           status == 'ended' ||
@@ -126,8 +126,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     WakelockPlus.disable();
     // Jangan unregister bila call diterima — session sudah diambil alih
     // CallProvider (aktif), dan unregister di sini akan mematikan penanda busy.
-    if (!_accepted) CallProvider.instance.unregisterCall(widget.callId);
-    CallProvider.instance.unbindIncomingScreen(widget.callId);
+    if (!_accepted) ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).unregisterCall(widget.callId);
+    ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).unbindIncomingScreen(widget.callId);
     _statusSub?.cancel();
     // Bersihkan channel status sharing bila tak ada sesi yang memakai
     // (decline/missed tanpa CallSession) — aman bila sesi aktif.
@@ -198,7 +198,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     final auth = context.read<AuthProvider>();
     final profile = auth.profile;
     final s = context.read<LocaleProvider>().s;
-    final session = await CallProvider.instance.startSession(
+    final session = await ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).startSession(
       callId: widget.callId,
       remoteUid: widget.callerUid,
       remoteName: _callerName.isEmpty ? 'User' : _callerName,
