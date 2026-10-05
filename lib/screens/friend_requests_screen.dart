@@ -1,20 +1,21 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../widgets/person_avatar.dart';
 import '../providers/theme_provider.dart';
 
-class FriendRequestsScreen extends StatefulWidget {
+class FriendRequestsScreen extends ConsumerStatefulWidget {
   const FriendRequestsScreen({super.key});
 
   @override
-  State<FriendRequestsScreen> createState() => _FriendRequestsScreenState();
+  ConsumerState<FriendRequestsScreen> createState() => _FriendRequestsScreenState();
 }
 
-class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
-  SocialProvider get _service => context.read<SocialProvider>();
+class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
+  SocialNotifier get _service => ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
   bool _loading = true;
   List<Map<String, dynamic>> _inbox = [];
   List<Map<String, dynamic>> _outbox = [];
@@ -25,7 +26,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
   @override
   void initState() {
     super.initState();
-    _knownCount = context.read<SocialProvider>().friendRequestCount;
+    _knownCount = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier).friendRequestCount;
     _load();
   }
 
@@ -52,7 +53,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
         );
       }
       await _load();
-      if (mounted) context.read<SocialProvider>().refreshInbox();
+      if (mounted) ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier).refreshInbox();
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
     }
@@ -85,8 +86,8 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
     final s = context.watch<LocaleProvider>().s;
     // Request masuk selagi layar terbuka → muat ulang (realtime provider
     // sudah update count; daftar lokal ikut segar tanpa pull-to-refresh).
-    final count = context.select<SocialProvider, int>(
-      (sp) => sp.friendRequestCount,
+    final count = ref.watch(
+      socialProvider.select((sp) => sp.friendRequestCount),
     );
     if (!_loading && _knownCount != count) {
       _knownCount = count;

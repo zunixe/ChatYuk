@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/social_provider.dart';
+import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/providers/theme_provider.dart';
 import 'package:chatyuk/screens/friend_requests_screen.dart';
 import 'package:chatyuk/services/social_service.dart';
@@ -13,6 +15,22 @@ import 'supabase_test_client.dart';
 import 'test_helper.dart';
 
 class MockSocialService extends Mock implements SocialService {}
+
+class TestSocial extends SocialNotifier {
+  final List<Map<String, dynamic>> inbox;
+  final List<Map<String, dynamic>> outbox;
+  TestSocial({this.inbox = const [], this.outbox = const []});
+  @override
+  SocialState build() => const SocialState();
+  @override
+  Future<List<Map<String, dynamic>>> friendRequestInbox(
+          {int limit = 50, int offset = 0}) async =>
+      inbox;
+  @override
+  Future<List<Map<String, dynamic>>> friendRequestOutbox(
+          {int limit = 50, int offset = 0}) async =>
+      outbox;
+}
 
 /// Regresi: Outbox memuat SEMUA riwayat (pending/accepted/rejected), tapi
 /// backend `cancel_friend_request` menolak non-pending (`not_pending`).
@@ -36,31 +54,27 @@ void main() {
       };
 
   Future<void> pump(WidgetTester tester) async {
-    final svc = MockSocialService();
-    when(() => svc.friendRequestInbox()).thenAnswer((_) async => []);
-    when(() => svc.friendRequestOutbox()).thenAnswer(
-      (_) async => [row(1, 'pending'), row(2, 'accepted'), row(3, 'rejected')],
-    );
-    final sp = SocialProvider(
-      service: svc,
-      sb: fakeSupabaseClientNoTicker(),
-      autoInit: false,
+    final outbox = [row(1, 'pending'), row(2, 'accepted'), row(3, 'rejected')];
+    final container = ProviderContainer(
+      overrides: [socialProvider.overrideWith(() => TestSocial(outbox: outbox))],
     );
     final locale = LocaleProvider();
     final theme = ThemeProvider();
     addTearDown(() {
-      sp.dispose();
       locale.dispose();
       theme.dispose();
+      container.dispose();
     });
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider.value(value: locale),
-          ChangeNotifierProvider.value(value: theme),
-          ChangeNotifierProvider.value(value: sp),
-        ],
-        child: const MaterialApp(home: FriendRequestsScreen()),
+      UncontrolledProviderScope(
+        container: container,
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: locale),
+            ChangeNotifierProvider.value(value: theme),
+          ],
+          child: const MaterialApp(home: FriendRequestsScreen()),
+        ),
       ),
     );
     await tester.pump();

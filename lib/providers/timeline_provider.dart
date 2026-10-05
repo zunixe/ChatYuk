@@ -168,7 +168,7 @@ class TimelineProvider extends ChangeNotifier {
   }
 
   /// Follow/unfollow terjadi → buang TTL cache, fetch berikutnya segar.
-  /// Dipanggil via SocialProvider.onFollowGraphChanged (di-wiring di app.dart).
+  /// Dipanggil via SocialNotifier.onFollowGraphChanged (di-wiring di app.dart).
   void invalidateFollowedIds() => _followedIdsAt = null;
 
   // ── Persist feed ke disk (encrypted) — cold start tampil instan ──────────
@@ -359,7 +359,7 @@ class TimelineProvider extends ChangeNotifier {
       'isFollowing': row['is_following'] == true,
       // `is_friend` BUKAN kolom tabel posts (computed di RPC list_posts/get_post),
       // jadi TIDAK ada di payload realtime. Jangan hardcode `false` — PostCard
-      // me-resolve status teman lewat SocialProvider.isFriend(authorId).
+      // me-resolve status teman lewat SocialNotifier.isFriend(authorId).
       // (Dulu `'isFriend': false` di sini → badge Teman post realtime hilang.)
     };
   }

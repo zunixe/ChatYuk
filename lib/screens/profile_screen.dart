@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
@@ -21,7 +22,7 @@ import '../providers/riverpod/device_info_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/points_provider.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
@@ -1782,9 +1783,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ),
                                   ),
                                 ),
-                                Consumer<SocialProvider>(
-                                  builder: (_, sp, __) =>
-                                      sp.friendRequestCount > 0
+                                rv.Consumer(
+                                  builder: (ctx, ref, __) {
+                                    final c = ref.watch(
+                                      socialProvider.select(
+                                        (st) => st.friendRequestCount,
+                                      ),
+                                    );
+                                    return c > 0
                                       ? Container(
                                           padding: EdgeInsets.symmetric(
                                             horizontal: 8,
@@ -1796,7 +1802,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                 BorderRadius.circular(10),
                                           ),
                                           child: Text(
-                                            '${sp.friendRequestCount}',
+                                            '$c',
                                             style: AppText.caption.copyWith(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w700,
@@ -1806,7 +1812,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       : Icon(
                                           Icons.chevron_right,
                                           color: AppTheme.textSecondary,
-                                        ),
+                                        );
+                                  },
                                 ),
                               ],
                             ),
@@ -2158,7 +2165,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _editSubscriptionPrice(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
-    final social = context.read<SocialProvider>();
+    final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     final current =
         context.read<AuthProvider>().profile?.subscriptionPrice ?? 0;
     final ctrl = TextEditingController(text: current > 0 ? '$current' : '');

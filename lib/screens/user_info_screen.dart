@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -13,7 +14,7 @@ import '../providers/chat_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../services/avatar_service.dart';
@@ -147,7 +148,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   Future<void> _loadSocial() async {
     try {
-      final st = await context.read<SocialProvider>()
+      final st = await ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier)
           .mySocialStatus(widget.userId)
           .timeout(_loadTimeout);
       if (!mounted) return;
@@ -172,7 +173,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgTargetNotRegistered)));
       return;
     }
-    final social = context.read<SocialProvider>();
+    final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     setState(() => _busySocial = true);
     final ok = _following
         ? await social.unfollow(widget.userId)
@@ -206,7 +207,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgTargetNotRegistered)));
       return;
     }
-    final social = context.read<SocialProvider>();
+    final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     setState(() => _busySocial = true);
     final status = await social.sendFriendRequest(widget.userId);
     if (!mounted) return;
@@ -233,7 +234,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   /// Dialog & snackbar lewat helper bersama `social_actions.dart`.
   Future<void> _unfriend() async {
     final name = _profile?.nickname ?? '';
-    final social = context.read<SocialProvider>();
+    final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     setState(() => _busySocial = true);
     final ok = await runUnfriend(context, social, widget.userId, name);
     if (!mounted) return;
@@ -249,7 +250,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   /// Batalkan permintaan teman yang sudah dikirim (id diambil dari outbox).
   Future<void> _cancelFriendRequest() async {
     final name = _profile?.nickname ?? '';
-    final social = context.read<SocialProvider>();
+    final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     setState(() => _busySocial = true);
     final ok = await runCancelRequest(context, social, widget.userId, name);
     if (!mounted) return;

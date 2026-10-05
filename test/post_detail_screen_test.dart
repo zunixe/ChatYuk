@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/strings.dart';
@@ -10,6 +12,7 @@ import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/social_provider.dart';
+import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/providers/timeline_provider.dart';
 import 'package:chatyuk/screens/post_detail_screen.dart';
 import 'package:chatyuk/services/social_service.dart';
@@ -22,6 +25,12 @@ import 'test_helper.dart';
 class MockTimelineProvider extends Mock implements TimelineProvider {}
 
 class MockSocialService extends Mock implements SocialService {}
+
+class TestSocial extends SocialNotifier {
+  TestSocial();
+  @override
+  SocialState build() => const SocialState();
+}
 
 void main() {
   final s = S(isId: true);
@@ -89,20 +98,27 @@ void main() {
       sb: sb,
       autoInit: false,
     );
+    final container = ProviderContainer(
+      overrides: [socialProvider.overrideWith(TestSocial.new)],
+    );
     addTearDown(() {
       auth.dispose();
       social.dispose();
+      container.dispose();
     });
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider<LocaleProvider>(
-          create: (_) => LocaleProvider(),
-        ),
-        ChangeNotifierProvider<AuthProvider>.value(value: auth),
-        ChangeNotifierProvider<SocialProvider>.value(value: social),
-        ChangeNotifierProvider<TimelineProvider>.value(value: timeline),
-      ],
-      child: const MaterialApp(home: PostDetailScreen(postId: 'p1')),
+    return UncontrolledProviderScope(
+      container: container,
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LocaleProvider>(
+            create: (_) => LocaleProvider(),
+          ),
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider<SocialProvider>.value(value: social),
+          ChangeNotifierProvider<TimelineProvider>.value(value: timeline),
+        ],
+        child: const MaterialApp(home: PostDetailScreen(postId: 'p1')),
+      ),
     );
   }
 

@@ -8,11 +8,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/social_provider.dart';
+import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/providers/timeline_provider.dart';
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/services/auth_service.dart';
@@ -30,6 +33,13 @@ class MockTimelineService extends Mock implements TimelineService {}
 class MockAuthService extends Mock implements AuthService {}
 
 class MockSocialService extends Mock implements SocialService {}
+
+class TestSocial extends SocialNotifier {
+  final SocialState preset;
+  TestSocial(this.preset);
+  @override
+  SocialState build() => preset;
+}
 
 Map<String, dynamic> _post({
   String id = 'p1',
@@ -110,34 +120,32 @@ void main() {
   });
 
   Future<void> pump(WidgetTester tester, Map<String, dynamic> post,
-      {SocialProvider? social}) async {
+      {SocialState socialState = const SocialState()}) async {
     final locale = LocaleProvider();
     final tp = TimelineProvider(service: timeline, autoInit: false);
     final ap = AuthProvider(authService: auth, autoInit: false);
-    // PostCard baca status follow/teman global (SocialProvider).
-    final sp = social ??
-        SocialProvider(
-          service: MockSocialService(),
-          sb: fakeSupabaseClientNoTicker(),
-          autoInit: false,
-        );
+    final container = ProviderContainer(
+      overrides: [socialProvider.overrideWith(() => TestSocial(socialState))],
+    );
     addTearDown(() {
       tp.dispose();
       ap.dispose();
-      sp.dispose();
       locale.dispose();
+      container.dispose();
     });
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider.value(value: locale),
-          ChangeNotifierProvider.value(value: tp),
-          ChangeNotifierProvider.value(value: ap),
-          ChangeNotifierProvider.value(value: sp),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(child: PostCard(post: post)),
+      UncontrolledProviderScope(
+        container: container,
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: locale),
+            ChangeNotifierProvider.value(value: tp),
+            ChangeNotifierProvider.value(value: ap),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(child: PostCard(post: post)),
+            ),
           ),
         ),
       ),
@@ -179,20 +187,9 @@ void main() {
   // muncul dari SocialProvider.isFriend(authorId) walau post['isFriend']=false.
   testWidgets('badge Teman muncul dari SocialProvider walau post.isFriend=false',
       (tester) async {
-    final svc = MockSocialService();
-    final sp = SocialProvider(
-      service: svc,
-      sb: fakeSupabaseClientNoTicker(),
-      autoInit: false,
-    );
-    // Simulasi author 'a1' sudah jadi teman (state global terisi).
-    when(() => svc.sendFriendRequest('a1'))
-        .thenAnswer((_) async => {'ok': true, 'already_friends': true});
-    await sp.sendFriendRequest('a1');
-    expect(sp.isFriend('a1'), isTrue, reason: 'prasyarat: a1 teman');
-
     // post.isFriend = false (seperti payload realtime yang tak punya field ini).
-    await pump(tester, _post(friend: false), social: sp);
+    await pump(tester, _post(friend: false),
+        socialState: const SocialState(friends: {'a1'}));
     expect(tester.takeException(), isNull);
     expect(
       find.byIcon(Icons.people_alt_rounded),

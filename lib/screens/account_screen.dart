@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,7 +7,7 @@ import '../providers/auth_provider.dart';
 import '../models/user_model.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
 import '../widgets/phone_edit_dialog.dart';
 import 'link_email_screen.dart';
@@ -630,7 +631,7 @@ class _AccountScreenState extends State<AccountScreen> {
     setState(() => _leaving = true);
     try {
       if (auth.isAnonymous) {
-        await context.read<SocialProvider>().clearAnonSocial();
+        await ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier).clearAnonSocial();
       }
       await context.read<AuthProvider>().deleteMyAccount();
       // Sesi: setelah profil+auth user dihapus server-side, signOut() biasa
@@ -727,7 +728,7 @@ class _AccountScreenState extends State<AccountScreen> {
     // MENGGAGALKAN logout.
     if (auth.isAnonymous) {
       try {
-        await context.read<SocialProvider>().clearAnonSocial().timeout(
+        await ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier).clearAnonSocial().timeout(
           const Duration(seconds: 5),
         );
       } catch (e) {
