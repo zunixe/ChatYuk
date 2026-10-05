@@ -33,7 +33,6 @@ import 'providers/riverpod/nav_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/timeline_provider.dart';
 import 'providers/story_provider.dart';
-import 'providers/privacy_provider.dart';
 import 'providers/update_provider.dart';
 import 'services/chat_service.dart';
 import 'services/boot_overlay.dart';
@@ -96,7 +95,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
         // OnlineUsersScreen.initState) — RPC story_tray + subscribe
         // realtime jangan berebut CPU/network dengan frame pertama.
         ChangeNotifierProvider(create: (_) => StoryProvider()),
-        ChangeNotifierProvider(create: (_) => PrivacyProvider()),
         ...AdminGate.extraProviders,
         ChangeNotifierProvider.value(value: _roomProvider),
         ChangeNotifierProvider.value(value: _onlineUsersProvider),
