@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -14,7 +15,7 @@ import '../../../models/story_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/chat_provider.dart';
 import '../../../providers/locale_provider.dart';
-import '../../../providers/storage_provider.dart';
+import '../../../providers/riverpod/storage_provider.dart';
 import '../../../providers/story_provider.dart';
 import '../../../core/cache/media_disk_cache.dart';
 import '../../../utils.dart';
@@ -474,7 +475,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (cached != null) return cached;
     // Legacy: row lama berisi base64 langsung (bukan path storage).
     // Tanpa cabang ini slide lama gagal total (return null → kotak retry).
-    if (path.isNotEmpty && !context.read<StorageProvider>().isPath(path)) {
+    if (path.isNotEmpty && !ProviderScope.containerOf(context, listen: false).read(storageProvider).isPath(path)) {
       try {
         final legacy = base64Decode(path);
         if (legacy.isNotEmpty) {
@@ -489,8 +490,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       b ??= await MediaDiskCache.instance.read(path);
       // Timeout WAJIB: tanpa ini satu unduhan yang menggantung menahan
       // `_loading` (spinner) selamanya di jalur pemanggil.
-      b ??= await context
-          .read<StorageProvider>()
+      b ??= await ProviderScope.containerOf(context, listen: false)
+          .read(storageProvider)
           .downloadBytes(path)
           .timeout(const Duration(seconds: 8));
       if (b != null && b.isNotEmpty) {

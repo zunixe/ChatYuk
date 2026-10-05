@@ -17,12 +17,12 @@ import '../models/room_model.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
-import '../providers/storage_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/location_provider.dart';
+import '../providers/riverpod/location_provider.dart';
 import '../providers/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/nav_guard.dart';
@@ -1740,7 +1740,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   /// Kirim pembaruan koordinat lokasi live (room) tiap 30 detik.
   void _startLiveLocationUpdates(String messageId, ChatLocation initial) {
     _liveTimer?.cancel();
-    final lp = context.read<LocationProvider>();
+    final lp = ProviderScope.containerOf(context, listen: false).read(locationProvider);
     _liveTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
       final exp = initial.expiresAt;
       if (exp == null || DateTime.now().toUtc().isAfter(exp)) {
@@ -1801,7 +1801,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         await queueVoiceOffline(bytes, f);
         return;
       }
-      final storagePath = await context.read<StorageProvider>().uploadVoice(
+      final storagePath = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadVoice(
         chatId: 'room_${widget.room.id}',
         bytes: bytes,
       );

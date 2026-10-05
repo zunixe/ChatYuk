@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -11,7 +12,7 @@ import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
-import '../providers/storage_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../utils.dart';
 import '../core/media/chat_photo_helper.dart';
 import '../core/photo_quality_pref.dart';
@@ -316,7 +317,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     required void Function(String) toast,
   }) async {
     final s = context.read<LocaleProvider>().s;
-    final storage = context.read<StorageProvider>();
+    final storage = ProviderScope.containerOf(context, listen: false).read(storageProvider);
     // 1) Cek durasi ASLI sebelum kompres (tolak >60 dtk lebih awal —
     //    jangan buang waktu kompres video 5 menit).
     final rawMs = await storage.videoDurationMs(path);

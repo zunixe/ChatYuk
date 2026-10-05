@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
-import '../providers/avatar_provider.dart';
+import '../providers/riverpod/avatar_provider.dart';
 
 /// Avatar baris penonton story.
 ///
@@ -65,7 +65,7 @@ class _StoryViewerAvatarState extends State<StoryViewerAvatar> {
     _bytes = null;
     if (widget.viewerId.isEmpty) return;
     // Path/kosong → ambil via AvatarProvider (fetch + download + cache).
-    final prov = context.read<AvatarProvider>();
+    final prov = ProviderScope.containerOf(context, listen: false).read(avatarProvider);
     prov
         .get(widget.viewerId)
         .then((b64) {

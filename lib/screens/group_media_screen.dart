@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -8,7 +9,7 @@ import '../config/theme.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../providers/locale_provider.dart';
-import '../providers/storage_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../widgets/post_photo_viewer.dart';
 
 /// Galeri media grup ala WA: grid foto dari pesan room + viewer.
@@ -61,7 +62,7 @@ class _GroupMediaScreenState extends State<GroupMediaScreen> {
           (i + concurrency) > paths.length ? paths.length : i + concurrency,
         );
         final results = await Future.wait(
-          batch.map((p) => context.read<StorageProvider>()
+          batch.map((p) => ProviderScope.containerOf(context, listen: false).read(storageProvider)
               .downloadThumbBytes(p)
               .then((b) => MapEntry(p, b))),
         );

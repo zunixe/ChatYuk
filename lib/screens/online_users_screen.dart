@@ -8,14 +8,14 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../providers/location_provider.dart';
+import '../providers/riverpod/location_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/regions.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
-import '../providers/storage_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
@@ -212,7 +212,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   /// Minta izin GPS saat masuk menu pengguna online (dialog native muncul
   /// sekali; kalau ditolak, user tetap bisa aktifkan lewat "bagikan lokasi").
   Future<void> _requestGpsOnce() async {
-    final loc = context.read<LocationProvider>().location;
+    final loc = ProviderScope.containerOf(context, listen: false).read(locationProvider).location;
     final ok = await loc.requestPermission();
     if (!ok) return;
     await loc.updateMyLocation();
@@ -536,7 +536,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         bytes =
             MediaDiskCache.instance.readSync(src) ??
             await MediaDiskCache.instance.read(src) ??
-            await context.read<StorageProvider>().downloadBytes(src);
+            await ProviderScope.containerOf(context, listen: false).read(storageProvider).downloadBytes(src);
       } catch (_) {}
     }
     if (!mounted) return;
@@ -3437,7 +3437,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
   Future<void> _loadThumb() async {
     final p = widget.item.thumbPath;
     if (p.isEmpty) return;
-    if (context.read<StorageProvider>().isAvatarPath(p)) return;
+    if (ProviderScope.containerOf(context, listen: false).read(storageProvider).isAvatarPath(p)) return;
     // Sudah punya thumbnail (sync hit / didUpdateWidget) → tidak perlu ulang.
     if (_thumb != null) return;
     // Tunggu prewarm disk dulu — kalau ternyata ADA di disk, ambil sinkron

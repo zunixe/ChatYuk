@@ -1,8 +1,9 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/location_provider.dart';
-import '../providers/device_info_provider.dart';
+import '../providers/riverpod/location_provider.dart';
+import '../providers/riverpod/device_info_provider.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../utils.dart';
@@ -35,7 +36,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
   final _nicknameCtrl = TextEditingController();
-  GeoService get _geo => context.read<LocationProvider>().geo;
+  GeoService get _geo => ProviderScope.containerOf(context, listen: false).read(locationProvider).geo;
 
   String _gender = 'male';
   int _age = 18;
@@ -60,7 +61,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // 1. Coba GPS presisi (tanpa memicu dialog — hanya bila izin sudah ada).
     GeoInfo? info;
     try {
-      final gps = await context.read<LocationProvider>().tryDevicePositionForRegister();
+      final gps = await ProviderScope.containerOf(context, listen: false).read(locationProvider).tryDevicePositionForRegister();
       if (gps != null) {
         info = await _geo.detectByCoordinates(gps.lat, gps.lon);
       }
@@ -327,7 +328,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } finally {
       // Catat identitas perangkat + install ID untuk pelacakan admin.
       unawaited(
-        context.read<DeviceInfoProvider>().syncToServer(ipAddress: _ipAddress),
+        ProviderScope.containerOf(context, listen: false).read(deviceInfoProvider).syncToServer(ipAddress: _ipAddress),
       );
       if (mounted) setState(() => _loading = false);
     }

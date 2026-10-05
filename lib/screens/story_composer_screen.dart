@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import '../utils.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +14,7 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/story_provider.dart';
-import '../providers/storage_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../widgets/story_text_overlay.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -227,7 +228,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     final uid = auth.uid;
     final ctrl = _videoCtrl;
     if (uid == null || ctrl == null || !ctrl.value.isInitialized) return;
-    final storage = context.read<StorageProvider>();
+    final storage = ProviderScope.containerOf(context, listen: false).read(storageProvider);
     final storyProv = context.read<StoryProvider>();
     final segs = _segments.isEmpty
         ? _planSegments(ctrl.value.duration.inMilliseconds)
@@ -562,7 +563,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
           ? await _renderTransformed(_bytes!)
           : _bytes!;
       final b64 = await compute(processStoryImage, transformed);
-      final path = await context.read<StorageProvider>()
+      final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider)
           .uploadStoryImage(uid: uid, base64: b64);
       if (path == null || path.isEmpty) throw Exception('upload_failed');
       final ok = await context.read<StoryProvider>().publish(

@@ -1,9 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';import 'package:provider/provider.dart';
-import '../../../providers/location_provider.dart';
+import '../../../providers/riverpod/location_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -221,7 +222,7 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
           if (_ipCache.containsKey(ip)) {
             info = _ipCache[ip];
           } else {
-            info = await context.read<LocationProvider>().detectByIp(ip);
+            info = await ProviderScope.containerOf(context, listen: false).read(locationProvider).detectByIp(ip);
             _ipCache[ip] = info;
           }
           if (info?.lat != null && info?.lon != null) {

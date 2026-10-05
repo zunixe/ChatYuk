@@ -1,11 +1,12 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../services/device_info_service.dart';
+import '../../services/device_info_service.dart';
 
-/// Provider info perangkat — screen tidak import `services/`.
-class DeviceInfoProvider extends ChangeNotifier {
+/// Info perangkat — action-only (+ cache appVersionLabel internal).
+/// Migrasi dari ChangeNotifier (0 notifyListeners) → Provider.
+class DeviceInfoNotifier {
   final DeviceInfoService service;
-  DeviceInfoProvider({DeviceInfoService? service})
+  DeviceInfoNotifier([DeviceInfoService? service])
       : service = service ?? DeviceInfoService.instance;
 
   Future<String> installId() => service.installId();
@@ -15,8 +16,6 @@ class DeviceInfoProvider extends ChangeNotifier {
   String? _appVersionLabel;
   Future<String>? _appVersionLoading;
 
-  /// Label versi aplikasi (mis. "v1.2.51+63") — di-cache supaya platform
-  /// channel hanya dipanggil sekali.
   Future<String> appVersionLabel() {
     if (_appVersionLabel != null) return Future.value(_appVersionLabel);
     return _appVersionLoading ??= service.collectDeviceInfo().then((info) {
@@ -27,3 +26,6 @@ class DeviceInfoProvider extends ChangeNotifier {
     });
   }
 }
+
+final deviceInfoProvider =
+    Provider<DeviceInfoNotifier>((_) => DeviceInfoNotifier());
