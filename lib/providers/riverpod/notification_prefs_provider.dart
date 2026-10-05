@@ -1,10 +1,11 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../services/notification_prefs_service.dart';
+import '../../services/notification_prefs_service.dart';
 
-/// Provider preferensi notifikasi — screen tidak import `services/`.
-class NotificationPrefsProvider extends ChangeNotifier {
-  NotificationPrefsProvider();
+/// Preferensi notifikasi (Riverpod) — action-only (pembungkus static service),
+/// tanpa state reaktif. Migrasi dari ChangeNotifier (yang tak pernah notify).
+class NotificationPrefsNotifier {
+  const NotificationPrefsNotifier();
 
   Future<bool> isEnabled(String type) => NotificationPrefsService.isEnabled(type);
   Future<Map<String, bool>> allPrefs() => NotificationPrefsService.allPrefs();
@@ -15,3 +16,6 @@ class NotificationPrefsProvider extends ChangeNotifier {
   Future<bool> isChatMuted(String chatId) =>
       NotificationPrefsService.isChatMuted(chatId);
 }
+
+final notificationPrefsProvider =
+    Provider<NotificationPrefsNotifier>((_) => const NotificationPrefsNotifier());

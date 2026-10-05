@@ -6,9 +6,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:provider/provider.dart';
 import '../providers/call_provider.dart';
-import '../providers/message_reaction_provider.dart';
+import '../providers/riverpod/message_reaction_provider.dart';
 import '../providers/room_provider.dart';
-import '../providers/notification_prefs_provider.dart';
+import '../providers/riverpod/notification_prefs_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -714,24 +714,24 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Cache dulu (tampil instan), stream menimpa sesudahnya.
-      context.read<MessageReactionProvider>().loadCachedReactions(widget.room.id).then((
+      ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).loadCachedReactions(widget.room.id).then((
         cached,
       ) {
         if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
         reactions = cached;
         _scheduleRebuild();
       });
-      _reactionsSub = context.read<MessageReactionProvider>()
+      _reactionsSub = ProviderScope.containerOf(context, listen: false).read(messageReactionProvider)
           .watchReactions(widget.room.id)
           .listen((m) {
         reactions = m;
         _scheduleRebuild();
-        context.read<MessageReactionProvider>().saveCachedReactions(widget.room.id, m);
+        ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).saveCachedReactions(widget.room.id, m);
       }, onError: (e) {
         // OFFLINE: reactions (.stream() mentah) error → jangan tak tertangkap.
         debugPrint('[NAV] room reactions stream error: $e');
       });
-      _starredSub = context.read<MessageReactionProvider>()
+      _starredSub = ProviderScope.containerOf(context, listen: false).read(messageReactionProvider)
           .watchStarred(widget.room.id)
           .listen((m) {
         starredIds = m;
@@ -797,7 +797,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
       await _refreshLiveUid();
       try {
-        _muted = await context.read<NotificationPrefsProvider>().isChatMuted(widget.room.id);
+        _muted = await ProviderScope.containerOf(context, listen: false)
+            .read(notificationPrefsProvider)
+            .isChatMuted(widget.room.id);
       } catch (_) {}
       try {
         final granted = await context.read<RoomProvider>().myBroadcastGranted(widget.room.id);

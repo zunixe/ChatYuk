@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../providers/message_reaction_provider.dart';
+import '../providers/riverpod/message_reaction_provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/message_model.dart';
@@ -1048,28 +1048,28 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         if (!mounted) return;
         _openWorkTimer = null;
         // Cache dulu (tampil instan), stream menimpa sesudahnya.
-        context.read<MessageReactionProvider>().loadCachedReactions(widget.chatId).then((
+        ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).loadCachedReactions(widget.chatId).then((
           cached,
         ) {
           if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
           reactions = cached;
           _scheduleRebuild();
         });
-        _reactionsSub = context.read<MessageReactionProvider>()
+        _reactionsSub = ProviderScope.containerOf(context, listen: false).read(messageReactionProvider)
             .watchReactions(widget.chatId)
             .listen((m) {
           reactions = m;
           _scheduleRebuild();
-          context.read<MessageReactionProvider>().saveCachedReactions(widget.chatId, m);
+          ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).saveCachedReactions(widget.chatId, m);
         }, onError: (e) {
           debugPrint('[NAV] reactions stream error: $e');
         });
-        _starredSub = context.read<MessageReactionProvider>()
+        _starredSub = ProviderScope.containerOf(context, listen: false).read(messageReactionProvider)
             .watchStarred(widget.chatId)
             .listen((m) {
           starredIds = m;
           _scheduleRebuild();
-          context.read<MessageReactionProvider>().saveCachedStarred(
+          ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).saveCachedStarred(
             widget.chatId,
             m,
           );
@@ -1080,7 +1080,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         // memori kosong di sesi ini), muat dari disk. Jangan timpa bila
         // `starredIds` sudah terisi (stream/prime lebih akurat). Dulu TANPA
         // cache → tiap buka chat bintang "di-load dulu" menunggu round-trip.
-        context.read<MessageReactionProvider>().loadCachedStarred(
+        ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).loadCachedStarred(
           widget.chatId,
         ).then((cached) {
           if (!mounted || cached.isEmpty || starredIds.isNotEmpty) return;
@@ -1161,8 +1161,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   /// Stream realtime + fallback `_loadCachedStarredAsync` menimpa sesudahnya.
   void _primeStarredFromCache() {
     try {
-      final cached = context
-          .read<MessageReactionProvider>()
+      final cached = ProviderScope.containerOf(context, listen: false)
+          .read(messageReactionProvider)
           .peekCachedStarred(widget.chatId);
       if (cached.isNotEmpty) starredIds = cached;
     } catch (_) {}

@@ -1,11 +1,12 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../services/message_reaction_service.dart';
+import '../../services/message_reaction_service.dart';
 
-/// Provider reaksi pesan — screen tidak import `services/`.
-class MessageReactionProvider extends ChangeNotifier {
+/// Reaksi & bintang pesan (Riverpod) — action-only (pembungkus service),
+/// tanpa state reaktif. Migrasi dari ChangeNotifier (0 notifyListeners).
+class MessageReactionNotifier {
   final MessageReactionService service;
-  MessageReactionProvider({MessageReactionService? service})
+  MessageReactionNotifier([MessageReactionService? service])
       : service = service ?? MessageReactionService.instance;
 
   Future<ToggleResult> toggleReaction({
@@ -65,3 +66,6 @@ class MessageReactionProvider extends ChangeNotifier {
   Future<void> saveCachedStarred(String chatId, Set<String> ids) =>
       service.saveCachedStarred(chatId, ids);
 }
+
+final messageReactionProvider =
+    Provider<MessageReactionNotifier>((_) => MessageReactionNotifier());

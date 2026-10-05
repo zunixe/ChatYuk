@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
-import '../providers/notification_prefs_provider.dart';
+import '../providers/riverpod/notification_prefs_provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
@@ -23,12 +24,16 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   }
 
   Future<void> _load() async {
-    final m = await context.read<NotificationPrefsProvider>().allPrefs();
+    final m = await ProviderScope.containerOf(context, listen: false)
+        .read(notificationPrefsProvider)
+        .allPrefs();
     if (mounted) setState(() { _prefs = m; _loading = false; });
   }
 
   Future<void> _toggle(String type, bool v) async {
-    await context.read<NotificationPrefsProvider>().setEnabled(type, v);
+    await ProviderScope.containerOf(context, listen: false)
+        .read(notificationPrefsProvider)
+        .setEnabled(type, v);
     if (mounted) setState(() => _prefs[type] = v);
   }
 
