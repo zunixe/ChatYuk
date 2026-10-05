@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/auth_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/social_provider.dart';
@@ -106,7 +106,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
     final navKey = navKeyChat(chat.chatId);
     if (!tryClaimNav(navKey)) return;
     // Prefetch pesan ke memori sebelum push → buka chat instant.
-    context.read<ChatProvider>().prefetchPrivateChat(chat.chatId);
+    ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).prefetchPrivateChat(chat.chatId);
     Navigator.push(
       context,
       PageRouteBuilder(
@@ -145,7 +145,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   /// Tombol menampilkan AKSI (misal semua sudah pin → tawarkan unpin).
   Future<void> _pinSelected(String uid, bool pin) async {
     final s = context.read<LocaleProvider>().s;
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final ids = _selected.toList();
     _clearSelection();
     for (final id in ids) {
@@ -162,7 +162,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
 
   Future<void> _muteSelected(String uid, bool mute) async {
     final s = context.read<LocaleProvider>().s;
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final ids = _selected.toList();
     _clearSelection();
     for (final id in ids) {
@@ -179,7 +179,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
 
   Future<void> _archiveSelected(String uid, bool archive) async {
     final s = context.read<LocaleProvider>().s;
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final ids = _selected.toList();
     _clearSelection();
     for (final id in ids) {
@@ -438,7 +438,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   }
 
   Future<void> _deleteChat(String uid, String chatId) async {
-    await context.read<ChatProvider>().hideChat(uid, chatId);
+    await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).hideChat(uid, chatId);
   }
 
   @override
@@ -457,8 +457,8 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
     if (uid == _boundUid) return;
     _boundUid = uid;
     if (uid != null) {
-      _initial = context.read<ChatProvider>().lastPrivateChatsSnapshot(uid);
-      _stream = context.read<ChatProvider>().getMyPrivateChats(uid);
+      _initial = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).lastPrivateChatsSnapshot(uid);
+      _stream = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).getMyPrivateChats(uid);
     } else {
       _initial = null;
       _stream = null;
@@ -636,9 +636,8 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
     context.watch<ThemeProvider>();
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final blocked = context.select<ChatProvider, List<String>>(
-      (c) => c.blockedUids,
-    );
+    final blocked =
+        ref.watch(chatProvider.select((c) => c.blockedUids));
     // PERF (§26): JANGAN select SELURUH daftar online — list itu berubah
     // referensi tiap event presence (heartbeat ~30s) sehingga seluruh
     // ChatList rebuild dan menabrak frame saat pindah tab (terukur 853ms
@@ -933,8 +932,8 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
                             confirmDismiss: (direction) async {
                               if (direction == DismissDirection.startToEnd) {
                                 final myUid = auth.uid;
-                                final ok = await context
-                                    .read<ChatProvider>()
+                                final ok = await ProviderScope.containerOf(context, listen: false)
+                                    .read(chatProvider.notifier)
                                     .pinChat(
                                       chat.chatId,
                                       !isPinned,
@@ -1320,8 +1319,8 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
                                         if (isBlocked)
                                           GestureDetector(
                                             onTap: () async {
-                                              await context
-                                                  .read<ChatProvider>()
+                                              await ProviderScope.containerOf(context, listen: false)
+                                                  .read(chatProvider.notifier)
                                                   .unblockUser(
                                                     auth.uid!,
                                                     otherUid,

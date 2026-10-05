@@ -13,7 +13,7 @@ import '../../../config/strings.dart';
 import '../../../config/theme.dart';
 import '../../../models/story_model.dart';
 import '../../../providers/auth_provider.dart';
-import '../../../providers/chat_provider.dart';
+import '../../../providers/riverpod/chat_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../providers/riverpod/storage_provider.dart';
 import '../../../providers/riverpod/story_provider.dart';
@@ -1301,7 +1301,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final s = context.read<LocaleProvider>().s;
     setState(() => _sendingReply = true);
     try {
-      final chat = context.read<ChatProvider>();
+      final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
       final myName = auth.profile?.nickname ?? 'Anon';
       final ids = [myUid, authorId]..sort();
       final chatId = '${ids[0]}_${ids[1]}';

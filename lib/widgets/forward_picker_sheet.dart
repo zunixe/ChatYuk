@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import 'profile_avatar.dart';
@@ -59,7 +59,7 @@ class _ForwardSheetState extends State<_ForwardSheet> {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
     final myUid = auth.uid ?? '';
-    final chats = context.read<ChatProvider>().lastPrivateChatsSnapshot(myUid) ?? const [];
+    final chats = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).lastPrivateChatsSnapshot(myUid) ?? const [];
     // PERF: `read` (bukan `watch`) — sheet forward dibuka sesaat & langsung
     // dipilih; tidak perlu rebuild tiap RoomProvider notify (provider besar,
     // counts/presence sering). Menghindari storm rebuild saat sheet terbuka.

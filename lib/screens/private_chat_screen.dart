@@ -12,7 +12,7 @@ import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/call_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
@@ -219,7 +219,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   AuthProvider get chatAuth => context.read<AuthProvider>();
 
   @override
-  ChatProvider get chatProvider => context.read<ChatProvider>();
+  chatRiverpod.ChatNotifier get chatProvider => ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
 
   @override
   TextEditingController get chatMsgCtrl => _msgCtrl;
@@ -232,7 +232,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   @override
   Future<bool> chatDeleteMessage(String id) async {
-    final ok = await context.read<ChatProvider>().deletePrivateMessage(id);
+    final ok = await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).deletePrivateMessage(id);
     // Optimistic lokal: tandai terhapus SEGERA supaya UI tidak menunggu
     // realtime/refetch. DB sudah menyimpan semua id, tapi tampilan bisa
     // tertinggal (gejala "pilih beberapa, hanya 1 yang kelihatan terhapus").
@@ -244,7 +244,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   @override
   Future<bool> chatUndeleteMessage(String id) async {
-    final ok = await context.read<ChatProvider>().undeletePrivateMessage(id);
+    final ok = await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).undeletePrivateMessage(id);
     if (ok && mounted) {
       setState(() => _localDeletedIds.remove(id));
     }
@@ -299,7 +299,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     int? viewOnceSecs,
     int? videoDurationMs,
   }) async {
-    await context.read<ChatProvider>().sendPrivateMessage(
+    await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
       senderId: senderId,
       senderName: senderName,
@@ -388,7 +388,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     );
     String? sentId;
     try {
-      sentId = await context.read<ChatProvider>().sendPrivateMessage(
+      sentId = await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
         chatId: widget.chatId,
         senderId: uid,
         senderName: profile.nickname,
@@ -431,8 +431,8 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       if (pos == null) return;
       if (!mounted) return;
       final updated = initial.copyWith(lat: pos.$1, lng: pos.$2);
-      await context
-          .read<ChatProvider>()
+      await ProviderScope.containerOf(context, listen: false)
+          .read(chatRiverpod.chatProvider.notifier)
           .updateLocationMessage(messageId, updated.encode());
     });
   }
@@ -582,7 +582,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   @override
   Future<bool> sendPreCheck() async {
-    if (context.read<ChatProvider>().isBlocked(widget.otherUid)) {
+    if (ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid)) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
         showChatSnack(context, s.msgBlocked);
@@ -597,7 +597,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   @override
   Future<bool> sendEditPersist(MessageModel editing, String raw) =>
-      context.read<ChatProvider>().editPrivateMessage(editing.id, raw);
+      ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).editPrivateMessage(editing.id, raw);
 
   @override
   Future<void> sendDispatchText({
@@ -605,7 +605,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     required MessageModel? reply,
     required List<Mention> mentions,
   }) async {
-    await context.read<ChatProvider>().sendPrivateMessage(
+    await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
       senderId: context.read<AuthProvider>().uid!,
       senderName: context.read<AuthProvider>().profile!.nickname,
@@ -625,7 +625,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   }
 
   late Stream<List<MessageModel>> _msgsStream;
-  late Stream<List<PrivateChatInfo>> _chatInfoStream;
+  late Stream<List<chatRiverpod.PrivateChatInfo>> _chatInfoStream;
   Future<void> Function() _loadOlder = () async {};
   Future<void> Function(String messageId) _msgsHandleFetchImage = (_) async {};
   Future<void> Function() _msgsHandleReload = () async {};
@@ -697,7 +697,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   /// Lawan sudah menghapus akunnya (penanda lokal) — label khusus, kirim
   /// dikunci, centang-2 diabaikan.
   bool _otherDeleted = false;
-  StreamSubscription<List<PrivateChatInfo>>? _chatInfoSub;
+  StreamSubscription<List<chatRiverpod.PrivateChatInfo>>? _chatInfoSub;
   StreamSubscription<List<MessageModel>>? _msgsSub;
   StreamSubscription<String>? _statusSub;
   String _otherStatus = 'offline';
@@ -839,7 +839,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     // Anti-screenshot dikontrol setting admin global (ScreenSecureService).
     // Privasi view_once tetap terjaga via enterViewOnce/exitViewOnce.
 
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     final auth = context.read<AuthProvider>();
 
     // Prime sinkron supaya akun terhapus langsung tampil banner di frame
@@ -1000,9 +1000,9 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     // Subscription non-kritis ditunda ke post-frame supaya frame pertama
     // (list pesan) tidak tertahan — ala WhatsApp: pesan tampil dulu,
     // status/typing/centang-2 menyusul di frame berikutnya.
-    _wasBlocked = context.read<ChatProvider>().isBlocked(widget.otherUid);
+    _wasBlocked = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid);
     _chatInfoSub = _chatInfoStream.listen((chats) {
-      final info = chats.cast<PrivateChatInfo?>().firstWhere(
+      final info = chats.cast<chatRiverpod.PrivateChatInfo?>().firstWhere(
         (c) => c?.chatId == widget.chatId,
         orElse: () => null,
       );
@@ -1129,7 +1129,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       if (myUid == null) return;
       final candidates = <DateTime?>[];
       // 1) Snapshot live — paling fresh di sesi ini.
-      final snap = context.read<ChatProvider>().lastPrivateChatsSnapshot(myUid);
+      final snap = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).lastPrivateChatsSnapshot(myUid);
       if (snap != null) {
         for (final c in snap) {
           if (c.chatId != widget.chatId) continue;
@@ -1366,8 +1366,8 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   DateTime? _lastSeenFetchedAt;
   void _subscribeStatus() {
     _statusSub?.cancel();
-    _statusSub = context
-        .read<ChatProvider>()
+    _statusSub = ProviderScope.containerOf(context, listen: false)
+        .read(chatRiverpod.chatProvider.notifier)
         .getUserStatus(widget.otherUid)
         .listen((status) {
           if (!mounted) return;
@@ -1394,8 +1394,8 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
               return;
             }
             _lastSeenFetchedAt = now;
-            context
-                .read<ChatProvider>()
+            ProviderScope.containerOf(context, listen: false)
+                .read(chatRiverpod.chatProvider.notifier)
                 .getUserLastSeen(widget.otherUid)
                 .then((t) {
               if (!mounted || t == null) return;
@@ -1468,8 +1468,8 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   void _subscribeTyping() {
     _typingSub?.cancel();
     dlog('[TYPING] screen subscribing for ${widget.chatId}');
-    _typingSub = context
-        .read<ChatProvider>()
+    _typingSub = ProviderScope.containerOf(context, listen: false)
+        .read(chatRiverpod.chatProvider.notifier)
         .getTypingPulseStream(widget.chatId)
         .listen((event) {
           final kind = event.$1;
@@ -1512,11 +1512,11 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     final now = DateTime.now();
     if (now.difference(_lastTypingSent).inMilliseconds < 2500) return;
     _lastTypingSent = now;
-    context.read<ChatProvider>().sendTyping(widget.chatId);
+    ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendTyping(widget.chatId);
   }
 
   void _sendRecordingSignal() {
-    context.read<ChatProvider>().sendTyping(widget.chatId, kind: 'recording');
+    ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendTyping(widget.chatId, kind: 'recording');
   }
 
   bool _newChatBonusClaimed = false;
@@ -1581,7 +1581,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   @override
   Future<void> outboxSendEntry(OutboxEntry e, String imageData) async {
-    await context.read<ChatProvider>().sendPrivateMessage(
+    await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
       senderId: e.senderId,
       senderName: e.senderName,
@@ -1691,7 +1691,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     setState(() => _pending.add(optimistic));
     _scrollToBottom();
     try {
-      await context.read<ChatProvider>().sendPrivateMessage(chatId: chatId, senderId: uid, senderName: profile.nickname, senderGender: profile.gender, text: '', type: 'voice', imageData: storagePath, durationMs: recordedMs);
+      await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(chatId: chatId, senderId: uid, senderName: profile.nickname, senderGender: profile.gender, text: '', type: 'voice', imageData: storagePath, durationMs: recordedMs);
       try { await f.delete(); } catch (_) {}
     } catch (e) {
       dlog('[Voice] send error: $e');
@@ -1750,7 +1750,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   Future<void> _sendCoins(int amount) async {
     final s = context.read<LocaleProvider>().s;
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -1775,7 +1775,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   Future<void> _sendGift(String giftId, String name, int coins) async {
     final s = context.read<LocaleProvider>().s;
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -1903,10 +1903,10 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       (a) => a.profile?.isRegistered ?? false,
     );
     final myUid = context.select<AuthProvider, String?>((a) => a.uid);
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     // select: rebuild hanya saat isBlocked untuk UID lawan bicara berubah
-    final isBlocked = context.select<ChatProvider, bool>(
-      (c) => c.isBlocked(widget.otherUid),
+    final isBlocked = ref.watch(
+      chatRiverpod.chatProvider.select((c) => c.isBlocked(widget.otherUid)),
     );
     final s = context.watch<LocaleProvider>().s;
     dlog('[CHAT-BUILD] callAllEnabled=$callAllEnabled '

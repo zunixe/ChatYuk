@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import 'nearby/widgets/nearby_card.dart';
 import '../providers/auth_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/perf/perf_probe.dart';
@@ -191,7 +191,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
 
   Future<void> _startChat(Map<String, dynamic> u) async {
     final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final s = context.read<LocaleProvider>().s;
     final myUid = auth.uid;
     final otherUid = '${u['uid']}';

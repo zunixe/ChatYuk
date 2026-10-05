@@ -16,7 +16,7 @@ import '../config/regions.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
@@ -242,8 +242,8 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
       } catch (_) {}
     }
     if (auth.uid != null) {
-      _unreadSub = context
-          .read<ChatProvider>()
+      _unreadSub = ProviderScope.containerOf(context, listen: false)
+          .read(chatProvider.notifier)
           .getMyPrivateChats(auth.uid!)
           .listen((chats) {
             if (!mounted) return;
@@ -891,7 +891,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     // transparannya tak boleh ikut ke halaman chat / nyangkut jadi penghalang.
     _dismissUnreadBubble();
     final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final s = context.read<LocaleProvider>().s;
     final myUid = auth.uid;
     final myName = auth.profile?.nickname ?? 'Anon';
@@ -906,7 +906,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     final navKey = navKeyChat(chatId);
     if (!tryClaimNav(navKey)) return;
     // Prefetch pesan ke memori sebelum push → buka chat instant.
-    context.read<ChatProvider>().prefetchPrivateChat(chatId);
+    ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).prefetchPrivateChat(chatId);
     if (!context.mounted) {
       releaseNav(navKey);
       return;
@@ -1431,7 +1431,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                     final prov = ref.watch(onlineUsersProvider);
                     // Hitung sama seperti list: exclude self + blocked +
                     // hidden + dedupe by uid/nickname, supaya angka = kartu.
-                    final chat = context.read<ChatProvider>();
+                    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
                     final seenU = <String>{};
                     final seenN = <String>{};
                     final n = prov.users
@@ -1638,7 +1638,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
           rv.Consumer(
             builder: (ctx, ref, __) {
               final provider = ref.watch(onlineUsersProvider);
-              final chat = context.read<ChatProvider>();
+              final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
               // Ukur biaya filter per emission (kandidat optimasi QA).
               // Partisi: utama = filter penuh + !hidden; kotak bawah =
               // semua hidden (abaikan negara/gender/search, hormati blokir)

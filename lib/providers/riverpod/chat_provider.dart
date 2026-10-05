@@ -1,0 +1,365 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/user_model.dart';
+import '../../utils/mention.dart';
+import '../../services/chat_service.dart';
+import '../../services/chat_stream_session.dart';
+export '../../services/chat_stream_session.dart' show ChatMessageStream;
+export '../../services/chat_service.dart' show PrivateChatInfo;
+import '../../core/cache/message_cache.dart';
+import '../../core/cache/photo_cache.dart';
+
+/// State chat (immutable — yang di-watch widget).
+class ChatState {
+  final List<String> blockedUids;
+  const ChatState({this.blockedUids = const []});
+
+  bool isBlocked(String uid) => blockedUids.contains(uid);
+}
+
+/// Passthrough ChatService + daftar blokir (Riverpod).
+/// Migrasi dari ChangeNotifier → Notifier. Global (persist sepanjang sesi).
+class ChatNotifier extends Notifier<ChatState> {
+  var _disposed = false;
+
+  // Service di-inject untuk test (default produksi) — call site tidak berubah.
+  final ChatService _service;
+  ChatNotifier({ChatService? service}) : _service = service ?? ChatService();
+  List<String> _blockedUids = [];
+  Future<List<String>>? _loadingBlockedUids;
+
+  List<String> get blockedUids => _blockedUids;
+
+  @override
+  ChatState build() {
+    ref.onDispose(_disposeAll);
+    return const ChatState();
+  }
+
+  void _emit() {
+    if (_disposed) return;
+    state = ChatState(blockedUids: List.unmodifiable(_blockedUids));
+  }
+
+  // Room chat — TIDAK di-cache karena stream mati saat RoomChatScreen dispose.
+  // Setiap kali masuk room, stream baru dibuat agar pesan selalu fresh.
+  ChatMessageStream getRoomMessages(String roomId) {
+    return _service.getRoomMessages(roomId);
+  }
+
+  Future<String?> sendRoomMessage({
+    required String roomId,
+    required String senderId,
+    required String senderName,
+    required String senderGender,
+    required String text,
+    String type = 'text',
+    String imageData = '',
+    int? durationMs,
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
+    bool isForwarded = false,
+    List<Mention> mentions = const [],
+  }) =>
+      _service.sendRoomMessage(
+        roomId: roomId,
+        senderId: senderId,
+        senderName: senderName,
+        senderGender: senderGender,
+        text: text,
+        type: type,
+        imageData: imageData,
+        durationMs: durationMs,
+        repliedToId: repliedToId,
+        repliedToText: repliedToText,
+        repliedToSenderName: repliedToSenderName,
+        isForwarded: isForwarded,
+        mentions: mentions,
+      );
+
+  /// Perbarui payload lokasi live di room.
+  Future<bool> updateRoomLocationMessage(String id, String payload) =>
+      _service.updateLocationMessage(id, payload);
+
+  Future<bool> deleteRoomMessage(String messageId) async {
+    return _service.deleteRoomMessage(messageId);
+  }
+
+  Future<bool> deletePrivateMessage(String messageId) async {
+    return _service.deletePrivateMessage(messageId);
+  }
+
+  Future<bool> undeletePrivateMessage(String messageId) async {
+    return _service.undeletePrivateMessage(messageId);
+  }
+
+  Future<bool> undeleteRoomMessage(String messageId) async {
+    return _service.undeleteRoomMessage(messageId);
+  }
+
+  // Private chat
+  Future<bool> isUserActive(String uid) => _service.isUserActive(uid);
+
+  /// Kirim koin ke lawan bicara (via RPC server). Return {ok, points}.
+  Future<Map<String, dynamic>> sendCoins(
+    String chatId,
+    String receiverId,
+    int amount,
+  ) {
+    return _service.sendCoins(chatId, receiverId, amount);
+  }
+
+  /// Kirim hadiah ke lawan bicara (via RPC server). Return {ok, points, net, cut}.
+  Future<Map<String, dynamic>> sendGift(
+    String chatId,
+    String receiverId,
+    String giftId,
+  ) {
+    return _service.sendGift(chatId, receiverId, giftId);
+  }
+
+  /// Daftar hadiah dari server (fallback katalog lokal bila gagal).
+  Future<List<Map<String, dynamic>>> listGifts() => _service.listGifts();
+
+  /// Kirim hadiah di room (live) ke host (owner). Return {ok, points, qty}.
+  Future<Map<String, dynamic>> sendRoomGift(
+    String roomId,
+    String giftId, {
+    int qty = 1,
+  }) {
+    return _service.sendRoomGift(roomId, giftId, qty: qty);
+  }
+
+  Future<String> startPrivateChat({
+    required String myUid,
+    required String otherUid,
+    required String myName,
+    required String otherName,
+    String myGender = '',
+    String otherGender = '',
+    String myCountry = '',
+    String otherCountry = '',
+    int myAge = 0,
+    int otherAge = 0,
+  }) async {
+    return _service.startPrivateChat(
+      myUid: myUid,
+      otherUid: otherUid,
+      myName: myName,
+      otherName: otherName,
+      myGender: myGender,
+      otherGender: otherGender,
+      myCountry: myCountry,
+      otherCountry: otherCountry,
+      myAge: myAge,
+      otherAge: otherAge,
+    );
+  }
+
+  ChatMessageStream getPrivateChatMessages(String chatId) {
+    // Jangan cache stream private chat — controller.onCancel di _cachedMessagesStream
+    // memanggil removeChannel saat screen ditutup, sehingga stream lama tidak emit lagi.
+    // Setiap buka chat harus dapat stream baru yang fresh.
+    return _service.getPrivateChatMessages(chatId);
+  }
+
+  Stream<String> getUserStatus(String uid, {String? initialStatus}) =>
+      _service.getUserStatus(uid, initialStatus: initialStatus);
+
+  /// last_seen satu user (untuk "terakhir dilihat" di header chat).
+  Future<DateTime?> getUserLastSeen(String uid) =>
+      _service.getUserLastSeen(uid);
+
+  Stream<String> getTypingStream(String chatId) =>
+      _service.getTypingStream(chatId);
+
+  Stream<(String, int)> getTypingPulseStream(String chatId) =>
+      _service.getTypingPulseStream(chatId);
+
+  void sendTyping(String chatId, {String kind = 'typing'}) =>
+      _service.sendTyping(chatId, kind: kind);
+
+  Future<String?> sendPrivateMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required String senderGender,
+    required String text,
+    String type = 'text',
+    String imageData = '',
+    int? durationMs,
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
+    bool isForwarded = false,
+    List<Mention> mentions = const [],
+  }) =>
+      _service.sendPrivateMessage(
+        chatId: chatId,
+        senderId: senderId,
+        senderName: senderName,
+        senderGender: senderGender,
+        text: text,
+        type: type,
+        imageData: imageData,
+        durationMs: durationMs,
+        repliedToId: repliedToId,
+        repliedToText: repliedToText,
+        repliedToSenderName: repliedToSenderName,
+        isForwarded: isForwarded,
+        mentions: mentions,
+      );
+
+  Future<void> markAsRead(String chatId, String uid) async {
+    await _service.markAsRead(chatId, uid);
+  }
+
+  /// Tandai SEMUA chat pribadi dibaca (menu ⋮ chat list). Return jumlah
+  /// chat yang benar-benar berubah (skip yang sudah 0). RPC paralel per
+  /// batch 10 (dulu serial; paralel tanpa batas = DB storm).
+  Future<int> markAllChatsRead(String uid) async {
+    final snapshot = _service.lastPrivateChatsSnapshot(uid) ?? const [];
+    final targets =
+        snapshot.where((c) => (c.unreadCounts[uid] ?? 0) > 0).toList();
+    for (var i = 0; i < targets.length; i += 10) {
+      final chunk = targets.skip(i).take(10);
+      await Future.wait(chunk.map((c) => _service.markAsRead(c.chatId, uid)));
+    }
+    return targets.length;
+  }
+
+  /// Tandai dibaca dari monitor admin (RPC SECURITY DEFINER khusus admin —
+  /// mark_chat_read biasa kena RLS participant saat dipanggil akun admin).
+  Future<void> markAsReadAdmin(String chatId, String uid) async {
+    await _service.markAsReadAdmin(chatId, uid);
+  }
+
+  Future<void> clearViewOnceImage(
+    String messageId, {
+    bool isRoom = false,
+    bool video = false,
+  }) async {
+    await _service.clearViewOnceImage(
+      messageId,
+      isRoom: isRoom,
+      video: video,
+    );
+  }
+
+  Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
+    return _service.getMyPrivateChats(myUid);
+  }
+
+  List<PrivateChatInfo>? lastPrivateChatsSnapshot(String myUid) =>
+      _service.lastPrivateChatsSnapshot(myUid);
+
+  /// Refresh paksa list private chat (dipanggil saat tab Pesan di-mount ulang
+  /// supaya tidak stuck spinner pada broadcast stream yang di-cache).
+  void refreshMyPrivateChats(String myUid) =>
+      _service.refreshMyPrivateChats(myUid);
+
+  Stream<List<UserModel>> getOnlineUsersInRoom(String roomId) {
+    return _service.getOnlineUsersInRoom(roomId);
+  }
+
+  Future<void> joinRoom(String roomId, UserModel user) async {
+    await _service.joinRoom(roomId, user);
+  }
+
+  Future<void> leaveRoom(String roomId, String uid) async {
+    await _service.leaveRoom(roomId, uid);
+  }
+
+  // Block / Report
+  Future<void> blockUser(String myUid, String otherUid) async {
+    await _service.blockUser(myUid, otherUid);
+    await loadBlockedUids(myUid);
+  }
+
+  Future<void> unblockUser(String myUid, String otherUid) async {
+    await _service.unblockUser(myUid, otherUid);
+    await loadBlockedUids(myUid);
+  }
+
+  // Hide Chat (client-side delete)
+  Future<void> hideChat(String myUid, String chatId) async {
+    await _service.hideChat(myUid, chatId);
+  }
+
+  Future<void> pinChat(String chatId, bool pin, {String? myUid}) async {
+    await _service.pinPrivateChat(chatId, pin, myUidParam: myUid);
+  }
+
+  Future<void> muteChat(String chatId, bool mute, {String? myUid}) async {
+    await _service.mutePrivateChat(chatId, mute, myUidParam: myUid);
+  }
+
+  /// Mute/unmute notifikasi room live — sync server + lokal (C1 audit).
+  Future<void> muteRoom(String roomId, bool mute) {
+    return _service.muteRoom(roomId, mute);
+  }
+
+  Future<void> archiveChat(String chatId, bool archive, {String? myUid}) async {
+    await _service.archivePrivateChat(chatId, archive, myUidParam: myUid);
+  }
+
+  Future<Set<String>> getHiddenChats(String myUid) {
+    return _service.getHiddenChats(myUid);
+  }
+
+  Future<void> reportUser({
+    required String reporterId,
+    required String reportedId,
+    required String reason,
+  }) async {
+    await _service.reportUser(
+      reporterId: reporterId,
+      reportedId: reportedId,
+      reason: reason,
+    );
+  }
+
+  Future<void> loadBlockedUids(String myUid) async {
+    if (_loadingBlockedUids != null) {
+      await _loadingBlockedUids;
+      return;
+    }
+    _loadingBlockedUids = _service.getBlockedUids(myUid);
+    try {
+      _blockedUids = await _loadingBlockedUids!;
+    } finally {
+      _loadingBlockedUids = null;
+    }
+    _emit();
+  }
+
+
+  // ── Passthrough agar screen tidak import ChatService (Fase 9b) ──
+  Future<bool> editPrivateMessage(String id, String text) =>
+      _service.editPrivateMessage(id, text);
+
+  /// Perbarui payload lokasi live (koordinat bergerak) — hanya `text`.
+  Future<bool> updateLocationMessage(String id, String payload) =>
+      _service.updateLocationMessage(id, payload);
+  Future<bool> editRoomMessage(String id, String text) =>
+      _service.editRoomMessage(id, text);
+  void prefetchPrivateChat(String chatId) => _service.prefetchPrivateChat(chatId);
+  String privateChatId(String a, String b) => _service.privateChatId(a, b);
+  static String effectiveStatusOf(String? raw, String? lastSeen) =>
+      ChatService.effectiveStatusOf(raw, lastSeen);
+  bool isBlocked(String uid) => _blockedUids.contains(uid);
+
+  void reset() {
+    _blockedUids = [];
+    _service.clearCachedStreams();
+    MessageCache.instance.clearAll();
+    PhotoCache.instance.clearAll();
+    _emit();
+  }
+
+  void _disposeAll() {
+    _disposed = true;
+  }
+}
+
+final chatProvider = NotifierProvider<ChatNotifier, ChatState>(ChatNotifier.new);

@@ -9,13 +9,14 @@ import 'mention_spans.dart';
 import 'chat_video_bubble.dart';
 import 'media_caption_time.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/chat/chat_location.dart';
@@ -2599,7 +2600,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     final id = widget.messageId;
     if (id == null || id.startsWith('pending-')) return;
     try {
-      await context.read<ChatProvider>().clearViewOnceImage(
+      await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).clearViewOnceImage(
         id,
         isRoom: widget.isRoom,
       );
