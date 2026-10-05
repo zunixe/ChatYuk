@@ -2832,13 +2832,17 @@ class _UserCard extends StatelessWidget {
 
   Color _statusColor(String status) => AppTheme.statusColor(status);
 
+  // DateFormat dibuat SEKALI (statis) — dulu `DateFormat('d MMM')` bikin
+  // objek baru tiap build kartu user idle >7 hari → pemborosan saat scroll.
+  static final DateFormat _dayMonthFmt = DateFormat('d MMM');
+
   String _idleDurationLabel(DateTime lastSeen) {
     final diff = DateTime.now().difference(lastSeen.toLocal());
     if (diff.inMinutes < 1) return '1m';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m';
     if (diff.inHours < 24) return '${diff.inHours}h';
     if (diff.inDays < 7) return '${diff.inDays}d';
-    return DateFormat('d MMM').format(lastSeen.toLocal());
+    return _dayMonthFmt.format(lastSeen.toLocal());
   }
 
   @override
@@ -3445,18 +3449,25 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     try {
       await MediaDiskCache.instance.waitReady();
     } catch (_) {}
-    if (!mounted) return;
+    // ANTI-BLINK FOTO ORANG LAIN: selama menunggu di atas, tile bisa
+    // didaur-ulang untuk item lain (didUpdateWidget → path baru). Tanpa cek
+    // ini, hasil path LAMA menimpa tile baru → thumbnail orang lain sempat
+    // tampil sekilas. Pola sama seperti guard uid di _AsyncAvatarState.
+    if (!mounted || widget.item.thumbPath != p) return;
     final sp = context.read<StoryProvider>();
     if (sp.warmThumb(p)) {
       final cached = sp.thumbCached(p);
-      if (mounted && cached != null) {
+      if (mounted && widget.item.thumbPath == p && cached != null) {
         setState(() => _thumb = cached);
       }
       return;
     }
     try {
       final b = await sp.thumbFor(p);
-      if (mounted && b != null && b.isNotEmpty) {
+      if (mounted &&
+          widget.item.thumbPath == p &&
+          b != null &&
+          b.isNotEmpty) {
         setState(() => _thumb = b);
       }
     } catch (_) {}
