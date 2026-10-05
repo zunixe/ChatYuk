@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +8,7 @@ import '../config/strings_admin.dart';
 import '../providers/chat_provider.dart';
 import '../providers/room_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/avatar_provider.dart';
+import '../providers/riverpod/avatar_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../widgets/sheet_drag_handle.dart';
 import '../widgets/person_avatar.dart';
@@ -72,7 +73,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
           .where((u) => u.isNotEmpty)
           .toList();
       if (uids.isNotEmpty && mounted) {
-        context.read<AvatarProvider>().prefetch(uids);
+        ProviderScope.containerOf(context, listen: false).read(avatarProvider).prefetch(uids);
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);

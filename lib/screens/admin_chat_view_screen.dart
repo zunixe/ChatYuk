@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +15,7 @@ import '../models/active_call_model.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/gender_avatar.dart';
-import '../providers/storage_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/cache/message_cache.dart';
@@ -722,10 +723,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
           // image_data berupa PATH storage (foto baru) → download dari bucket.
           if (raw.isNotEmpty &&
               mounted &&
-              context.read<StorageProvider>().isPath(raw)) {
+              ProviderScope.containerOf(context, listen: false).read(storageProvider).isPath(raw)) {
             raw =
-                await context
-                    .read<StorageProvider>()
+                await ProviderScope.containerOf(context, listen: false)
+          .read(storageProvider)
                     .download(raw)
                     .timeout(const Duration(seconds: 15)) ??
                 '';

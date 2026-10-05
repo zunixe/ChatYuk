@@ -11,11 +11,7 @@ import 'config/theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/room_provider.dart';
 import 'providers/chat_provider.dart';
-import 'providers/storage_provider.dart';
-import 'providers/location_provider.dart';
-import 'providers/device_info_provider.dart';
 import 'services/device_info_service.dart';
-import 'providers/avatar_provider.dart';
 import 'providers/riverpod/message_reaction_provider.dart';
 import 'providers/online_users_provider.dart';
 import 'providers/points_provider.dart';
@@ -79,10 +75,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
-        ChangeNotifierProvider(create: (_) => StorageProvider()),
-        ChangeNotifierProvider(create: (_) => LocationProvider()),
-        ChangeNotifierProvider(create: (_) => DeviceInfoProvider()),
-        ChangeNotifierProvider(create: (_) => AvatarProvider()),
         ChangeNotifierProvider(
           create: (_) => PointsProvider()
             ..checkOnboarding()

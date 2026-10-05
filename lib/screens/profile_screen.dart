@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Consumer;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
@@ -16,7 +17,7 @@ import '../config/strings.dart';
 import '../models/user_photo.dart';
 import '../providers/auth_provider.dart';
 import '../models/user_model.dart';
-import '../providers/device_info_provider.dart';
+import '../providers/riverpod/device_info_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/points_provider.dart';
@@ -108,7 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // tidak jalan lagi saat swap), supaya foto/hashtag/avatar ikut ganti.
   String? _loadedUid;
   // Future label versi dibuat SEKALI (bukan di build) — dulu `FutureBuilder(future:
-  // context.read<DeviceInfoProvider>().appVersionLabel())` membuat Future BARU
+  // ProviderScope.containerOf(context, listen: false).read(deviceInfoProvider).appVersionLabel())` membuat Future BARU
   // tiap build → FutureBuilder re-subscribe → "setState() called during build".
   Future<String>? _appVersionFuture;
 
@@ -2116,7 +2117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SizedBox(height: 8),
                   FutureBuilder<String>(
                     future: _appVersionFuture ??=
-                        context.read<DeviceInfoProvider>().appVersionLabel(),
+                        ProviderScope.containerOf(context, listen: false).read(deviceInfoProvider).appVersionLabel(),
                     builder: (_, snap) {
                       if (!snap.hasData || snap.data!.isEmpty) {
                         return const SizedBox.shrink();

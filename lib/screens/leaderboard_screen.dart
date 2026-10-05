@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/points_provider.dart';
-import '../providers/avatar_provider.dart';
+import '../providers/riverpod/avatar_provider.dart';
 import '../widgets/user_avatar.dart'
     show cachedUserAvatarBytes, rememberAvatarBytes;
 import '../config/theme.dart';
@@ -68,7 +69,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       });
       // Prefetch avatar semua uid sekaligus (1 query) — cegah N+1 per kartu.
       unawaited(
-        context.read<AvatarProvider>().prefetch(
+        ProviderScope.containerOf(context, listen: false).read(avatarProvider).prefetch(
           _entries
               .map((e) => '${(e as Map)['uid'] ?? ''}')
               .where((u) => u.isNotEmpty)

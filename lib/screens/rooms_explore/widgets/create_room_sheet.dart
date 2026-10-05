@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -8,7 +9,7 @@ import '../../../config/theme.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../providers/room_provider.dart';
-import '../../../providers/storage_provider.dart';
+import '../../../providers/riverpod/storage_provider.dart';
 import '../../../widgets/anon_prompt_dialog.dart';
 
 const _exploreIconChoices = [
@@ -280,8 +281,8 @@ Future<void> showCreateExploreRoomDialog(
                                     ),
                                   );
                                 }
-                                path = await context
-                                    .read<StorageProvider>()
+                                path = await ProviderScope.containerOf(context, listen: false)
+          .read(storageProvider)
                                     .uploadRoomIcon(
                                       uid: uid,
                                       base64: base64Encode(bytes),

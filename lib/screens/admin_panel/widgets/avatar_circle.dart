@@ -1,10 +1,10 @@
 import 'dart:convert';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../../config/theme.dart';
-import '../../../providers/avatar_provider.dart';
+import '../../../providers/riverpod/avatar_provider.dart';
 import '../../../widgets/user_avatar.dart';
 
 /// Avatar kotak (radius 8) untuk panel admin — memakai widget avatar
@@ -42,7 +42,7 @@ class AdminAvatarCircleState extends State<AdminAvatarCircle> {
   Future<void> _load() async {
     if (widget.uid.isEmpty) return;
     try {
-      final b64 = await context.read<AvatarProvider>().get(widget.uid);
+      final b64 = await ProviderScope.containerOf(context, listen: false).read(avatarProvider).get(widget.uid);
       if (!mounted) return;
       setState(() {
         _src = b64;
@@ -61,7 +61,7 @@ class AdminAvatarCircleState extends State<AdminAvatarCircle> {
       try {
         final b64 = _src.isNotEmpty
             ? _src
-            : await context.read<AvatarProvider>().get(widget.uid);
+            : await ProviderScope.containerOf(context, listen: false).read(avatarProvider).get(widget.uid);
         if (b64.isNotEmpty) bytes = base64Decode(b64);
       } catch (_) {}
     }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Consumer;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -8,12 +9,12 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/user_model.dart';
 import '../providers/points_provider.dart';
-import '../providers/avatar_provider.dart';
+import '../providers/riverpod/avatar_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
-import '../providers/storage_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../screens/user_info_screen.dart';
@@ -145,7 +146,7 @@ class _LeaderboardSheetState extends State<LeaderboardSheet> {
         _loading = false;
       });
       unawaited(
-        context.read<AvatarProvider>().prefetch(
+        ProviderScope.containerOf(context, listen: false).read(avatarProvider).prefetch(
           _entries
               .map((e) => '${(e as Map)['uid'] ?? ''}')
               .where((u) => u.isNotEmpty)
@@ -600,7 +601,7 @@ class LeaderboardRow extends StatelessWidget {
       }
       if (bytes == null) {
         try {
-          bytes = await context.read<StorageProvider>().downloadBytes(
+          bytes = await ProviderScope.containerOf(context, listen: false).read(storageProvider).downloadBytes(
             'avatars/$uid.jpg',
           );
         } catch (_) {}

@@ -1,19 +1,20 @@
 import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart' show ResizeMode;
-import '../services/storage_photo_service.dart';
-export '../services/storage_photo_service.dart' show StoragePhotoService;
+import '../../services/storage_photo_service.dart';
+export '../../services/storage_photo_service.dart' show StoragePhotoService;
 
-/// Provider tipis untuk [StoragePhotoService] — agar screen tidak import
+/// Storage (Riverpod) — wrapper action-only untuk [StoragePhotoService].
 /// `services/` langsung (aturan boundary AGENTS.md).
 ///
 /// Bukan state bisnis; hanya jembatan. Widget boleh tetap pakai service
 /// langsung (aturan hanya untuk screen).
-class StorageProvider extends ChangeNotifier {
+class StorageNotifier {
   final StoragePhotoService service;
-  StorageProvider({StoragePhotoService? service})
+  StorageNotifier([StoragePhotoService? service])
       : service = service ?? StoragePhotoService.instance;
 
   Future<String?> upload({required String chatId, required String base64}) =>
@@ -118,3 +119,5 @@ class StorageProvider extends ChangeNotifier {
   String voicePath(String chatId) => service.voicePath(chatId);
   String newPath(String chatId) => service.newPath(chatId);
 }
+
+final storageProvider = Provider<StorageNotifier>((_) => StorageNotifier());

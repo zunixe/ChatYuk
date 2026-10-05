@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/location_provider.dart';
+import '../providers/riverpod/location_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import 'nearby/widgets/nearby_card.dart';
@@ -30,7 +31,7 @@ class NearbyScreen extends StatefulWidget {
 }
 
 class _NearbyScreenState extends State<NearbyScreen> {
-  LocationService get _loc => context.read<LocationProvider>().location;
+  LocationService get _loc => ProviderScope.containerOf(context, listen: false).read(locationProvider).location;
   double _radiusKm = 50;
   bool _loading = true;
   bool _shareOn = false;

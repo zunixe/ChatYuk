@@ -1,15 +1,16 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../services/geo_service.dart';
-export '../services/geo_service.dart' show GeoInfo, GeoService;
-import '../services/location_service.dart';
-export '../services/location_service.dart' show LocationService, DeviceFix;
+import '../../services/geo_service.dart';
+export '../../services/geo_service.dart' show GeoInfo, GeoService;
+import '../../services/location_service.dart';
+export '../../services/location_service.dart' show LocationService, DeviceFix;
 
-/// Provider lokasi + geolokasi (IP/GPS) — screen tidak import `services/`.
-class LocationProvider extends ChangeNotifier {
+/// Lokasi + geolokasi (IP/GPS) — action-only, wrapper service.
+/// Migrasi dari ChangeNotifier (0 notifyListeners) → Provider.
+class LocationNotifier {
   final LocationService location;
   final GeoService geo;
-  LocationProvider({LocationService? location, GeoService? geo})
+  LocationNotifier({LocationService? location, GeoService? geo})
       : location = location ?? LocationService(),
         geo = geo ?? GeoService();
 
@@ -22,11 +23,12 @@ class LocationProvider extends ChangeNotifier {
   Future<void> setShareLocation(bool value) => location.setShareLocation(value);
   Future<List<Map<String, dynamic>>> nearbyUsers(double radiusKm) =>
       location.nearbyUsers(radiusKm);
-  Future<(double, double, int)?> precisePosition() =>
-      location.precisePosition();
+  Future<(double, double, int)?> precisePosition() => location.precisePosition();
 
   Future<GeoInfo?> detect() => geo.detect();
   Future<GeoInfo?> detectByCoordinates(double lat, double lon) =>
       geo.detectByCoordinates(lat, lon);
   Future<GeoInfo?> detectByIp(String ip) => geo.detectByIp(ip);
 }
+
+final locationProvider = Provider<LocationNotifier>((_) => LocationNotifier());

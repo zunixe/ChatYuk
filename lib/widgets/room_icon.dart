@@ -1,9 +1,9 @@
 import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../core/cache/photo_cache.dart';
-import '../providers/storage_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 
 /// Ikon room: prioritas (1) foto upload-an (`room-icons/...` di rooms.icon),
 /// (2) glyph Material per kategori, (3) emoji custom sebagai fallback.
@@ -105,7 +105,7 @@ class _UploadedIconState extends State<_UploadedIcon> {
     } catch (_) {}
     try {
       final data =
-          await context.read<StorageProvider>().download(widget.path);
+          await ProviderScope.containerOf(context, listen: false).read(storageProvider).download(widget.path);
       if (data == null || data.isEmpty) return null;
       await PhotoCache.instance.save('roomicon', key, data);
       return await PhotoCache.instance.loadThumb('roomicon', key) ?? data;

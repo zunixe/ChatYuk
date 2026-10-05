@@ -10,13 +10,13 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
-import '../providers/storage_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/location_provider.dart';
+import '../providers/riverpod/location_provider.dart';
 import '../providers/points_provider.dart';
 import 'story_camera_capture_screen.dart';
 import '../providers/social_provider.dart';
@@ -420,7 +420,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   /// Berhenti otomatis saat waktu habis; update gagal diabaikan (best-effort).
   void _startLiveLocationUpdates(String messageId, ChatLocation initial) {
     _liveTimer?.cancel();
-    final lp = context.read<LocationProvider>();
+    final lp = ProviderScope.containerOf(context, listen: false).read(locationProvider);
     _liveTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
       final exp = initial.expiresAt;
       if (exp == null || DateTime.now().toUtc().isAfter(exp)) {
@@ -1643,7 +1643,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       );
       return;
     }
-    final storagePath = await context.read<StorageProvider>().uploadVoice(chatId: chatId, bytes: bytes);
+    final storagePath = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadVoice(chatId: chatId, bytes: bytes);
     if (storagePath == null || storagePath.isEmpty) {
       if (!outboxIsOnline) {
         final optimisticOffline = MessageModel(
