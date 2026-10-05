@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,7 +10,7 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/story_provider.dart';
+import '../providers/riverpod/story_provider.dart';
 import 'admin_story_tab.dart' show storyVisStyle;
 
 /// Viewer story mode ADMIN — tap kartu di tab Story.
@@ -68,7 +69,7 @@ class _AdminStoryViewerScreenState extends State<AdminStoryViewerScreen> {
     final path = '${m['image_path'] ?? ''}';
     if (path.isEmpty) return;
     try {
-      final b = await context.read<StoryProvider>().thumbFor(path);
+      final b = await ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier).thumbFor(path);
       if (mounted && b != null) setState(() => _img[id] = b);
     } catch (_) {}
   }

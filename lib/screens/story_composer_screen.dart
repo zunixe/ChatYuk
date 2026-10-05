@@ -13,7 +13,7 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/story_provider.dart';
+import '../providers/riverpod/story_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../widgets/story_text_overlay.dart';
 import 'dart:convert';
@@ -229,7 +229,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     final ctrl = _videoCtrl;
     if (uid == null || ctrl == null || !ctrl.value.isInitialized) return;
     final storage = ProviderScope.containerOf(context, listen: false).read(storageProvider);
-    final storyProv = context.read<StoryProvider>();
+    final storyProv = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     final segs = _segments.isEmpty
         ? _planSegments(ctrl.value.duration.inMilliseconds)
         : _segments;
@@ -566,7 +566,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
       final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider)
           .uploadStoryImage(uid: uid, base64: b64);
       if (path == null || path.isEmpty) throw Exception('upload_failed');
-      final ok = await context.read<StoryProvider>().publish(
+      final ok = await ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier).publish(
             imagePath: path,
             textOverlay: _textCtrl.text.trim(),
             textX: _textX,

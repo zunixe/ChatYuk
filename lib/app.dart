@@ -28,7 +28,7 @@ import 'providers/call_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/timeline_provider.dart';
-import 'providers/story_provider.dart';
+import 'providers/riverpod/story_provider.dart';
 import 'providers/riverpod/update_provider.dart';
 import 'services/chat_service.dart';
 import 'services/boot_overlay.dart';
@@ -83,7 +83,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
         // Refresh perdana story DITUNDA ke post-frame (di
         // OnlineUsersScreen.initState) — RPC story_tray + subscribe
         // realtime jangan berebut CPU/network dengan frame pertama.
-        ChangeNotifierProvider(create: (_) => StoryProvider()),
         ...AdminGate.extraProviders,
         ChangeNotifierProvider.value(value: _roomProvider),
         // NavProvider: MIGRASI ke Riverpod (navProvider) — dihapus dari sini.

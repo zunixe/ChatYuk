@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,7 +9,7 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/story_provider.dart';
+import '../providers/riverpod/story_provider.dart';
 import '../widgets/filter_chip_pill.dart';
 import 'admin_story_viewer_screen.dart';
 
@@ -262,7 +263,7 @@ class _StoryThumbState extends State<_StoryThumb> {
   Future<void> _load() async {
     final p = widget.path;
     if (p.isEmpty) return;
-    final sp = context.read<StoryProvider>();
+    final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     // Cache RAM dulu (sinkron) → frame pertama langsung terisi.
     final cached = sp.thumbCached(p);
     if (cached != null) {
