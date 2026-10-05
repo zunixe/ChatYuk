@@ -11,7 +11,7 @@ import '../config/strings.dart';
 import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
-import '../providers/call_provider.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
@@ -828,8 +828,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     // frame pertama → bintang tampil instan, tanpa "di-load dulu" (anti-glich).
     // Stream realtime + fallback async menimpa sesudahnya.
     _primeStarredFromCache();
-    // Rebuild saat status call berubah (overlay video dalam chat muncul/hilang).
-    CallProvider.instance.addListener(_onCallChanged);
+    // (listener call via ref.listen di build — lihat bawah).
     // Buka keyboard → tutup baris menu attach (mirip WhatsApp)
     _inputFocus.addListener(() {
       if (_inputFocus.hasFocus && _showAttachRow) {
@@ -1195,7 +1194,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     ChatTextScale.notifier.removeListener(_onFontScaleChanged);
     _pendingConfirmTimer?.cancel();
     // conn listener dikelola Riverpod (ref.listen) — tak perlu close manual.
-    CallProvider.instance.removeListener(_onCallChanged);
+    // (ref.listen otomatis berhenti saat widget dispose).
     // Keluar chat TIDAK memutus panggilan — call lanjut berjalan dan notifikasi
     // ongoing "sedang call" tetap tampil. Tap notifikasi → kembali ke chat ini.
     _chatInfoSub?.cancel();
@@ -1250,7 +1249,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   }
 
   void _onCallChanged() {
-    final sess = CallProvider.instance.activeSession;
+    final sess = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).activeSession;
     // Signature state call yang RELEVAN untuk layar ini: overlay hidup/mati
     // ditentukan oleh (ada sesi? uid lawan? phase?). Dulu cukup `sess == null
     // || remoteUid==other` → setState SELALU saat chat biasa (sess==null
@@ -1323,7 +1322,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   String _prevCallSig = '_none';
 
   bool get _showCallOverlay {
-    final prov = CallProvider.instance;
+    final prov = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
     final sess = prov.activeSession;
     return sess != null &&
         prov.activeMode == CallMode.chat &&
@@ -1336,7 +1335,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     // Guard anti tap-ganda: dua push beruntun membuat stack kacau &
     // `_callExpanded` salah reset → tombol perbesar terasa "tidak jalan".
     if (_expandingCall) return;
-    final sess = CallProvider.instance.activeSession;
+    final sess = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).activeSession;
     if (sess == null) return;
     _expandingCall = true;
     setState(() => _callExpanded = true);
@@ -1892,6 +1891,14 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     ref.listen<bool>(connectivityProvider, (prev, next) {
       _connOnline = next;
       if (mounted && next) flushOutbox();
+    });
+    // Rebuild saat status call berubah (overlay video dalam chat muncul/hilang).
+    ref.listen(callProvider, (prev, next) {
+      if (prev?.activeSession != next.activeSession ||
+          prev?.activeMode != next.activeMode ||
+          prev?.activeCallId != next.activeCallId) {
+        _onCallChanged();
+      }
     });
     // select per field (bukan watch penuh): heartbeat presence AuthProvider
     // berubah tiap beberapa detik — watch membuat SELURUH layar chat
@@ -2849,10 +2856,10 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
             if (_showCallOverlay)
             Positioned.fill(
               child: ChatCallOverlay(
-                session: CallProvider.instance.activeSession!,
+                session: ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).activeSession!,
                 onExpand: _expandCall,
                 onEnd: () =>
-                    unawaited(CallProvider.instance.hangup()),
+                    unawaited(ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).hangup()),
               ),
             ),
         ],
@@ -2870,7 +2877,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     CallMode mode,
   ) async {
     final s = context.read<LocaleProvider>().s;
-    if (CallProvider.instance.inCall) {
+    if (ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).inCall) {
       showChatSnack(ctx, s.msgCallInProgress);
       return;
     }
@@ -2914,12 +2921,12 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       return;
     }
     try {
-      final callId = await context.read<CallProvider>().startCall(
+      final callId = await ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).startCall(
         widget.otherUid,
         callType,
       );
       if (!mounted) return;
-      final session = await CallProvider.instance.startSession(
+      final session = await ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).startSession(
         callId: callId,
         remoteUid: widget.otherUid,
         remoteName: widget.otherName,

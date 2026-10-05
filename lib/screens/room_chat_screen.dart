@@ -5,7 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:provider/provider.dart';
-import '../providers/call_provider.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/message_reaction_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../providers/riverpod/notification_prefs_provider.dart';
@@ -1079,7 +1079,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       roomId: widget.room.id,
       isBroadcaster: true,
       onEnded: () {
-        context.read<CallProvider>().notifStopLive();
+        ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStopLive();
         if (mounted) {
           setState(() {
             _broadcastSession = null;
@@ -1093,7 +1093,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       await session.start();
       if (!mounted) return;
       // Foreground service: broadcast tetap hidup saat app di-background
-      context.read<CallProvider>().notifStartLive(
+      ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStartLive(
           text: context.read<LocaleProvider>().s.broadcastLiveNotif);
     } catch (e) {
       if (!mounted) return;
@@ -1111,7 +1111,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       roomId: widget.room.id,
       isBroadcaster: false,
       onEnded: () {
-        context.read<CallProvider>().notifStopLive();
+        ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStopLive();
         if (mounted) {
           setState(() => _broadcastSession = null);
         }
@@ -1121,7 +1121,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     await session.start();
     if (!mounted) return;
     // Foreground service: menonton broadcast tetap hidup di background
-    context.read<CallProvider>().notifStartLive(
+    ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStartLive(
         text: context.read<LocaleProvider>().s.broadcastWatchingNotif);
     await session.requestStream();
     if (mounted) setState(() {});

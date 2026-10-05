@@ -11,7 +11,7 @@ import '../utils.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/call_provider.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
@@ -435,7 +435,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
     final auth = context.read<AuthProvider>();
     final profile = auth.profile;
     final name = _profile?.nickname ?? widget.fallbackName;
-    if (CallProvider.instance.inCall) {
+    if (ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).inCall) {
       ScaffoldMessenger.of(
         ctx,
       ).showSnackBar(SnackBar(content: Text(s.msgCallInProgress)));
@@ -472,8 +472,8 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
         myGender: profile?.gender ?? '',
       );
       if (!mounted) return;
-      final session = await CallProvider.instance.startSession(
-        callId: await context.read<CallProvider>().startCall(widget.userId, callType),
+      final session = await ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).startSession(
+        callId: await ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).startCall(widget.userId, callType),
         remoteUid: widget.userId,
         remoteName: name,
         callType: callType,

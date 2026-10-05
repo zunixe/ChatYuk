@@ -7,7 +7,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
-import '../providers/call_provider.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/perf/perf_probe.dart';
@@ -82,7 +82,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   void initState() {
     super.initState();
     WakelockPlus.enable();
-    CallProvider.instance.registerCall(widget.callId);
+    ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).registerCall(widget.callId);
     final profile = context.read<AuthProvider>().profile;
     final s = context.read<LocaleProvider>().s;
     if (widget.session != null) {
@@ -106,7 +106,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     if (_ownsSession) {
       unawaited(
-        context.read<CallProvider>().notifShowActive(
+        ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifShowActive(
           body: widget.callType == 'video'
               ? s.callNotifActiveVideo
               : s.callNotifActiveAudio,
@@ -130,8 +130,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     _elapsed.dispose();
     if (_ownsSession) {
       unawaited(_session.close());
-      unawaited(context.read<CallProvider>().notifCancel());
-      CallProvider.instance.unregisterCall(widget.callId);
+      unawaited(ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifCancel());
+      ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).unregisterCall(widget.callId);
     }
     super.dispose();
   }
@@ -140,7 +140,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     if (!mounted) return;
     setState(() {});
     if (_session.phase == CallPhase.ended) {
-      unawaited(context.read<CallProvider>().notifCancel());
+      unawaited(ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifCancel());
     }
     if (_session.phase == CallPhase.ended && _autoClose == null) {
       _autoClose = Timer(const Duration(milliseconds: 400), () {
@@ -154,7 +154,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   /// Layar ditutup SEGERA (jeda 250ms agar animasi tap terlihat), TIDAK
   /// menunggu cleanup WebRTC yang lambat.
   void _endCall() {
-    unawaited(CallProvider.instance.hangup());
+    unawaited(ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).hangup());
     _autoClose?.cancel();
     _autoClose = Timer(const Duration(milliseconds: 250), () {
       if (mounted) Navigator.of(context).pop();
@@ -188,7 +188,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   void _minimize() {
     if (!_minimizable || _minimizing) return;
     setState(() => _minimizing = true);
-    CallProvider.instance.setMode(CallMode.chat);
+    ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).setMode(CallMode.chat);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) Navigator.of(context).pop();
     });

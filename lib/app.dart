@@ -24,7 +24,7 @@ import 'core/cache/post_photo_cache.dart';
 import 'core/media/image_cache_hygiene.dart';
 import 'models/user_model.dart';
 import 'providers/riverpod/connectivity_provider.dart';
-import 'providers/call_provider.dart';
+import 'providers/riverpod/call_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/riverpod/timeline_provider.dart';
@@ -78,7 +78,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => localeProvider),
         // ConnectivityProvider: MIGRASI ke Riverpod (connectivityProvider).
-        ChangeNotifierProvider.value(value: CallProvider.instance),
       ],
       // Selector hanya pada appFontFamily → MaterialApp hanya rebuild saat
       // font global berubah (bukan tiap notifikasi AuthProvider).
@@ -635,7 +634,7 @@ class _MainNavState extends ConsumerState<_MainNav>
       ref.read(timelineProvider.notifier).invalidateFollowedIds();
     };
     // Hanya user terdaftar yang menerima panggilan masuk (anon: tidak).
-    CallProvider.instance.ensureListening(
+    ref.read(callProvider.notifier).ensureListening(
       registered: auth.profile?.isRegistered ?? false,
     );
     final uid = auth.uid;
@@ -800,7 +799,7 @@ class _MainNavState extends ConsumerState<_MainNav>
       // Pasang ULANG notif "panggilan aktif" bila sesi masih hidup tapi
       // notifnya hilang (app di-swipe/OS restart service saat keluar) —
       // tanpa ini tap-untuk-kembali-ke-panggilan lenyap padahal call jalan.
-      unawaited(CallProvider.instance.ensureActiveNotif());
+      unawaited(ref.read(callProvider.notifier).ensureActiveNotif());
       // Update: cek ulang saat kembali foreground — popup hanya muncul
       // bila ada versi baru yang belum ditangani; download yang sudah
       // dimulai user lanjut diam-diam di background (tidak di-nag ulang).

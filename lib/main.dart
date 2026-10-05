@@ -21,7 +21,7 @@ import 'core/admin_gate.dart';
 import 'app.dart';
 import 'models/room_model.dart';
 import 'providers/auth_provider.dart';
-import 'providers/call_provider.dart';
+import 'providers/riverpod/call_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
 import 'providers/riverpod/update_provider.dart';
@@ -837,8 +837,8 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
     // Tutup IncomingCallScreen yang mungkin masih nongol (app foreground)
     final callId = (data['callId'] ?? data['chatId']) as String?;
     if (callId != null && callId.isNotEmpty) {
-      if (CallProvider.instance.activeCallId == callId) {
-        CallProvider.instance.unregisterCall(callId);
+      if (_rootContainer!.read(callProvider.notifier).activeCallId == callId) {
+        _rootContainer!.read(callProvider.notifier).unregisterCall(callId);
       }
       // JANGAN pop buta di sini: IncomingCallScreen menutup sendiri via
       // subscription status realtime (canceled/ended → _close). Pop buta
@@ -846,7 +846,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
       // dan pop paksa menembus PopScope → dispose melempar → navigator
       // rusak (back mati, UI seperti hang, CPU 0%).
       try {
-        final dynamic prov = CallProvider.instance;
+        final dynamic prov = _rootContainer!.read(callProvider.notifier);
         if (prov.activeSession != null) {
           await prov.clearSession();
         }
@@ -914,8 +914,8 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
     // tutup layar panggilan masuk yang masih nongol (jika ada)
     final callId = (data['callId'] ?? data['chatId']) as String?;
     if (callId != null && callId.isNotEmpty) {
-      if (CallProvider.instance.activeCallId == callId) {
-        CallProvider.instance.unregisterCall(callId);
+      if (_rootContainer!.read(callProvider.notifier).activeCallId == callId) {
+        _rootContainer!.read(callProvider.notifier).unregisterCall(callId);
       }
       // JANGAN pop buta (lihat call_ended di atas): IncomingCallScreen
       // menutup sendiri via realtime; pop buta bisa menutup layar yang
@@ -1094,7 +1094,7 @@ Future<bool> _waitForSession({
 bool ensureCallScreenRoute(NavigatorState? navIn) {
   if (navIn == null) return false;
   final nav = navIn;
-  final sess = CallProvider.instance.activeSession;
+  final sess = _rootContainer!.read(callProvider.notifier).activeSession;
   if (sess == null) return false;
   if (routeTracker.contains(kCallScreenRoute)) return true;
   nav.push(
@@ -1202,10 +1202,10 @@ void _openFromData(Map<String, dynamic> data) {
   // Tunggu sesi login pulih dulu (cold start) supaya tombol terima tidak gagal.
   if (data['type'] == 'call') {
     final callId = data['callId'] ?? '';
-    if (callId.isNotEmpty && CallProvider.instance.activeCallId != callId) {
+    if (callId.isNotEmpty && _rootContainer!.read(callProvider.notifier).activeCallId != callId) {
       // Nama pemanggil dari payload push → dipakai langsung oleh ring sistem
       // (tidak menunggu query nickname). Ring jadi muncul lebih cepat.
-      CallProvider.instance.setPendingIncomingName(
+      _rootContainer!.read(callProvider.notifier).setPendingIncomingName(
         (data['callerName'] ?? data['otherName'] ?? '') as String,
       );
       unawaited(

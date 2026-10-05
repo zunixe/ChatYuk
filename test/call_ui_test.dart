@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatyuk/providers/call_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chatyuk/providers/riverpod/call_provider.dart';
 import 'package:chatyuk/services/call/call_ui.dart';
 import 'package:chatyuk/services/call/call_ui_channel.dart';
 
@@ -120,14 +121,17 @@ void main() {
 
   group('CallProvider integrasi CallUi', () {
     late _FakeCallUi ui;
-    late CallProvider provider;
+    late ProviderContainer container;
+    late CallNotifier provider;
 
     setUp(() {
       ui = _FakeCallUi();
-      provider = CallProvider.newForTest(ui);
+      CallNotifier.callUiForTest = ui;
+      container = ProviderContainer();
+      provider = container.read(callProvider.notifier);
     });
 
-    tearDown(() => provider.dispose());
+    tearDown(() => container.dispose());
 
     test('bindIncomingScreen: accept sistem memanggil handler layar', () async {
       var accepted = 0;
@@ -190,18 +194,22 @@ void main() {
   });
   group('notif panggilan aktif (regresi tap-kembali hilang)', () {
     test('ensureActiveNotif tanpa sesi = no-op (tidak crash)', () async {
-      final provider = CallProvider.newForTest(_FakeCallUi());
+      CallNotifier.callUiForTest = _FakeCallUi();
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final provider = c.read(callProvider.notifier);
       // Tanpa sesi aktif → langsung return, tidak menyentuh plugin.
       await provider.ensureActiveNotif();
-      provider.dispose();
     });
 
     test('clearSession membersihkan metadata notif', () async {
-      final provider = CallProvider.newForTest(_FakeCallUi());
+      CallNotifier.callUiForTest = _FakeCallUi();
+      final c2 = ProviderContainer();
+      addTearDown(c2.dispose);
+      final provider = c2.read(callProvider.notifier);
       // Akses field privat lewat perilaku: tanpa sesi, ensure no-op.
       await provider.ensureActiveNotif();
       expect(provider.activeSession, isNull);
-      provider.dispose();
     });
   });
 }

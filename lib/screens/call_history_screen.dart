@@ -9,7 +9,7 @@ import '../core/call/call_history_entry.dart';
 import '../core/call/call_permissions.dart';
 import '../core/nav_guard.dart';
 import '../providers/auth_provider.dart';
-import '../providers/call_provider.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
@@ -48,7 +48,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
 
   Future<void> _load() async {
     final auth = context.read<AuthProvider>();
-    final call = context.read<CallProvider>();
+    final call = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
     final me = auth.uid;
     if (me == null || me.isEmpty) {
       if (mounted) {
@@ -144,7 +144,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
     final profile = auth.profile;
-    final call = context.read<CallProvider>();
+    final call = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
     if (call.inCall) {
       showChatSnack(context, s.msgCallInProgress);
       return;

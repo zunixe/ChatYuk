@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chatyuk/providers/call_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chatyuk/providers/riverpod/call_provider.dart';
 
 import 'test_helper.dart';
 
@@ -9,15 +10,13 @@ void main() {
     await initSupabaseForTest();
   });
 
-  tearDown(() {
-    // Singleton dipakai lintas test dalam satu run — kembalikan bersih.
-    final p = CallProvider.instance;
-    if (p.activeCallId != null) p.unregisterCall(p.activeCallId!);
-  });
+
 
   group('state call aktif (murni, tanpa realtime)', () {
     test('register → inCall true; unregister id cocok → false', () {
-      final p = CallProvider.instance;
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final p = container.read(callProvider.notifier);
       expect(p.inCall, isFalse);
       p.registerCall('c1');
       expect(p.inCall, isTrue);
@@ -30,15 +29,16 @@ void main() {
     });
 
     test('setMode notify sekali, sama = no-op', () {
-      final p = CallProvider.instance;
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final p = container.read(callProvider.notifier);
       var notified = 0;
-      void listener() => notified++;
-      p.addListener(listener);
+      final sub = container.listen(callProvider, (prev, next) => notified++);
       p.setMode(CallMode.fullscreen);
       expect(notified, 1);
       p.setMode(CallMode.fullscreen);
       expect(notified, 1);
-      p.removeListener(listener);
+      sub.close();
     });
   });
 }
