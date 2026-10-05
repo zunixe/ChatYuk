@@ -8,7 +8,7 @@ import '../core/perf/perf_probe.dart';
 import '../models/room_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/empty_state_view.dart';
@@ -191,7 +191,7 @@ const _roomIconChoices = [
 /// Dialog buat grup — publik: dipakai FAB tab Grup DAN menu ⋮ chat list.
 Future<void> showCreateGroupDialog(BuildContext context) async {
   final s = context.read<LocaleProvider>().s;
-  final points = context.read<PointsProvider>();
+  final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
   final auth = context.read<AuthProvider>();
   // Admin privilege hanya ada di build admin (flavor-gate) —
   // bukan lagi cek email runtime.
@@ -537,7 +537,7 @@ class _GroupCard extends ConsumerWidget {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
     final rooms = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
-    final points = context.read<PointsProvider>();
+    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final isMember =
         rooms.memberRoomIds.contains(room.id) ||
         room.ownerId == auth.uid;
@@ -659,7 +659,7 @@ class _GroupCard extends ConsumerWidget {
   Future<void> _ownerMenu(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
     final rooms = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
-    final points = context.read<PointsProvider>();
+    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -890,10 +890,10 @@ class _GroupCard extends ConsumerWidget {
                       ),
                     ),
                     if (!isMember &&
-                        context.read<PointsProvider>().enabled) ...[
+                        ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).enabled) ...[
                       const SizedBox(height: 4),
                       Text(
-                        '${context.read<PointsProvider>().roomJoinPaid} 🪙',
+                        '${ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).roomJoinPaid} 🪙',
                         style: AppText.caption.copyWith(
                           color: AppTheme.primary,
                           fontWeight: FontWeight.w700,

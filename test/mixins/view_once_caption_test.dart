@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:chatyuk/core/cache/offline_outbox.dart';
 import 'package:chatyuk/mixins/chat_outbox_mixin.dart';
@@ -13,13 +15,24 @@ import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/points_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
+import 'package:chatyuk/services/points_service.dart';
 import 'package:chatyuk/services/storage_photo_service.dart';
 
 class MockAuthService extends Mock implements AuthService {}
 class MockStorage extends Mock implements StoragePhotoService {}
-class MockPoints extends Mock implements PointsProvider {}
+class MockPointsService extends Mock implements PointsService {}
+
+class TestPoints extends PointsNotifier {
+  TestPoints(MockPointsService svc) : super(service: svc);
+  @override
+  PointsState build() => const PointsState();
+  @override
+  Future<int> deductBeforeSend(String _) async => 100;
+  @override
+  Future<void> refundChatPoint(String _) async {}
+}
 
 /// Host mixin ASLI: `ChatPhotoSendMixin` di atas `ChatOutboxMixin`.
 /// `pickViewOnceImage` di-override supaya alur caption bisa diuji tanpa
@@ -119,7 +132,7 @@ class ViewOnceHostState extends State<ViewOnceHost>
   @override
   void photoOnSent(String kind) {}
   @override
-  void photoFirstBonus(PointsProvider pp) {}
+  void photoFirstBonus(PointsNotifier pp) {}
   @override
   void photoSetPreview(String base64) {}
 
@@ -146,7 +159,7 @@ UserModel profileForTest() => UserModel(
 void main() {
   late MockAuthService mockSvc;
   late MockStorage mockStorage;
-  late MockPoints mockPoints;
+
   late AuthProvider auth;
 
   setUp(() {
@@ -163,11 +176,7 @@ void main() {
           base64: any(named: 'base64'),
         )).thenAnswer((_) async => 'storage/path.jpg');
 
-    mockPoints = MockPoints();
-    when(() => mockPoints.enabled).thenReturn(false);
-    when(() => mockPoints.deductBeforeSend(any()))
-        .thenAnswer((_) async => 100);
-    when(() => mockPoints.refundChatPoint(any())).thenAnswer((_) async {});
+    // Points hermetic via Riverpod override (dibuat di pump).
   });
 
   tearDown(() {
@@ -176,16 +185,24 @@ void main() {
   });
 
   Future<ViewOnceHostState> pump(WidgetTester tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        pointsProvider.overrideWith(() => TestPoints(MockPointsService()))
+      ],
+    );
+    addTearDown(container.dispose);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: auth),
-          ChangeNotifierProvider<LocaleProvider>(
-            create: (_) => LocaleProvider(),
-          ),
-          ChangeNotifierProvider<PointsProvider>.value(value: mockPoints),
-        ],
-        child: const MaterialApp(home: Scaffold(body: ViewOnceHost())),
+      UncontrolledProviderScope(
+        container: container,
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<LocaleProvider>(
+              create: (_) => LocaleProvider(),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: ViewOnceHost())),
+        ),
       ),
     );
     await tester.pump();

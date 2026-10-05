@@ -22,7 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import '../providers/riverpod/nav_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../widgets/search_dropdown.dart';
 import '../widgets/skeleton_card.dart';
@@ -1728,7 +1728,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                               // Filter gender berbayar (harian) — gate server
                               // saat fitur sudah dipublish. Pilih 'all' = gratis.
                               if (v != 'all') {
-                                final pp = context.read<PointsProvider>();
+                                final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
                                 if (pp.genderFilterPublished) {
                                   try {
                                     await pp.gateFeature(

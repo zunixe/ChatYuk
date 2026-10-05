@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import 'missions/widgets/mission_card.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/theme_provider.dart';
 
 class MissionsScreen extends StatefulWidget {
@@ -16,7 +17,7 @@ class MissionsScreen extends StatefulWidget {
 
 class _MissionsScreenState extends State<MissionsScreen>
     with SingleTickerProviderStateMixin {
-  PointsProvider get _service => context.read<PointsProvider>();
+  PointsNotifier get _service => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
   late final TabController _tab = TabController(length: 3, vsync: this);
   int _lastTabIndex = 0;
   int get _tzOffset => DateTime.now().timeZoneOffset.inMinutes;
@@ -76,7 +77,7 @@ class _MissionsScreenState extends State<MissionsScreen>
       final res = await _service.claimWeeklyQuest(key, _tzOffset);
       if (!mounted) return;
       if (res['claimed'] == true) {
-        final pp = context.read<PointsProvider>();
+        final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
         pp.setPoints((res['points'] as num?)?.toInt() ?? pp.points);
         pp.showPointsToast(context, s.missionClaimedToast(reward));
       }

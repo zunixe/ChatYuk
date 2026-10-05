@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as lpn;
 import 'package:provider/provider.dart';
@@ -11,7 +13,7 @@ import '../widgets/admin_error_view.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../utils.dart';
 import 'admin_chat_list_screen.dart';
 import 'admin_contact_tab.dart';
@@ -251,8 +253,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       // Sinkron ulang status YukCoin v2 ke provider poin supaya perubahan
       // toggle (mis. membuka jalur topup) langsung terlihat tanpa restart.
       if (mounted) {
-        unawaited(context.read<PointsProvider>().refreshYukcoinV2());
-        unawaited(context.read<PointsProvider>().refreshMeteredPricing());
+        unawaited(ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).refreshYukcoinV2());
+        unawaited(ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).refreshMeteredPricing());
       }
       if (mounted) _toast(context.read<LocaleProvider>().s.adminPointSettingsSaved);
     } catch (e) {

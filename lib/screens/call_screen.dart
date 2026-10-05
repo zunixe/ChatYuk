@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -8,6 +9,7 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/call/call_permissions.dart';
 import '../utils.dart';
@@ -16,7 +18,7 @@ import '../widgets/profile_avatar.dart';
 
 /// Layar panggilan 1:1 — dipakai caller (menelpon) dan callee (menerima).
 /// Audio: avatar + timer. Video: remote fullscreen + preview lokal kecil.
-class CallScreen extends StatefulWidget {
+class CallScreen extends ConsumerStatefulWidget {
   final String callId;
   final String remoteUid;
   final String remoteName;
@@ -44,10 +46,10 @@ class CallScreen extends StatefulWidget {
   });
 
   @override
-  State<CallScreen> createState() => _CallScreenState();
+  ConsumerState<CallScreen> createState() => _CallScreenState();
 }
 
-class _CallScreenState extends State<CallScreen> {
+class _CallScreenState extends ConsumerState<CallScreen> {
   late final CallSession _session;
   bool _ownsSession = true;
   Timer? _autoClose;
@@ -202,6 +204,8 @@ class _CallScreenState extends State<CallScreen> {
   Widget build(BuildContext context) {
     PerfProbe.buildCount('CallScreen');
     final s = context.watch<LocaleProvider>().s;
+    // Toggle admin OFF → semua yang berhubungan koin sembunyi (banner tarif).
+    final coinsOn = ref.watch(pointsProvider.select((p) => p.enabled));
     final isVideo = widget.callType == 'video';
     final inCall = _session.phase == CallPhase.inCall;
     final showRemoteVideo = inCall && isVideo && _session.hasRemoteVideo;
@@ -393,8 +397,10 @@ class _CallScreenState extends State<CallScreen> {
                           style: AppText.body.copyWith(color: Colors.white70),
                         ),
                       ),
-                      // Banner billing: sisa gratis / tarif per menit (caller).
-                      if (_session.phase == CallPhase.inCall &&
+                      // Banner billing: tarif koin/menit (caller). Sembunyi
+                      // saat sistem koin dimatikan admin.
+                      if (coinsOn &&
+                          _session.phase == CallPhase.inCall &&
                           _session.billingPerMinute > 0) ...[
                         const SizedBox(height: 6),
                         _BillingBanner(session: _session, isId: s.isId),

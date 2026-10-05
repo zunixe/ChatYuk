@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../utils.dart';
 import '../core/media/chat_photo_helper.dart';
@@ -81,7 +81,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   void photoOnSent(String kind);
 
   /// Bonus sekali pakai khusus private (`first_photo`); room = no-op.
-  void photoFirstBonus(PointsProvider pp);
+  void photoFirstBonus(PointsNotifier pp);
 
   /// Set preview foto di composer (private: + fokus & scroll; room: set saja).
   void photoSetPreview(String base64);
@@ -472,7 +472,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       return;
     }
 
-    final pp = context.read<PointsProvider>();
+    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     // Biaya kirim video = sama dengan foto (kind 'image').
     final r = await pp.deductBeforeSend('image');
     if (r < 0) {
@@ -641,7 +641,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       return;
     }
 
-    final pp = context.read<PointsProvider>();
+    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final r = await pp.deductBeforeSend(effKind);
     if (r < 0) {
       if (r == -2) {

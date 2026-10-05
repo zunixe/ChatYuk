@@ -14,7 +14,7 @@ import 'providers/chat_provider.dart';
 import 'services/device_info_service.dart';
 import 'providers/riverpod/message_reaction_provider.dart';
 import 'providers/riverpod/online_users_provider.dart';
-import 'providers/points_provider.dart';
+import 'providers/riverpod/points_provider.dart';
 import 'providers/riverpod/social_provider.dart';
 import 'core/admin_gate.dart';
 import 'providers/locale_provider.dart';
@@ -71,12 +71,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
-        ChangeNotifierProvider(
-          create: (_) => PointsProvider()
-            ..checkOnboarding()
-            ..refreshEnabled()
-            ..subscribeEnabled(),
-        ),
         // Refresh perdana story DITUNDA ke post-frame (di
         // OnlineUsersScreen.initState) — RPC story_tray + subscribe
         // realtime jangan berebut CPU/network dengan frame pertama.

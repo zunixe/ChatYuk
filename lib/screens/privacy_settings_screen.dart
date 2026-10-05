@@ -4,7 +4,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/privacy_settings.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/privacy_provider.dart';
 import 'privacy_settings/widgets/privacy_exclusions_sheet.dart';
@@ -257,11 +257,14 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
     // privasi rebuild tiap PointsProvider notify (refresh beberapa kali saat
     // buka: get_points_enabled/get_wallet/yukcoin_v2_status) → lag saat masuk.
     // Sekarang `select` field yang dirender saja.
-    final (:yukcoinV2Active, :ghostMode) = context.select<PointsProvider,
-        ({bool yukcoinV2Active, bool ghostMode})>((pp) => (
-      yukcoinV2Active: pp.yukcoinV2Active,
-      ghostMode: pp.ghostMode,
-    ));
+    final (:yukcoinV2Active, :ghostMode) = ref.watch(
+      pointsProvider.select(
+        (pp) => (
+          yukcoinV2Active: pp.yukcoinV2Active,
+          ghostMode: pp.ghostMode,
+        ),
+      ),
+    );
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.privacyTitle)),
@@ -341,7 +344,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
                   title: s.yukcoinFeatureGhost,
                   subtitle: ghostMode
                       ? s.ghostModeActive
-                      : '${s.ghostModeDesc} (${context.read<PointsProvider>().costGhostModeDaily})',
+                      : '${s.ghostModeDesc} (${ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).costGhostModeDaily})',
                   value: ghostMode,
                   onChanged: (v) => _buyGhost(v),
                 ),
@@ -356,7 +359,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
   /// Beli ghost mode 1 hari (YukCoin). Bila sudah aktif, tombol = perpanjang.
   Future<void> _buyGhost(bool want) async {
     if (!want) return; // tidak bisa mematikan lebih awal (habis sendiri)
-    final pp = context.read<PointsProvider>();
+    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final s = context.read<LocaleProvider>().s;
     final ok = await showDialog<bool>(
       context: context,

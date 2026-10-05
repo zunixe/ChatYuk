@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
 import '../widgets/user_avatar.dart'
     show cachedUserAvatarBytes, rememberAvatarBytes;
@@ -30,7 +30,7 @@ class LeaderboardScreen extends StatefulWidget {
 
 class _LeaderboardScreenState extends State<LeaderboardScreen>
     with SingleTickerProviderStateMixin {
-  PointsProvider get _service => context.read<PointsProvider>();
+  PointsNotifier get _service => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
   late final TabController _tab = TabController(length: 2, vsync: this);
   String _scope = 'weekly';
   bool _loading = true;

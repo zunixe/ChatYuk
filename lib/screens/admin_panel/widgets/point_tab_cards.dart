@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
-import '../../../providers/points_provider.dart';
+import '../../../providers/riverpod/points_provider.dart';
 import 'panel_card.dart';
 
 /// Ringkasan rata-rata & total poin.
@@ -211,7 +212,7 @@ class PointsSystemCard extends StatelessWidget {
               value: admin.pointsEnabled,
               onChanged: (v) {
                 admin.togglePointsSystem(v);
-                context.read<PointsProvider>().refreshEnabled();
+                ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).refreshEnabled();
               },
               activeColor: AppTheme.primary,
             ),
@@ -492,7 +493,7 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
     setState(() => _saving = true);
     try {
       final res = await context.read<AdminProvider>().setFeatureFlag(feature, v);
-      final pp = context.read<PointsProvider>();
+      final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
       await pp.refreshMeteredPricing();
       if (mounted) {
         setState(() => _flags = res);

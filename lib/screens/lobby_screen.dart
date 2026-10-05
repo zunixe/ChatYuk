@@ -9,7 +9,7 @@ import '../config/regions.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import 'private_rooms_screen.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/search_dropdown.dart';
@@ -58,7 +58,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     if (!mounted) return;
     await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).setCountry(target);
     // Muat harga room (dual pricing) dari server.
-    context.read<PointsProvider>().refreshRoomPricing();
+    ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).refreshRoomPricing();
     if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchExplore();
   }
 
