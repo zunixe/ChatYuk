@@ -114,44 +114,28 @@ class UpdateProvider extends ChangeNotifier {
       _fromPlay = play == PlayAvailability.available;
 
       // Kebijakan dari server (app_settings) sebagai sumber utama.
-      var available = policy != null &&
+      final available = policy != null &&
           !policy.isEmpty &&
           AppUpdateService.isUpdateAvailable(
             local: local.version,
             latest: policy.latestVersion,
           );
-      var forceReq = policy != null &&
+      final forceReq = policy != null &&
           AppUpdateService.isForceRequired(
             local: local.version,
             minVersion: policy.minVersion,
           );
 
-      // Bila admin belum mengisi latest_version tapi app dari Play, tanya Play.
-      if (!available && _fromPlay) {
-        final playHas = await service.playReportsUpdate();
-        if (playHas) available = true;
-      }
-
-      if (!available) {
+      if (!available && !forceReq) {
         _phase = UpdatePhase.idle;
         _notify();
         return;
       }
 
-      _latestVersion = policy?.latestVersion ?? '';
-      _notes = policy?.notes ?? '';
-      _force = forceReq;
-
-      // ── PUSH MANUAL admin ──
-      // Admin menekan "Kirim Popup Update" → update_push_at berubah. Bila
-      // stempel server LEBIH BARU dari yang terakhir kita tampilkan, popup
-      // harus muncul walau versi ini sudah di-snooze (permintaan eksplisit
-      // admin). User cukup MEMBUKA app — tidak perlu app hidup saat push.
-      final pushedNow = await _hasFreshManualPush(policy?.pushAt);
-
       // Play sudah selesai mengunduh tapi install belum jalan (mis. app
-      // terbunuh sebelum complete) → selesaikan diam-diam tanpa popup,
-      // walau versi ini sempat di-snooze/ditandai.
+      // terbunuh sebelum complete) → selesaikan diam-diam tanpa popup.
+      // Dijalankan SEBELUM gerbang push: ini bukan popup/nag, melainkan
+      // menyelesaikan update yang user sudah mulai.
       if (_fromPlay) {
         try {
           final st = await service.playInstallStatus();
@@ -167,6 +151,31 @@ class UpdateProvider extends ChangeNotifier {
         }
       }
 
+      // ── GERBANG PUSH MANUAL admin ──
+      // Popup update HANYA muncul bila admin baru menekan "Kirim Popup
+      // Update" di panel admin (update_push_at lebih baru dari yang pernah
+      // ditampilkan) — ATAU bila force (min_version, penegakan wajib).
+      // Selisih versi SAJA tidak cukup: mencegah popup palsu/loop saat
+      // latest_version lebih baru dari versi yang benar-benar ter-publish
+      // di Play. Alur admin yang benar: publish rilis → samakan
+      // latest_version → tekan "Kirim Popup Update".
+      // (Dulu ada fallback tanya Play Core bila latest_version kosong —
+      // dihapus: ia bisa memunculkan popup tanpa push manual.)
+      // Lolos gerbang di atas berarti policy non-null (available/forceReq
+      // keduanya mensyaratkan policy ada).
+      final pol = policy;
+      final pushedNow = await _hasFreshManualPush(pol.pushAt);
+      if (!pushedNow && !forceReq) {
+        dlog('[UPDATE] menunggu push manual admin (tidak nag)');
+        _phase = UpdatePhase.idle;
+        _notify();
+        return;
+      }
+
+      _latestVersion = pol.latestVersion;
+      _notes = pol.notes;
+      _force = forceReq;
+
       // Snooze: jangan popup versi yang sama dalam 24 jam — kecuali force
       // atau admin baru melakukan push manual.
       if (!forceReq && !pushedNow && await _isSnoozed(_latestVersion)) {
@@ -178,7 +187,7 @@ class UpdateProvider extends ChangeNotifier {
 
       // Tandai push manual sudah dilihat (agar popup tidak muncul terus tiap
       // buka app setelah admin push). Dilakukan SETELAH lolos guard snooze.
-      if (pushedNow) await _markManualPushSeen(policy?.pushAt);
+      if (pushedNow) await _markManualPushSeen(pol.pushAt);
 
       _phase = UpdatePhase.available;
       _notify();

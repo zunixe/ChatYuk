@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -19,8 +18,8 @@ import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../screens/user_info_screen.dart';
 import 'social_actions.dart';
+import 'person_avatar.dart';
 import 'profile_avatar.dart';
-import 'gender_avatar.dart';
 
 /// "Top Aktif" versi COMPACT untuk ditampilkan sebagai bottom sheet —
 /// langsung di halaman Pengguna Online (bukan halaman baru). Ringkas:
@@ -403,9 +402,11 @@ class LeaderboardRow extends StatelessWidget {
     // cukup ditandai medali/badge + label netral.
     final topColor = _rankAccent(rank);
     final isTop3 = rank >= 1 && rank <= 3;
-    // Border avatar: top-3 pakai warna medali (emas/perak/perunggu); sisanya
-    // ikut GENDER (male=biru, female=pink) — sama seperti list Pengguna Online.
-    final borderColor = isTop3 ? topColor : GenderAvatar.colorFor(gender);
+    // Ring avatar: top-3 MEDALI (emas/perak/perunggu, dikembalikan sesuai
+    // permintaan); sisanya ikut GENDER — sama persis dengan Pengguna Online,
+    // private chat, dan profil (PersonAvatar). Badge peringkat + tint baris
+    // tetap ada untuk top-3.
+    final borderColor = isTop3 ? topColor : PersonAvatar.colorFor(gender);
 
     return Container(
       color: isTop3
@@ -416,10 +417,12 @@ class LeaderboardRow extends StatelessWidget {
         children: [
           SizedBox(width: 30, child: _RankBadge(rank: rank)),
           const SizedBox(width: 8),
-          // Foto profil diselesaikan lewat ProfileAvatar(uid) — `entry['avatar']`
-          // dari RPC adalah PATH storage ("avatars/xxx.jpg"), BUKAN base64,
-          // jadi decode base64 selalu gagal (dulu foto tak pernah tampil).
-          // Tap avatar → buka foto (zoom) ala layar Online.
+          // Top-3: ring MEDALI via ProfileAvatar (edisi semula). Selain itu:
+          // PersonAvatar = standar yang sama persis dengan Pengguna Online
+          // (foto + latar tint + ring warna gender). `entry['avatar']` dari
+          // RPC adalah PATH storage ("avatars/xxx.jpg") atau base64 —
+          // PersonAvatar menangani keduanya (resolve by uid bila kosong).
+          // Tap avatar → buka foto (zoom).
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => _zoomAvatar(
@@ -428,13 +431,21 @@ class LeaderboardRow extends StatelessWidget {
               name: nickname,
               ring: borderColor,
             ),
-            child: ProfileAvatar(
-              uid: uid,
-              name: nickname,
-              size: 32,
-              borderColor: borderColor,
-              borderWidth: 1.6,
-            ),
+            child: isTop3
+                ? ProfileAvatar(
+                    uid: uid,
+                    name: nickname,
+                    size: 32,
+                    borderColor: borderColor,
+                    borderWidth: 1.6,
+                  )
+                : PersonAvatar(
+                    uid: uid,
+                    name: nickname,
+                    gender: gender,
+                    avatarB64: entry['avatar']?.toString() ?? '',
+                    size: 32,
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -633,9 +644,9 @@ class LeaderboardRow extends StatelessWidget {
                           gaplessPlayback: true,
                         ),
                       )
-                    : CircleAvatar(
+                      : CircleAvatar(
                         radius: 90,
-                        backgroundColor: AppTheme.avatarBg,
+                        backgroundColor: ring,
                         child: Text(
                           initial,
                           style: const TextStyle(

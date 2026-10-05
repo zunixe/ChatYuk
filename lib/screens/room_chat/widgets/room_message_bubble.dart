@@ -12,8 +12,7 @@ import '../../../widgets/location_bubble.dart';
 import '../../../widgets/link_preview.dart';
 import '../../../widgets/mention_spans.dart';
 import '../../../widgets/private_chat_message.dart';
-import '../../../widgets/profile_avatar.dart';
-import '../../../widgets/gender_avatar.dart';
+import '../../../widgets/person_avatar.dart';
 import '../../../widgets/reply_quote.dart';
 import '../../../widgets/voice_bubble.dart';
 
@@ -363,15 +362,13 @@ class RoomMessageBubble extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onTapUser,
-            // Avatar: FOTO asli bila ada (lazy via ProfileAvatar) + border
-            // WARNA GENDER (male=biru/female=pink); fallback inisial bila
-            // tanpa foto — sama seperti list Pengguna Online & chat private.
-            child: ProfileAvatar(
+            // PersonAvatar = standar yang sama persis dengan Pengguna Online
+            // (foto + latar tint + ring warna gender).
+            child: PersonAvatar(
               uid: msg.senderId,
               name: msg.senderName,
+              gender: msg.senderGender,
               size: 32,
-              borderColor: GenderAvatar.colorFor(msg.senderGender),
-              borderWidth: 1.5,
             ),
           ),
           SizedBox(width: 8),

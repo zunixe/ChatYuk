@@ -2,6 +2,112 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-06 — Email Marketing (admin tab Marketing)
+
+- **Status:** SUDAH TERAPPLIED via Management API —
+  `20261006170000_email_marketing.sql` (tabel + RPC + cron),
+  `20261006180000_email_marketing_fix.sql` (fix review),
+  `20261006190000_email_marketing_status_check_fix.sql` (CHECK 'sending').
+- **Fix review (WAJIB, sudah terapply):**
+  - **Duplikat kirim** → claim atomik `pending→sending` + `for update skip locked`
+    + `p_lock_seconds` (lepas 'sending' macet) → `email_worker_claim(3-arg)`.
+    Overload lama 2-arg DI-DROP.
+  - **Backlog abadi** → `retry_count`+`email_max_retry`, `email_mark_failed`
+    memutuskan retry/failed; `email_finalize_campaign` menutup campaign.
+  - **CHECK constraint** tak memuat `'sending'` → claim gagal 23514 → sudah
+    ditambah (migrasi #3).
+  - **Idempotency-Key** Resend per recipient (`camp-<cid>-rcpt-<id>`).
+  - **Outbox** ditandai `sent_at` SEGERA setelah claim (cegah proses ulang).
+  - **email-track**: lookup `.limit(1)` (anti maybeSingle error) + jangan
+    turunkan status 'clicked'.
+  - **email_daily_cap** kini dipakai worker (batasi kirim/hari).
+
+- **Tabel:** `email_campaigns`, `email_recipients`, `email_events`,
+  `email_suppressions` (RLS terkunci; akses hanya lewat RPC security-definer
+  dengan guard `auth.email() = 'zunixe@gmail.com'`).
+- **Kolom baru `app_settings`:** `email_marketing_enabled` (default false),
+  `email_from_name`, `email_from_address`, `email_daily_cap`.
+- **RPC:** `admin_email_campaigns_page`, `admin_email_campaign_save`,
+  `admin_email_campaign_delete`, `admin_email_campaign_detail`,
+  `admin_email_estimate_segment`, `admin_email_enqueue`, `admin_email_stats`.
+  Internal (service_role): `email_worker_claim`, `email_recount_campaign`.
+- **Edge functions (WAJIB deploy + `verify_jwt=false`):** `email-worker`
+  (kirim via Resend), `email-track` (pixel open + redirect click),
+  `email-unsubscribe` (footer), `email-webhook` (event Resend).
+- **Cron:** `chatyuk-email-worker` (tiap 1 menit) → panggil `email-worker`.
+- **Secrets:** `RESEND_API_KEY`; set `email_from_address` ke domain
+  terverifikasi Resend (SPF/DKIM). Aktifkan kill-switch
+  `email_marketing_enabled=true` sebelum kirim.
+- **Client:** tab "Marketing" ke-12 di admin panel
+  (`admin_marketing_tab.dart` + composer WYSIWYG flutter_quill +
+  detail screen), provider mixin `admin/admin_marketing.dart`, service
+  method, strings.
+
+## 2026-10-06 — Admin tab Story: lihat semua, atur visibility, hard-delete
+
+- **Status:** SUDAH TERAPPLIED via Management API
+  (`20261006160000_story_admin_manage.sql`).
+  - `admin_story_all(p_limit, p_filter)` — semua slide aktif + info
+    visibility (`all|public|followers|friends|private`), terbaru di atas.
+  - `admin_set_story_visibility(p_story_id, p_state)` — public/followers/
+    friends (set visibility + owner_only=false) atau private (owner_only=true).
+  - `admin_story_delete(p_story_id)` — HAPUS PERMANEN + return path (client
+    bersihkan file Storage).
+  - Fungsi lama `admin_story_all(int)` di-DROP (hindari overload ambigu).
+- **Client:** tab baru "Story" di admin panel (`admin_story_tab.dart` +
+  `admin_story_viewer_screen.dart`), provider mixin `admin_stories.dart`,
+  service method, strings.
+
+## 2026-10-06 — Story "hapus" = PRIVATE (semua pemanggil, termasuk admin)
+
+- **Status:** SUDAH TERAPPLIED via Management API.
+  - `20261006140000_story_owner_only_private.sql` (kolom owner_only + bypass).
+  - `20261006150000_story_delete_always_private.sql` (REVISI delete_story).
+- **Permintaan user:** story yang "dihapus" (user MAUPUN admin — mis. kasus
+  nude) TIDAK hilang permanen → jadi **PRIVATE (`owner_only=true`)**.
+  Pembuat (jason) DAN admin tetap bisa lihat; orang lain tidak.
+- **Catatan penting:** sempat ada versi `20261006150000` yang bikin **admin
+  hard-delete** — sudah DIREVISI: sekarang semua "hapus" = owner_only (tidak
+  ada hard-delete via delete_story). Purge permanen hanya via cron
+  `purge_expired_stories` (retensi 24 jam).
+- **Client:** dialog "Sembunyikan slide ini?" + toast "Story jadi privat
+  (hanya kamu)"; viewer tetap terbuka setelah sembunyikan (slide masih ada).
+
+## 2026-10-06 — Story "dihapus" → PRIVATE (owner_only) + admin lihat semua
+
+- **Status:** SUDAH TERAPPLIED via Management API
+  (`20261006140000_story_owner_only_private.sql`).
+- **Permintaan user:** story yang "dihapus" jangan hilang permanen —
+  tampilkan lagi TAPI hanya pembuat (private) yang bisa lihat; admin tetap
+  bisa lihat semua + ada keterangan private/visibility.
+- **Perubahan:**
+  - Kolom baru `stories.owner_only boolean not null default false`.
+  - `delete_story` → `set owner_only = true` (bukan `delete`). Row tetap
+    ada → author masih lihat di tray/viewer (badge "Private (hanya saya)").
+  - `story_slides` & `story_tray`: sertakan `owner_only`/`has_owner_only`
+    + ADMIN bypass (`is_admin_request()`) → admin lihat SEMUA.
+  - RPC baru `admin_story_all(p_limit)` — daftar semua slide aktif +
+    flag owner_only/visibility (keterangan moderasi).
+- **Client:** `StorySlide.ownerOnly`, `StoryTrayItem.hasOwnerOnly`,
+  `_VisibilityBadge` (ikon kunci + "Private (hanya saya)") tampil untuk
+  pembuat & admin.
+- **Catatan:** `purge_expired_stories` (cron) tetap hapus slide lewat 24 jam
+  — owner_only hanya menyembunyikan dari ORANG LAIN, bukan dari expiry.
+
+## 2026-10-05 — Preview kartu ikut teks hasil edit (private chat)
+
+- **Status:** SUDAH TERAPPLIED via Management API
+  (`20261006130000_private_last_message_on_edit.sql`). Tercatat di
+  `supabase_migrations.schema_migrations`.
+- **Laporan user:** pesan terakhir diedit → kartu list masih teks lama.
+- **Akar:** `editPrivateMessage` hanya UPDATE `private_messages.text`;
+  preview kartu dibaca dari `private_chats.last_message` yang hanya ditulis
+  trigger `trg_private_msg` (AFTER INSERT).
+- **Fix:** trigger BARU `trg_private_msg_edit` (AFTER UPDATE OF text) —
+  bila teks berubah DAN pesan itu masih yang terakhir, tulis ulang
+  `last_message` (format sama persis: [Foto]/[Koin]/[Hadiah]/teks).
+  Tidak menyentuh unread/count/at.
+
 ## 2026-10-05 — Pesan room user terhapus tampil "Pesan dihapus"
 
 - **Status:** SUDAH TERAPPLIED via Management API

@@ -857,4 +857,144 @@ class AdminService {
       return null;
     }
   }
+
+  // ── STORY (tab admin) ──────────────────────────────────────────────
+
+  /// Semua slide story aktif lintas user (moderasi). [filter] ∈
+  /// `all|public|followers|friends|private`. Urut terbaru di atas (server).
+  Future<List<Map<String, dynamic>>> adminStoryAll({
+    String filter = 'all',
+    int limit = 200,
+  }) async {
+    final res = await _rpc(
+      'admin_story_all',
+      params: {'p_limit': limit, 'p_filter': filter},
+    ).timeout(_openTimeout);
+    if (res is List) {
+      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return const [];
+  }
+
+  /// Atur visibilitas satu slide. [state] ∈
+  /// `public|followers|friends|private`. Return true bila sukses.
+  Future<bool> adminSetStoryVisibility(String storyId, String state) async {
+    try {
+      final res = await _rpc('admin_set_story_visibility', params: {
+        'p_story_id': storyId,
+        'p_state': state,
+      }).timeout(_openTimeout);
+      return res is Map && res['ok'] == true;
+    } catch (e) {
+      dlog('[AdminService] adminSetStoryVisibility error: $e');
+      return false;
+    }
+  }
+
+  /// Hapus PERMANEN slide (moderasi). Return (ok, image_path, video_path)
+  /// agar client membersihkan file Storage.
+  Future<({bool ok, String imagePath, String videoPath})>
+      adminStoryDelete(String storyId) async {
+    try {
+      final res = await _rpc(
+        'admin_story_delete',
+        params: {'p_story_id': storyId},
+      ).timeout(_openTimeout);
+      if (res is Map && res['ok'] == true) {
+        return (
+          ok: true,
+          imagePath: '${res['image_path'] ?? ''}',
+          videoPath: '${res['video_path'] ?? ''}',
+        );
+      }
+      return (ok: false, imagePath: '', videoPath: '');
+    } catch (e) {
+      dlog('[AdminService] adminStoryDelete error: $e');
+      return (ok: false, imagePath: '', videoPath: '');
+    }
+  }
+
+  // ── Email Marketing ──────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> emailCampaignsPage({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final res = await _rpc(
+      'admin_email_campaigns_page',
+      params: {'p_limit': limit, 'p_offset': offset},
+    ).timeout(_openTimeout);
+    if (res is List) {
+      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> emailStats() async {
+    final res = await _rpc('admin_email_stats').timeout(_openTimeout);
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  Future<Map<String, dynamic>> emailEstimateSegment(
+    Map<String, dynamic> segment,
+  ) async {
+    final res = await _rpc(
+      'admin_email_estimate_segment',
+      params: {'p_segment': segment},
+    ).timeout(_openTimeout);
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  Future<Map<String, dynamic>> emailCampaignSave({
+    int? id,
+    required String name,
+    required String subject,
+    required String html,
+    required Map<String, dynamic> segment,
+  }) async {
+    final res = await _rpc(
+      'admin_email_campaign_save',
+      params: {
+        'p_id': id,
+        'p_name': name,
+        'p_subject': subject,
+        'p_html': html,
+        'p_segment': segment,
+      },
+    ).timeout(_openTimeout);
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  Future<bool> emailCampaignDelete(int id) async {
+    try {
+      final res = await _rpc(
+        'admin_email_campaign_delete',
+        params: {'p_id': id},
+      ).timeout(_openTimeout);
+      return res is Map && res['ok'] == true;
+    } catch (e) {
+      dlog('[AdminService] emailCampaignDelete error: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> emailCampaignDetail(
+    int id, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final res = await _rpc(
+      'admin_email_campaign_detail',
+      params: {'p_id': id, 'p_limit': limit, 'p_offset': offset},
+    ).timeout(_openTimeout);
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  Future<Map<String, dynamic>> emailEnqueue(int id) async {
+    final res = await _rpc(
+      'admin_email_enqueue',
+      params: {'p_id': id},
+    ).timeout(_openTimeout);
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
 }

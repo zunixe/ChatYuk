@@ -4,8 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../models/user_model.dart';
 import '../../../providers/locale_provider.dart';
-import '../../../widgets/profile_avatar.dart';
-import '../../../widgets/gender_avatar.dart';
+import '../../../widgets/person_avatar.dart';
 
 class RoomUserChip extends StatelessWidget {
   final UserModel user;
@@ -26,15 +25,14 @@ class RoomUserChip extends StatelessWidget {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              // Avatar: foto asli (lazy via ProfileAvatar) + border WARNA
-              // GENDER (male=biru/female=pink); fallback inisial bila tanpa
-              // foto — selaras list Pengguna Online.
-              ProfileAvatar(
+              // PersonAvatar = standar yang sama persis dengan Pengguna
+              // Online (foto + latar tint + ring warna gender).
+              PersonAvatar(
                 uid: user.uid,
                 name: user.nickname,
+                gender: user.gender,
+                avatarB64: user.avatar,
                 size: 44,
-                borderColor: GenderAvatar.colorFor(user.gender),
-                borderWidth: 1.6,
               ),
               if (user.isRegistered)
                 Positioned(

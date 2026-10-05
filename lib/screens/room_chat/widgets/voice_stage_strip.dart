@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../config/theme.dart';
 import '../../../models/user_model.dart';
 import '../../../services/room_voice_service.dart';
-import '../../../widgets/gender_avatar.dart';
+import '../../../widgets/person_avatar.dart';
 
 /// Tombol mic voice stage di AppBar room global.
 /// - Belum join: mic mati (tap = masuk + langsung naik stage).
@@ -73,7 +73,7 @@ class _SpeakingAvatar extends StatefulWidget {
   final bool speaking;
   final Color bg;
   final String label;
-  /// Foto asli user (lazy via [GenderAvatar]) + ring warna gender.
+  /// Foto asli user (lazy via [PersonAvatar]) + ring warna gender.
   final String uid;
   final String gender;
 
@@ -140,14 +140,13 @@ class _SpeakingAvatarState extends State<_SpeakingAvatar>
               ],
             )
           : null,
-      // FOTO asli user (lazy) + ring warna gender — dulu CircleAvatar inisial
-      // saja sehingga foto speaker tak pernah tampil.
-      child: GenderAvatar(
+      // PersonAvatar = standar yang sama persis dengan Pengguna Online
+      // (foto + latar tint + ring warna gender).
+      child: PersonAvatar(
         uid: widget.uid,
         name: widget.label,
         gender: widget.gender,
         size: 44,
-        borderRadius: 22,
       ),
     );
     if (!widget.speaking) return avatar;

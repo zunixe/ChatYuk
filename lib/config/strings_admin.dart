@@ -1379,4 +1379,105 @@ extension SAdminExcludeX on S {
     AdminErrKind.server => adminErrServerHint,
     AdminErrKind.unknown => '',
   };
+
+  // ── Tab Story (kelola story user: lihat semua, atur visibilitas, hapus) ──
+  String get adminStoryTab => isId ? 'Story' : 'Stories';
+  String get adminStorySubtitle => isId
+      ? 'Semua story user. Atur visibilitas atau hapus.'
+      : 'All user stories. Set visibility or delete.';
+  String get adminStoryFilterAll => isId ? 'Semua' : 'All';
+  String get adminStoryFilterPublic => isId ? 'Public' : 'Public';
+  String get adminStoryFilterFollowers => isId ? 'Pengikut' : 'Followers';
+  String get adminStoryFilterFriends => isId ? 'Teman' : 'Friends';
+  String get adminStoryFilterPrivate => isId ? 'Private' : 'Private';
+  String get adminStoryEmpty => isId ? 'Belum ada story' : 'No stories yet';
+  String get adminStoryVisibleTo => isId ? 'Terlihat oleh' : 'Visible to';
+  /// Keterangan siapa yang bisa lihat (per state).
+  String adminStoryVisibleFor(String state) {
+    switch (state) {
+      case 'private':
+        return isId
+            ? 'Hanya pembuat & admin'
+            : 'Owner & admin only';
+      case 'friends':
+        return isId ? 'Teman dua arah saja' : 'Mutual friends only';
+      case 'followers':
+        return isId ? 'Pengikut saja' : 'Followers only';
+      default:
+        return isId ? 'Semua orang' : 'Everyone';
+    }
+  }
+  String get adminStorySetVisibility =>
+      isId ? 'Atur visibilitas' : 'Set visibility';
+  String get adminStoryDelete => isId ? 'Hapus permanen' : 'Delete permanently';
+  String get adminStoryDeleteConfirmTitle =>
+      isId ? 'Hapus story ini?' : 'Delete this story?';
+  String get adminStoryDeleteConfirmMsg => isId
+      ? 'Story akan dihapus PERMANEN dari server & storage. Tindakan ini tidak bisa dibatalkan.'
+      : 'This story will be PERMANENTLY deleted from server & storage. This cannot be undone.';
+  String get adminStoryDeleted => isId ? 'Story dihapus' : 'Story deleted';
+  String get adminStoryDeleteFail =>
+      isId ? 'Gagal menghapus story' : 'Failed to delete story';
+  String get adminStoryVisibilitySaved =>
+      isId ? 'Visibilitas diperbarui' : 'Visibility updated';
+  String get adminStoryVisibilityFail =>
+      isId ? 'Gagal mengubah visibilitas' : 'Failed to update visibility';
+  String get adminStoryToggle => isId ? 'Ubah' : 'Change';
+
+  // ── Email Marketing ──────────────────────────────────────────
+  String get adminMarketingTab => isId ? 'Marketing' : 'Marketing';
+  String get adminMktNewCampaign => isId ? 'Buat Campaign' : 'New Campaign';
+  String get adminMktEmpty =>
+      isId ? 'Belum ada campaign email' : 'No email campaigns yet';
+  String get adminMktCampaignName => isId ? 'Nama campaign' : 'Campaign name';
+  String get adminMktSubject => isId ? 'Subjek email' : 'Email subject';
+  String get adminMktBody => isId ? 'Isi email' : 'Email body';
+  String get adminMktSegment => isId ? 'Penerima' : 'Recipients';
+  String get adminMktSegmentAll =>
+      isId ? 'Semua user terdaftar' : 'All registered users';
+  String get adminMktSegmentActive30 =>
+      isId ? 'Aktif 30 hari terakhir' : 'Active last 30 days';
+  String get adminMktRecipients => isId ? 'penerima' : 'recipients';
+  String get adminMktSaveDraft => isId ? 'Simpan draft' : 'Save draft';
+  String get adminMktSend => isId ? 'Kirim' : 'Send';
+  String get adminMktSendConfirmTitle =>
+      isId ? 'Kirim campaign ini?' : 'Send this campaign?';
+  String adminMktSendConfirmMsg(int n) => isId
+      ? 'Email akan dikirim ke $n penerima. Lanjutkan?'
+      : 'Email will be sent to $n recipients. Continue?';
+  String get adminMktSentQueue =>
+      isId ? 'Dijadwalkan terkirim' : 'Queued for sending';
+  String get adminMktSendFail => isId ? 'Gagal mengirim' : 'Failed to send';
+  String get adminMktSaved => isId ? 'Tersimpan' : 'Saved';
+  String get adminMktSaveFail => isId ? 'Gagal menyimpan' : 'Failed to save';
+  String get adminMktDeleted => isId ? 'Campaign dihapus' : 'Campaign deleted';
+  String get adminMktDeleteConfirm =>
+      isId ? 'Hapus campaign ini?' : 'Delete this campaign?';
+  String get adminMktPreview => isId ? 'Pratinjau' : 'Preview';
+  String get adminMktTestSend => isId ? 'Kirim tes' : 'Send test';
+  String get adminMktTestHint =>
+      isId ? 'Email tes dikirim ke email Anda sendiri' : 'Test email is sent to your own address';
+  String get adminMktConfirmSendTitle => isId ? 'Kirim' : 'Send';
+  String get adminMktStatusDraft => isId ? 'Draft' : 'Draft';
+  String get adminMktStatusQueued => isId ? 'Menunggu' : 'Queued';
+  String get adminMktStatusSending => isId ? 'Mengirim' : 'Sending';
+  String get adminMktStatusSent => isId ? 'Terkirim' : 'Sent';
+  String get adminMktStatusFailed => isId ? 'Gagal' : 'Failed';
+  String get adminMktStatSent => isId ? 'Terkirim' : 'Sent';
+  String get adminMktStatDelivered => isId ? 'Sampai' : 'Delivered';
+  String get adminMktStatOpen => isId ? 'Dibuka' : 'Opened';
+  String get adminMktStatClick => isId ? 'Diklik' : 'Clicked';
+  String get adminMktStatBounce => isId ? 'Gagal kirim' : 'Bounced';
+  String get adminMktStatUnsub => isId ? 'Berhenti langganan' : 'Unsubscribed';
+  String get adminMktOpenRate => isId ? 'Rasio buka' : 'Open rate';
+  String get adminMktClickRate => isId ? 'Rasio klik' : 'Click rate';
+  String get adminMktRecipientList => isId ? 'Daftar penerima' : 'Recipients';
+  String get adminMktBold => isId ? 'Tebal' : 'Bold';
+  String get adminMktItalic => isId ? 'Miring' : 'Italic';
+  String get adminMktUnderline => isId ? 'Garis bawah' : 'Underline';
+  String get adminMktBulletList => isId ? 'Daftar' : 'Bullet list';
+  String get adminMktNumberList => isId ? 'Daftar angka' : 'Numbered list';
+  String get adminMktLink => isId ? 'Tautan' : 'Link';
+  String get adminMktHeading => isId ? 'Judul' : 'Heading';
 }
+

@@ -1314,6 +1314,12 @@ class S {
   String get storyVisibilityFriends => isId ? 'Teman' : 'Friends';
   String get storyVisibilityFriendsDesc =>
       isId ? 'Hanya teman dua arah' : 'Mutual friends only';
+  /// Label slide private (dulu "dihapus") — hanya pembuat yang bisa lihat.
+  String get storyVisibilityPrivate =>
+      isId ? 'Private (hanya saya)' : 'Private (only me)';
+  String get storyVisibilityPrivateDesc => isId
+      ? 'Disembunyikan dari orang lain, hanya kamu yang bisa lihat'
+      : 'Hidden from others, only you can see it';
   String get storyBtnPublish => isId ? 'Bagikan ke Story' : 'Share to Story';
   String get storyMine => isId ? 'Story Saya' : 'My Story';
   String get storyMicNeeded => isId
@@ -1354,7 +1360,8 @@ class S {
   String get storyUploading => isId ? 'Mengunggah…' : 'Uploading…';
   String get storyPublishFail =>
       isId ? 'Gagal membagikan story' : 'Failed to share story';
-  String get storyDeleted => isId ? 'Story dihapus' : 'Story deleted';
+  String get storyDeleted =>
+      isId ? 'Story jadi privat (hanya kamu)' : 'Story set to private (only you)';
   String get storyVideoSoon =>
       isId ? 'Story video segera hadir' : 'Video stories coming soon';
   String get storyCamera => isId ? 'Kamera' : 'Camera';
@@ -1370,10 +1377,10 @@ class S {
   String get storyLoadFail =>
       isId ? 'Gagal memuat story' : 'Failed to load story';
   String get storyDeleteSlideTitle =>
-      isId ? 'Hapus slide ini?' : 'Delete this slide?';
+      isId ? 'Sembunyikan slide ini?' : 'Hide this slide?';
   String get storyDeleteSlideMsg => isId
-      ? 'Slide akan dihapus permanen dari story kamu.'
-      : 'This slide will be permanently removed from your story.';
+      ? 'Slide ini tidak akan terlihat orang lain, tapi tetap bisa kamu lihat sendiri (privat).'
+      : 'This slide won\'t be visible to others, but you can still see it yourself (private).';
   String get storyViewersTitle => isId ? 'Penonton Story' : 'Story Viewers';
   String get storyViewersEmpty =>
       isId ? 'Belum ada yang melihat' : 'No views yet';

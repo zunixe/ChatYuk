@@ -422,6 +422,23 @@ verify_jwt = false
 [functions.send-push]
 verify_jwt = false
 
+# email-worker: dipanggil pg_cron / outbox-worker dengan x-app-secret.
+[functions.email-worker]
+verify_jwt = false
+
+# email-track: pixel open + redirect click dibuka dari email (browser/klien
+# email) — tanpa JWT.
+[functions.email-track]
+verify_jwt = false
+
+# email-unsubscribe: link footer dibuka dari email — tanpa JWT.
+[functions.email-unsubscribe]
+verify_jwt = false
+
+# email-webhook: dipanggil Resend dengan x-app-secret.
+[functions.email-webhook]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

@@ -20,7 +20,9 @@ import 'admin_deleted_tab.dart';
 import 'admin_dummy_tab.dart';
 import 'admin_global_setting_tab.dart';
 import 'admin_attribution_tab.dart';
+import 'admin_story_tab.dart';
 import 'admin_docs_tab.dart';
+import 'admin_marketing_tab.dart';
 import 'admin_panel/widgets/usermap_card.dart';
 import 'admin_panel/widgets/storageusage_card.dart';
 import 'admin_panel/widgets/registrationschart_card.dart';
@@ -112,7 +114,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _tabCtrl = TabController(length: 10, vsync: this);
+    _tabCtrl = TabController(length: 12, vsync: this);
     _tabCtrl.addListener(_onTabChanged);
     final admin = context.read<AdminProvider>();
     Future.microtask(() => admin.fetchStats());
@@ -361,7 +363,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             Tab(text: s.adminDeviceTab),
             Tab(text: s.adminDeletedTab),
             Tab(text: s.adminAttributionTab),
+            Tab(text: s.adminStoryTab),
             Tab(text: s.adminDocsTab),
+            Tab(text: s.adminMarketingTab),
           ],
         ),
       ),
@@ -412,7 +416,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(9))
+            const AdminStoryTab()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(10))
             const AdminDocsTab()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(11))
+            const AdminMarketingTab()
           else
             const SizedBox.shrink(),
         ],
