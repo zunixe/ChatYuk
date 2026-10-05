@@ -16,7 +16,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/chat_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../providers/riverpod/storage_provider.dart';
-import '../../../providers/story_provider.dart';
+import '../../../providers/riverpod/story_provider.dart';
 import '../../../core/cache/media_disk_cache.dart';
 import '../../../utils.dart';
 import '../../../widgets/story_text_overlay.dart';
@@ -111,7 +111,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   // unmount() framework men-defunct-kan element DULU baru memanggil
   // dispose(), sehingga lookup ancestor dari context tidak bisa diandalkan
   // (flush saat keluar viewer diam-diam gagal → penonton story selalu 0).
-  StoryProvider? _storyProv;
+  StoryNotifier? _storyProv;
   // Status admin dicache saat init — dipakai ghost-mode (admin tidak tercatat
   // sebagai penonton story orang). Jangan context.read di _flushSeen/dispose.
   bool _isAdminCached = false;
@@ -128,7 +128,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   void initState() {
     super.initState();
     // Cache provider selagi context masih aktif (lihat catatan _storyProv).
-    _storyProv = context.read<StoryProvider>();
+    _storyProv = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     // Cache status admin untuk ghost-mode (lihat catatan _isAdminCached).
     try {
       _isAdminCached = context.read<AuthProvider>().isRealAdmin;
@@ -327,7 +327,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       _loadError = false;
       _slide = 0;
     });
-    final sp = context.read<StoryProvider>();
+    final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     final authorId = _item.authorId;
     // Minta sesuai hitungan tray (segar) — jangan pakai cache basi.
     var slides =
@@ -622,7 +622,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   Future<void> _deleteSlide() async {
     final s = context.read<LocaleProvider>().s;
-    final sp = context.read<StoryProvider>();
+    final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     final ok = await sp.deleteSlide(_slides[_slide].id, _item.authorId);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -674,7 +674,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _viewersOpen = true;
     try {
       final s = context.read<LocaleProvider>().s;
-      final sp = context.read<StoryProvider>();
+      final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
       final slide = _slides[_slide];
       final viewers = await sp.fetchViewers(slide.id);
       if (!mounted) return;
@@ -1233,7 +1233,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     // Jeda sebentar saat memproses like supaya slide tidak lompat.
     _pause();
     final authorId = _item.authorId;
-    final sp = context.read<StoryProvider>();
+    final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     // Provider sudah menerapkan optimistic update secara sinkron sebelum
     // menunggu RPC. Rebuild viewer sekarang supaya hati langsung berubah;
     // hasil server menyusul untuk mengoreksi count/status bila perlu.

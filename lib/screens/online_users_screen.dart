@@ -45,7 +45,7 @@ import 'story_composer_screen.dart';
 import 'story_camera_capture_screen.dart';
 import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
-import '../providers/story_provider.dart';
+import '../providers/riverpod/story_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/riverpod/privacy_provider.dart';
 import '../models/privacy_settings.dart';
@@ -180,7 +180,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     // user yang baru online tidak terlihat sampai restart app).
     if (state == AppLifecycleState.resumed && mounted) {
       try {
-        context.read<StoryProvider>().refresh(silent: true);
+        ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier).refresh(silent: true);
       } catch (_) {}
       try {
         ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).resubscribeOnline();
@@ -199,7 +199,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       try {
-        context.read<StoryProvider>().refresh(silent: true);
+        ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier).refresh(silent: true);
       } catch (_) {}
       // Total user (registered + anon) — agregat ringan, ditunda ke
       // post-frame supaya tak berebut dengan raster pertama.
@@ -591,7 +591,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     if (mounted) {
       // Refresh tray (optimistic di provider sudah jalan; ini sinkron
       // ulang untuk urutan + unseen dari server).
-      context.read<StoryProvider>().refresh(silent: true);
+      ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier).refresh(silent: true);
     }
   }
 
@@ -774,10 +774,10 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     // PERF: dulu `ctx.watch<StoryProvider>()` dengan ctx = context SCREEN →
     // seluruh halaman Online ikut rebuild tiap StoryProvider notify. Bungkus
     // Consumer sempit: HANYA tray ini yang rebuild saat story berubah.
-    return Consumer<StoryProvider>(
-      builder: (ctx, sp, _) => _storyTrayContent(
+    return rv.Consumer(
+      builder: (ctx, ref, _) => _storyTrayContent(
         ctx,
-        sp,
+        ref.watch(storyProvider),
         myAvatar,
         myNickname,
         myRegistered,
@@ -789,7 +789,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
 
   Widget _storyTrayContent(
     BuildContext ctx,
-    StoryProvider sp,
+    StoryState sp,
     String myAvatar,
     String myNickname,
     bool myRegistered,
@@ -3433,7 +3433,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     // "keload ulang" seperti cold start sebelumnya. `warmThumb` mengisi RAM
     // provider dari disk (pola sama dengan AvatarB64Service) sehingga state
     // widget tidak lagi satu-satunya tempat menyimpan hasil.
-    final sp = context.read<StoryProvider>();
+    final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     sp.warmThumb(widget.item.thumbPath);
     _thumb = sp.thumbCached(widget.item.thumbPath);
     _loadThumb();
@@ -3455,7 +3455,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     // ini, hasil path LAMA menimpa tile baru → thumbnail orang lain sempat
     // tampil sekilas. Pola sama seperti guard uid di _AsyncAvatarState.
     if (!mounted || widget.item.thumbPath != p) return;
-    final sp = context.read<StoryProvider>();
+    final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     if (sp.warmThumb(p)) {
       final cached = sp.thumbCached(p);
       if (mounted && widget.item.thumbPath == p && cached != null) {
@@ -3479,7 +3479,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     super.didUpdateWidget(old);
     // Path berganti (slide baru) → ambil yang baru; kalau sama, biarkan.
     if (old.item.thumbPath != widget.item.thumbPath) {
-      final sp = context.read<StoryProvider>();
+      final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
       sp.warmThumb(widget.item.thumbPath);
       _thumb = sp.thumbCached(widget.item.thumbPath);
       _loadThumb();
@@ -3510,7 +3510,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
               title: Text(it.muted ? s.storyUnmute : s.storyMute),
               onTap: () async {
                 Navigator.pop(ctx);
-                final sp = context.read<StoryProvider>();
+                final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
                 final ok = await sp.toggleStoryMute(it.authorId, !it.muted);
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
