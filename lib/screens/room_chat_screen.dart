@@ -63,15 +63,15 @@ import '../mixins/chat_send_mixin.dart';
 import '../core/perf/perf_probe.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
-class RoomChatScreen extends StatefulWidget {
+class RoomChatScreen extends ConsumerStatefulWidget {
   final RoomModel room;
   const RoomChatScreen({super.key, required this.room});
 
   @override
-  State<RoomChatScreen> createState() => _RoomChatScreenState();
+  ConsumerState<RoomChatScreen> createState() => _RoomChatScreenState();
 }
 
-class _RoomChatScreenState extends State<RoomChatScreen>
+class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     with
         WidgetsBindingObserver,
         ChatOutboxMixin<RoomChatScreen>,
@@ -292,7 +292,6 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   final Set<String> _confirmedTextIds = {};
   late final DateTime _openedAt;
   bool _connOnline = true;
-  ProviderSubscription<bool>? _connSub;
   bool _flushingOutbox = false;
 
   // ── Room gift (live) ──
@@ -742,13 +741,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     });
     // Antrean offline: koneksi pulih → kirim otomatis; muat sisa antrean
     // sesi lalu (app sempat ditutup saat offline).
-    _connOnline = ProviderScope.containerOf(context, listen: false)
-        .read(connectivityProvider);
-    _connSub = ProviderScope.containerOf(context, listen: false)
-        .listen<bool>(connectivityProvider, (prev, next) {
-      _connOnline = next;
-      if (mounted && next) flushOutbox();
-    });
+    // `ref.listen` dipasang di build() (Riverpod melarang di initState).
+    _connOnline = ref.read(connectivityProvider);
     loadQueuedForChat();
   }
 
@@ -1541,10 +1535,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     hideActionBar();
     _reactionsSub?.cancel();
     _starredSub?.cancel();
-    try {
-      _connSub?.close();
-    } catch (_) {}
-    _connSub = null;
+    // conn listener dikelola Riverpod (ref.listen).
     ChatTextScale.notifier.removeListener(_onFontScaleChanged);
     WidgetsBinding.instance.removeObserver(this);
     _presenceTimer?.cancel();
@@ -1886,6 +1877,12 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   Widget build(BuildContext context) {
     PerfProbe.buildCount('RoomChat');
     context.watch<ThemeProvider>();
+    // Koneksi pulih → flush outbox. `ref.listen` WAJIB di build (bukan
+    // initState) — Riverpod mengelolanya (aman saat dispose).
+    ref.listen<bool>(connectivityProvider, (prev, next) {
+      _connOnline = next;
+      if (mounted && next) flushOutbox();
+    });
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
     // select (bukan watch penuh): perubahan saldo/poin tidak perlu

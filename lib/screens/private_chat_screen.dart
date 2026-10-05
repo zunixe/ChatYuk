@@ -61,7 +61,7 @@ import '../core/perf/perf_probe.dart';
 @visibleForTesting
 final Color privateChatScaffoldBg = AppTheme.bgScreen;
 
-class PrivateChatScreen extends StatefulWidget {
+class PrivateChatScreen extends ConsumerStatefulWidget {
   final String chatId;
   final String otherName;
   final String otherUid;
@@ -85,7 +85,7 @@ class PrivateChatScreen extends StatefulWidget {
   });
 
   @override
-  State<PrivateChatScreen> createState() => _PrivateChatScreenState();
+  ConsumerState<PrivateChatScreen> createState() => _PrivateChatScreenState();
 }
 
 /// Id pesan yang teksnya mengandung [query] (case-insensitive),
@@ -105,7 +105,7 @@ List<String> searchChatMatches(List<MessageModel> msgs, String query) {
   return out;
 }
 
-class _PrivateChatScreenState extends State<PrivateChatScreen>
+class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     with
         ChatOutboxMixin<PrivateChatScreen>,
         ChatSelectionMixin<PrivateChatScreen>,
@@ -714,7 +714,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   // Terkirim saat koneksi pulih → centang-2 (biru bila dibaca).
   final Set<String> _queuedIds = {};
   bool _connOnline = true;
-  ProviderSubscription<bool>? _connSub;
   bool _flushingOutbox = false;
   // LayerLink per pesan — dipakai anchor bar reaksi ala WA tepat di atas
   // bubble. CompositedTransformFollower ikut mengikuti bubble saat list
@@ -1114,13 +1113,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     });
     // Antrean offline: koneksi pulih → kirim otomatis; muat sisa antrean
     // sesi lalu (app sempat ditutup saat offline).
-    _connOnline = ProviderScope.containerOf(context, listen: false)
-        .read(connectivityProvider);
-    _connSub = ProviderScope.containerOf(context, listen: false)
-        .listen<bool>(connectivityProvider, (prev, next) {
-      _connOnline = next;
-      if (mounted && next) flushOutbox();
-    });
+    // CATATAN: `ref.listen` TIDAK boleh di initState (harus di build) —
+    // lihat build(): ref.listen(connectivityProvider) dipasang di sana.
+    _connOnline = ref.read(connectivityProvider);
     loadQueuedForChat();
   }
 
@@ -1199,10 +1194,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     _starredSub?.cancel();
     ChatTextScale.notifier.removeListener(_onFontScaleChanged);
     _pendingConfirmTimer?.cancel();
-    try {
-      _connSub?.close();
-    } catch (_) {}
-    _connSub = null;
+    // conn listener dikelola Riverpod (ref.listen) — tak perlu close manual.
     CallProvider.instance.removeListener(_onCallChanged);
     // Keluar chat TIDAK memutus panggilan — call lanjut berjalan dan notifikasi
     // ongoing "sedang call" tetap tampil. Tap notifikasi → kembali ke chat ini.
@@ -1895,6 +1887,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   Widget build(BuildContext context) {
     PerfProbe.buildCount('PrivateChat');
     context.watch<ThemeProvider>();
+    // Koneksi pulih → flush outbox. `ref.listen` WAJIB di build (bukan
+    // initState) — Riverpod mengelolanya (aman saat dispose).
+    ref.listen<bool>(connectivityProvider, (prev, next) {
+      _connOnline = next;
+      if (mounted && next) flushOutbox();
+    });
     // select per field (bukan watch penuh): heartbeat presence AuthProvider
     // berubah tiap beberapa detik — watch membuat SELURUH layar chat
     // rebuild tiap kali. Field yang dipakai render tercantum di bawah.

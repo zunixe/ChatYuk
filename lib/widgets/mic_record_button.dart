@@ -83,7 +83,12 @@ class _MicRecordButtonState extends State<MicRecordButton>
       _dragDy = 0;
       _wasDragged = false;
       _wasPickUp = false;
-      widget.onPickUpChanged?.call(false);
+      // DEFER callback ke post-frame: didUpdateWidget dipanggil SAAT parent
+      // build → memanggil callback yang setState di parent = "setState()
+      // called during build" (layar rusak/overflow). Tunda 1 frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onPickUpChanged?.call(false);
+      });
       _animCtrl.reverse();
     }
     // Shield area kunci: pasang saat terkunci, lepas saat tidak.
