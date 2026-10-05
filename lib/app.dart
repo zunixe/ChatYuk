@@ -15,10 +15,8 @@ import 'providers/storage_provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/device_info_provider.dart';
 import 'services/device_info_service.dart';
-import 'providers/contact_provider.dart';
 import 'providers/avatar_provider.dart';
-import 'providers/notification_prefs_provider.dart';
-import 'providers/message_reaction_provider.dart';
+import 'providers/riverpod/message_reaction_provider.dart';
 import 'providers/online_users_provider.dart';
 import 'providers/points_provider.dart';
 import 'providers/social_provider.dart';
@@ -85,10 +83,7 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ChangeNotifierProvider(create: (_) => StorageProvider()),
         ChangeNotifierProvider(create: (_) => LocationProvider()),
         ChangeNotifierProvider(create: (_) => DeviceInfoProvider()),
-        ChangeNotifierProvider(create: (_) => ContactProvider()),
         ChangeNotifierProvider(create: (_) => AvatarProvider()),
-        ChangeNotifierProvider(create: (_) => NotificationPrefsProvider()),
-        ChangeNotifierProvider(create: (_) => MessageReactionProvider()),
         ChangeNotifierProvider(
           create: (_) => PointsProvider()
             ..checkOnboarding()
@@ -462,7 +457,7 @@ class _AuthGateState extends State<_AuthGate> {
       if (warmUid != null) MessageCache.instance.preloadRawList(warmUid),
       // Preload semua cache bintang ke memori → bias tampil instan di cold
       // start tanpa menunggu disk per-chat (anti-glich).
-      context.read<MessageReactionProvider>().preloadAllStarred(),
+      ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).preloadAllStarred(),
     ]).timeout(_warmTimeout, onTimeout: () async => const <void>[]);
     return FutureBuilder<void>(
       future: _warmFuture,
