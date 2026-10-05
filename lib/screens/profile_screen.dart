@@ -20,7 +20,7 @@ import '../providers/auth_provider.dart';
 import '../models/user_model.dart';
 import '../providers/riverpod/device_info_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/online_users_provider.dart';
+import '../providers/riverpod/online_users_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/timeline_provider.dart';
@@ -465,7 +465,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final uid = context.read<AuthProvider>().profile?.uid ?? '';
         if (uid.isNotEmpty) {
           try {
-            context.read<OnlineUsersProvider>().updateAvatarForUid(uid, base64);
+            ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).updateAvatarForUid(uid, base64);
           } catch (_) {}
           try {
             context.read<TimelineProvider>().refreshAvatarForUid(uid, base64);
@@ -540,7 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     final uid = context.read<AuthProvider>().profile?.uid ?? '';
                     if (uid.isNotEmpty) {
                       try {
-                        context.read<OnlineUsersProvider>().removeAvatarForUid(
+                        ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).removeAvatarForUid(
                           uid,
                         );
                       } catch (_) {}

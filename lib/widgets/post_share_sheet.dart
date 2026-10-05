@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +10,7 @@ import '../config/theme.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/online_users_provider.dart';
+import '../providers/riverpod/online_users_provider.dart';
 import '../utils.dart';
 import 'gender_avatar.dart';
 
@@ -97,7 +98,7 @@ class _PostShareSheetState extends State<_PostShareSheet> {
     // Snapshot sekali — daftar tidak ikut rebuild tiap update presence
     // supaya kolom search tidak kehilangan fokus.
     final myUid = context.read<AuthProvider>().uid ?? '';
-    final all = context.read<OnlineUsersProvider>().users;
+    final all = ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).users;
     _users = [
       for (final u in all)
         if (u.uid.isNotEmpty && u.uid != myUid) u,

@@ -13,7 +13,7 @@ import 'providers/room_provider.dart';
 import 'providers/chat_provider.dart';
 import 'services/device_info_service.dart';
 import 'providers/riverpod/message_reaction_provider.dart';
-import 'providers/online_users_provider.dart';
+import 'providers/riverpod/online_users_provider.dart';
 import 'providers/points_provider.dart';
 import 'providers/riverpod/social_provider.dart';
 import 'core/admin_gate.dart';
@@ -60,12 +60,10 @@ class _ChatYukAppState extends State<ChatYukApp> {
   // disk cache (SQLite) menghangat paralel dengan auth init, sehingga begitu
   // skeleton hilang tab langsung menampilkan data, TANPA blink abu skeleton.
   final _roomProvider = RoomProvider();
-  final _onlineUsersProvider = OnlineUsersProvider();
 
   @override
   void dispose() {
     _roomProvider.dispose();
-    _onlineUsersProvider.dispose();
     super.dispose();
   }
 
@@ -88,7 +86,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ChangeNotifierProvider(create: (_) => StoryProvider()),
         ...AdminGate.extraProviders,
         ChangeNotifierProvider.value(value: _roomProvider),
-        ChangeNotifierProvider.value(value: _onlineUsersProvider),
         // NavProvider: MIGRASI ke Riverpod (navProvider) — dihapus dari sini.
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => localeProvider),
@@ -441,7 +438,7 @@ class _AuthGateState extends State<_AuthGate> {
     final warmUid = context.read<AuthProvider>().uid;
     _warmFuture ??= Future.wait([
       context.read<RoomProvider>().warmFuture,
-      context.read<OnlineUsersProvider>().warmup(),
+      ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).warmup(),
       if (warmUid != null) MessageCache.instance.preloadRawList(warmUid),
       // Preload semua cache bintang ke memori → bias tampil instan di cold
       // start tanpa menunggu disk per-chat (anti-glich).
@@ -921,8 +918,8 @@ class _MainNavState extends ConsumerState<_MainNav>
     // bertumpuk dengan card-nya tapi juga tidak mengambang kejauhan.
     // `select` int → rebuild _MainNav hanya saat jumlahnya berubah, bukan
     // tiap heartbeat presence.
-    final hiddenCount = context.select<OnlineUsersProvider, int>(
-      (p) => p.hiddenCount,
+    final hiddenCount = ref.watch(
+      onlineUsersProvider.select((p) => p.hiddenCount),
     );
     final adminFabBottom = (tab == 0 && hiddenCount > 0) ? 64.0 : 14.0;
     return Scaffold(
@@ -1094,13 +1091,13 @@ class _MainNavState extends ConsumerState<_MainNav>
   }
 }
 
-class _BottomNav extends StatelessWidget {
+class _BottomNav extends ConsumerWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   const _BottomNav({required this.currentIndex, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
     final uid = context.select<AuthProvider, String?>((a) => a.uid);
     final chat = context.read<ChatProvider>();
@@ -1108,15 +1105,17 @@ class _BottomNav extends StatelessWidget {
     // `select` mengembalikan ANGKA (bukan list) → _BottomNav hanya rebuild
     // saat jumlahnya benar-benar berubah, bukan tiap kali list online
     // berubah referensi (yang dulu memicu rebuild seluruh bottom nav).
-    final onlineCount = context.select<OnlineUsersProvider, int>((p) {
-      var n = 0;
-      for (final u in p.users) {
-        if (u.uid != uid && !chat.isBlocked(u.uid) && u.status == 'online') {
-          n++;
+    final onlineCount = ref.watch(
+      onlineUsersProvider.select((p) {
+        var n = 0;
+        for (final u in p.users) {
+          if (u.uid != uid && !chat.isBlocked(u.uid) && u.status == 'online') {
+            n++;
+          }
         }
-      }
-      return n;
-    });
+        return n;
+      }),
+    );
 
     return StreamBuilder<List<PrivateChatInfo>>(
       stream: uid != null ? chat.getMyPrivateChats(uid) : const Stream.empty(),
