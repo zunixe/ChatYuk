@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../core/admin_gate.dart';
+import '../core/cache/message_cache.dart';
+import '../core/cache/photo_cache.dart';
+import '../core/cache/post_photo_cache.dart';
+import '../core/media/image_cache_hygiene.dart';
 import '../core/photo_quality_pref.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
@@ -140,6 +144,10 @@ class SettingsScreen extends StatelessWidget {
                 const Divider(height: 1, indent: 52),
                 // Ukuran font chat — hanya berlaku di bubble chat.
                 const ProfileChatFontTile(),
+                const Divider(height: 1, indent: 52),
+                // Bersihkan cache sementara (foto/pesan lama) — bantu app
+                // tetap ringan tanpa hapus data user.
+                const _ClearCacheTile(),
               ],
             ),
           ),
@@ -196,6 +204,94 @@ class _PhotoQualityTileState extends State<_PhotoQualityTile> {
         },
         activeThumbColor: AppTheme.primary,
       ),
+    );
+  }
+}
+
+/// Tile "Bersihkan Cache" — kosongkan cache SEMENTARA (RAM pesan/foto +
+/// bitmap + file foto lama) tanpa menghapus pesan/foto user.
+///
+/// Ini pelengkap dari auto-trim reaktif (memory pressure & background):
+/// user bisa memaksa app ringan kapan saja, mis. saat terasa mulai ngelag.
+/// Konfirmasi dulu karena ada efek "foto dimuat ulang" sesaat.
+class _ClearCacheTile extends StatefulWidget {
+  const _ClearCacheTile();
+
+  @override
+  State<_ClearCacheTile> createState() => _ClearCacheTileState();
+}
+
+class _ClearCacheTileState extends State<_ClearCacheTile> {
+  bool _busy = false;
+
+  Future<void> _confirmAndClear() async {
+    if (_busy) return;
+    final s = context.read<LocaleProvider>().s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(s.clearCacheConfirmTitle),
+        content: Text(
+          s.clearCacheConfirmBody,
+          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.btnClear),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    // RAM dulu (sinkron, instan) lalu disk lama (fire-and-forget tak menghambat).
+    try {
+      MessageCache.instance.trimMemCache();
+    } catch (_) {}
+    try {
+      PhotoCache.instance.trimMemCache();
+    } catch (_) {}
+    try {
+      PostPhotoCache.instance.trimMemCache();
+    } catch (_) {}
+    try {
+      ImageCacheHygiene.clearAll();
+    } catch (_) {}
+    try {
+      await PhotoCache.instance.cleanOldPhotos();
+    } catch (_) {}
+    try {
+      await PostPhotoCache.instance.cleanOldPhotos();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(s.clearCacheDone)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    return SettingsMenuTile(
+      icon: Icons.cleaning_services_outlined,
+      iconColor: AppTheme.accent,
+      title: s.clearCacheTitle,
+      desc: s.clearCacheDesc,
+      trailing: _busy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      onTap: _confirmAndClear,
     );
   }
 }

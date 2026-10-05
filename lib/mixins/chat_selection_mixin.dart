@@ -235,6 +235,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   Future<void> starSelected() async {
     if (selectedIds.isEmpty) return;
     var res = ToggleResult.removed;
+    var anyChanged = false;
     for (final id in selectedIds) {
       res = await MessageReactionService.instance.toggleStar(
         chatType: chatKind,
@@ -242,17 +243,19 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
         messageId: id,
       );
       if (!mounted) return;
-      // Update optimistis: ikon bintang langsung benar tanpa realtime.
-      setState(() {
-        if (res == ToggleResult.added) {
-          starredIds.add(id);
-        } else {
-          starredIds.remove(id);
-        }
-      });
+      // Update optimistis data saja — JANGAN setState per id (dulu N setState
+      // beruntun = N rebuild layar penuh untuk satu aksi bintang). Rebuild
+      // sekali di akhir loop (di bawah).
+      if (res == ToggleResult.added) {
+        starredIds.add(id);
+      } else {
+        starredIds.remove(id);
+      }
+      anyChanged = true;
       if (res == ToggleResult.failed) break;
     }
     if (!mounted) return;
+    if (anyChanged) setState(() {});
     final s = context.read<LocaleProvider>().s;
     showChatSnack(
       context,
