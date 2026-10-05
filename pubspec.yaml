@@ -60,7 +60,10 @@ dependencies:
   in_app_purchase: ^3.3.0
 
   # State management
+  # Migrasi Provider -> Riverpod v2 (v3 butuh Dart >=3.12; project Dart 3.11.5).
+  # Keduanya berdampingan selama migrasi (strangler); provider dipensiunkan nanti.
   provider: ^6.1.4
+  flutter_riverpod: ^2.6.1
 
   # UI helpers
   intl: ^0.20.3

@@ -9,7 +9,8 @@ import '../config/strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/nav_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
+import '../providers/riverpod/nav_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
 import '../widgets/emoji_picker_sheet.dart';
@@ -236,7 +237,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
             onPressed: () {
               Navigator.of(ctx).pop();
               Navigator.of(context).popUntil((r) => r.isFirst);
-              context.read<NavProvider>().goTo(3);
+              ProviderScope.containerOf(context, listen: false).read(navProvider.notifier).goTo(3);
             },
             child: Text(s.btnGoProfile),
           ),

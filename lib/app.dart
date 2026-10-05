@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/theme.dart';
@@ -30,7 +31,7 @@ import 'core/media/image_cache_hygiene.dart';
 import 'models/user_model.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/call_provider.dart';
-import 'providers/nav_provider.dart';
+import 'providers/riverpod/nav_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/timeline_provider.dart';
 import 'providers/story_provider.dart';
@@ -104,7 +105,7 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ...AdminGate.extraProviders,
         ChangeNotifierProvider.value(value: _roomProvider),
         ChangeNotifierProvider.value(value: _onlineUsersProvider),
-        ChangeNotifierProvider(create: (_) => NavProvider()),
+        // NavProvider: MIGRASI ke Riverpod (navProvider) — dihapus dari sini.
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => UpdateProvider.instance),
         ChangeNotifierProvider(create: (_) => localeProvider),
@@ -583,11 +584,11 @@ class _SwapMaskState extends State<_SwapMask> {
   }
 }
 
-class _MainNav extends StatefulWidget {
+class _MainNav extends ConsumerStatefulWidget {
   const _MainNav();
 
   @override
-  State<_MainNav> createState() => _MainNavState();
+  ConsumerState<_MainNav> createState() => _MainNavState();
 }
 
 /// Menahan (freeze) subtree tab yang TIDAK aktif agar tidak ikut rebuild
@@ -631,7 +632,8 @@ class _TabFreezeState extends State<_TabFreeze> {
       TickerMode(enabled: widget.active, child: _frozenChild);
 }
 
-class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
+class _MainNavState extends ConsumerState<_MainNav>
+    with WidgetsBindingObserver {
   // Kapan app terakhir di-background — untuk memutuskan trim cache memori
   // saat resume (hanya kalau background CUKUP LAMA, biar chat tetap instan
   // saat app sekadar sebentar pindah app).
@@ -878,7 +880,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       }
     }
     PerfProbe.tabStart(i);
-    context.read<NavProvider>().goTo(i);
+    ref.read(navProvider.notifier).goTo(i);
     if (PerfProbe.measuring) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         PerfProbe.tabTrace(i);
@@ -888,7 +890,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final tab = context.watch<NavProvider>().tab;
+    final tab = ref.watch(navProvider);
     // Rebuild seluruh tab saat mode terang/gelap berubah.
     final dark = context.watch<ThemeProvider>().isDark;
     if (_pages == null || _pagesDark != dark) {

@@ -12,6 +12,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as lpn;
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,7 +23,7 @@ import 'models/room_model.dart';
 import 'providers/auth_provider.dart';
 import 'providers/call_provider.dart';
 import 'providers/locale_provider.dart';
-import 'providers/nav_provider.dart';
+import 'providers/riverpod/nav_provider.dart';
 import 'providers/update_provider.dart';
 import 'screens/incoming_call_screen.dart';
 import 'screens/call_screen.dart';
@@ -1134,7 +1135,7 @@ void _openFromData(Map<String, dynamic> data) {
     final ctx = navigatorKey.currentContext;
     if (ctx != null) {
       try {
-        ctx.read<NavProvider>().goTo(2);
+        ProviderScope.containerOf(ctx, listen: false).read(navProvider.notifier).goTo(2);
       } catch (_) {}
     }
     return;
@@ -1642,7 +1643,9 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Probe frame (no-op bila PERF_PROBE off) — ukur build/raster per frame.
   PerfProbe.hookFrameTimings();
   debugPrint('[BOOT] runApp');
-  runApp(const ChatYukApp());
+  // ProviderScope (Riverpod) membungkus root — berdampingan dengan
+  // MultiProvider yang ada selama migrasi Provider -> Riverpod.
+  runApp(const ProviderScope(child: ChatYukApp()));
   // Token FCM lambat (5s) - lazy setelah UI tampil, tidak block TTI
   unawaited(_initFcmTokenLazy());
   // Cek update (silent) — tunda sedikit supaya frame pertama + warm-gate
