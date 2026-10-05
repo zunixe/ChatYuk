@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
@@ -7,7 +8,7 @@ import '../models/room_model.dart';
 import '../core/nav_guard.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/locale_provider.dart';
-import '../providers/room_provider.dart';
+import '../providers/riverpod/room_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import 'room_chat_screen.dart';
@@ -19,7 +20,7 @@ import 'rooms_explore/widgets/room_explore_card.dart';
 /// satu list global + grup + FAB Buat Room (gratis).
 /// Dipakai sebagai isi tab Room di [LobbyScreen] (tanpa Scaffold sendiri).
 /// [externalQuery]: filter nama + isi dari ikon cari AppBar (pola Pesan).
-class RoomsExploreScreen extends StatefulWidget {
+class RoomsExploreScreen extends ConsumerStatefulWidget {
   final String? externalQuery;
 
   /// Kategori yang dipilih saat layar pertama dibuka (mis. 'general' saat
@@ -32,16 +33,16 @@ class RoomsExploreScreen extends StatefulWidget {
   });
 
   @override
-  State<RoomsExploreScreen> createState() => _RoomsExploreScreenState();
+  ConsumerState<RoomsExploreScreen> createState() => _RoomsExploreScreenState();
 }
 
-class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
+class _RoomsExploreScreenState extends ConsumerState<RoomsExploreScreen> {
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
       if (!mounted) return;
-      final rp = context.read<RoomProvider>();
+      final rp = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
       if (widget.initialCategory != null) {
         rp.setExploreCategory(widget.initialCategory!);
       }
@@ -50,7 +51,7 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
   }
 
   Future<void> _openRoom(String roomId, int index) async {
-    final rp = context.read<RoomProvider>();
+    final rp = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
     final rooms = rp.exploreRooms;
     if (index < 0 || index >= rooms.length) return;
     final room = rooms[index];
@@ -62,7 +63,7 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
       context,
       MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
     ).then((_) => releaseNav(navKey));
-    if (mounted) context.read<RoomProvider>().fetchExplore();
+    if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchExplore();
   }
 
   @override
@@ -76,14 +77,12 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
     // dari isi `_explore`) + category + loading → rebuild hanya saat data
     // benar-benar berubah. Data aktual dibaca via `read` (snapshot terbaru
     // saat rebuild dipicu).
-    context.select<RoomProvider, String>((rp) => rp.exploreSig);
-    final exploreCategory = context.select<RoomProvider, String>(
-      (rp) => rp.exploreCategory,
-    );
-    final exploreLoading = context.select<RoomProvider, bool>(
-      (rp) => rp.exploreLoading,
-    );
-    final rp = context.read<RoomProvider>();
+    ref.watch(roomProvider.select((rp) => rp.exploreSig));
+    final exploreCategory =
+        ref.watch(roomProvider.select((rp) => rp.exploreCategory));
+    final exploreLoading =
+        ref.watch(roomProvider.select((rp) => rp.exploreLoading));
+    final rp = ref.read(roomProvider.notifier);
     final q = (widget.externalQuery ?? '').trim().toLowerCase();
     final searching = q.isNotEmpty;
     final rooms = searching
@@ -173,7 +172,7 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
 
   Widget _buildList(
     S s,
-    RoomProvider rp,
+    RoomNotifier rp,
     List<RoomModel> rooms,
     bool isRame,
     bool searching,

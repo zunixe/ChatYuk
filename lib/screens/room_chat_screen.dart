@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:provider/provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/riverpod/message_reaction_provider.dart';
-import '../providers/room_provider.dart';
+import '../providers/riverpod/room_provider.dart';
 import '../providers/riverpod/notification_prefs_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
@@ -217,7 +217,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     // Private room: cek role SEBELUM kirim — komposer interaktif sejak
     // awal (tanpa gerbang loading). Bukan member → snackbar ajak join.
     if (isPrivateRoom && !_roleChecked) {
-      _myRole = await context.read<RoomProvider>().myRole(widget.room.id);
+      _myRole = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).myRole(widget.room.id);
       _roleChecked = true;
       if (!mounted) return false;
       setState(() {});
@@ -763,7 +763,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     setState(() => _broadcastStarting = true);
     try {
       if (_liveUid != _auth.uid) {
-        await context.read<RoomProvider>().startBroadcast(widget.room.id);
+        await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).startBroadcast(widget.room.id);
         await _refreshLiveUid();
       }
       await _startBroadcastSession();
@@ -775,16 +775,16 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   Future<void> _initPrivate() async {
     dlog('[BDBG] initPrivate start room=${widget.room.id} uid=${_auth.uid}');
     try {
-      _myRole = await context.read<RoomProvider>().myRole(widget.room.id);
+      _myRole = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).myRole(widget.room.id);
       dlog('[BDBG] myRole=$_myRole isPrivate=${widget.room.isPrivate}');
       // Anggota untuk kandidat mention grup (termasuk yang offline).
       try {
         _roomMembers =
-            await context.read<RoomProvider>().listMembers(widget.room.id);
+            await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).listMembers(widget.room.id);
       } catch (_) {}
       if (canModerate) {
         try {
-          final req = await context.read<RoomProvider>()
+          final req = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
               .listJoinRequests(widget.room.id);
           _pendingCount = req.length;
         } catch (_) {}
@@ -796,7 +796,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
             .isChatMuted(widget.room.id);
       } catch (_) {}
       try {
-        final granted = await context.read<RoomProvider>().myBroadcastGranted(widget.room.id);
+        final granted = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).myBroadcastGranted(widget.room.id);
         _isGrantedBroadcast = granted || _liveUid == _auth.uid;
         dlog('[BDBG] init granted=$_isGrantedBroadcast live=$_liveUid');
       } catch (e) {
@@ -858,7 +858,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   Future<void> _refreshGrant() async {
     try {
-      final granted = await context.read<RoomProvider>().myBroadcastGranted(widget.room.id);
+      final granted = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).myBroadcastGranted(widget.room.id);
       final g = granted || _liveUid == _auth.uid;
       dlog('[BDBG] refreshGrant granted=$granted live=$_liveUid uid=${_auth.uid} g=$g');
       if (mounted && g != _isGrantedBroadcast) setState(() => _isGrantedBroadcast = g);
@@ -1020,7 +1020,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     if (_liveUid == null || _liveUid == _auth.uid) return;
     if (_broadcastSession != null && !_broadcastSession!.isBroadcaster) return;
     try {
-      final cnt = await context.read<RoomProvider>().broadcastCount(widget.room.id);
+      final cnt = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).broadcastCount(widget.room.id);
       if (!mounted) return;
       if (cnt == 0) return;
       unawaited(_startViewerSession());
@@ -1028,7 +1028,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _refreshLiveUid() async {
-    final row = await context.read<RoomProvider>().fetchRoomById(widget.room.id);
+    final row = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchRoomById(widget.room.id);
     final live = row?['live_uid']?.toString();
     dlog('[BDBG] refreshLiveUid fetched=$live current=$_liveUid');
     if (!mounted) return;
@@ -1064,7 +1064,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   Future<void> _startBroadcastSession() async {
     // cap 4
     try {
-      final cnt = await context.read<RoomProvider>().broadcastCount(widget.room.id);
+      final cnt = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).broadcastCount(widget.room.id);
       if (cnt >= 4) {
         if (!mounted) return;
         final s = context.read<LocaleProvider>().s;
@@ -1074,7 +1074,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     } catch (_) {}
     unawaited(_broadcastSession?.stop());
     _broadcastSession = null;
-    final session = context.read<RoomProvider>().createBroadcastSession(
+    final session = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).createBroadcastSession(
       roomId: widget.room.id,
       isBroadcaster: true,
       onEnded: () {
@@ -1106,7 +1106,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   Future<void> _startViewerSession() async {
     unawaited(_broadcastSession?.stop());
     _broadcastSession = null;
-    final session = context.read<RoomProvider>().createBroadcastSession(
+    final session = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).createBroadcastSession(
       roomId: widget.room.id,
       isBroadcaster: false,
       onEnded: () {
@@ -1129,7 +1129,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   /// Hand raise — kirim signal ke admin.
   Future<void> _raiseHand() async {
-    await context.read<RoomProvider>().sendSignal(
+    await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).sendSignal(
       widget.room.id,
       type: 'hand_raise',
       payload: {'nickname': _auth.profile?.nickname ?? ''},
@@ -1148,7 +1148,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
           // tanpa ini member lama bisa muncul lagi di picker.
           final memberIds = <String>{};
           try {
-            final members = await context.read<RoomProvider>()
+            final members = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
                 .listMembers(widget.room.id);
             for (final m in members) {
               memberIds.add('${m['user_id'] ?? ''}');
@@ -1162,7 +1162,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
             onInvited: () {
               // Anggota baru → segarkan daftar grupku (biar langsung ada
               // di tab Grup) + hitung ulang jumlah anggota tampilan.
-              context.read<RoomProvider>().loadMyGroups(refresh: true);
+              ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).loadMyGroups(refresh: true);
               setState(() {});
             },
           );
@@ -1430,7 +1430,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   Future<void> _exitGroup() async {
     try {
-      await context.read<RoomProvider>().leavePrivate(widget.room.id);
+      await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).leavePrivate(widget.room.id);
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
@@ -1445,7 +1445,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   Future<void> _deleteGroup() async {
     try {
-      await context.read<RoomProvider>().deleteRoom(widget.room.id);
+      await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).deleteRoom(widget.room.id);
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
@@ -1472,7 +1472,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         onChanged: () async {
           if (canModerate) {
             try {
-              final req = await context.read<RoomProvider>()
+              final req = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
                   .listJoinRequests(widget.room.id);
               _pendingCount = req.length;
             } catch (_) {}
@@ -1959,7 +1959,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                 tooltip: s.privateRoomsStopBroadcast,
                 icon: Icon(Icons.cancel_rounded, color: AppTheme.danger),
                 onPressed: () async {
-                  await context.read<RoomProvider>().stopBroadcast(widget.room.id);
+                  await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).stopBroadcast(widget.room.id);
                   await _broadcastSession?.stop();
                   if (mounted) setState(() { _broadcastSession = null; });
                 },
@@ -3036,7 +3036,7 @@ class _BroadcastStage extends StatelessWidget {
                 IconButton.filledTonal(
                   visualDensity: VisualDensity.compact,
                   onPressed: () async {
-                    await context.read<RoomProvider>()
+                    await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
                         .stopBroadcast(session.roomId);
                     await session.stop();
                   },

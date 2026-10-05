@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/theme.dart';
 import 'providers/auth_provider.dart';
-import 'providers/room_provider.dart';
+import 'providers/riverpod/room_provider.dart';
 import 'providers/chat_provider.dart';
 import 'services/device_info_service.dart';
 import 'providers/riverpod/message_reaction_provider.dart';
@@ -59,11 +59,9 @@ class _ChatYukAppState extends State<ChatYukApp> {
   // Provider tab dibuat SEJAK APP START (saat skeleton auth masih tampil) —
   // disk cache (SQLite) menghangat paralel dengan auth init, sehingga begitu
   // skeleton hilang tab langsung menampilkan data, TANPA blink abu skeleton.
-  final _roomProvider = RoomProvider();
 
   @override
   void dispose() {
-    _roomProvider.dispose();
     super.dispose();
   }
 
@@ -83,7 +81,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
         // OnlineUsersScreen.initState) — RPC story_tray + subscribe
         // realtime jangan berebut CPU/network dengan frame pertama.
         ...AdminGate.extraProviders,
-        ChangeNotifierProvider.value(value: _roomProvider),
         // NavProvider: MIGRASI ke Riverpod (navProvider) — dihapus dari sini.
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => localeProvider),
@@ -435,7 +432,7 @@ class _AuthGateState extends State<_AuthGate> {
     // timeout → konten tetap tampil (skeleton tidak menahan lama).
     final warmUid = context.read<AuthProvider>().uid;
     _warmFuture ??= Future.wait([
-      context.read<RoomProvider>().warmFuture,
+      ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).warmFuture,
       ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).warmup(),
       if (warmUid != null) MessageCache.instance.preloadRawList(warmUid),
       // Preload semua cache bintang ke memori → bias tampil instan di cold
@@ -669,7 +666,7 @@ class _MainNavState extends ConsumerState<_MainNav>
           mounted && context.read<AuthProvider>().anonTimelineBlocked;
       if (mounted && !anonBlocked) ref.read(timelineProvider.notifier).prewarm();
       // Prewarm juga daftar grup (tab Grup) — klik tab instant.
-      if (mounted) context.read<RoomProvider>().loadMyGroups(refresh: true);
+      if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).loadMyGroups(refresh: true);
     });
     // Gaya Telegram: halaman tab lain dibangun diam-diam SAAT IDLE (bukan
     // saat diklik) supaya tap pertama terasa instan. Bertahap 1 tab per

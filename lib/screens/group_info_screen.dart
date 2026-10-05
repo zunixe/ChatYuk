@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -6,7 +7,7 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../providers/locale_provider.dart';
-import '../providers/room_provider.dart';
+import '../providers/riverpod/room_provider.dart';
 import 'group_media_screen.dart';
 import 'room_members_sheet.dart';
 
@@ -38,7 +39,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     try {
       // PARALEL: listMembers & fetchRoomById independen — jangan berurutan
       // (dulu 2 RTT). Satu RTT.
-      final rp = context.read<RoomProvider>();
+      final rp = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
       final membersF = rp.listMembers(widget.room.id);
       final roomF = _isOwner ? rp.fetchRoomById(widget.room.id) : null;
       final members = await membersF;

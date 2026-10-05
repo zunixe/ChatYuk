@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../core/admin_gate.dart';
@@ -8,7 +9,7 @@ import '../models/room_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
-import '../providers/room_provider.dart';
+import '../providers/riverpod/room_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/room_icon.dart';
@@ -38,19 +39,19 @@ class _GroupScreenState extends State<GroupScreen> {
   }
 }
 
-class _GroupList extends StatefulWidget {
+class _GroupList extends ConsumerStatefulWidget {
   final String? externalQuery;
   const _GroupList({super.key, this.externalQuery});
   @override
-  State<_GroupList> createState() => _GroupListState();
+  ConsumerState<_GroupList> createState() => _GroupListState();
 }
 
-class _GroupListState extends State<_GroupList> {
+class _GroupListState extends ConsumerState<_GroupList> {
   /// Muat-ulang dari luar (dialog buat grup) — langsung ke provider supaya
   /// jalan dari konteks mana pun (FAB tab Grup maupun menu ⋮ chat list yang
   /// tidak punya _GroupListState sebagai ancestor).
   static void reloadCurrent(BuildContext context) {
-    context.read<RoomProvider>().loadMyGroups(refresh: true);
+    ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).loadMyGroups(refresh: true);
   }
 
   @override
@@ -63,11 +64,11 @@ class _GroupListState extends State<_GroupList> {
   /// instan, spinner hanya saat cache benar-benar kosong). Grup expired
   /// disembunyikan kecuali milik sendiri (owner bisa perpanjang).
   Future<void> _load({bool refresh = false}) async {
-    await context.read<RoomProvider>().loadMyGroups(refresh: refresh);
+    await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).loadMyGroups(refresh: refresh);
   }
 
   List<RoomModel> _visibleGroups(List<RoomModel> myGroups) {
-    final myUid = context.read<RoomProvider>().prvUid ?? '';
+    final myUid = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).prvUid ?? '';
     final now = DateTime.now();
     return myGroups.where((m) {
       final expired = m.expiresAt != null && m.expiresAt!.isBefore(now);
@@ -84,12 +85,9 @@ class _GroupListState extends State<_GroupList> {
     // presence → sering). `select` hanya field yang dirender; `myGroups`
     // adalah field tersimpan (identity stabil) → rebuild hanya saat benar
     // berubah.
-    final myGroups = context.select<RoomProvider, List<RoomModel>>(
-      (rp) => rp.myGroups,
-    );
-    final myGroupsLoading = context.select<RoomProvider, bool>(
-      (rp) => rp.myGroupsLoading,
-    );
+    final myGroups = ref.watch(roomProvider.select((rp) => rp.myGroups));
+    final myGroupsLoading =
+        ref.watch(roomProvider.select((rp) => rp.myGroupsLoading));
     final q = (widget.externalQuery ?? '').trim().toLowerCase();
     final rooms = q.isEmpty
         ? _visibleGroups(myGroups)
@@ -448,9 +446,12 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
                       }
                       final messenger = ScaffoldMessenger.of(context);
                       try {
-                        final res = await context
-                            .read<RoomProvider>()
-                            .createPrivateRoom(
+                        final res = await ProviderScope.containerOf(
+                                context,
+                                listen: false,
+                              )
+                              .read(roomProvider.notifier)
+                              .createPrivateRoom(
                               name: name,
                               icon: icon,
                               password: usePw ? pwCtrl.text.trim() : null,
@@ -523,7 +524,7 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
   );
 }
 
-class _GroupCard extends StatelessWidget {
+class _GroupCard extends ConsumerWidget {
   final RoomModel room;
   const _GroupCard({required this.room});
 
@@ -535,10 +536,10 @@ class _GroupCard extends StatelessWidget {
   Future<void> _enter(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final roomProvider = context.read<RoomProvider>();
+    final rooms = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
     final points = context.read<PointsProvider>();
     final isMember =
-        roomProvider.memberRoomIds.contains(room.id) ||
+        rooms.memberRoomIds.contains(room.id) ||
         room.ownerId == auth.uid;
     if (isMember) {
       final navKey = navKeyRoom(room.id);
@@ -624,7 +625,7 @@ class _GroupCard extends StatelessWidget {
     }
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final res = await roomProvider.joinPrivateRoom(
+      final res = await rooms.joinPrivateRoom(
         room.id,
         password: room.hasPassword ? pwCtrl.text.trim() : null,
       );
@@ -657,7 +658,7 @@ class _GroupCard extends StatelessWidget {
 
   Future<void> _ownerMenu(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
-    final roomProvider = context.read<RoomProvider>();
+    final rooms = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
     final points = context.read<PointsProvider>();
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -704,7 +705,7 @@ class _GroupCard extends StatelessWidget {
         return;
       }
       try {
-        final res = await roomProvider.extendRoom(room.id);
+        final res = await rooms.extendRoom(room.id);
         if (res['points'] != null)
           points.setPoints((res['points'] as num).toInt());
         messenger.showSnackBar(SnackBar(content: Text(s.roomExtended)));
@@ -734,7 +735,7 @@ class _GroupCard extends StatelessWidget {
         ),
       );
       if (ok == true) {
-        await roomProvider.deleteRoom(room.id);
+        await rooms.deleteRoom(room.id);
         messenger.showSnackBar(SnackBar(content: Text(s.roomDeleted)));
       }
     }
@@ -742,7 +743,7 @@ class _GroupCard extends StatelessWidget {
 
   Future<bool> _confirmDelete(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
-    final roomProvider = context.read<RoomProvider>();
+    final rooms = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     final ok = await showDialog<bool>(
       context: context,
@@ -766,7 +767,7 @@ class _GroupCard extends StatelessWidget {
       ),
     );
     if (ok == true) {
-      await roomProvider.deleteRoom(room.id);
+      await rooms.deleteRoom(room.id);
       messenger.showSnackBar(SnackBar(content: Text(s.roomDeleted)));
       return true;
     }
@@ -774,7 +775,7 @@ class _GroupCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
     // PERF: dulu `watch<RoomProvider>()` penuh di SETIAP kartu → semua kartu
@@ -785,8 +786,9 @@ class _GroupCard extends StatelessWidget {
     // bukan lagi cek email runtime.
     final isAdmin = AdminGate.enabled;
     final canManage = isOwner || isAdmin;
-    final isMember = context.select<RoomProvider, bool>(
-          (rp) => rp.memberRoomIds.contains(room.id),
+    final isMember = ref.watch(
+          roomProvider
+              .select((rp) => rp.memberRoomIds.contains(room.id)),
         ) ||
         isOwner;
     final days = _daysLeft;
