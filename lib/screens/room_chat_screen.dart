@@ -19,7 +19,8 @@ import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/chat_provider.dart';
-import '../providers/connectivity_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/points_provider.dart';
@@ -290,8 +291,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   // Gema teks yang sudah memakai satu pending (lihat consumeConfirmedText).
   final Set<String> _confirmedTextIds = {};
   late final DateTime _openedAt;
-  ConnectivityProvider? _connProv;
-  VoidCallback? _connListener;
+  bool _connOnline = true;
+  ProviderSubscription<bool>? _connSub;
   bool _flushingOutbox = false;
 
   // ── Room gift (live) ──
@@ -741,11 +742,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     });
     // Antrean offline: koneksi pulih → kirim otomatis; muat sisa antrean
     // sesi lalu (app sempat ditutup saat offline).
-    _connProv = context.read<ConnectivityProvider>();
-    _connListener = () {
-      if (mounted && (_connProv?.online ?? false)) flushOutbox();
-    };
-    _connProv!.addListener(_connListener!);
+    _connOnline = ProviderScope.containerOf(context, listen: false)
+        .read(connectivityProvider);
+    _connSub = ProviderScope.containerOf(context, listen: false)
+        .listen<bool>(connectivityProvider, (prev, next) {
+      _connOnline = next;
+      if (mounted && next) flushOutbox();
+    });
     loadQueuedForChat();
   }
 
@@ -1537,11 +1540,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _reactionsSub?.cancel();
     _starredSub?.cancel();
     try {
-      final l = _connListener;
-      if (l != null) _connProv?.removeListener(l);
+      _connSub?.close();
     } catch (_) {}
-    _connListener = null;
-    _connProv = null;
+    _connSub = null;
     ChatTextScale.notifier.removeListener(_onFontScaleChanged);
     WidgetsBinding.instance.removeObserver(this);
     _presenceTimer?.cancel();
@@ -1600,7 +1601,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   bool _isSending = false;
 
   // ── Antrean offline: implementasi BERSAMA di ChatOutboxMixin ──
-  bool get outboxIsOnline => _connProv?.online ?? true;
+  bool get outboxIsOnline => _connOnline;
 
   @override
   String get outboxKind => 'room';
