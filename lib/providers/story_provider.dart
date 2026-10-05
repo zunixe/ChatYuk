@@ -103,6 +103,10 @@ class StoryProvider extends ChangeNotifier {
         final cached = await MessageCache.instance.loadRawList(_kTrayKey);
         if (cached.isNotEmpty && _tray.isEmpty) {
           _tray = cached.map(StoryTrayItem.fromMap).toList();
+          // Hangatkan thumb dari disk JUGA untuk jalur ini — kalau tidak,
+          // tile cold-start selalu pop-in satu per satu walau bytes-nya
+          // sudah ada di disk.
+          warmTrayThumbs();
           if (!_disposed) notifyListeners();
         }
       } catch (_) {}
