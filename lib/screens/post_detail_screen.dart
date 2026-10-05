@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
-import '../providers/timeline_provider.dart';
+import '../providers/riverpod/timeline_provider.dart';
 import '../widgets/post_card.dart';
 import '../core/perf/perf_probe.dart';
 
@@ -29,7 +30,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Future<void> _load() async {
     Map<String, dynamic>? post;
     try {
-      post = await context.read<TimelineProvider>().getPost(widget.postId);
+      post = await ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).getPost(widget.postId);
     } catch (_) {
       post = null;
     }

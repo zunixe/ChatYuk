@@ -11,7 +11,7 @@ import '../providers/riverpod/storage_provider.dart';
 import '../providers/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../providers/riverpod/nav_provider.dart';
-import '../providers/timeline_provider.dart';
+import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
@@ -299,14 +299,14 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
           return;
         }
       }
-      await context.read<TimelineProvider>().createPost(
+      await ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).createPost(
         text: text,
         imagePaths: paths,
         imageDims: [for (final d in _imageDims) {'w': d.w, 'h': d.h}],
         visibility: _visibility,
       );
       if (!mounted) return;
-      context.read<TimelineProvider>().load('all', refresh: true);
+      ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).load('all', refresh: true);
       Navigator.of(context).pop();
       messenger.showSnackBar(SnackBar(content: Text(s.msgPosted)));
     } catch (e) {

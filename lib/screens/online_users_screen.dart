@@ -32,7 +32,7 @@ import '../core/nav_guard.dart';
 import '../core/ui/online_pill_mode.dart';
 import '../models/story_model.dart';
 import '../providers/riverpod/social_provider.dart';
-import '../providers/timeline_provider.dart';
+import '../providers/riverpod/timeline_provider.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
@@ -398,7 +398,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
               uid,
               processed,
             );
-            context.read<TimelineProvider>().refreshAvatarForUid(
+            ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).refreshAvatarForUid(
               uid,
               processed,
             );

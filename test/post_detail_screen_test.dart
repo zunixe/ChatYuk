@@ -13,16 +13,17 @@ import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/social_provider.dart';
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
-import 'package:chatyuk/providers/timeline_provider.dart';
+import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
 import 'package:chatyuk/screens/post_detail_screen.dart';
 import 'package:chatyuk/services/social_service.dart';
+import 'package:chatyuk/services/timeline_service.dart';
 
 import 'supabase_test_client.dart';
 import 'test_helper.dart';
 
 /// Tap notifikasi postingan baru → PostDetailScreen memuat 1 post via
 /// get_post (atau empty state bila dihapus/tak boleh dilihat).
-class MockTimelineProvider extends Mock implements TimelineProvider {}
+class MockTimelineService extends Mock implements TimelineService {}
 
 class MockSocialService extends Mock implements SocialService {}
 
@@ -89,8 +90,8 @@ void main() {
   Widget wrap({required Map<String, dynamic>? post}) {
     final auth = AuthProvider(autoInit: false);
     auth.seedProfileForTest(registeredUser());
-    final timeline = MockTimelineProvider();
-    when(() => timeline.getPost(any())).thenAnswer((_) async => post);
+    final svc = MockTimelineService();
+    when(() => svc.getPost(any())).thenAnswer((_) async => post);
     // Tanpa ticker GoTrue (anti "Timer masih pending" saat teardown).
     final sb = fakeSupabaseClientNoTicker();
     final social = SocialProvider(
@@ -99,7 +100,12 @@ void main() {
       autoInit: false,
     );
     final container = ProviderContainer(
-      overrides: [socialProvider.overrideWith(TestSocial.new)],
+      overrides: [
+        socialProvider.overrideWith(TestSocial.new),
+        timelineProvider.overrideWith(
+          () => TimelineNotifier(service: svc, autoInit: false),
+        ),
+      ],
     );
     addTearDown(() {
       auth.dispose();
@@ -115,7 +121,6 @@ void main() {
           ),
           ChangeNotifierProvider<AuthProvider>.value(value: auth),
           ChangeNotifierProvider<SocialProvider>.value(value: social),
-          ChangeNotifierProvider<TimelineProvider>.value(value: timeline),
         ],
         child: const MaterialApp(home: PostDetailScreen(postId: 'p1')),
       ),
