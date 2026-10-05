@@ -24,7 +24,7 @@ import 'providers/auth_provider.dart';
 import 'providers/call_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
-import 'providers/update_provider.dart';
+import 'providers/riverpod/update_provider.dart';
 import 'screens/incoming_call_screen.dart';
 import 'screens/call_screen.dart';
 import 'screens/friend_requests_screen.dart';
@@ -53,6 +53,10 @@ import 'services/storage_photo_service.dart';
 import 'services/topup_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+/// Container Riverpod global — untuk akses provider TANPA BuildContext
+/// (mis. bootstrap `checkOnStart` update). Diisi saat runApp.
+ProviderContainer? _rootContainer;
 final LocaleProvider localeProvider = LocaleProvider();
 
 /// Override opsi Firebase untuk build admin (di-set oleh lib/main_admin.dart).
@@ -1645,14 +1649,20 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   debugPrint('[BOOT] runApp');
   // ProviderScope (Riverpod) membungkus root — berdampingan dengan
   // MultiProvider yang ada selama migrasi Provider -> Riverpod.
-  runApp(const ProviderScope(child: ChatYukApp()));
+  // `_rootContainer` disimpan agar kode NON-WIDGET (mis. bootstrap update)
+  // bisa membaca provider Riverpod tanpa BuildContext.
+  final container = ProviderContainer();
+  _rootContainer = container;
+  runApp(UncontrolledProviderScope(container: container, child: const ChatYukApp()));
   // Token FCM lambat (5s) - lazy setelah UI tampil, tidak block TTI
   unawaited(_initFcmTokenLazy());
   // Cek update (silent) — tunda sedikit supaya frame pertama + warm-gate
   // selesai dulu; popup update tidak boleh menahan TTI.
   unawaited(
     Future<void>.delayed(const Duration(seconds: 4)).then(
-      (_) => UpdateProvider.checkOnStart(navigatorKey),
+      (_) => _rootContainer
+          ?.read(updateProvider.notifier)
+          .check(navigatorKey: navigatorKey),
     ),
   );
   // Warm-up jalur RPC: panggilan Supabase PERTAMA selalu jauh lebih mahal

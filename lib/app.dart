@@ -29,7 +29,7 @@ import 'providers/riverpod/nav_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/timeline_provider.dart';
 import 'providers/story_provider.dart';
-import 'providers/update_provider.dart';
+import 'providers/riverpod/update_provider.dart';
 import 'services/chat_service.dart';
 import 'services/boot_overlay.dart';
 import 'core/perf/perf_probe.dart';
@@ -92,7 +92,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ChangeNotifierProvider.value(value: _onlineUsersProvider),
         // NavProvider: MIGRASI ke Riverpod (navProvider) — dihapus dari sini.
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
-        ChangeNotifierProvider(create: (_) => UpdateProvider.instance),
         ChangeNotifierProvider(create: (_) => localeProvider),
         // ConnectivityProvider: MIGRASI ke Riverpod (connectivityProvider).
         ChangeNotifierProvider.value(value: CallProvider.instance),
@@ -823,8 +822,8 @@ class _MainNavState extends ConsumerState<_MainNav>
       // dimulai user lanjut diam-diam di background (tidak di-nag ulang).
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        UpdateProvider.instance.presentIfNeeded(navigatorKey);
-        UpdateProvider.instance.check(navigatorKey: navigatorKey);
+        ref.read(updateProvider.notifier).presentIfNeeded(navigatorKey);
+        ref.read(updateProvider.notifier).check(navigatorKey: navigatorKey);
       });
     }
   }
