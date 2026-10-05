@@ -5,7 +5,8 @@ import '../config/strings.dart';
 import '../models/privacy_settings.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
-import '../providers/privacy_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/riverpod/privacy_provider.dart';
 import 'privacy_settings/widgets/privacy_exclusions_sheet.dart';
 
 /// Pengaturan Privasi — struktur & gaya sama dengan halaman Notifikasi
@@ -16,20 +17,20 @@ import 'privacy_settings/widgets/privacy_exclusions_sheet.dart';
 ///   Teman saya kecuali... / Hanya orang tertentu / Tidak ada
 /// Opsi pemilih orang ("kecuali..." & "hanya orang tertentu") memakai satu
 /// picker yang sama; "Teman kecuali..." dibatasi ke teman saja.
-class PrivacySettingsScreen extends StatefulWidget {
+class PrivacySettingsScreen extends ConsumerStatefulWidget {
   const PrivacySettingsScreen({super.key});
 
   @override
-  State<PrivacySettingsScreen> createState() => _PrivacySettingsScreenState();
+  ConsumerState<PrivacySettingsScreen> createState() => _PrivacySettingsScreenState();
 }
 
-class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
+class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final p = context.read<PrivacyProvider>();
+      final p = ref.read(privacyProvider.notifier);
       p.load();
       // Daftar excludable dimuat awal juga supaya jumlah "(n)" akurat.
       p.ensureExcludable();
@@ -113,7 +114,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
   }
 
   Future<void> _applyField(String field, PrivacyVisibility value) async {
-    final provider = context.read<PrivacyProvider>();
+    final provider = ref.read(privacyProvider.notifier);
     switch (field) {
       case 'presence':
         await provider.update(presence: value);
@@ -197,11 +198,11 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     required PrivacyVisibility mode,
   }) async {
     final s = context.read<LocaleProvider>().s;
-    final provider = context.read<PrivacyProvider>();
+    final provider = ref.read(privacyProvider.notifier);
     await provider.ensureExcludable();
     if (!mounted) return null;
 
-    final all = provider.excludable;
+    final all = ref.read(privacyProvider).excludable;
     // 'Teman kecuali' hanya menampilkan teman; 'Semua kecuali' & 'Hanya orang
     // tertentu' menampilkan semua kandidat (teman + anon yang pernah chat).
     final list = mode.friendsOnly
@@ -219,7 +220,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     }
 
     final selected = Set<String>.of(
-      provider.settings.exclusions[field] ?? const {},
+      ref.read(privacyProvider).settings.exclusions[field] ?? const {},
     );
 
     final result = await showModalBottomSheet<Set<String>>(
@@ -251,8 +252,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final privacy = context.watch<PrivacyProvider>();
-    final p = privacy.settings;
+    final p = ref.watch(privacyProvider).settings;
     // PERF (§26b): dulu 3× `watch<PointsProvider>()` → SELURUH halaman
     // privasi rebuild tiap PointsProvider notify (refresh beberapa kali saat
     // buka: get_points_enabled/get_wallet/yukcoin_v2_status) → lag saat masuk.
@@ -327,7 +327,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 subtitle: s.privacyReadReceiptsDesc,
                 value: p.readReceipts,
                 onChanged: (v) =>
-                    context.read<PrivacyProvider>().update(readReceipts: v),
+                    ref.read(privacyProvider.notifier).update(readReceipts: v),
               ),
             ],
           ),

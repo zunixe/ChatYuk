@@ -46,7 +46,7 @@ import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
 import '../providers/story_provider.dart';
 import '../providers/call_provider.dart';
-import '../providers/privacy_provider.dart';
+import '../providers/riverpod/privacy_provider.dart';
 import '../models/privacy_settings.dart';
 import '../widgets/sheet_drag_handle.dart';
 import 'privacy_settings_screen.dart';
@@ -110,14 +110,14 @@ Future<String?> _processAvatarJpeg(Uint8List bytes) async {
   return processAvatarImage(bytes);
 }
 
-class OnlineUsersScreen extends StatefulWidget {
+class OnlineUsersScreen extends ConsumerStatefulWidget {
   const OnlineUsersScreen({super.key});
 
   @override
-  State<OnlineUsersScreen> createState() => _OnlineUsersScreenState();
+  ConsumerState<OnlineUsersScreen> createState() => _OnlineUsersScreenState();
 }
 
-class _OnlineUsersScreenState extends State<OnlineUsersScreen>
+class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   // Multi-select negara: kosong = Semua. Persist via prefs (JSON list).
   List<String> _negaraSel = const [];
@@ -497,10 +497,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   Future<void> _showMyStatusSheet() async {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final privacy = context.read<PrivacyProvider>();
     // Muat visibilitas bila belum pernah dimuat (lazy; tak ada RPC baru bila
     // sudah ter-cache di provider).
-    unawaited(privacy.load());
+    unawaited(ref.read(privacyProvider.notifier).load());
 
     await showModalBottomSheet<void>(
       context: context,
@@ -518,7 +517,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         gender: auth.profile?.gender ?? '',
         status: auth.profile?.status ?? 'offline',
         invisible: auth.invisibleEnabled,
-        privacy: privacy,
       ),
     );
   }
@@ -3176,7 +3174,7 @@ class _UserCard extends StatelessWidget {
 /// UI: chip ringkas + subbaris (agar "kecuali N orang" tidak menyesatkan).
 /// Status & visibilitas adalah 2 dimensi terpisah — lihat catatan di
 /// `_showMyStatusSheet`.
-class MyStatusSheet extends StatelessWidget {
+class MyStatusSheet extends ConsumerWidget {
   final S s;
   final String uid;
   final String nickname;
@@ -3184,7 +3182,6 @@ class MyStatusSheet extends StatelessWidget {
   final String gender;
   final String status;
   final bool invisible;
-  final PrivacyProvider privacy;
   const MyStatusSheet({
     super.key,
     required this.s,
@@ -3194,7 +3191,6 @@ class MyStatusSheet extends StatelessWidget {
     required this.gender,
     required this.status,
     required this.invisible,
-    required this.privacy,
   });
 
   String _statusLabel() {
@@ -3209,7 +3205,8 @@ class MyStatusSheet extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final privacy = ref.watch(privacyProvider).settings;
     return SafeArea(
       top: false,
       child: Padding(
@@ -3274,10 +3271,9 @@ class MyStatusSheet extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             // Baris 2: TERLIHAT OLEH (efek privasi) — chip + subbaris.
-            AnimatedBuilder(
-              animation: privacy,
-              builder: (_, __) {
-                final st = privacy.settings;
+            Builder(
+              builder: (_) {
+                final st = privacy;
                 final vis = st.presence;
                 final n = (st.exclusions['presence'] ?? const <String>{}).length;
                 final (chip, sub) = myStatusVisibilityChip(s, vis, n);
@@ -3305,11 +3301,10 @@ class MyStatusSheet extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             // Baris 3: FOTO PROFIL (dimensi privasi terpisah).
-            AnimatedBuilder(
-              animation: privacy,
-              builder: (_, __) {
-                final vis = privacy.settings.profilePhoto;
-                final n = (privacy.settings.exclusions['profile_photo'] ??
+            Builder(
+              builder: (_) {
+                final vis = privacy.profilePhoto;
+                final n = (privacy.exclusions['profile_photo'] ??
                         const <String>{})
                     .length;
                 final (chip, _) = myStatusVisibilityChip(s, vis, n);
