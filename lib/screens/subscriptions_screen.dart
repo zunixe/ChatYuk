@@ -1,6 +1,7 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../widgets/person_avatar.dart';
@@ -14,7 +15,7 @@ class SubscriptionsScreen extends StatefulWidget {
 }
 
 class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
-  SocialProvider get _service => context.read<SocialProvider>();
+  SocialNotifier get _service => ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
   bool _loading = true;
   List<Map<String, dynamic>> _items = [];
 

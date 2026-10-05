@@ -19,7 +19,7 @@ import '../providers/locale_provider.dart';
 import '../providers/riverpod/location_provider.dart';
 import '../providers/points_provider.dart';
 import 'story_camera_capture_screen.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/chat/read_receipt.dart';
@@ -2207,7 +2207,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                 _openSearch();
               } else if (val == 'follow') {
                 // Dinamis: sudah follow → berhenti ikuti.
-                final social = context.read<SocialProvider>();
+                final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
                 if (social.isFollowing(widget.otherUid)) {
                   social.unfollow(widget.otherUid);
                   showChatSnack(context, s.btnUnfollow);
@@ -2216,7 +2216,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                   showChatSnack(context, s.btnFollow);
                 }
               } else if (val == 'friend') {
-                final social = context.read<SocialProvider>();
+                final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
                 final messenger = ScaffoldMessenger.of(context);
                 social.sendFriendRequest(widget.otherUid).then((res) {
                   if (!mounted) return;
@@ -2238,7 +2238,8 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
               }
             },
             itemBuilder: (_) {
-              final social = context.watch<SocialProvider>();
+              ref.watch(socialProvider);
+              final social = ref.read(socialProvider.notifier);
               final following = social.isFollowing(widget.otherUid);
               // Sudah teman / permintaan terkirim → sembunyikan "Tambah Teman"
               // (putus teman / batalkan dilakukan di profil, daftar chat, dll).

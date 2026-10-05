@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -15,7 +16,7 @@ import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
 import '../core/perf/perf_probe.dart';
@@ -70,7 +71,7 @@ Future<bool> sendShareToUser(
 }
 
 /// Kartu postingan timeline: header + foto + caption + like/comment/share.
-class PostCard extends StatefulWidget {
+class PostCard extends ConsumerStatefulWidget {
   final Map<String, dynamic> post;
 
   /// Dipanggil setelah post berhasil dihapus. Di feed kartu hilang sendiri
@@ -81,10 +82,10 @@ class PostCard extends StatefulWidget {
   const PostCard({super.key, required this.post, this.onDeleted});
 
   @override
-  State<PostCard> createState() => _PostCardState();
+  ConsumerState<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<PostCard> {
+class _PostCardState extends ConsumerState<PostCard> {
   Map<String, dynamic> get _p => widget.post;
   bool _busy = false;
   bool _followBusy = false;
@@ -606,7 +607,7 @@ class _PostCardState extends State<PostCard> {
       );
       return;
     }
-    final sp = context.read<SocialProvider>();
+    final sp = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     final currently =
         sp.isFollowing(authorId) || _p['isFollowing'] == true;
     setState(() => _followBusy = true);
@@ -632,7 +633,7 @@ class _PostCardState extends State<PostCard> {
     final name = _p['authorName'] as String? ?? 'Anon';
     // Status follow: set global (realtime) ATAU bawaan server saat load.
     final following =
-        context.select<SocialProvider, bool>((sp) => sp.isFollowing(authorId)) ||
+        ref.watch(socialProvider.select((sp) => sp.isFollowing(authorId))) ||
         _p['isFollowing'] == true;
     final createdAt = parseDate(_p['createdAt']);
     final isLiked = _p['isLiked'] == true;
@@ -642,9 +643,9 @@ class _PostCardState extends State<PostCard> {
     final isBoosted = _p['isBoosted'] == true;
     // Status teman: set global (realtime) ATAU bawaan server saat load.
     // Realtime stream `posts` tidak membawa is_friend (computed di RPC), jadi
-    // sumber utama = SocialProvider.isFriend(authorId).
+    // sumber utama = SocialNotifier.isFriend(authorId).
     final isFriend =
-        context.select<SocialProvider, bool>((sp) => sp.isFriend(authorId)) ||
+        ref.watch(socialProvider.select((sp) => sp.isFriend(authorId))) ||
         _p['isFriend'] == true;
 
     // Konten (nama, teks, foto, tombol aksi) diberi padding kiri/kanan

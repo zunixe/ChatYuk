@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -11,7 +12,7 @@ import '../models/user_model.dart';
 import '../providers/points_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
 import '../providers/auth_provider.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
@@ -689,8 +690,10 @@ class _FollowTextButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SocialProvider>(
-      builder: (ctx, sp, _) {
+    return rv.Consumer(
+      builder: (ctx, ref, _) {
+        ref.watch(socialProvider);
+        final sp = ref.read(socialProvider.notifier);
         final following = sp.isFollowing(uid);
         return Tooltip(
           message:
@@ -734,7 +737,7 @@ class _FollowTextButton extends StatelessWidget {
   }
 }
 
-/// Tombol TAMBAH TEMAN berbentuk IKON. Status ikut SocialProvider.
+/// Tombol TAMBAH TEMAN berbentuk IKON. Status ikut SocialNotifier.
 /// Saat sudah teman → tap = putus teman; saat permintaan terkirim → tap =
 /// batalkan. Guard `_busy` mencegah double-tap.
 class _AddFriendIconButton extends StatefulWidget {
@@ -754,7 +757,7 @@ class _AddFriendIconButton extends StatefulWidget {
 class _AddFriendIconButtonState extends State<_AddFriendIconButton> {
   bool _busy = false;
 
-  Future<void> _onTap(SocialProvider sp, bool isFriend, bool pending) async {
+  Future<void> _onTap(SocialNotifier sp, bool isFriend, bool pending) async {
     if (_busy) return;
     final name = widget.name;
     setState(() => _busy = true);
@@ -780,8 +783,10 @@ class _AddFriendIconButtonState extends State<_AddFriendIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SocialProvider>(
-      builder: (ctx, sp, _) {
+    return rv.Consumer(
+      builder: (ctx, ref, _) {
+        ref.watch(socialProvider);
+        final sp = ref.read(socialProvider.notifier);
         final s = widget.s;
         final isFriend = sp.isFriend(widget.uid);
         final pending = sp.isPendingFriendRequest(widget.uid);

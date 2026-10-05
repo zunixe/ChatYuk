@@ -19,6 +19,7 @@ import '../providers/riverpod/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import '../providers/riverpod/nav_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/points_provider.dart';
@@ -30,7 +31,7 @@ import '../core/cache/media_disk_cache.dart';
 import '../core/nav_guard.dart';
 import '../core/ui/online_pill_mode.dart';
 import '../models/story_model.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
@@ -3036,8 +3037,10 @@ class _UserCard extends StatelessWidget {
                       // Tombol TAMBAH TEMAN hanya untuk user ter-registrasi.
                       // Lingkaran belakang ikon transparan — ikon saja.
                       if (user.isRegistered)
-                        Consumer<SocialProvider>(
-                          builder: (_, sp, __) {
+                        rv.Consumer(
+                          builder: (ctx, ref, __) {
+                            ref.watch(socialProvider);
+                            final sp = ref.read(socialProvider.notifier);
                             final isFriend = sp.isFriend(user.uid);
                             final pending = sp.isPendingFriendRequest(user.uid);
                             final tip = isFriend

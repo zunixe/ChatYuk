@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 
 /// Aksi sosial bersama (putus teman / batalkan permintaan teman) — satu
 /// sumber kebenaran supaya dialog & snackbar konsisten di semua layar
@@ -65,14 +65,14 @@ Future<bool> confirmCancelRequest(
   return res == true;
 }
 
-/// Putus pertemanan ([targetUid]) via `SocialProvider.unfollow`.
-Future<bool> doUnfriend(SocialProvider sp, String targetUid) =>
+/// Putus pertemanan ([targetUid]) via `SocialNotifier.unfollow`.
+Future<bool> doUnfriend(SocialNotifier sp, String targetUid) =>
     sp.unfollow(targetUid);
 
 /// Batalkan permintaan teman terkirim ke [targetUid]. Ambil `id` dari outbox
 /// (RPC `my_social_status` tidak mengembalikan id), lalu cancel.
 Future<bool> cancelFriendRequestFor(
-  SocialProvider sp,
+  SocialNotifier sp,
   String targetUid,
 ) async {
   try {
@@ -93,7 +93,7 @@ Future<bool> cancelFriendRequestFor(
 /// bila berhasil. Dipakai oleh tombol di leaderboard/online/daftar chat.
 Future<bool> runUnfriend(
   BuildContext context,
-  SocialProvider sp,
+  SocialNotifier sp,
   String targetUid,
   String name,
 ) async {
@@ -111,7 +111,7 @@ Future<bool> runUnfriend(
 /// Aksi batalkan permintaan lengkap: konfirmasi → cancel → snackbar.
 Future<bool> runCancelRequest(
   BuildContext context,
-  SocialProvider sp,
+  SocialNotifier sp,
   String targetUid,
   String name,
 ) async {

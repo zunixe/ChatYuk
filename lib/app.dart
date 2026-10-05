@@ -15,7 +15,7 @@ import 'services/device_info_service.dart';
 import 'providers/riverpod/message_reaction_provider.dart';
 import 'providers/online_users_provider.dart';
 import 'providers/points_provider.dart';
-import 'providers/social_provider.dart';
+import 'providers/riverpod/social_provider.dart';
 import 'core/admin_gate.dart';
 import 'providers/locale_provider.dart';
 import 'core/cache/message_cache.dart';
@@ -81,7 +81,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
             ..refreshEnabled()
             ..subscribeEnabled(),
         ),
-        ChangeNotifierProvider(create: (_) => SocialProvider()),
         ChangeNotifierProvider(create: (_) => TimelineProvider()),
         // Refresh perdana story DITUNDA ke post-frame (di
         // OnlineUsersScreen.initState) — RPC story_tray + subscribe
@@ -647,7 +646,7 @@ class _MainNavState extends ConsumerState<_MainNav>
     // Follow/unfollow → invalidate cache followee di TimelineProvider
     // (R4: TTL cache supaya switch tab tidak mem-fetch follows berulang,
     // tapi tetap akurat saat graf follow berubah).
-    context.read<SocialProvider>().onFollowGraphChanged = () {
+    ref.read(socialProvider.notifier).onFollowGraphChanged = () {
       context.read<TimelineProvider>().invalidateFollowedIds();
     };
     // Hanya user terdaftar yang menerima panggilan masuk (anon: tidak).

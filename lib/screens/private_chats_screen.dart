@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -9,7 +10,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
-import '../providers/social_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/social_actions.dart';
@@ -580,7 +581,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
         (p) => p != myUid,
         orElse: () => '',
       );
-      return context.read<SocialProvider>().isFriend(other);
+      return ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier).isFriend(other);
     }
 
     bool registeredOf(PrivateChatInfo c) {
@@ -680,7 +681,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     final liveChanged =
         !_sameStatusMap(statusMap, _statusMap) ||
         !_sameStatusMap(liveNameMap, _nameMap);
-    final currentFriends = context.read<SocialProvider>().friends;
+    final currentFriends = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier).friends;
     final friendsChanged = !setEquals(currentFriends, _friendSet);
     if (_lastChats.isNotEmpty &&
         (_recomputeDirty || queryChanged || liveChanged || friendsChanged)) {
@@ -1468,26 +1469,26 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
 }
 
 /// Tombol add friend di list pesan untuk user yang terdaftar (registered).
-/// Status dibaca dari SocialProvider (set global, ter-load saat app start +
+/// Status dibaca dari SocialNotifier (set global, ter-load saat app start +
 /// cache disk) — TANPA RPC per-item (dulu: my_social_status per tombol =
 /// N+1 RPC, spinner berjejak saat jaringan lambat).
-class _FriendButton extends StatefulWidget {
+class _FriendButton extends ConsumerStatefulWidget {
   final String otherUid;
   final String name;
   const _FriendButton({required this.otherUid, required this.name});
 
   @override
-  State<_FriendButton> createState() => _FriendButtonState();
+  ConsumerState<_FriendButton> createState() => _FriendButtonState();
 }
 
-class _FriendButtonState extends State<_FriendButton> {
+class _FriendButtonState extends ConsumerState<_FriendButton> {
   bool _busy = false;
   double _scale = 1.0;
 
   Future<void> _onTap(bool isFriend, bool pending) async {
     if (_busy) return;
     final s = context.read<LocaleProvider>().s;
-    final social = context.read<SocialProvider>();
+    final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     // Putus teman / batalkan lewat helper bersama (dialog + snackbar).
     if (isFriend) {
       setState(() => _busy = true);
@@ -1522,7 +1523,8 @@ class _FriendButtonState extends State<_FriendButton> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final social = context.watch<SocialProvider>();
+    ref.watch(socialProvider);
+    final social = ref.read(socialProvider.notifier);
     final isFriend = social.isFriend(widget.otherUid);
     final pending = social.isPendingFriendRequest(widget.otherUid);
     final icon = isFriend
