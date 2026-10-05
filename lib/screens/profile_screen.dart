@@ -107,6 +107,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // sesi dummy ⇄ admin (ProfileScreen hidup di IndexedStack, initState
   // tidak jalan lagi saat swap), supaya foto/hashtag/avatar ikut ganti.
   String? _loadedUid;
+  // Future label versi dibuat SEKALI (bukan di build) — dulu `FutureBuilder(future:
+  // context.read<DeviceInfoProvider>().appVersionLabel())` membuat Future BARU
+  // tiap build → FutureBuilder re-subscribe → "setState() called during build".
+  Future<String>? _appVersionFuture;
 
   @override
   void initState() {
@@ -2111,9 +2115,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   SizedBox(height: 8),
                   FutureBuilder<String>(
-                    future: context
-                        .read<DeviceInfoProvider>()
-                        .appVersionLabel(),
+                    future: _appVersionFuture ??=
+                        context.read<DeviceInfoProvider>().appVersionLabel(),
                     builder: (_, snap) {
                       if (!snap.hasData || snap.data!.isEmpty) {
                         return const SizedBox.shrink();

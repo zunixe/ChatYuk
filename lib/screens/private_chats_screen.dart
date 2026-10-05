@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -601,17 +602,30 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
         )
         .toList();
     if (notify) {
-      _listNotifier.value = _lastFiltered;
-      _archivedNotifier.value = _archivedCount;
-      _countsNotifier.value = ChatFilterLogic.countsWithFriends(
-        visible.map(
-          (c) => (
-            unread: unreadOf(c),
-            registered: registeredOf(c),
-            friend: friendOf(c),
+      // set ValueNotifier saat fase BUILD → "setState called during build".
+      // Defer ke post-frame bila sedang build (dipanggil dari build()).
+      final inBuild = SchedulerBinding.instance.schedulerPhase ==
+          SchedulerPhase.persistentCallbacks;
+      void apply() {
+        _listNotifier.value = _lastFiltered;
+        _archivedNotifier.value = _archivedCount;
+        _countsNotifier.value = ChatFilterLogic.countsWithFriends(
+          visible.map(
+            (c) => (
+              unread: unreadOf(c),
+              registered: registeredOf(c),
+              friend: friendOf(c),
+            ),
           ),
-        ),
-      );
+        );
+      }
+      if (inBuild) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) apply();
+        });
+      } else {
+        apply();
+      }
     }
   }
 
