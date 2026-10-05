@@ -23,7 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import '../providers/riverpod/nav_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/points_provider.dart';
-import '../providers/room_provider.dart';
+import '../providers/riverpod/room_provider.dart';
 import '../widgets/search_dropdown.dart';
 import '../widgets/skeleton_card.dart';
 import 'online_users/widgets/hidden_box_widgets.dart';
@@ -2031,7 +2031,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   /// general langsung dibuka; kalau belum, buka halaman Global Room dengan
   /// kategori General terpilih.
   Future<void> _openGeneralRoom(BuildContext context) async {
-    final rp = context.read<RoomProvider>();
+    final rp = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
     final rooms = rp.exploreRooms.where((r) => r.category == 'general');
     if (rooms.isNotEmpty) {
       final room = rooms.first;
@@ -2074,7 +2074,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
 ///  - Satu-satunya gerakan saat diam: chevron ">" yang bergerak halus
 ///    (geser kanan-kiri) sebagai isyarat bisa diketuk.
 /// Membaca sendiri jumlah online kategori General dari [RoomProvider].
-class _OnlinePill extends StatefulWidget {
+class _OnlinePill extends ConsumerStatefulWidget {
   /// Aksi saat kapsul mode Global Room diketuk. `Future` supaya kapsul bisa
   /// menunggu sampai halaman yang dibuka DITUTUP, lalu reset animasi.
   final Future<void> Function() onOpenRoom;
@@ -2093,10 +2093,10 @@ class _OnlinePill extends StatefulWidget {
   });
 
   @override
-  State<_OnlinePill> createState() => _OnlinePillState();
+  ConsumerState<_OnlinePill> createState() => _OnlinePillState();
 }
 
-class _OnlinePillState extends State<_OnlinePill>
+class _OnlinePillState extends ConsumerState<_OnlinePill>
     with TickerProviderStateMixin {
   /// Posisi horizontal kapsul: 0 = menempel tepi, 1 = seluruhnya di luar.
   late final AnimationController _slide;
@@ -2265,13 +2265,15 @@ class _OnlinePillState extends State<_OnlinePill>
     // PERF: `exploreRooms` = list baru tiap akses; `select` ANGKA (value-type)
     // supaya pill hanya rebuild saat jumlah online benar-benar berubah —
     // bukan tiap notify RoomProvider (realtime counts/presence sering).
-    final online = context.select<RoomProvider, int>((rp) {
-      var n = 0;
-      for (final r in rp.exploreRooms) {
-        if (r.category == 'general') n += r.onlineCount;
-      }
-      return n;
-    });
+    final online = ref.watch(
+      roomProvider.select((rp) {
+        var n = 0;
+        for (final r in rp.exploreRooms) {
+          if (r.category == 'general') n += r.onlineCount;
+        }
+        return n;
+      }),
+    );
     final label = isTimeline ? s.titleTimeline : s.titleRooms;
     final glyph = isTimeline ? '📰' : '💬';
     final showCount = !isTimeline && online > 0;

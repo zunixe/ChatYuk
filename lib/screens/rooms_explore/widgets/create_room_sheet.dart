@@ -8,7 +8,7 @@ import '../../../config/room_categories.dart';
 import '../../../config/theme.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/locale_provider.dart';
-import '../../../providers/room_provider.dart';
+import '../../../providers/riverpod/room_provider.dart';
 import '../../../providers/riverpod/storage_provider.dart';
 import '../../../widgets/anon_prompt_dialog.dart';
 
@@ -299,8 +299,10 @@ Future<void> showCreateExploreRoomDialog(
                                 );
                               }
                             }
-                            await ctx
-                                .read<RoomProvider>()
+                            await ProviderScope.containerOf(
+                                    ctx,
+                                    listen: false)
+                                .read(roomProvider.notifier)
                                 .createGlobalRoom(
                                   name: name,
                                   icon: finalIcon,

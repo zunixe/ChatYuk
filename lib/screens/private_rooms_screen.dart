@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
@@ -10,7 +12,7 @@ import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../core/nav_guard.dart';
 import '../providers/auth_provider.dart';
-import '../providers/room_provider.dart';
+import '../providers/riverpod/room_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import 'room_chat_screen.dart';
@@ -25,7 +27,7 @@ class PrivateRoomsScreen extends StatefulWidget {
 }
 
 class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
-  RoomProvider get _prv => context.read<RoomProvider>();
+  RoomNotifier get _prv => ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
   List<Map<String, dynamic>> _myRooms = [];
   bool _loading = true;
   Timer? _poll;
@@ -61,10 +63,10 @@ class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
       } catch (_) {
         // fallback ke jalur lama
       }
-      final rows = await context.read<RoomProvider>().fetchMyMemberships(uid);
+      final rows = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchMyMemberships(uid);
       final ids = rows.where((rid) => rid.startsWith('pr_')).toList();
       // Batch 1 query ganti N+1 fetchRoomById per room.
-      final all = await context.read<RoomProvider>().fetchRoomsByIds(ids);
+      final all = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchRoomsByIds(ids);
       if (!mounted) return;
       setState(() {
         _myRooms = all;
@@ -274,7 +276,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
     if (name.length < 3 || mounted == false) return;
     setState(() => _creating = true);
     try {
-      final res = await context.read<RoomProvider>().createPrivateRoom(
+      final res = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).createPrivateRoom(
         name: name,
         icon: _icon,
       );
@@ -296,10 +298,10 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
 
   Future<void> _rotateToken() async {
     if (_createdId == null) return;
-    await context.read<RoomProvider>().rotateToken(_createdId!);
+    await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).rotateToken(_createdId!);
     // Refresh token dari server.
     try {
-      final row = await context.read<RoomProvider>().fetchRoomById(_createdId!);
+      final row = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchRoomById(_createdId!);
       if (mounted && row != null) {
         setState(() => _joinToken = '${row['join_token'] ?? ''}');
       }
@@ -427,7 +429,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
             label: Text(s.privateRoomsEnterRoom),
             onPressed: () async {
               // Buka chat room mode private.
-              final room = await context.read<RoomProvider>().fetchRoomById(_createdId!);
+              final room = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchRoomById(_createdId!);
               if (!mounted) return;
               if (room != null) {
                 Navigator.of(context).pushReplacement(
@@ -480,7 +482,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
     // Validasi token vs rooms.join_token.
     try {
-      final row = await context.read<RoomProvider>().fetchRoomById(roomId);
+      final row = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchRoomById(roomId);
       final serverToken = '${row?['join_token'] ?? ''}';
       if (serverToken.isEmpty || token != serverToken) {
         if (mounted) {
@@ -489,10 +491,10 @@ class _QrScanScreenState extends State<QrScanScreen> {
         return;
       }
       // Rotasi otomatis setelah dipakai — QR sekali pakai per share.
-      await context.read<RoomProvider>().rotateToken(roomId);
+      await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).rotateToken(roomId);
 
       final res =
-          await context.read<RoomProvider>().joinPrivateRoom(roomId);
+          await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).joinPrivateRoom(roomId);
       final pending = res['pending'] == true;
       if (!mounted) return;
       final s = context.read<LocaleProvider>().s;

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/admin_gate.dart';
 import '../core/perf/perf_probe.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
-import '../providers/room_provider.dart';
+import '../providers/riverpod/room_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
@@ -14,7 +15,7 @@ import '../providers/theme_provider.dart';
 import '../widgets/search_dropdown.dart';
 import 'rooms_explore_screen.dart';
 
-class LobbyScreen extends StatefulWidget {
+class LobbyScreen extends ConsumerStatefulWidget {
   final bool embedded;
   final String? externalQuery;
 
@@ -29,10 +30,10 @@ class LobbyScreen extends StatefulWidget {
   });
 
   @override
-  State<LobbyScreen> createState() => _LobbyScreenState();
+  ConsumerState<LobbyScreen> createState() => _LobbyScreenState();
 }
 
-class _LobbyScreenState extends State<LobbyScreen> {
+class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   static const _prefKey = 'lobby_country';
 
   @override
@@ -55,17 +56,17 @@ class _LobbyScreenState extends State<LobbyScreen> {
         ? saved
         : profileCountry;
     if (!mounted) return;
-    await context.read<RoomProvider>().setCountry(target);
+    await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).setCountry(target);
     // Muat harga room (dual pricing) dari server.
     context.read<PointsProvider>().refreshRoomPricing();
-    if (mounted) context.read<RoomProvider>().fetchExplore();
+    if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchExplore();
   }
 
   Future<void> _onCountryChanged(String country) async {
-    await context.read<RoomProvider>().setCountry(country);
+    await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).setCountry(country);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKey, country);
-    if (mounted) context.read<RoomProvider>().fetchExplore(refresh: true);
+    if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchExplore(refresh: true);
   }
 
   @override
@@ -76,7 +77,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     // PERF: build utama hanya butuh `country` — daftar room ada di
     // RoomsExploreScreen (baca sendiri). Dulu `watch<RoomProvider>()` penuh
     // → seluruh layar rebuild tiap notify RoomProvider (sering).
-    final country = context.select<RoomProvider, String>((rp) => rp.country);
+    final country = ref.watch(roomProvider.select((rp) => rp.country));
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: widget.embedded
