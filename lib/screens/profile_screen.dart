@@ -23,7 +23,7 @@ import '../providers/locale_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
-import '../providers/timeline_provider.dart';
+import '../providers/riverpod/timeline_provider.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
 import 'settings_screen.dart';
@@ -468,7 +468,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).updateAvatarForUid(uid, base64);
           } catch (_) {}
           try {
-            context.read<TimelineProvider>().refreshAvatarForUid(uid, base64);
+            ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).refreshAvatarForUid(uid, base64);
           } catch (_) {}
         }
       }
@@ -545,7 +545,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         );
                       } catch (_) {}
                       try {
-                        context.read<TimelineProvider>().refreshAvatarForUid(
+                        ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).refreshAvatarForUid(
                           uid,
                           '',
                         );

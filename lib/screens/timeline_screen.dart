@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/timeline_provider.dart';
+import '../providers/riverpod/timeline_provider.dart';
 import '../widgets/post_card.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/skeleton_card.dart';
@@ -16,14 +17,14 @@ import '../widgets/empty_state_view.dart';
 import '../core/perf/perf_probe.dart';
 
 /// Timeline feed: tab Semua / Mengikuti + infinite scroll + refresh.
-class TimelineScreen extends StatefulWidget {
+class TimelineScreen extends ConsumerStatefulWidget {
   const TimelineScreen({super.key});
 
   @override
-  State<TimelineScreen> createState() => _TimelineScreenState();
+  ConsumerState<TimelineScreen> createState() => _TimelineScreenState();
 }
 
-class _TimelineScreenState extends State<TimelineScreen>
+class _TimelineScreenState extends ConsumerState<TimelineScreen>
     with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 3, vsync: this);
   final ScrollController _scroll = ScrollController();
@@ -126,7 +127,7 @@ class _TimelineScreenState extends State<TimelineScreen>
     if (_scrollDebounce?.isActive ?? false) return;
     _scrollDebounce = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      final tp = context.read<TimelineProvider>();
+      final tp = ref.read(timelineProvider.notifier);
       if (!tp.loading && tp.hasMore) _load(refresh: false);
     });
   }
@@ -141,8 +142,8 @@ class _TimelineScreenState extends State<TimelineScreen>
     // Jangan tembak RPC `list_posts` (pasti raise ANON_DISABLED → layar error
     // retry palsu). UI menampilkan state "daftar dulu" (lihat build()).
     if (auth.anonTimelineBlocked) return;
-    await context
-        .read<TimelineProvider>()
+    await ref
+        .read(timelineProvider.notifier)
         .load(_scope, refresh: refresh, skipIfFresh: skipIfFresh);
   }
 
@@ -154,14 +155,13 @@ class _TimelineScreenState extends State<TimelineScreen>
     final s = context.watch<LocaleProvider>().s;
     // Rebuild granular: hanya rebuild saat daftar post / hasMore benar-benar
     // berubah (bukan tiap notifyListeners — mis. pricing, loading).
-    final postsRaw = context.select<TimelineProvider, List<Map<String, dynamic>>>(
-      (t) => t.posts,
-    );
-    final hasMore = context.select<TimelineProvider, bool>((t) => t.hasMore);
-    final loading = context.select<TimelineProvider, bool>((t) => t.loading);
-    final fetchFailed = context.select<TimelineProvider, bool>(
-      (t) => t.fetchFailed,
-    );
+    final postsRaw = ref.watch(timelineProvider.select((t) => t.posts));
+    final hasMore =
+        ref.watch(timelineProvider.select((t) => t.hasMore));
+    final loading =
+        ref.watch(timelineProvider.select((t) => t.loading));
+    final fetchFailed =
+        ref.watch(timelineProvider.select((t) => t.fetchFailed));
     final scope = _scope;
     // Debounce search: filter pakai _appliedSearch (di-update 250ms
     // setelah keystroke terakhir) — tiap huruf tidak rebuild seluruh list.

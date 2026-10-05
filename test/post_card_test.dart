@@ -17,6 +17,7 @@ import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/social_provider.dart';
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/providers/timeline_provider.dart';
+import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/social_service.dart';
@@ -125,7 +126,12 @@ void main() {
     final tp = TimelineProvider(service: timeline, autoInit: false);
     final ap = AuthProvider(authService: auth, autoInit: false);
     final container = ProviderContainer(
-      overrides: [socialProvider.overrideWith(() => TestSocial(socialState))],
+      overrides: [
+        socialProvider.overrideWith(() => TestSocial(socialState)),
+        timelineProvider.overrideWith(
+          () => TimelineNotifier(service: timeline, autoInit: false),
+        ),
+      ],
     );
     addTearDown(() {
       tp.dispose();

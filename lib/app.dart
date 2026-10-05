@@ -27,7 +27,7 @@ import 'providers/riverpod/connectivity_provider.dart';
 import 'providers/call_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
 import 'providers/theme_provider.dart';
-import 'providers/timeline_provider.dart';
+import 'providers/riverpod/timeline_provider.dart';
 import 'providers/riverpod/story_provider.dart';
 import 'providers/riverpod/update_provider.dart';
 import 'services/chat_service.dart';
@@ -79,7 +79,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
             ..refreshEnabled()
             ..subscribeEnabled(),
         ),
-        ChangeNotifierProvider(create: (_) => TimelineProvider()),
         // Refresh perdana story DITUNDA ke post-frame (di
         // OnlineUsersScreen.initState) — RPC story_tray + subscribe
         // realtime jangan berebut CPU/network dengan frame pertama.
@@ -643,7 +642,7 @@ class _MainNavState extends ConsumerState<_MainNav>
     // (R4: TTL cache supaya switch tab tidak mem-fetch follows berulang,
     // tapi tetap akurat saat graf follow berubah).
     ref.read(socialProvider.notifier).onFollowGraphChanged = () {
-      context.read<TimelineProvider>().invalidateFollowedIds();
+      ref.read(timelineProvider.notifier).invalidateFollowedIds();
     };
     // Hanya user terdaftar yang menerima panggilan masuk (anon: tidak).
     CallProvider.instance.ensureListening(
@@ -668,7 +667,7 @@ class _MainNavState extends ConsumerState<_MainNav>
       // (RPC list_posts pasti raise ANON_DISABLED, buang kuota + isi error).
       final anonBlocked =
           mounted && context.read<AuthProvider>().anonTimelineBlocked;
-      if (mounted && !anonBlocked) context.read<TimelineProvider>().prewarm();
+      if (mounted && !anonBlocked) ref.read(timelineProvider.notifier).prewarm();
       // Prewarm juga daftar grup (tab Grup) — klik tab instant.
       if (mounted) context.read<RoomProvider>().loadMyGroups(refresh: true);
     });

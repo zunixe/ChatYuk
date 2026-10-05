@@ -17,7 +17,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/social_provider.dart';
-import '../providers/timeline_provider.dart';
+import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
@@ -332,7 +332,7 @@ class _PostCardState extends ConsumerState<PostCard> {
     // OPTIMISTIK: UI langsung berubah (hati + counter) TANPA menunggu
     // network — hapus delay saat tap. RPC jalan di belakang; hasil server
     // merekonsiliasi angka absolut, error → kembalikan ke nilai awal.
-    final tp = context.read<TimelineProvider>();
+    final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
     final curLiked = _p['isLiked'] == true;
     final curCount = (_p['likeCount'] as num?)?.toInt() ?? 0;
     final optLiked = !curLiked;
@@ -392,7 +392,7 @@ class _PostCardState extends ConsumerState<PostCard> {
 
   Future<void> _submitComment(String text, {int? parentId}) async {
     final s = context.read<LocaleProvider>().s;
-    final tp = context.read<TimelineProvider>();
+    final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
     final auth = context.read<AuthProvider>();
     // Id unik per kiriman — dua komentar cepat tidak tabrakan saat
     // replace/rollback (dulu konstanta -1 untuk semua).
@@ -524,7 +524,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   /// Counter HANYA bertambah saat user benar-benar menyelesaikan share
   /// (status success / terkirim ke user) — tap lalu batal tidak dihitung.
   Future<void> _bumpShareCount() async {
-    final tp = context.read<TimelineProvider>();
+    final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
     try {
       await tp.sharePost(_id);
       if (!mounted) return;
@@ -535,7 +535,7 @@ class _PostCardState extends ConsumerState<PostCard> {
 
   Future<void> _boost() async {
     final s = context.read<LocaleProvider>().s;
-    final tp = context.read<TimelineProvider>();
+    final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -558,9 +558,9 @@ class _PostCardState extends ConsumerState<PostCard> {
     );
     if (confirm != true || !mounted) return;
     try {
-      await context.read<TimelineProvider>().boostPost(_id);
+      await ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).boostPost(_id);
       if (mounted) {
-        context.read<TimelineProvider>().updatePost(_id, {'isBoosted': true});
+        ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).updatePost(_id, {'isBoosted': true});
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.msgBoosted)));
@@ -617,7 +617,7 @@ class _PostCardState extends ConsumerState<PostCard> {
     setState(() => _followBusy = false);
     // Hanya patch kalau RPC sukses — state tetap sinkron dengan server.
     if (ok) {
-      context.read<TimelineProvider>().updatePost(_id, {
+      ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).updatePost(_id, {
         'isFollowing': !currently,
       });
     }
@@ -1082,9 +1082,9 @@ class _PostCardState extends ConsumerState<PostCard> {
     );
     if (ok != true || !mounted) return;
     try {
-      await context.read<TimelineProvider>().deletePost(_id);
+      await ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).deletePost(_id);
       if (!mounted) return;
-      context.read<TimelineProvider>().removePost(_id);
+      ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).removePost(_id);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(s.postDeleted)));
@@ -1407,7 +1407,7 @@ class _CommentsListState extends State<_CommentsList> {
   void initState() {
     super.initState();
     // Baca cache dulu — tampil instant tanpa network.
-    final cached = context.read<TimelineProvider>().getCachedComments(
+    final cached = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).getCachedComments(
       widget.postId,
     );
     if (cached != null) {
@@ -1416,7 +1416,7 @@ class _CommentsListState extends State<_CommentsList> {
     }
     // RPC hanya bila cache tidak ada / basi (TTL 30 dtk) — buka-tutup-buka
     // sheet tidak menembak server berulang.
-    final tp = context.read<TimelineProvider>();
+    final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
     if (!tp.isCommentsFresh(widget.postId)) _load();
     _subscribeRealtime();
   }
@@ -1463,9 +1463,9 @@ class _CommentsListState extends State<_CommentsList> {
   }
 
   Future<void> _load() async {
-    final list = await context.read<TimelineProvider>().comments(widget.postId);
+    final list = await ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).comments(widget.postId);
     if (!mounted) return;
-    context.read<TimelineProvider>().cacheComments(widget.postId, list);
+    ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).cacheComments(widget.postId, list);
     // Jangan timpa optimistic user yang belum terkonfirmasi server: bila
     // item lokal punya id negatif (optimistic), pertahankan — kecuali server
     // sudah mengembalikannya (cocok author+teks) supaya tidak dobel.
@@ -1535,7 +1535,7 @@ class _CommentsListState extends State<_CommentsList> {
     _busy = true;
     final id = (c['id'] as num?)?.toInt() ?? 0;
     try {
-    final res = await context.read<TimelineProvider>().toggleCommentLike(id);
+    final res = await ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).toggleCommentLike(id);
     if (!mounted) return;
     final liked = res['liked'] == true;
     // Sumber kebenaran = server (likeCount absolut), bukan hitung lokal.
@@ -1588,7 +1588,7 @@ class _CommentsListState extends State<_CommentsList> {
 
   /// Counter share komentar — hanya bila benar-benar terkirim.
   Future<void> _bumpCommentShareCount(Map<String, dynamic> c, int id) async {
-    final tp = context.read<TimelineProvider>();
+    final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
     try {
       final res = await tp.shareComment(id);
       final count = (res['share_count'] as num?)?.toInt();
@@ -1625,7 +1625,7 @@ class _CommentsListState extends State<_CommentsList> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await context.read<TimelineProvider>().deleteComment(widget.postId, id);
+      await ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).deleteComment(widget.postId, id);
       if (!mounted) return;
       setState(
         () => _items = _items!
