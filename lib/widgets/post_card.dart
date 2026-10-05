@@ -14,7 +14,7 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
@@ -42,7 +42,7 @@ Future<bool> sendShareToUser(
   String content,
 ) async {
   final auth = context.read<AuthProvider>();
-  final chat = context.read<ChatProvider>();
+  final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
   final myUid = auth.uid ?? '';
   if (myUid.isEmpty || user.uid.isEmpty) return false;
   try {

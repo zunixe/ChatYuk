@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
@@ -475,7 +475,7 @@ Future<void> showGroupInvitePicker({
   // saat sheet dibuka (dulu StreamBuilder menunggu fetch server 300-760ms →
   // "cari" terasa lama). Stream server menyusul & mengoreksi.
   final seed = (myUid != null && myUid.isNotEmpty)
-      ? context.read<ChatProvider>().lastPrivateChatsSnapshot(myUid)
+      ? ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).lastPrivateChatsSnapshot(myUid)
       : null;
   if (!context.mounted) return;
   await showModalBottomSheet(
@@ -514,8 +514,8 @@ Future<void> showGroupInvitePicker({
             Expanded(
               child: StreamBuilder<List<PrivateChatInfo>>(
                 stream: myUid != null && myUid.isNotEmpty
-                    ? context
-                        .read<ChatProvider>()
+                    ? ProviderScope.containerOf(context, listen: false)
+                        .read(chatProvider.notifier)
                         .getMyPrivateChats(myUid)
                     : const Stream.empty(),
                 initialData: seed,

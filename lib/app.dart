@@ -10,7 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/riverpod/room_provider.dart';
-import 'providers/chat_provider.dart';
+import 'providers/riverpod/chat_provider.dart';
 import 'services/device_info_service.dart';
 import 'providers/riverpod/message_reaction_provider.dart';
 import 'providers/riverpod/online_users_provider.dart';
@@ -70,7 +70,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ChatProvider()),
         // Refresh perdana story DITUNDA ke post-frame (di
         // OnlineUsersScreen.initState) — RPC story_tray + subscribe
         // realtime jangan berebut CPU/network dengan frame pertama.
@@ -641,13 +640,13 @@ class _MainNavState extends ConsumerState<_MainNav>
     );
     final uid = auth.uid;
     if (uid != null) {
-      context.read<ChatProvider>().loadBlockedUids(uid);
+      ref.read(chatProvider.notifier).loadBlockedUids(uid);
     }
     // Logout paksa (sesi kedaluwarsa) tidak lewat tombol logout → pasang
     // hook: tutup stream chat & channel milik user lama.
     auth.onSignedOut = () {
       try {
-        context.read<ChatProvider>().reset();
+        ref.read(chatProvider.notifier).reset();
       } catch (_) {}
     };
     // Prewarm timeline di background (3s setelah frame pertama — lewat
@@ -1089,7 +1088,7 @@ class _BottomNav extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
     final uid = context.select<AuthProvider, String?>((a) => a.uid);
-    final chat = context.read<ChatProvider>();
+    final chat = ref.read(chatProvider.notifier);
     // Badge hijau = jumlah user online (bukan diri sendiri, bukan diblokir).
     // `select` mengembalikan ANGKA (bukan list) → _BottomNav hanya rebuild
     // saat jumlahnya benar-benar berubah, bukan tiap kali list online

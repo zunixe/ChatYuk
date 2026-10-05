@@ -9,7 +9,7 @@ import '../config/strings.dart';
 import '../models/message_model.dart';
 import '../models/room_model.dart';
 import '../providers/auth_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/message_reaction_service.dart';
 import '../widgets/chat_info_snack.dart';
@@ -28,7 +28,7 @@ import '../widgets/reaction_detail_sheet.dart';
 /// - [chatKind]        'private' / 'room' (dipakai API reaksi)
 /// - [chatId]          id chat/room
 /// - [chatAuth]        AuthProvider aktif
-/// - [chatProvider]    ChatProvider untuk hapus/forward
+/// - [chatProvider]    ChatNotifier untuk hapus/forward
 /// - [chatMsgCtrl]     controller composer (edit pesan)
 /// - [chatFocusComposer] fokuskan composer setelah edit/balas
 /// - [chatScrollToBottom] scroll ke bawah setelah set reply
@@ -39,7 +39,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   String get chatKind;
   String get chatId;
   AuthProvider get chatAuth;
-  ChatProvider get chatProvider;
+  ChatNotifier get chatProvider;
   TextEditingController get chatMsgCtrl;
   void chatFocusComposer();
   void chatScrollToBottom();

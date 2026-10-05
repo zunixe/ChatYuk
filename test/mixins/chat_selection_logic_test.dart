@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chatyuk/mixins/chat_selection_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
-import 'package:chatyuk/providers/chat_provider.dart';
+import 'package:chatyuk/providers/riverpod/chat_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/message_reaction_service.dart';
@@ -23,7 +23,7 @@ class MockAuthProvider extends Mock implements AuthProvider {}
 /// bergantung mixin lain), jadi cukup host kecil.
 class SelHost extends StatefulWidget {
   final AuthProvider auth;
-  final ChatProvider chat;
+  final ChatNotifier chat;
   final bool showAppBar;
   const SelHost({
     super.key,
@@ -43,7 +43,7 @@ class SelHostState extends State<SelHost> with ChatSelectionMixin<SelHost> {
   @override
   AuthProvider get chatAuth => widget.auth;
   @override
-  ChatProvider get chatProvider => widget.chat;
+  ChatNotifier get chatProvider => widget.chat;
   final TextEditingController msgCtrl = TextEditingController();
   @override
   TextEditingController get chatMsgCtrl => msgCtrl;
@@ -118,7 +118,7 @@ MessageModel msg({
 Future<SelHostState> pumpSel(WidgetTester tester,
     {bool showAppBar = false}) async {
   final auth = AuthProvider(autoInit: false);
-  final chat = ChatProvider();
+  final chat = ChatNotifier();
   await tester.pumpWidget(
     MultiProvider(
       providers: [
@@ -308,7 +308,7 @@ void main() {
       // initSupabaseForTest (yang meninggalkan timer periodik).
       final mockAuth = MockAuthProvider();
       when(() => mockAuth.uid).thenReturn('u-me');
-      final chat = ChatProvider();
+      final chat = ChatNotifier();
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -421,7 +421,7 @@ void main() {
       final mockSvc = MockAuthService();
       when(() => mockSvc.uid).thenReturn(uid);
       final auth = AuthProvider(authService: mockSvc, autoInit: false);
-      final chat = ChatProvider();
+      final chat = ChatNotifier();
       SelHostState.deleteResults.clear();
       SelHostState.undeleteResults.clear();
       SharedPreferences.setMockInitialValues({});
@@ -515,7 +515,7 @@ void main() {
       final mockSvc = MockAuthService();
       when(() => mockSvc.uid).thenReturn(uid);
       final auth = AuthProvider(authService: mockSvc, autoInit: false);
-      final chat = ChatProvider();
+      final chat = ChatNotifier();
       SelHostState.deleteResults.clear();
       SelHostState.undeleteResults.clear();
       await tester.pumpWidget(

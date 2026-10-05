@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/call_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../widgets/profile_avatar.dart';
 import 'call_screen.dart';
@@ -173,7 +174,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     final profile0 = auth0.profile;
     if (widget.callType == 'video' && chatId.isEmpty && auth0.uid != null) {
       try {
-        chatId = await context.read<ChatProvider>().startPrivateChat(
+        chatId = await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).startPrivateChat(
           myUid: auth0.uid!,
           otherUid: widget.callerUid,
           myName: profile0?.nickname ?? '',
@@ -182,7 +183,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         );
       } catch (_) {}
       if (chatId.isEmpty) {
-        chatId = context.read<ChatProvider>().privateChatId(auth0.uid!, widget.callerUid);
+        chatId = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).privateChatId(auth0.uid!, widget.callerUid);
       }
       if (!mounted) {
         _busy = false;

@@ -10,7 +10,7 @@ import '../core/call/call_permissions.dart';
 import '../core/nav_guard.dart';
 import '../providers/auth_provider.dart';
 import '../providers/call_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../utils.dart';
@@ -104,7 +104,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   /// Buka chat dengan lawan bicara baris ini.
   Future<void> _openChat(CallHistoryEntry e) async {
     final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final profile = auth.profile;
     final me = auth.uid;
     if (me == null) return;
@@ -183,7 +183,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
     }
     final otherName = _nameFor(e.otherUid, s);
     try {
-      final chatId = await context.read<ChatProvider>().startPrivateChat(
+      final chatId = await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).startPrivateChat(
         myUid: auth.uid!,
         otherUid: e.otherUid,
         myName: profile?.nickname ?? '',

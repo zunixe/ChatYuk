@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../models/user_model.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
@@ -519,7 +519,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Future<void> _confirmDeleteAccount() async {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
 
     // Admin dilarang self-delete di sisi server — tidak tampilkan menu.
     if (auth.isRealAdmin) {
@@ -671,7 +671,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Future<void> _confirmLogout() async {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

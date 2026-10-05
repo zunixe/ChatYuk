@@ -4,13 +4,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
@@ -149,11 +150,26 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   @override
   void initState() {
     super.initState();
+    // ANTI-KEDIP: poster yang sudah ada di disk tampil SEJAK frame pertama
+    // (baca sinkron — thumbnail kecil, aman di main isolate). Tanpa ini
+    // selalu ada 1+ frame spinner walau poster sudah ter-cache.
+    // Null bila prewarm belum jalan / poster belum ada → jalur async di
+    // bawah yang mengurus (tidak mengubah perilaku lazy).
+    if (!_locked && widget.videoData.isNotEmpty) {
+      try {
+        final hit = MediaDiskCache.instance.readSync(_posterKey);
+        if (hit != null && hit.isNotEmpty) {
+          _poster = hit;
+          _loading = false;
+          return;
+        }
+      } catch (_) {}
+    }
     // LAZY: tunda 1 frame — bubble yang belum benar-benar tampil (di luar
     // viewport) tidak memicu unduh video + generate frame. Cegah puluhan
     // video berebut bandwidth saat cold start (gejala "ngeblink").
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_locked && widget.videoData.isNotEmpty) {
+      if (mounted && !_locked && widget.videoData.isNotEmpty && _poster == null) {
         unawaited(_loadPoster());
       }
     });
@@ -355,7 +371,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     if (id == null || id.isEmpty || id.startsWith('pending-')) return;
     if (!mounted) return;
     try {
-      await context.read<ChatProvider>().clearViewOnceImage(id, video: true);
+      await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).clearViewOnceImage(id, video: true);
     } catch (e) {
       dlog('[VideoBubble] expire gagal: $e');
     }

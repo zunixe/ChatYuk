@@ -10,7 +10,7 @@ import '../core/nav_guard.dart';
 import '../utils.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
-import '../providers/chat_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
@@ -464,7 +464,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
     }
     try {
       // Chat dibuat/diambil dulu supaya overlay & banner punya rumah.
-      final chatId = await context.read<ChatProvider>().startPrivateChat(
+      final chatId = await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).startPrivateChat(
         myUid: auth.uid!,
         otherUid: widget.userId,
         myName: profile?.nickname ?? '',
@@ -560,7 +560,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   Future<void> _startChat() async {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
+    final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final profile = _profile;
     final name = profile?.nickname ?? widget.fallbackName;
     final myUid = auth.uid;
@@ -628,12 +628,12 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
     _statusSub?.cancel();
     final known = fresh == null
         ? null
-        : ChatProvider.effectiveStatusOf(
+        : ChatNotifier.effectiveStatusOf(
             fresh.status,
             fresh.lastSeen.toIso8601String(),
           );
-    _statusSub = context
-        .read<ChatProvider>()
+    _statusSub = ProviderScope.containerOf(context, listen: false)
+        .read(chatProvider.notifier)
         .getUserStatus(widget.userId, initialStatus: known)
         .listen((status) {
           if (!mounted) return;
