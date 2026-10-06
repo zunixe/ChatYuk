@@ -224,11 +224,25 @@ class AuthNotifier extends Notifier<AuthData> {
 
   void _emit() {
     if (_disposed) return;
+    final email = _auth.currentUser?.email;
+    final admin = AdminGate.isRealAdmin(email);
     state = AuthData(
       profile: _profile,
       loading: _loading,
       error: _error,
       signingOut: _signingOut,
+      uid: _auth.uid,
+      isSignedIn: _auth.isSignedIn,
+      isAnonymous: _auth.isAnonymous,
+      dummySessionActive: _auth.dummySessionActive,
+      emailConfirmed: _auth.emailConfirmed,
+      userEmail: _auth.userEmail,
+      hasPassword: _auth.hasPassword,
+      isRealAdmin: admin,
+      anonBlocked:
+          _requireRegistration && _auth.isAnonymous && !_auth.dummySessionActive,
+      anonTimelineBlocked:
+          _auth.isAnonymous && !_auth.dummySessionActive && !admin,
       screenshotEnabled: _screenshotEnabled,
       watermarkEnabled: _watermarkEnabled,
       invisibleEnabled: _invisibleEnabled,
