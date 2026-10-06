@@ -12,7 +12,7 @@ import 'package:video_player/video_player.dart';
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
 import '../../../models/story_model.dart';
-import '../../../providers/auth_provider.dart';
+import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/chat_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../providers/riverpod/storage_provider.dart';
@@ -131,7 +131,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _storyProv = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     // Cache status admin untuk ghost-mode (lihat catatan _isAdminCached).
     try {
-      _isAdminCached = context.read<AuthProvider>().isRealAdmin;
+      _isAdminCached = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isRealAdmin;
     } catch (_) {
       _isAdminCached = false;
     }
@@ -294,7 +294,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   StoryTrayItem get _item => widget.items[_person];
   bool get _own => _item.own;
-  bool get _isAdmin => context.read<AuthProvider>().isRealAdmin;
+  bool get _isAdmin => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isRealAdmin;
   StorySlide? get _current =>
       (_slide >= 0 && _slide < _slides.length) ? _slides[_slide] : null;
 
@@ -1294,7 +1294,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     // Kapitalkan huruf pertama balasan story (gaya WhatsApp).
     final text = capitalizeFirst(_replyCtrl.text.trim());
     if (text.isEmpty || _sendingReply) return;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final myUid = auth.uid;
     final authorId = _item.authorId;
     if (myUid == null || authorId.isEmpty || authorId == myUid) return;

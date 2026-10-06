@@ -15,6 +15,7 @@ import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/points_service.dart';
@@ -23,6 +24,18 @@ import 'package:chatyuk/services/storage_photo_service.dart';
 class MockAuthService extends Mock implements AuthService {}
 class MockStorage extends Mock implements StoragePhotoService {}
 class MockPointsService extends Mock implements PointsService {}
+
+class TestAuth extends AuthNotifier {
+  final UserModel? prof;
+  TestAuth(this.prof, MockAuthService svc) : super(authService: svc);
+  @override
+  AuthData build() =>
+      AuthData(profile: prof, uid: prof?.uid, loading: false);
+  @override
+  UserModel? get profile => prof;
+  @override
+  String? get uid => prof?.uid;
+}
 
 class TestPoints extends PointsNotifier {
   TestPoints(MockPointsService svc) : super(service: svc);
@@ -187,7 +200,10 @@ void main() {
   Future<ViewOnceHostState> pump(WidgetTester tester) async {
     final container = ProviderContainer(
       overrides: [
-        pointsProvider.overrideWith(() => TestPoints(MockPointsService()))
+        pointsProvider.overrideWith(() => TestPoints(MockPointsService())),
+        authProvider.overrideWith(
+          () => TestAuth(profileForTest(), mockSvc),
+        ),
       ],
     );
     addTearDown(container.dispose);

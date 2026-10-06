@@ -16,7 +16,7 @@ import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -89,7 +89,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   String get chatId => widget.room.id;
 
   @override
-  AuthProvider get chatAuth => _auth;
+  AuthNotifier get chatAuth => _auth;
 
   @override
   chatRiverpod.ChatNotifier get chatProvider => _chat;
@@ -274,7 +274,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   final _scrollCtrl = ScrollController();
   bool _showUsers = false;
   bool _sheetOpen = false;
-  late AuthProvider _auth;
+  late AuthNotifier _auth;
   late chatRiverpod.ChatNotifier _chat;
   int _lastMsgCount = 0;
   PointsNotifier? _pointsProv;
@@ -684,7 +684,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     WidgetsBinding.instance.addObserver(this);
     // Ukuran font chat berubah (slider) → rebuild bubble & composer room.
     ChatTextScale.notifier.addListener(_onFontScaleChanged);
-    _auth = context.read<AuthProvider>();
+    _auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     _chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     // DEFER seperti private chat — hindari setState-during-build glitch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -969,7 +969,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   Future<void> _openRoomGiftPanel() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (!auth.canUsePaid) {
       showChatSnack(
         context,
@@ -1521,7 +1521,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _joinRoom() async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     if (auth.profile != null) {
       await chat.joinRoom(widget.room.id, auth.profile!);
@@ -1674,7 +1674,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     String text = '',
     MessageModel? reply,
   }) async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -1760,7 +1760,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
@@ -1886,7 +1886,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       _connOnline = next;
       if (mounted && next) flushOutbox();
     });
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final s = context.watch<LocaleProvider>().s;
     // select (bukan watch penuh): perubahan saldo/poin tidak perlu
     // me-rebuild seluruh layar room — hanya flag enabled yang dipakai.
@@ -2728,7 +2728,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     );
   }
 
-  void _onTapUser(MessageModel msg, AuthProvider auth) {
+  void _onTapUser(MessageModel msg, AuthNotifier auth) {
     if (msg.senderId == auth.uid) return;
     if (_sheetOpen) return;
     if (ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).isBlocked(msg.senderId)) {

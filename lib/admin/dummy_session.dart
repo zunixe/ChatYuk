@@ -203,7 +203,7 @@ class DummySession {
 
   /// Minta token FCM segar lalu ikat ke sesi SEKARANG (sesudah swap).
   /// Best-effort — kegagalan hanya berarti push tertunda sampai
-  /// AuthProvider.updateFcmToken berikutnya.
+  /// AuthNotifier.updateFcmToken berikutnya.
   static Future<void> _bindFreshFcmToken() async {
     try {
       final token = await FirebaseMessaging.instance.getToken();

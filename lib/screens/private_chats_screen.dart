@@ -6,7 +6,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
@@ -96,7 +96,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   /// Buka private chat dari kartu list. Dipanggil AppGestureDetector (lapis
   /// luar) supaya tak bergantung InkWell di dalam Dismissible (tap lambat).
   void _openChat(PrivateChatInfo chat) {
-    final myUid = context.read<AuthProvider>().uid;
+    final myUid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
     final otherUid = chat.participants.firstWhere(
       (p) => p != myUid,
       orElse: () => '',
@@ -360,7 +360,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
         // Hitung ulang memakai data yang sudah ada (tanpa fetch).
         _recomputeDirty = true;
         _recomputeFiltered(
-          myUid: context.read<AuthProvider>().uid ?? '',
+          myUid: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid ?? '',
           query: widget.externalQuery ?? _query,
         );
       },
@@ -453,7 +453,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
     // List chat hidup di IndexedStack → initState hanya sekali, padahal
     // swap akun (dummy ⇄ admin) mengganti auth.uid. Re-bind stream/snapshot
     // saat uid berubah supaya otherUid di-resolve ke akun yang benar.
-    final uid = context.watch<AuthProvider>().uid;
+    final uid = ref.watch(authProvider.select((a) => a.uid));
     if (uid == _boundUid) return;
     _boundUid = uid;
     if (uid != null) {
@@ -634,7 +634,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   Widget build(BuildContext context) {
     PerfProbe.buildCount('ChatList');
     context.watch<ThemeProvider>();
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final s = context.watch<LocaleProvider>().s;
     final blocked =
         ref.watch(chatProvider.select((c) => c.blockedUids));

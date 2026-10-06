@@ -1,23 +1,24 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
-import '../../../providers/auth_provider.dart';
+import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../core/admin_err.dart';
 
 /// Exclude perangkat (install_id): perangkat yang di-exclude tidak dihitung
 /// di ringkasan (users/aktif/anon) & disembunyikan dari tab Perangkat.
 /// Fitur admin-only — dikelola dari Pengaturan Global.
-class ExcludedDevicesTile extends StatelessWidget {
+class ExcludedDevicesTile extends ConsumerWidget {
   const ExcludedDevicesTile({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    final auth = ref.watch(authProvider);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -114,7 +115,7 @@ class _ExcludedDevicesSheetState extends State<ExcludedDevicesSheet> {
   @override
   void initState() {
     super.initState();
-    _ids = List.of(context.read<AuthProvider>().excludedDevices);
+    _ids = List.of(ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).excludedDevices);
   }
 
   @override
@@ -153,7 +154,7 @@ class _ExcludedDevicesSheetState extends State<ExcludedDevicesSheet> {
     if (guardOfflineCtx(context, context.read<LocaleProvider>().s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
     final s = context.read<LocaleProvider>().s;
     setState(() => _saving = true);
-    final ok = await context.read<AuthProvider>().setExcludedDevices(_ids);
+    final ok = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setExcludedDevices(_ids);
     if (!mounted) return;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(

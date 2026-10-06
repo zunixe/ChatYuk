@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../../config/room_categories.dart';
 import '../../../config/theme.dart';
-import '../../../providers/auth_provider.dart';
+import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../providers/riverpod/room_provider.dart';
 import '../../../providers/riverpod/storage_provider.dart';
@@ -35,7 +35,7 @@ Future<void> showCreateExploreRoomDialog(
   String initialCategory,
 ) async {
   final s = context.read<LocaleProvider>().s;
-  final auth = context.read<AuthProvider>();
+  final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
   if (auth.isAnonymous && !auth.dummySessionActive) {
     showAnonPromptDialog(context);
     return;
@@ -269,7 +269,7 @@ Future<void> showCreateExploreRoomDialog(
                             var finalIcon = icon;
                             final bytes = customBytes;
                             if (bytes != null && bytes.isNotEmpty) {
-                              final uid = ctx.read<AuthProvider>().uid;
+                              final uid = ProviderScope.containerOf(ctx, listen: false).read(authProvider.notifier).uid;
                               String? path;
                               if (uid != null && uid.isNotEmpty) {
                                 if (ctx.mounted) {

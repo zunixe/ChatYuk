@@ -6,7 +6,7 @@ import '../providers/riverpod/device_info_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
 import 'register_screen.dart';
@@ -77,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _loading = true);
     try {
-      final auth = context.read<AuthProvider>();
+      final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
       await auth.signInWithEmail(email, password);
 
       if (!mounted) return;
@@ -204,7 +204,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (submittedEmail != null && mounted) {
       try {
-        await context.read<AuthProvider>().sendPasswordResetEmail(
+        await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).sendPasswordResetEmail(
           submittedEmail!,
         );
         if (mounted) {
@@ -237,10 +237,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final s = context.read<LocaleProvider>().s;
     setState(() => _googleLoading = true);
     try {
-      final result = await context.read<AuthProvider>().signInWithGoogle();
+      final result = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signInWithGoogle();
       if (!mounted) return;
       if (result == 'link_prompt') {
-        final auth = context.read<AuthProvider>();
+        final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
         final nickname = auth.pendingLinkNickname ?? s.unknownUser;
         final confirm = await showDialog<bool>(
           context: context,
@@ -261,9 +261,9 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         if (!mounted) return;
         if (confirm == true) {
-          await context.read<AuthProvider>().confirmLinkGoogle();
+          await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).confirmLinkGoogle();
         } else {
-          context.read<AuthProvider>().cancelLinkGoogle();
+          ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).cancelLinkGoogle();
           // Gate profil di _AuthGate yang menampilkan popup isian —
           // tidak perlu push halaman register terpisah.
         }
@@ -291,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final geo = ProviderScope.containerOf(context, listen: false).read(locationProvider).geo;
       final info = await geo.detect();
       if (info != null && info.ipAddress.isNotEmpty && mounted) {
-        final auth = context.read<AuthProvider>();
+        final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
         await auth.updateIpAddress(info.ipAddress);
         // Update country/city jika deteksi valid dan berbeda dari profile
         final profile = auth.profile;

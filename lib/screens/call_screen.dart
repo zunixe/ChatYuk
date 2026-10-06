@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
@@ -83,7 +83,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     super.initState();
     WakelockPlus.enable();
     ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).registerCall(widget.callId);
-    final profile = context.read<AuthProvider>().profile;
+    final profile = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile;
     final s = context.read<LocaleProvider>().s;
     if (widget.session != null) {
       // Session sudah dibuat & di-init oleh CallProvider (mode chat / expand).

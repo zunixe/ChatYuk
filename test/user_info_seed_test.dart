@@ -12,7 +12,10 @@ import 'package:chatyuk/models/user_photo.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/chat_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/points_provider.dart';
+import 'package:chatyuk/providers/riverpod/chat_provider.dart';
+import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/providers/social_provider.dart';
 import 'package:chatyuk/providers/theme_provider.dart';
 import 'package:chatyuk/config/fonts.dart';
@@ -31,6 +34,31 @@ class MockAuthService extends Mock implements AuthService {}
 class MockChatService extends Mock implements ChatService {}
 
 class MockPointsService extends Mock implements PointsService {}
+
+class TestAuth extends AuthNotifier {
+  TestAuth(MockAuthService svc) : super(authService: svc);
+  @override
+  AuthData build() => const AuthData(loading: false);
+  @override
+  String? get uid => null;
+}
+
+class TestChat extends ChatNotifier {
+  TestChat();
+  @override
+  ChatState build() => const ChatState();
+  @override
+  Stream<String> getUserStatus(String _, {String? initialStatus}) =>
+      Stream<String>.value('offline');
+}
+
+class TestSocial extends SocialNotifier {
+  TestSocial();
+  @override
+  SocialState build() => const SocialState();
+  @override
+  Future<Map<String, dynamic>> mySocialStatus(String _, {bool force = false}) async => {};
+}
 
 class TestPoints extends PointsNotifier {
   TestPoints(MockPointsService svc) : super(service: svc);
@@ -117,7 +145,12 @@ void main() {
     );
 
     final container = ProviderContainer(
-      overrides: [pointsProvider.overrideWith(() => TestPoints(pointsSvc))],
+      overrides: [
+        pointsProvider.overrideWith(() => TestPoints(pointsSvc)),
+        authProvider.overrideWith(() => TestAuth(authSvc)),
+        socialProvider.overrideWith(TestSocial.new),
+        chatProvider.overrideWith(TestChat.new),
+      ],
     );
     addTearDown(container.dispose);
     await t.pumpWidget(

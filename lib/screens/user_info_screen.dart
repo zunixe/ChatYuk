@@ -15,7 +15,7 @@ import '../providers/riverpod/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../services/avatar_service.dart';
 import '../widgets/async_photo.dart';
@@ -111,7 +111,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
       _avatarB64 = seedAvatar;
     } else {
       _avatarB64 =
-          context.read<AuthProvider>().cachedAvatarSyncDeep(widget.userId) ?? '';
+          ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).cachedAvatarSyncDeep(widget.userId) ?? '';
     }
     if (_avatarB64.isEmpty && seedIsPath) {
       // Foto ada sebagai path → muat (inisial tampil sampai bytes siap).
@@ -163,7 +163,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
 
   Future<void> _toggleFollow() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final targetRegistered = _profile?.isRegistered ?? false;
     if (auth.isAnonymous || !(auth.profile?.isRegistered ?? false)) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgRegisterToFollow)));
@@ -197,7 +197,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
 
   Future<void> _addFriend() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final targetRegistered = _profile?.isRegistered ?? false;
     if (auth.isAnonymous || !(auth.profile?.isRegistered ?? false)) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgRegisterToFollow)));
@@ -355,7 +355,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
     if (profile == null) return;
     final price = profile.subscriptionPrice;
     if (price <= 0) return;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (!auth.canUsePaid) {
       ScaffoldMessenger.of(
         context,
@@ -432,7 +432,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   /// Video darat di dalam chat (overlay), audio di layar penuh.
   Future<void> _startCall(BuildContext ctx, String callType) async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile = auth.profile;
     final name = _profile?.nickname ?? widget.fallbackName;
     if (ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).inCall) {
@@ -559,7 +559,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   /// Buat/ambil chatId dulu, lalu push PrivateChatScreen.
   Future<void> _startChat() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final profile = _profile;
     final name = profile?.nickname ?? widget.fallbackName;
@@ -652,7 +652,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
     // memvonis gagal (kasus "tadi tidak, sekarang muncul").
     for (var attempt = 0; attempt < 2 && p == null; attempt++) {
       try {
-        p = await context.read<AuthProvider>()
+        p = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier)
             .getOtherProfile(widget.userId)
             .timeout(_loadTimeout);
       } catch (_) {
@@ -691,8 +691,8 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
     for (var attempt = 0; attempt < 2; attempt++) {
       if (!mounted) return;
       try {
-        final b64 = await context
-            .read<AuthProvider>()
+        final b64 = await ProviderScope.containerOf(context, listen: false)
+            .read(authProvider.notifier)
             .getAvatarByPath(path)
             .timeout(_loadTimeout);
         if (!mounted) return;
@@ -768,7 +768,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
 
   Future<void> _loadPhotos() async {
     try {
-      final photos = await context.read<AuthProvider>()
+      final photos = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier)
           .getPhotosWithAccess(widget.userId)
           .timeout(_loadTimeout);
       if (!mounted) return;
@@ -806,12 +806,13 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
     // Tombol sosial (pengikut/mengikuti/subscriber + ikuti/tambah teman)
     // SELALU tampil — viewer anon yang mengetuk diberi snackbar daftar
     // (guard di _toggleFollow/_addFriend). Jangan disembunyikan.
-    // PERF (§26b): dulu `watch<AuthProvider>()` penuh → seluruh halaman
-    // rebuild tiap AuthProvider notify. `select` snapshot field yang dipakai
+    // PERF (§26b): dulu `watch<AuthNotifier>()` penuh → seluruh halaman
+    // rebuild tiap AuthNotifier notify. `select` snapshot field yang dipakai
     // render (value-type) saja.
-    final authSnap = context.select<AuthProvider,
-        ({bool isAnon, bool callAll, String? uid})>(
-      (a) => (isAnon: a.isAnonymous, callAll: a.callAllEnabled, uid: a.uid),
+    final authSnap = ref.watch(
+      authProvider.select(
+        (a) => (isAnon: a.isAnonymous, callAll: a.callAllEnabled, uid: a.uid),
+      ),
     );
     final isAnonViewer = authSnap.isAnon;
 

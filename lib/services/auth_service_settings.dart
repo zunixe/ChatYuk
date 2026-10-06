@@ -330,7 +330,7 @@ mixin AuthServiceSettingsMx on AuthBase {
     }, onConflict: 'id');
   }
 
-  /// Stream perubahan setting app_settings (realtime) — dipakai AuthProvider
+  /// Stream perubahan setting app_settings (realtime) — dipakai AuthNotifier
   /// supaya toggle admin langsung berdampak di semua device tanpa polling.
   Stream<Map<String, dynamic>> onAppSettingsUpdated() {
     final channel = _sb.channel('auth-app-settings');

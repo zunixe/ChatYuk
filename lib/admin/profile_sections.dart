@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../core/admin_gate.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../config/strings_admin.dart';
 
@@ -19,7 +20,7 @@ List<Widget> adminSettingsHeader(BuildContext context) {
   if (!AdminGate.enabled) return const [];
   // Hanya admin sungguhan (zunixe) yang melihat UI admin. Login anon/user
   // biasa di build admin = tampilan user normal.
-  final auth = context.read<AuthProvider>();
+  final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
   final isDummy = auth.dummySessionActive;
   if (isDummy || !auth.isRealAdmin) return const [];
   return const [_AdminPanelTile()];
@@ -29,7 +30,7 @@ List<Widget> adminSettingsTail(BuildContext context) {
   // Semua toggle admin (screenshot, watermark, invisible, call-all,
   // registrasi wajib) dipindah ke tab "Pengaturan Global" di admin panel.
   if (!AdminGate.enabled) return const [];
-  final auth = context.read<AuthProvider>();
+  final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
   final isDummy = auth.dummySessionActive;
   if (isDummy || !auth.isRealAdmin) return const [];
   return const [];
@@ -205,7 +206,7 @@ Future<void> backToAdminFlow(BuildContext context) async {
   );
   if (confirmed != true) return;
   if (!context.mounted) return;
-  final ok = await context.read<AuthProvider>().backToAdmin();
+  final ok = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).backToAdmin();
   if (!context.mounted) return;
   ScaffoldMessenger.of(context)
     ..clearSnackBars()

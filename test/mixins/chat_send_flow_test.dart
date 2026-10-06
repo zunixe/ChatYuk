@@ -14,6 +14,7 @@ import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/utils.dart' show capitalizeFirst;
@@ -32,6 +33,19 @@ class TestPoints extends PointsNotifier {
   Future<int> deductBeforeSend(String _) async => deductResult;
   @override
   Future<void> refundChatPoint(String _) async {}
+}
+
+class TestAuth extends AuthNotifier {
+  final UserModel? prof;
+  TestAuth(this.prof, MockAuthService svc) : super(authService: svc);
+  @override
+  AuthData build() =>
+      AuthData(profile: prof, uid: prof?.uid, loading: false);
+  // Getter notifier membaca field/service (bukan state) — override juga.
+  @override
+  UserModel? get profile => prof;
+  @override
+  String? get uid => prof?.uid;
 }
 
 class SendHost extends StatefulWidget {
@@ -304,7 +318,12 @@ void main() {
       if (withProfile) auth.seedProfileForTest(profileForTest());
       addTearDown(auth.dispose);
       final container = ProviderContainer(
-        overrides: [pointsProvider.overrideWith(TestPoints.new)],
+        overrides: [
+          pointsProvider.overrideWith(TestPoints.new),
+          authProvider.overrideWith(
+            () => TestAuth(withProfile ? profileForTest() : null, mockSvc),
+          ),
+        ],
       );
       addTearDown(container.dispose);
       await tester.pumpWidget(

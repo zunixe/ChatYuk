@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
-import '../../../providers/auth_provider.dart';
+import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../widgets/toggle_tile.dart';
 
 /// Kartu pembungkus standar untuk baris pengaturan admin.
-class SettingCard extends StatelessWidget {
+class SettingCard extends ConsumerWidget {
   final Widget child;
   const SettingCard({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
@@ -34,11 +35,11 @@ class SettingCard extends StatelessWidget {
   }
 }
 
-class InfoCard extends StatelessWidget {
+class InfoCard extends ConsumerWidget {
   const InfoCard({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.read<LocaleProvider>().s;
     return Container(
       padding: const EdgeInsets.all(14),
@@ -66,85 +67,85 @@ class InfoCard extends StatelessWidget {
   }
 }
 
-class ScreenshotToggle extends StatelessWidget {
+class ScreenshotToggle extends ConsumerWidget {
   const ScreenshotToggle({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    final auth = ref.watch(authProvider);
     return ToggleTile(
       icon: Icons.screenshot_monitor,
       color: AppTheme.online,
       title: s.labelScreenshotAllow,
       desc: s.descScreenshotAdmin,
       value: auth.screenshotEnabled,
-      onChanged: (v) => context.read<AuthProvider>().setScreenshotEnabled(v),
+      onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setScreenshotEnabled(v),
     );
   }
 }
 
-class WatermarkToggle extends StatelessWidget {
+class WatermarkToggle extends ConsumerWidget {
   const WatermarkToggle({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    final auth = ref.watch(authProvider);
     return ToggleTile(
       icon: Icons.fingerprint,
       color: AppTheme.primary,
       title: s.labelWatermarkAdmin,
       desc: s.descWatermarkAdmin,
       value: auth.watermarkEnabled,
-      onChanged: (v) => context.read<AuthProvider>().setWatermarkEnabled(v),
+      onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setWatermarkEnabled(v),
     );
   }
 }
 
-class InvisibleToggle extends StatelessWidget {
+class InvisibleToggle extends ConsumerWidget {
   const InvisibleToggle({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    final auth = ref.watch(authProvider);
     return ToggleTile(
       icon: Icons.visibility_off_outlined,
       color: AppTheme.accent,
       title: s.labelInvisibleAdmin,
       desc: s.descInvisibleAdmin,
       value: auth.invisibleEnabled,
-      onChanged: (v) => context.read<AuthProvider>().setInvisibleEnabled(v),
+      onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setInvisibleEnabled(v),
     );
   }
 }
 
-class CallToggle extends StatelessWidget {
+class CallToggle extends ConsumerWidget {
   const CallToggle({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    final auth = ref.watch(authProvider);
     return ToggleTile(
       icon: Icons.phone_in_talk_rounded,
       color: Colors.green,
       title: s.adminCallTitle,
       desc: s.adminCallDesc,
       value: auth.callAllEnabled && auth.callAnonEnabled,
-      onChanged: (v) => context.read<AuthProvider>().setCallEnabled(v),
+      onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setCallEnabled(v),
     );
   }
 }
 
-class RequireRegistrationToggle extends StatelessWidget {
+class RequireRegistrationToggle extends ConsumerWidget {
   const RequireRegistrationToggle({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    final auth = ref.watch(authProvider);
     return ToggleTile(
       icon: Icons.how_to_reg_outlined,
       color: Colors.deepPurple,
@@ -152,7 +153,7 @@ class RequireRegistrationToggle extends StatelessWidget {
       desc: s.descRequireRegistration,
       value: auth.requireRegistration,
       onChanged: (v) =>
-          context.read<AuthProvider>().setRequireRegistration(v),
+          ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setRequireRegistration(v),
     );
   }
 }
@@ -160,20 +161,20 @@ class RequireRegistrationToggle extends StatelessWidget {
 /// Toggle notifikasi pengingat harian (re-engagement): push ke user yang
 /// offline 1-8 hari, tiap 19:00 WIB, berhenti setelah 7 hari. Server-side
 /// (pg_cron + FCM); toggle ini hanya menulis app_settings.reengage_enabled.
-class ReengageToggle extends StatelessWidget {
+class ReengageToggle extends ConsumerWidget {
   const ReengageToggle({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    final auth = ref.watch(authProvider);
     return ToggleTile(
       icon: Icons.notifications_active_outlined,
       color: Colors.deepOrange,
       title: s.labelReengageNotif,
       desc: s.descReengageNotif,
       value: auth.reengageEnabled,
-      onChanged: (v) => context.read<AuthProvider>().setReengageEnabled(v),
+      onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setReengageEnabled(v),
     );
   }
 }
@@ -181,11 +182,11 @@ class ReengageToggle extends StatelessWidget {
 /// Hapus data admin yang tersimpan di perangkat (cache offline).
 /// Data admin memuat PII user (email/IP/device) — berguna bila HP bergantian
 /// dipakai. Cache ini juga yang membuat panel tetap tampil saat offline.
-class ClearAdminCacheTile extends StatelessWidget {
+class ClearAdminCacheTile extends ConsumerWidget {
   const ClearAdminCacheTile({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.read<LocaleProvider>().s;
     return SettingCard(
       child: ListTile(

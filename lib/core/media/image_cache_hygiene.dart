@@ -7,7 +7,7 @@ import 'package:flutter/painting.dart';
 ///  - Flutter `ImageCache` (bitmap hasil decode)
 ///  - cache aplikasi yang mendaftar lewat [registerAppCache]
 ///
-/// Dipanggil dari `AuthProvider.signOut()` dan setelah login Google
+/// Dipanggil dari `AuthNotifier.signOut()` dan setelah login Google
 /// (pola yang sama dengan `MessageCache.clearAllLegacy`).
 class ImageCacheHygiene {
   ImageCacheHygiene._();

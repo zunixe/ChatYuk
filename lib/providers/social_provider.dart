@@ -107,7 +107,7 @@ class SocialProvider extends ChangeNotifier {
 
   /// Realtime: setiap perubahan follows/friend_requests yang melibatkan uid
   /// sendiri → refresh set (following/friends) + counter di profil ikut
-  /// ter-update lewat AuthProvider.onMyProfileUpdates (profiles realtime).
+  /// ter-update lewat AuthNotifier.onMyProfileUpdates (profiles realtime).
   void _listenRealtime() {
     _rtSub?.cancel();
     final uid = _service.uid;
