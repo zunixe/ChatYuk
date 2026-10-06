@@ -165,6 +165,9 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     String callType,
     bool isId,
   ) async {
+    // Sistem koin OFF (toggle admin) atau billing belum publish → gratis,
+    // jangan blokir call dengan dialog koin.
+    if (!_enabled || !callBillingPublished) return true;
     await refreshWallet();
     final need = callCostPerMin(callType);
     if (_points >= need) return true;

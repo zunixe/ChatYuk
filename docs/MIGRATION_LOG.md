@@ -1,4 +1,23 @@
 ﻿
+## 2026-10-06 — call_billing_tick hormati master toggle koin (SUDAH APPLY via Management API)
+
+- **Masalah:** banner `X coin/menit` + dialog "koin kurang" tetap muncul saat
+  call walau admin mematikan master toggle koin (`points_enabled=false`).
+  Client cuma cek flag publish `call_billing`, dan server `call_billing_tick`
+  juga cuma cek flag publish → tick tetap memotong saldo diam-diam.
+- **Client (5 file):** `ensureEnoughForCall` return true saat koin OFF;
+  gate call jadi `pp.enabled && pp.callBillingPublished` + `setBillingPerMinute`
+  0 saat OFF (`private_chat`, `user_info`, `call_history _redial` yang selama
+  ini tanpa gate); banner `CallScreen` sembunyi saat `PointsProvider.enabled`
+  false. Overlay video dalam chat & sisi penerima memang tak ada UI koin.
+- **Migrasi** `20261006200000_call_billing_master_toggle.sql`: rewrite
+  `call_billing_tick` (basis `20261005140000`) + guard `points_enabled` PALING
+  ATAS → return gratis (`can_continue=true`, `per_minute=0`). Bukan FROZEN.
+- **STATUS: SUDAH APPLY** via Management API. Verifikasi: `prosrc` memuat
+  guard (pos 508); pgTAP `call_billing_toggle_test.sql` 3/3 + `call_test.sql`
+  20/20 hijau. `check_migrations.sh` bersih untuk file ini (2 FAIL
+  pre-existing `story_slides` tak terkait).
+
 ## 2026-10-06 — get_online_users: optimasi perf (SUDAH APPLY via Management API)
 
 - **Minta user:** fix lag RPC `get_online_users` (~1.46s terukur di HP).
