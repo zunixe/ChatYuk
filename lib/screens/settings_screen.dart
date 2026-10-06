@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
@@ -8,7 +9,7 @@ import '../core/cache/photo_cache.dart';
 import '../core/cache/post_photo_cache.dart';
 import '../core/media/image_cache_hygiene.dart';
 import '../core/photo_quality_pref.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import 'account_screen.dart';
@@ -20,22 +21,22 @@ import 'settings/widgets/settings_menu_tile.dart';
 /// Pengaturan (ala WhatsApp): Akun, Privasi, Notifikasi, Tampilan, Bantuan.
 /// Isi dipindah dari Profil supaya Profil tinggal etalase (identitas,
 /// galeri, sosial, poin) — perilaku tiap baris tidak berubah.
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    // PERF (§26b): dulu `watch<AuthProvider>()` penuh → SELURUH halaman
-    // Settings rebuild tiap AuthProvider notify (avatar/location/heartbeat).
-    // `select` snapshot field yang dirender (value-type) saja.
-    final authSnap = context.select<AuthProvider,
-        ({bool isAnon, bool dummyActive, bool isRealAdmin, bool notif})>(
-      (a) => (
-        isAnon: a.isAnonymous,
-        dummyActive: a.dummySessionActive,
-        isRealAdmin: a.isRealAdmin,
-        notif: a.notificationsEnabled,
+    // PERF (§26b): dulu `watch` penuh → SELURUH halaman
+    // Settings rebuild tiap notify (avatar/location/heartbeat).
+    final authSnap = ref.watch(
+      authProvider.select(
+        (a) => (
+          isAnon: a.isAnonymous,
+          dummyActive: a.dummySessionActive,
+          isRealAdmin: a.isRealAdmin,
+          notif: a.notificationsEnabled,
+        ),
       ),
     );
     final locale = context.watch<LocaleProvider>();
@@ -82,8 +83,8 @@ class SettingsScreen extends StatelessWidget {
                   desc: s.notifEnabledDesc,
                   trailing: Switch(
                     value: authSnap.notif,
-                    onChanged: (v) => context
-                        .read<AuthProvider>()
+                    onChanged: (v) => ProviderScope.containerOf(context, listen: false)
+                        .read(authProvider.notifier)
                         .setNotificationsEnabled(v),
                     activeThumbColor: AppTheme.primary,
                   ),

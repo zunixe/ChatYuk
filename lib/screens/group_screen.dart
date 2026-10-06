@@ -6,7 +6,7 @@ import '../core/admin_gate.dart';
 import '../core/nav_guard.dart';
 import '../core/perf/perf_probe.dart';
 import '../models/room_model.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/room_provider.dart';
@@ -192,7 +192,7 @@ const _roomIconChoices = [
 Future<void> showCreateGroupDialog(BuildContext context) async {
   final s = context.read<LocaleProvider>().s;
   final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
-  final auth = context.read<AuthProvider>();
+  final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
   // Admin privilege hanya ada di build admin (flavor-gate) —
   // bukan lagi cek email runtime.
   final isAdmin = AdminGate.enabled;
@@ -535,7 +535,7 @@ class _GroupCard extends ConsumerWidget {
 
   Future<void> _enter(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final rooms = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final isMember =
@@ -777,7 +777,7 @@ class _GroupCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     // PERF: dulu `watch<RoomProvider>()` penuh di SETIAP kartu → semua kartu
     // rebuild tiap provider notify (counts/presence/membership sering).
     // Kartu hanya butuh SATU boolean: apakah aku anggota grup ini.

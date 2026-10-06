@@ -8,7 +8,7 @@ import '../config/theme.dart';
 import '../core/call/call_history_entry.dart';
 import '../core/call/call_permissions.dart';
 import '../core/nav_guard.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
@@ -47,7 +47,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   }
 
   Future<void> _load() async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final call = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
     final me = auth.uid;
     if (me == null || me.isEmpty) {
@@ -103,7 +103,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
 
   /// Buka chat dengan lawan bicara baris ini.
   Future<void> _openChat(CallHistoryEntry e) async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final profile = auth.profile;
     final me = auth.uid;
@@ -142,7 +142,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   /// kamera/mikrofon, sama persis dengan alur panggil dari layar chat.
   Future<void> _redial(CallHistoryEntry e) async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile = auth.profile;
     final call = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
     if (call.inCall) {

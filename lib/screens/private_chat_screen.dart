@@ -9,7 +9,7 @@ import '../providers/riverpod/message_reaction_provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/message_model.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
@@ -216,7 +216,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   String get chatId => widget.chatId;
 
   @override
-  AuthProvider get chatAuth => context.read<AuthProvider>();
+  AuthNotifier get chatAuth => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
 
   @override
   chatRiverpod.ChatNotifier get chatProvider => ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
@@ -370,7 +370,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     String text = '',
     MessageModel? reply,
   }) async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -607,9 +607,9 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   }) async {
     await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
-      senderId: context.read<AuthProvider>().uid!,
-      senderName: context.read<AuthProvider>().profile!.nickname,
-      senderGender: context.read<AuthProvider>().profile!.gender,
+      senderId: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid!,
+      senderName: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile!.nickname,
+      senderGender: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile!.gender,
       text: text,
       repliedToId: reply?.id,
       repliedToText: reply?.text,
@@ -839,7 +839,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     // Privasi view_once tetap terjaga via enterViewOnce/exitViewOnce.
 
     final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
 
     // Prime sinkron supaya akun terhapus langsung tampil banner di frame
     // pertama — tanpa kedip composer "Ketik pesan..." dulu menunggu stream.
@@ -1098,7 +1098,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
             _subscribeTyping();
           }
           final otherId = widget.otherUid;
-          context.read<AuthProvider>().getOtherProfile(otherId).then((p) {
+          ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).getOtherProfile(otherId).then((p) {
             if (!mounted || p == null) return;
             _otherCity = p.city.trim();
             _otherCountry = p.country.trim();
@@ -1124,7 +1124,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   /// bootstrap). Tidak ada await → centang-2 tampil instan sejak buka chat.
   void _primeReadFromCache() {
     try {
-      final myUid = context.read<AuthProvider>().uid;
+      final myUid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
       if (myUid == null) return;
       final candidates = <DateTime?>[];
       // 1) Snapshot live — paling fresh di sesi ini.
@@ -1267,7 +1267,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
         sess.remoteUid == widget.otherUid &&
         sess.phase == CallPhase.ended &&
         _prevCallPhase != CallPhase.ended) {
-      final auth = context.read<AuthProvider>();
+      final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
       final uid = auth.uid;
       final profile = auth.profile;
       if (uid != null && profile != null) {
@@ -1610,7 +1610,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     final f = File(path);
     final bytes = await f.readAsBytes();
     final chatId = widget.chatId;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid; final profile = auth.profile;
     if (uid == null || profile == null) return;
     // Offline: bubble tetap tampil (centang-1) + antre, terkirim otomatis
@@ -1724,7 +1724,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   Future<void> _showSendCoinDialog() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
 
     if (!auth.canUsePaid) {
@@ -1800,7 +1800,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   Future<void> _showGiftPicker() async {
     final s = context.read<LocaleProvider>().s;
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
 
     if (!auth.canUsePaid) {
       showChatSnack(
@@ -1900,16 +1900,15 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
         _onCallChanged();
       }
     });
-    // select per field (bukan watch penuh): heartbeat presence AuthProvider
+    // select per field (bukan watch penuh): heartbeat presence AuthNotifier
     // berubah tiap beberapa detik — watch membuat SELURUH layar chat
     // rebuild tiap kali. Field yang dipakai render tercantum di bawah.
-    final callAllEnabled = context.select<AuthProvider, bool>(
-      (a) => a.callAllEnabled,
+    final callAllEnabled =
+        ref.watch(authProvider.select((a) => a.callAllEnabled));
+    final meRegistered = ref.watch(
+      authProvider.select((a) => a.profile?.isRegistered ?? false),
     );
-    final meRegistered = context.select<AuthProvider, bool>(
-      (a) => a.profile?.isRegistered ?? false,
-    );
-    final myUid = context.select<AuthProvider, String?>((a) => a.uid);
+    final myUid = ref.watch(authProvider.select((a) => a.uid));
     final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     // select: rebuild hanya saat isBlocked untuk UID lawan bicara berubah
     final isBlocked = ref.watch(
@@ -2882,7 +2881,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       return;
     }
     final messenger = ScaffoldMessenger.of(ctx);
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile = auth.profile;
     // Gate anon & dummy: hanya boleh call bila toggle admin
     // app_settings.call_anon_enabled ON (server RLS juga menegakkan).

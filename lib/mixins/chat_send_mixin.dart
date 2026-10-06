@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../models/message_model.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
@@ -118,8 +118,9 @@ mixin ChatSendMixin<T extends StatefulWidget>
     if (text.isEmpty && !hasPhoto && !hasVideo && !hasLocation) return;
     if (sendIsSending) return;
 
+
     // Soft gate anon: fitur anon OFF → tawarkan daftar, jangan kirim.
-    if (context.read<AuthProvider>().anonBlocked) {
+    if (ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).anonBlocked) {
       if (!mounted) return;
       final ls = context.read<LocaleProvider>().s;
       showAnonPromptDialog(
@@ -134,6 +135,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
     // Cek kekhasan layar (blokir / role private-room).
     if (!await sendPreCheck()) return;
     if (!mounted) return;
+
 
     // Mode edit: kirim langsung mengubah pesan lama (bukan pesan baru).
     // Pakai versi ROOM (lebih aman): guard `_isSending` (anti double-tap) +
@@ -159,7 +161,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
       return;
     }
 
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;

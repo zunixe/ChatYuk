@@ -133,7 +133,7 @@ class AppFonts {
   }
 
   /// Terapkan font (set static + persist). Tidak notify; pemanggil
-  /// (ThemeProvider/AuthProvider) yang bertanggung jawab notifyListeners.
+  /// (ThemeProvider/AuthNotifier) yang bertanggung jawab notifyListeners.
   static Future<void> set(String key) async {
     current = resolve(key);
     final prefs = await SharedPreferences.getInstance();

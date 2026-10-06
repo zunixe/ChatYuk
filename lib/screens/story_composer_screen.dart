@@ -11,7 +11,7 @@ import 'dart:ui' as ui;
 
 import '../config/strings.dart';
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/story_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
@@ -224,7 +224,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   Future<void> _publishVideo() async {
     if (_publishing) return;
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     final ctrl = _videoCtrl;
     if (uid == null || ctrl == null || !ctrl.value.isInitialized) return;
@@ -453,7 +453,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     );
     // Anon dipaksa public (server juga menegakkan) — set sejak awal
     // supaya UI langsung benar dan nilai terkirim pasti 'everyone'.
-    if (context.read<AuthProvider>().isAnonymous) {
+    if (ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isAnonymous) {
       _visibility = 'everyone';
     }
     _textCtrl.addListener(() {
@@ -551,7 +551,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   Future<void> _publish() async {
     if (_publishing) return;
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     if (uid == null || _bytes == null) return;
     setState(() => _publishing = true);
@@ -1330,7 +1330,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   }
 
   Widget _visibilitySelector(S s) {
-    final isAnon = context.read<AuthProvider>().isAnonymous;
+    final isAnon = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isAnonymous;
     // Anon: HANYA public — dikunci server (dipaksa 'everyone').
     if (isAnon) {
       return Container(

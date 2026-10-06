@@ -7,7 +7,7 @@ import '../providers/riverpod/device_info_provider.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../utils.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../main.dart';
 import 'login_screen.dart';
@@ -107,13 +107,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
     // Nickname terlarang langsung ditolak tanpa RPC (kecuali admin).
     if (isBannedNickname(val) &&
-        !context.read<AuthProvider>().isRealAdmin) {
+        !ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isRealAdmin) {
       final s = context.read<LocaleProvider>().s;
       setState(() => _nicknameError = s.errNicknameBanned);
       return;
     }
     _nicknameDebounce = Timer(const Duration(milliseconds: 600), () async {
-      final available = await context.read<AuthProvider>().isNicknameAvailable(
+      final available = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isNicknameAvailable(
         val,
       );
       if (mounted) {
@@ -175,7 +175,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
     if (isBannedNickname(nickname) &&
-        !context.read<AuthProvider>().isRealAdmin) {
+        !ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isRealAdmin) {
       if (profileOnly) {
         _popupError(s.errNicknameBanned);
       } else {
@@ -192,7 +192,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() {
       _nicknameError = null;
     });
-    final available = await context.read<AuthProvider>().isNicknameAvailable(
+    final available = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isNicknameAvailable(
       nickname,
     );
     if (!available) {
@@ -205,7 +205,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       if (profileOnly) {
         // E2: Mode profile only — user sudah login, langsung registerProfile
-        await context.read<AuthProvider>().registerProfile(
+        await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).registerProfile(
           nickname: nickname,
           gender: _gender,
           age: _age,
@@ -220,7 +220,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       // Mode full: sign up → (bila perlu) verifikasi OTP → registerProfile
-      final autoLogin = await context.read<AuthProvider>().signUpWithEmail(
+      final autoLogin = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signUpWithEmail(
         email: email,
         password: password,
         nickname: nickname,
@@ -258,7 +258,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         // "sudah terdaftar" tanpa jalan masuk kode → pengguna buntu
         // (dianggap "kode tidak valid").
         try {
-          await context.read<AuthProvider>().resendVerificationEmail(email);
+          await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).resendVerificationEmail(email);
           if (mounted) _snack(s.msgEmailAlreadyRegisteredResend);
           if (!mounted) return;
           final verified = await _showOtpDialog(
@@ -286,8 +286,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           // Session hilang saat mode profileOnly — coba login anon lalu ulangi
           if (profileOnly) {
             try {
-              await context.read<AuthProvider>().signInAnonymously();
-              await context.read<AuthProvider>().registerProfile(
+              await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signInAnonymously();
+              await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).registerProfile(
                 nickname: nickname,
                 gender: _gender,
                 age: _age,
@@ -397,7 +397,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       : () async {
                           setInner(() => resendCooldown = true);
                           try {
-                            await context.read<AuthProvider>().resendEmailOtp(
+                            await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).resendEmailOtp(
                               email,
                             );
                             if (ctx.mounted) {
@@ -425,8 +425,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ).showSnackBar(SnackBar(content: Text(s.errInvalidCode)));
                       return;
                     }
-                    final ok = await context
-                        .read<AuthProvider>()
+                    final ok = await ProviderScope.containerOf(context, listen: false)
+                        .read(authProvider.notifier)
                         .verifyEmailAndRegister(
                           email: email,
                           token: code,
@@ -444,7 +444,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       // dipakai / salah) — dulu selalu "kode tidak valid" generik
                       // sehingga pengguna tak tahu harus kirim ulang kode.
                       final raw =
-                          context.read<AuthProvider>().lastOtpError ?? '';
+                          ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).lastOtpError ?? '';
                       final lower = raw.toLowerCase();
                       final msg = lower.contains('expired') ||
                               lower.contains('expir')

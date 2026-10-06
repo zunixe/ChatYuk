@@ -20,7 +20,7 @@ import 'firebase_options.dart';
 import 'core/admin_gate.dart';
 import 'app.dart';
 import 'models/room_model.dart';
-import 'providers/auth_provider.dart';
+import 'providers/riverpod/auth_provider.dart';
 import 'providers/riverpod/call_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
@@ -1419,16 +1419,15 @@ void _handleDeepLink(Uri uri) {
   if (uri.host == 'referral') {
     final referrer = uri.queryParameters['u'];
     if (referrer != null && referrer.isNotEmpty) {
-      // Update AuthProvider in-memory supaya referral juga ter-ikat saat
-      // app sudah berjalan (bukan cuma cold start). Kalau AuthProvider
+      // Update AuthNotifier in-memory supaya referral juga ter-ikat saat
+      // app sudah berjalan (bukan cuma cold start). Kalau AuthNotifier
       // belum tersedia (loading), fallback ke prefs (dibaca saat konstruktor).
       try {
         final ctx = navigatorKey.currentContext;
         if (ctx != null) {
-          Provider.of<AuthProvider>(
-            ctx,
-            listen: false,
-          ).setPendingReferrer(referrer);
+          ProviderScope.containerOf(ctx, listen: false)
+              .read(authProvider.notifier)
+              .setPendingReferrer(referrer);
         } else {
           SharedPreferences.getInstance().then(
             (p) => p.setString('pending_referrer_uid', referrer),

@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/mixins/chat_selection_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
-import 'package:chatyuk/providers/auth_provider.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/chat_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
@@ -17,12 +19,12 @@ import '../supabase_test_client.dart';
 
 class MockAuthService extends Mock implements AuthService {}
 
-class MockAuthProvider extends Mock implements AuthProvider {}
+class MockAuthService2 extends Mock implements AuthService {}
 
 /// Harness minimal untuk `ChatSelectionMixin` — kontraknya mandiri (tidak
 /// bergantung mixin lain), jadi cukup host kecil.
 class SelHost extends StatefulWidget {
-  final AuthProvider auth;
+  final AuthNotifier auth;
   final ChatNotifier chat;
   final bool showAppBar;
   const SelHost({
@@ -41,7 +43,7 @@ class SelHostState extends State<SelHost> with ChatSelectionMixin<SelHost> {
   @override
   String get chatId => 'chat_1';
   @override
-  AuthProvider get chatAuth => widget.auth;
+  AuthNotifier get chatAuth => widget.auth;
   @override
   ChatNotifier get chatProvider => widget.chat;
   final TextEditingController msgCtrl = TextEditingController();
@@ -117,16 +119,22 @@ MessageModel msg({
 
 Future<SelHostState> pumpSel(WidgetTester tester,
     {bool showAppBar = false}) async {
-  final auth = AuthProvider(autoInit: false);
+  final auth = AuthNotifier(autoInit: false);
   final chat = ChatNotifier();
+  final container = ProviderContainer(
+    overrides: [authProvider.overrideWith(() => auth)],
+  );
+  addTearDown(container.dispose);
   await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
-        ChangeNotifierProvider<AuthProvider>.value(value: auth),
-      ],
-      child: MaterialApp(
-          home: SelHost(auth: auth, chat: chat, showAppBar: showAppBar)),
+    UncontrolledProviderScope(
+      container: container,
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
+        ],
+        child: MaterialApp(
+            home: SelHost(auth: auth, chat: chat, showAppBar: showAppBar)),
+      ),
     ),
   );
   return tester.state<SelHostState>(find.byType(SelHost));
@@ -306,15 +314,15 @@ void main() {
         (tester) async {
       // Auth di-mock (uid tanpa Supabase) supaya test ini tidak butuh
       // initSupabaseForTest (yang meninggalkan timer periodik).
-      final mockAuth = MockAuthProvider();
-      when(() => mockAuth.uid).thenReturn('u-me');
+      final mockSvc2 = MockAuthService2();
+      when(() => mockSvc2.uid).thenReturn('u-me');
+      final mockAuth = AuthNotifier(authService: mockSvc2, autoInit: false);
       final chat = ChatNotifier();
       await tester.pumpWidget(
         MultiProvider(
           providers: [
             ChangeNotifierProvider<LocaleProvider>(
                 create: (_) => LocaleProvider()),
-            ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
           ],
           child: MaterialApp(
               home: SelHost(auth: mockAuth, chat: chat, showAppBar: true)),
@@ -420,21 +428,27 @@ void main() {
     }) async {
       final mockSvc = MockAuthService();
       when(() => mockSvc.uid).thenReturn(uid);
-      final auth = AuthProvider(authService: mockSvc, autoInit: false);
+      final auth = AuthNotifier(authService: mockSvc, autoInit: false);
       final chat = ChatNotifier();
       SelHostState.deleteResults.clear();
       SelHostState.undeleteResults.clear();
       SharedPreferences.setMockInitialValues({});
       final lp = LocaleProvider();
       await lp.setLang(lang);
+      final container = ProviderContainer(
+        overrides: [authProvider.overrideWith(() => auth)],
+      );
+      addTearDown(container.dispose);
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<LocaleProvider>.value(value: lp),
-            ChangeNotifierProvider<AuthProvider>.value(value: auth),
-          ],
-          child: MaterialApp(
-            home: Scaffold(body: SelHost(auth: auth, chat: chat)),
+        UncontrolledProviderScope(
+          container: container,
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<LocaleProvider>.value(value: lp),
+            ],
+            child: MaterialApp(
+              home: Scaffold(body: SelHost(auth: auth, chat: chat)),
+            ),
           ),
         ),
       );
@@ -514,19 +528,25 @@ void main() {
     Future<SelHostState> pumpUid(WidgetTester tester, String uid) async {
       final mockSvc = MockAuthService();
       when(() => mockSvc.uid).thenReturn(uid);
-      final auth = AuthProvider(authService: mockSvc, autoInit: false);
+      final auth = AuthNotifier(authService: mockSvc, autoInit: false);
       final chat = ChatNotifier();
       SelHostState.deleteResults.clear();
       SelHostState.undeleteResults.clear();
+      final container = ProviderContainer(
+        overrides: [authProvider.overrideWith(() => auth)],
+      );
+      addTearDown(container.dispose);
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<AuthProvider>.value(value: auth),
-            ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider(),
-            ),
-          ],
-          child: MaterialApp(home: Scaffold(body: SelHost(auth: auth, chat: chat))),
+        UncontrolledProviderScope(
+          container: container,
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<LocaleProvider>(
+                create: (_) => LocaleProvider(),
+              ),
+            ],
+            child: MaterialApp(home: Scaffold(body: SelHost(auth: auth, chat: chat))),
+          ),
         ),
       );
       return tester.state<SelHostState>(find.byType(SelHost));

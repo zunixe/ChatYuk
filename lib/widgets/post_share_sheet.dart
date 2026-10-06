@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/user_model.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../utils.dart';
@@ -97,7 +97,7 @@ class _PostShareSheetState extends State<_PostShareSheet> {
     super.initState();
     // Snapshot sekali — daftar tidak ikut rebuild tiap update presence
     // supaya kolom search tidak kehilangan fokus.
-    final myUid = context.read<AuthProvider>().uid ?? '';
+    final myUid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid ?? '';
     final all = ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).users;
     _users = [
       for (final u in all)

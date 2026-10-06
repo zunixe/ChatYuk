@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart'
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/providers/auth_provider.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/social_provider.dart';
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
@@ -34,6 +35,14 @@ class MockTimelineService extends Mock implements TimelineService {}
 class MockAuthService extends Mock implements AuthService {}
 
 class MockSocialService extends Mock implements SocialService {}
+
+class TestAuth extends AuthNotifier {
+  TestAuth(MockAuthService svc) : super(authService: svc);
+  @override
+  AuthData build() => const AuthData(uid: 'me', loading: false);
+  @override
+  String? get uid => 'me';
+}
 
 class TestSocial extends SocialNotifier {
   final SocialState preset;
@@ -131,6 +140,7 @@ void main() {
         timelineProvider.overrideWith(
           () => TimelineNotifier(service: timeline, autoInit: false),
         ),
+        authProvider.overrideWith(() => TestAuth(auth)),
       ],
     );
     addTearDown(() {

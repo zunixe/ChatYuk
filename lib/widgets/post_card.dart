@@ -13,7 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/user_model.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/social_provider.dart';
@@ -41,7 +41,7 @@ Future<bool> sendShareToUser(
   UserModel user,
   String content,
 ) async {
-  final auth = context.read<AuthProvider>();
+  final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
   final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
   final myUid = auth.uid ?? '';
   if (myUid.isEmpty || user.uid.isEmpty) return false;
@@ -393,7 +393,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   Future<void> _submitComment(String text, {int? parentId}) async {
     final s = context.read<LocaleProvider>().s;
     final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     // Id unik per kiriman — dua komentar cepat tidak tabrakan saat
     // replace/rollback (dulu konstanta -1 untuk semua).
     final optimisticId = -DateTime.now().microsecondsSinceEpoch;
@@ -597,7 +597,7 @@ class _PostCardState extends ConsumerState<PostCard> {
     if (_followBusy) return;
     final authorId = _p['authorId'] as String? ?? '';
     if (authorId.isEmpty) return;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (auth.isAnonymous || !(auth.profile?.isRegistered ?? false)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -627,7 +627,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   Widget build(BuildContext context) {
     PerfProbe.buildCount('PostCard');
     final s = context.watch<LocaleProvider>().s;
-    final uid = context.select<AuthProvider, String?>((a) => a.uid);
+    final uid = ref.watch(authProvider.select((a) => a.uid));
     final authorId = _p['authorId'] as String? ?? '';
     final isAuthor = authorId.isNotEmpty && authorId == uid;
     final name = _p['authorName'] as String? ?? 'Anon';
@@ -1646,7 +1646,7 @@ class _CommentsListState extends State<_CommentsList> {
   @override
   Widget build(BuildContext context) {
     final items = _items ?? [];
-    final myUid = context.read<AuthProvider>().uid ?? '';
+    final myUid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid ?? '';
     if (!_loaded && items.isEmpty) return const _CommentSkeleton();
     if (items.isEmpty) {
       // Isi penuh area (sheet tinggi TETAP) → empty state center, tidak

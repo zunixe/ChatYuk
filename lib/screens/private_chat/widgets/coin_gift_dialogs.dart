@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../config/gifts.dart';
 import '../../../config/theme.dart';
-import '../../../providers/auth_provider.dart';
+import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/chat_provider.dart';
 import '../../../providers/locale_provider.dart';
 
@@ -46,7 +46,7 @@ void showReportUserDialog(
         TextButton(
           onPressed: () {
             ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).reportUser(
-              reporterId: context.read<AuthProvider>().uid!,
+              reporterId: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid!,
               reportedId: reportedId,
               reason: reason,
             );

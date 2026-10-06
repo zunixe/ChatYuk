@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../providers/riverpod/contact_provider.dart';
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils.dart';
@@ -42,7 +42,7 @@ class _ContactScreenState extends State<ContactScreen> {
           .submitMessage(
             name: _nameCtrl.text,
             message: message,
-            userId: context.read<AuthProvider>().uid,
+            userId: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid,
           );
       _messageCtrl.clear();
       messenger.showSnackBar(SnackBar(content: Text(s.contactSent)));

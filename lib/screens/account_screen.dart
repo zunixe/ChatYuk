@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../models/user_model.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
@@ -16,14 +16,14 @@ import 'settings/widgets/settings_menu_tile.dart';
 /// Akun (ala WhatsApp: Pengaturan › Akun): keamanan, email, keluar.
 /// Hapus akun SEMBUNYI di menu ⋮ (AppBar) seperti WhatsApp.
 /// Isi dipindah dari Profil tanpa ubah perilaku.
-class AccountScreen extends StatefulWidget {
+class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
 
   @override
-  State<AccountScreen> createState() => _AccountScreenState();
+  ConsumerState<AccountScreen> createState() => _AccountScreenState();
 }
 
-class _AccountScreenState extends State<AccountScreen> {
+class _AccountScreenState extends ConsumerState<AccountScreen> {
   bool _loggingOut = false;
   // Keluar/HAPUS sedang berjalan (sejak konfirmasi akhir, SEBELUM RPC).
   // Menekan kartu peringatan anon + tombol amankan-akun selama proses —
@@ -38,9 +38,9 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   void initState() {
     super.initState();
-    _hasPassword = context.read<AuthProvider>().hasPassword;
+    _hasPassword = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).hasPassword;
     Future.microtask(() async {
-      final v = await context.read<AuthProvider>().fetchHasPassword();
+      final v = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).fetchHasPassword();
       if (mounted) setState(() => _hasPassword = v);
     });
   }
@@ -48,8 +48,8 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    // PERF (§26b): dulu `watch<AuthProvider>()` → SELURUH halaman rebuild
-    // tiap `notifyListeners` AuthProvider (heartbeat presence berkala) →
+    // PERF (§26b): dulu `watch<AuthNotifier>()` → SELURUH halaman rebuild
+    // tiap `notifyListeners` AuthNotifier (heartbeat presence berkala) →
     // lag saat masuk menu Akun. Sekarang: `read` untuk memanggil method
     // (setPassword/signOut), `select` snapshot utk field yang dirender —
     // rebuild hanya bila field itu berubah.
@@ -60,21 +60,18 @@ class _AccountScreenState extends State<AccountScreen> {
       :userEmail,
       :hasPassword,
       :profile,
-    ) = context.select<AuthProvider, ({
-      bool isAnonymous,
-      bool signingOut,
-      bool emailConfirmed,
-      String? userEmail,
-      bool hasPassword,
-      UserModel? profile,
-    })>((a) => (
-      isAnonymous: a.isAnonymous,
-      signingOut: a.signingOut,
-      emailConfirmed: a.emailConfirmed,
-      userEmail: a.userEmail,
-      hasPassword: a.hasPassword,
-      profile: a.profile,
-    ));
+    ) = ref.watch(
+      authProvider.select(
+        (a) => (
+          isAnonymous: a.isAnonymous,
+          signingOut: a.signingOut,
+          emailConfirmed: a.emailConfirmed,
+          userEmail: a.userEmail,
+          hasPassword: a.hasPassword,
+          profile: a.profile,
+        ),
+      ),
+    );
     // Jangan tampilkan banner anon saat proses keluar (signingOut/_leaving)
     // — sesi belum kosong & isAnonymous masih true sekejap → banner berkedip.
     // `_leaving` menutup celah alur HAPUS akun: provider `signingOut` baru
@@ -234,8 +231,8 @@ class _AccountScreenState extends State<AccountScreen> {
                         ? s.descChangePassword
                         : s.descSetPassword,
                     onTap: () async {
-                      final hasPw = await context
-                          .read<AuthProvider>()
+                      final hasPw = await ProviderScope.containerOf(context, listen: false)
+                          .read(authProvider.notifier)
                           .fetchHasPassword();
                       if (context.mounted) {
                         setState(() => _hasPassword = hasPw);
@@ -293,7 +290,7 @@ class _AccountScreenState extends State<AccountScreen> {
     required bool isSet,
   }) async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final currentCtrl = TextEditingController();
     final newCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
@@ -460,10 +457,10 @@ class _AccountScreenState extends State<AccountScreen> {
     return isId ? '${d.day} $m ${d.year}' : '$m ${d.day}, ${d.year}';
   }
 
-  /// Dialog pemilih tanggal lahir. Menyimpan via AuthProvider.updateProfile.
+  /// Dialog pemilih tanggal lahir. Menyimpan via AuthNotifier.updateProfile.
   Future<void> _pickBirthDate(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final now = DateTime.now();
     final current = auth.profile?.birthDate;
     final picked = await showDatePicker(
@@ -475,7 +472,7 @@ class _AccountScreenState extends State<AccountScreen> {
     );
     if (picked == null || !mounted) return;
     try {
-      await context.read<AuthProvider>().updateProfile(birthDate: picked);
+      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).updateProfile(birthDate: picked);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.msgBirthDateSaved)),
@@ -492,7 +489,7 @@ class _AccountScreenState extends State<AccountScreen> {
   /// + nomor lokal. Hasil disimpan E.164 (mis. +62812…).
   Future<void> _editPhone(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final full = await showPhoneEditDialog(
       context,
       s,
@@ -501,7 +498,7 @@ class _AccountScreenState extends State<AccountScreen> {
     );
     if (full == null || !mounted) return;
     try {
-      await context.read<AuthProvider>().updateProfile(phone: full);
+      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).updateProfile(phone: full);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.msgPhoneSaved)),
@@ -518,7 +515,7 @@ class _AccountScreenState extends State<AccountScreen> {
   /// Konfirmasi berlapis: dialog ringkasan → dialog ketik HAPUS/DELETE.
   Future<void> _confirmDeleteAccount() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
 
     // Admin dilarang self-delete di sisi server — tidak tampilkan menu.
@@ -633,7 +630,7 @@ class _AccountScreenState extends State<AccountScreen> {
       if (auth.isAnonymous) {
         await ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier).clearAnonSocial();
       }
-      await context.read<AuthProvider>().deleteMyAccount();
+      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).deleteMyAccount();
       // Sesi: setelah profil+auth user dihapus server-side, signOut() biasa
       // bisa gagal (token sudah mati). signOut provider tahan-error & paksa
       // buang sesi lokal, tapi tetap dibungkus timeout agar tak menggantung.
@@ -670,7 +667,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Future<void> _confirmLogout() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,

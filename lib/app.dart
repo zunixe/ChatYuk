@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/theme.dart';
-import 'providers/auth_provider.dart';
+import 'providers/riverpod/auth_provider.dart';
 import 'providers/riverpod/room_provider.dart';
 import 'providers/riverpod/chat_provider.dart';
 import 'services/device_info_service.dart';
@@ -69,7 +69,6 @@ class _ChatYukAppState extends State<ChatYukApp> {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
         // Refresh perdana story DITUNDA ke post-frame (di
         // OnlineUsersScreen.initState) — RPC story_tray + subscribe
         // realtime jangan berebut CPU/network dengan frame pertama.
@@ -80,10 +79,9 @@ class _ChatYukAppState extends State<ChatYukApp> {
         // ConnectivityProvider: MIGRASI ke Riverpod (connectivityProvider).
       ],
       // Selector hanya pada appFontFamily → MaterialApp hanya rebuild saat
-      // font global berubah (bukan tiap notifikasi AuthProvider).
-      child: Selector<AuthProvider, String>(
-        selector: (_, auth) => auth.appFontFamily,
-        builder: (context, _, __) =>
+      // font global berubah (bukan tiap notifikasi AuthNotifier).
+      child: _FontGate(
+        builder: (context) =>
             // Rebuild subtree saat ukuran font chat berubah (slider user) —
             // bubble chat langsung menyesuaikan tanpa restart navigasi.
             ValueListenableBuilder<double>(
@@ -114,7 +112,7 @@ class _ChatYukAppState extends State<ChatYukApp> {
                       behavior: HitTestBehavior.translucent,
                       onPointerDown: (_) {
                         try {
-                          context.read<AuthProvider>().notifyActivity();
+                          ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).notifyActivity();
                         } catch (_) {}
                       },
                       child: OfflineBanner(
@@ -185,16 +183,27 @@ GateScreen decideGateScreen({
   return GateScreen.main;
 }
 
-class _AuthGate extends StatefulWidget {
+class _FontGate extends ConsumerWidget {
+  final Widget Function(BuildContext context) builder;
+  const _FontGate({required this.builder});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(authProvider.select((a) => a.appFontFamily));
+    return builder(context);
+  }
+}
+
+class _AuthGate extends ConsumerStatefulWidget {
   const _AuthGate();
 
   @override
-  State<_AuthGate> createState() => _AuthGateState();
+  ConsumerState<_AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<_AuthGate> {
+class _AuthGateState extends ConsumerState<_AuthGate> {
   StreamSubscription<AuthState>? _authSub;
-  VoidCallback? _authListenCb;
+  ProviderSubscription<AuthData>? _authListenSub;
   DateTime? _lastRecoveryNav;
   Timer? _autoRetryTimer;
   int _autoRetryCount = 0;
@@ -212,8 +221,12 @@ class _AuthGateState extends State<_AuthGate> {
     // Auto-retry error jaringan lewat LISTENER (bukan build): begitu auth
     // masuk state error, jadwalkan login ulang tiap 8 dtk (maks 3×). Tidak
     // ada side-effect (Timer/retry) di build → build murni render.
-    _authListenCb = _onAuthChanged;
-    context.read<AuthProvider>().addListener(_authListenCb!);
+    _authListenSub = ProviderScope.containerOf(context, listen: false).listen<AuthData>(
+      authProvider,
+      (prev, next) {
+        if (prev?.error != next.error) _onAuthChanged();
+      },
+    );
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.passwordRecovery) {
         // Guard: cegah push ganda jika event ter-trigger berulang
@@ -241,7 +254,7 @@ class _AuthGateState extends State<_AuthGate> {
 
   void _onAuthChanged() {
     if (!mounted) return;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (auth.error == null) {
       _autoRetryCount = 0;
       _autoRetryTimer?.cancel();
@@ -252,7 +265,7 @@ class _AuthGateState extends State<_AuthGate> {
       if (!mounted) return;
       _autoRetryCount++;
       dlog('[AUTHGATE] auto retry #$_autoRetryCount');
-      context.read<AuthProvider>().retry();
+      ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).retry();
     });
   }
 
@@ -260,29 +273,28 @@ class _AuthGateState extends State<_AuthGate> {
   void dispose() {
     _autoRetryTimer?.cancel();
     _authSub?.cancel();
-    final cb = _authListenCb;
-    if (cb != null) context.read<AuthProvider>().removeListener(cb);
+    _authListenSub?.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // select field spesifik — hindari watch penuh AuthProvider yang
+    // select field spesifik — hindari watch penuh AuthNotifier yang
     // me-rebuild seluruh gate pada tiap notifyListeners (presence, poin).
-    final loading = context.select<AuthProvider, bool>((a) => a.loading);
-    final error = context.select<AuthProvider, String?>((a) => a.error);
-    final isAnonymous = context.select<AuthProvider, bool>(
-      (a) => a.isAnonymous,
+    final loading = ref.watch(authProvider.select((a) => a.loading));
+    final error = ref.watch(authProvider.select((a) => a.error));
+    final isAnonymous = ref.watch(
+      authProvider.select((a) => a.isAnonymous),
     );
-    final dummySessionActive = context.select<AuthProvider, bool>(
-      (a) => a.dummySessionActive,
+    final dummySessionActive = ref.watch(
+      authProvider.select((a) => a.dummySessionActive),
     );
-    final profile = context.select<AuthProvider, UserModel?>((a) => a.profile);
-    final signingOut = context.select<AuthProvider, bool>(
-      (a) => a.signingOut,
+    final profile = ref.watch(authProvider.select((a) => a.profile));
+    final signingOut = ref.watch(
+      authProvider.select((a) => a.signingOut),
     );
-    final isSignedIn = context.select<AuthProvider, bool>(
-      (a) => a.isSignedIn,
+    final isSignedIn = ref.watch(
+      authProvider.select((a) => a.isSignedIn),
     );
     final s = context.watch<LocaleProvider>().s;
     // Watch ThemeProvider supaya seluruh tree rebuild saat mode gelap/terang
@@ -290,8 +302,8 @@ class _AuthGateState extends State<_AuthGate> {
     context.watch<ThemeProvider>();
 
     final p0 = profile;
-    final isAdminGate0 = context.select<AuthProvider, bool>(
-      (a) => a.isRealAdmin,
+    final isAdminGate0 = ref.watch(
+      authProvider.select((a) => a.isRealAdmin),
     );
     final gate = decideGateScreen(
       loading: loading,
@@ -351,7 +363,7 @@ class _AuthGateState extends State<_AuthGate> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: () => context.read<AuthProvider>().retry(),
+                  onPressed: () => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).retry(),
                   icon: const Icon(Icons.refresh),
                   label: Text(s.btnRetry),
                 ),
@@ -398,7 +410,7 @@ class _AuthGateState extends State<_AuthGate> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: () => context.read<AuthProvider>().signOut(),
+                  onPressed: () => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signOut(),
                   icon: const Icon(Icons.logout),
                   label: Text(s.btnLogout),
                 ),
@@ -422,7 +434,7 @@ class _AuthGateState extends State<_AuthGate> {
     // cache. Preload list chat ke MEMORI tetap diikutkan supaya centang-2
     // terisi sejak frame pertama (SQLite lokal = cepat); kalau lambat,
     // timeout → konten tetap tampil (skeleton tidak menahan lama).
-    final warmUid = context.read<AuthProvider>().uid;
+    final warmUid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
     _warmFuture ??= Future.wait([
       ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).warmFuture,
       ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).warmup(),
@@ -624,7 +636,7 @@ class _MainNavState extends ConsumerState<_MainNav>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     auth.goOnline();
     auth.resetIdleTimer();
     // Follow/unfollow → invalidate cache followee di TimelineProvider
@@ -655,7 +667,7 @@ class _MainNavState extends ConsumerState<_MainNav>
       // Gerbang Timeline absolut: anon tidak bisa lihat feed → jangan prewarm
       // (RPC list_posts pasti raise ANON_DISABLED, buang kuota + isi error).
       final anonBlocked =
-          mounted && context.read<AuthProvider>().anonTimelineBlocked;
+          mounted && ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).anonTimelineBlocked;
       if (mounted && !anonBlocked) ref.read(timelineProvider.notifier).prewarm();
       // Prewarm juga daftar grup (tab Grup) — klik tab instant.
       if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).loadMyGroups(refresh: true);
@@ -710,7 +722,7 @@ class _MainNavState extends ConsumerState<_MainNav>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (state == AppLifecycleState.paused) {
       _pausedAt = DateTime.now();
       // Ringkasan probe (p50/p90/max) dicetak saat app di-background — satu
@@ -840,7 +852,7 @@ class _MainNavState extends ConsumerState<_MainNav>
   /// Anon diblokir dari tab timeline — popup saja, tab tidak pindah.
   void _onNavTap(int i) {
     if (i == 2) {
-      final auth = context.read<AuthProvider>();
+      final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
       if (!(auth.profile?.isRegistered ?? false)) {
         showAnonPromptDialog(context);
         return;
@@ -879,19 +891,19 @@ class _MainNavState extends ConsumerState<_MainNav>
       });
     }
     // Rebuild _MainNav HANYA saat nilai yang benar-benar dipakai berubah —
-    // BUKAN setiap AuthProvider.notifyListeners (presence/idle/ping tiap
-    // beberapa detik). Sebelumnya `watch<AuthProvider>()` membuat seluruh
+    // BUKAN setiap AuthNotifier.notifyListeners (presence/idle/ping tiap
+    // beberapa detik). Sebelumnya `watch<AuthNotifier>()` membuat seluruh
     // IndexedStack (termasuk feed Timeline) di-layout ulang terus-menerus →
     // pindah tab terasa berat. `select` granular = nol rebuild saat notify
     // yang tidak relevan.
-    final anonBanner = context.select<AuthProvider, bool>(
-      (a) => a.anonBlocked,
+    final anonBanner = ref.watch(
+      authProvider.select((a) => a.anonBlocked),
     );
-    final isRealAdmin = context.select<AuthProvider, bool>(
-      (a) => a.isRealAdmin,
+    final isRealAdmin = ref.watch(
+      authProvider.select((a) => a.isRealAdmin),
     );
-    final dummySession = context.select<AuthProvider, bool>(
-      (a) => a.dummySessionActive,
+    final dummySession = ref.watch(
+      authProvider.select((a) => a.dummySessionActive),
     );
     final s = context.read<LocaleProvider>().s;
     // Tombol Admin Panel melayang (admin sungguhan saja) — HANYA di tab
@@ -966,8 +978,8 @@ class _MainNavState extends ConsumerState<_MainNav>
           Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onTap: () => context.read<AuthProvider>().notifyActivity(),
-              onPanDown: (_) => context.read<AuthProvider>().notifyActivity(),
+              onTap: () => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).notifyActivity(),
+              onPanDown: (_) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).notifyActivity(),
               // Saat banner menempel di atas, ia sudah mengambil inset atas
               // → nol-kan inset atas AppBar tab supaya tidak dobel.
               child: MediaQuery.removePadding(
@@ -1033,7 +1045,7 @@ class _MainNavState extends ConsumerState<_MainNav>
         height: 52,
         child: FloatingActionButton(
           onPressed: () {
-            final auth = context.read<AuthProvider>();
+            final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
             // Anon (belum isi email) — samakan dengan timeline: arahkan
             // ke profil, jangan buka composer.
             if (!(auth.profile?.isRegistered ?? false)) {
@@ -1086,7 +1098,7 @@ class _BottomNav extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final uid = context.select<AuthProvider, String?>((a) => a.uid);
+    final uid = ref.watch(authProvider.select((a) => a.uid));
     final chat = ref.read(chatProvider.notifier);
     // Badge hijau = jumlah user online (bukan diri sendiri, bukan diblokir).
     // `select` mengembalikan ANGKA (bukan list) → _BottomNav hanya rebuild

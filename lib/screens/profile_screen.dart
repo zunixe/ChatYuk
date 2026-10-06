@@ -16,7 +16,7 @@ import 'profile/widgets/profile_widgets.dart';
 import '../config/regions.dart';
 import '../config/strings.dart';
 import '../models/user_photo.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../models/user_model.dart';
 import '../providers/riverpod/device_info_provider.dart';
 import '../providers/locale_provider.dart';
@@ -119,7 +119,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     super.initState();
     _loadPhotos();
     _hashtags = List.of(
-      context.read<AuthProvider>().profile?.hashtags ?? const [],
+      ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile?.hashtags ?? const [],
     );
     // Onboarding + daily login toast
     Future.microtask(() {
@@ -147,7 +147,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _saveAbout() async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final s = context.read<LocaleProvider>().s;
     final text = _aboutCtrl.text.trim();
     if (text == (auth.profile?.about ?? '')) {
@@ -207,7 +207,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _savingHashtags = true;
     });
     try {
-      await context.read<AuthProvider>().updateHashtags(tags);
+      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).updateHashtags(tags);
     } catch (e) {
       if (mounted) setState(() => _hashtags = previous);
       if (mounted) {
@@ -220,10 +220,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _loadPhotos() async {
-    final uid = context.read<AuthProvider>().uid;
+    final uid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
     if (uid == null) return;
     try {
-      final photos = await context.read<AuthProvider>().getPhotos(uid);
+      final photos = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).getPhotos(uid);
       if (mounted) setState(() => _photos = photos);
     } catch (_) {}
     if (mounted) setState(() => _loadingPhotos = false);
@@ -307,7 +307,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // Reward koin upload DIHAPUS (overhaul coin: tidak ada poin gratis).
     setState(() => _uploading = true);
     try {
-      await context.read<AuthProvider>().uploadPhoto(
+      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uploadPhoto(
         processed['full']!,
         preview: processed['preview'],
       );
@@ -385,7 +385,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
     if (ok != true || !mounted) return;
     try {
-      await context.read<AuthProvider>().deletePhoto(photo.id);
+      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).deletePhoto(photo.id);
       // Hapus item saja dari list lokal (tanpa reload penuh getPhotos yang
       // me-download ulang semua foto). Grid max 6 item — murah.
       if (mounted) {
@@ -460,9 +460,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     setState(() => _uploading = true);
     try {
-      await context.read<AuthProvider>().updateAvatar(base64);
+      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).updateAvatar(base64);
       if (mounted) {
-        final uid = context.read<AuthProvider>().profile?.uid ?? '';
+        final uid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile?.uid ?? '';
         if (uid.isNotEmpty) {
           try {
             ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).updateAvatarForUid(uid, base64);
@@ -485,7 +485,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _showAvatarOptions() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final hasAvatar = (auth.profile?.avatar ?? '').isNotEmpty;
     showModalBottomSheet(
       context: context,
@@ -535,9 +535,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
-                  await context.read<AuthProvider>().removeAvatar();
+                  await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).removeAvatar();
                   if (mounted) {
-                    final uid = context.read<AuthProvider>().profile?.uid ?? '';
+                    final uid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile?.uid ?? '';
                     if (uid.isNotEmpty) {
                       try {
                         ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).removeAvatarForUid(
@@ -623,7 +623,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _editProfile() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile = auth.profile;
     if (profile == null) return;
     final currentNick = profile.nickname;
@@ -793,13 +793,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   return;
                                 }
                                 if (isBannedNickname(nick) &&
-                                    !context.read<AuthProvider>().isRealAdmin) {
+                                    !ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isRealAdmin) {
                                   setSheet(() => error = s.errNicknameBanned);
                                   focus.requestFocus();
                                   return;
                                 }
-                                final available = await context
-                                    .read<AuthProvider>()
+                                final available = await ProviderScope.containerOf(context, listen: false)
+                                    .read(authProvider.notifier)
                                     .isNicknameAvailable(nick);
                                 if (!available) {
                                   setSheet(() => error = s.errNicknameTaken);
@@ -809,8 +809,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               }
                               setSheet(() => loading = true);
                               try {
-                                await context
-                                    .read<AuthProvider>()
+                                await ProviderScope.containerOf(context, listen: false)
+                                    .read(authProvider.notifier)
                                     .updateProfile(
                                       nickname: nickChanged ? nick : null,
                                       age: age,
@@ -864,9 +864,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('Profile');
-    // PERF (§2.3 / §26): dulu `context.watch<AuthProvider>()` — SELURUH
+    // PERF (§2.3 / §26): dulu `context.watch<AuthNotifier>()` — SELURUH
     // halaman (CustomScrollView + slivers + galeri) rebuild tiap
-    // `notifyListeners` AuthProvider, termasuk **heartbeat presence** &
+    // `notifyListeners` AuthNotifier, termasuk **heartbeat presence** &
     // refresh profil berkala → sering menabrak frame transisi/tap tab =
     // jank. Sekarang `select` SNAPSHOT field yang benar-benar dipakai render,
     // dibandingkan via equality record: notify yang tidak mengubah field ini
@@ -879,23 +879,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       :dummySessionActive,
       :emailConfirmed,
       :userEmail,
-    ) = context.select<AuthProvider, ({
-      UserModel? profile,
-      String? uid,
-      bool isAnonymous,
-      bool signingOut,
-      bool dummySessionActive,
-      bool emailConfirmed,
-      String? userEmail,
-    })>(
-      (a) => (
-        profile: a.profile,
-        uid: a.uid,
-        isAnonymous: a.isAnonymous,
-        signingOut: a.signingOut,
-        dummySessionActive: a.dummySessionActive,
-        emailConfirmed: a.emailConfirmed,
-        userEmail: a.userEmail,
+    ) = ref.watch(
+      authProvider.select(
+        (a) => (
+          profile: a.profile,
+          uid: a.uid,
+          isAnonymous: a.isAnonymous,
+          signingOut: a.signingOut,
+          dummySessionActive: a.dummySessionActive,
+          emailConfirmed: a.emailConfirmed,
+          userEmail: a.userEmail,
+        ),
       ),
     );
     // Deteksi swap sesi (dummy ⇄ admin): profil berubah identitas tanpa
@@ -2165,7 +2159,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final s = context.read<LocaleProvider>().s;
     final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     final current =
-        context.read<AuthProvider>().profile?.subscriptionPrice ?? 0;
+        ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile?.subscriptionPrice ?? 0;
     final ctrl = TextEditingController(text: current > 0 ? '$current' : '');
     final price = await showDialog<int>(
       context: context,
@@ -2227,6 +2221,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(ok ? s.msgProfileSaved : s.errGeneric)),
     );
-    if (ok) await context.read<AuthProvider>().reloadProfile();
+    if (ok) await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).reloadProfile();
   }
 }

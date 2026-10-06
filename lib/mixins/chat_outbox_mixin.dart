@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../models/message_model.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
@@ -51,7 +51,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
   Future<void> loadQueuedForChat() async {
     await OfflineOutbox.instance.load();
     if (!mounted) return;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final entries = OfflineOutbox.instance.forChat(outboxKind, outboxChatId);
     if (entries.isEmpty) return;
     setState(() {

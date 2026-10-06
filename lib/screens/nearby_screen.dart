@@ -7,7 +7,7 @@ import '../providers/riverpod/location_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import 'nearby/widgets/nearby_card.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
@@ -48,7 +48,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
   }
 
   Future<void> _init() async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     _shareOn = auth.profile?.shareLocation ?? false;
     // Anti-lag buka layar: JANGAN tunggu GPS chain (bisa belasan detik).
     // Pakai lastKnown (instan) kalau ada → langsung query. GPS akurat &
@@ -190,7 +190,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
   }
 
   Future<void> _startChat(Map<String, dynamic> u) async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final s = context.read<LocaleProvider>().s;
     final myUid = auth.uid;

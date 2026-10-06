@@ -13,6 +13,7 @@ import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/theme_provider.dart';
 import 'package:chatyuk/providers/timeline_provider.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
 import 'package:chatyuk/screens/post_composer_screen.dart';
 import 'package:chatyuk/services/timeline_service.dart';
@@ -24,6 +25,18 @@ import 'test_helper.dart';
 /// _ensureRegistered()`, flag `_posting` belum diset).
 class MockTimelineService extends Mock implements TimelineService {}
 
+class TestAuth extends AuthNotifier {
+  final UserModel? prof;
+  TestAuth(this.prof);
+  @override
+  AuthData build() =>
+      AuthData(profile: prof, uid: prof?.uid, loading: false);
+  @override
+  UserModel? get profile => prof;
+  @override
+  String? get uid => prof?.uid;
+}
+
 void main() {
   final s = S(isId: true);
 
@@ -31,6 +44,7 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
     AppFonts.setLocal(AppFonts.systemKey);
     await initSupabaseForTest();
+    await prewarmMediaForTest();
   });
 
   tearDownAll(resetFontForTest);
@@ -94,7 +108,10 @@ void main() {
         .thenAnswer((_) async => []);
     final timeline = TimelineNotifier(service: svc, autoInit: false);
     final container = ProviderContainer(
-      overrides: [timelineProvider.overrideWith(() => timeline)],
+      overrides: [
+        timelineProvider.overrideWith(() => timeline),
+        authProvider.overrideWith(() => TestAuth(registeredUser())),
+      ],
     );
     addTearDown(container.dispose);
 

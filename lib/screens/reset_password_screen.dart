@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 
@@ -46,7 +47,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     setState(() => _loading = true);
     try {
-      await context.read<AuthProvider>().resetPassword(password);
+      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).resetPassword(password);
       if (!mounted) return;
       _snack(s.msgPasswordChanged);
       await Future.delayed(const Duration(milliseconds: 400));

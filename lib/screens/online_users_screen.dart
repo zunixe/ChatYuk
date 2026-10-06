@@ -14,7 +14,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/regions.dart';
 import '../models/user_model.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
@@ -234,7 +234,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _unreadSub?.cancel();
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (_hiddenOwner != auth.uid) {
       _hiddenOwner = auth.uid;
       try {
@@ -386,7 +386,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         return;
       }
 
-      final pp = context.read<AuthProvider>();
+      final pp = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
       await pp.updateAvatar(processed);
       if (mounted) {
         // Langsung patch list online & timeline supaya foto baru terlihat
@@ -497,7 +497,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   /// "Invisible" yang menyesatkan).
   Future<void> _showMyStatusSheet() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     // Muat visibilitas bila belum pernah dimuat (lazy; tak ada RPC baru bila
     // sudah ter-cache di provider).
     unawaited(ref.read(privacyProvider.notifier).load());
@@ -890,7 +890,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     // Buang bubble unread overlay (kalau ada) SEBELUM navigasi — overlay
     // transparannya tak boleh ikut ke halaman chat / nyangkut jadi penghalang.
     _dismissUnreadBubble();
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final s = context.read<LocaleProvider>().s;
     final myUid = auth.uid;
@@ -1027,7 +1027,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     int unreadCount,
     Offset globalPos,
   ) async {
-    final myUid = cardCtx.read<AuthProvider>().uid;
+    final myUid = ProviderScope.containerOf(cardCtx, listen: false).read(authProvider.notifier).uid;
     final s = cardCtx.read<LocaleProvider>().s;
     if (myUid == null) return;
     final ids = [myUid, user.uid]..sort();
@@ -1269,26 +1269,26 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('Online');
-    // select (bukan watch): heartbeat presence AuthProvider berubah tiap
+    // select (bukan watch): heartbeat presence AuthNotifier berubah tiap
     // beberapa detik — watch membuat SELURUH halaman (Scaffold + tray story
     // + ListView) rebuild tiap kali walau tak ada yang terlihat berubah.
     // Hanya field yang dipakai untuk render yang di-listen.
-    final authUid = context.select<AuthProvider, String?>((a) => a.uid);
-    final myAvatar = context.select<AuthProvider, String>(
-      (a) => a.profile?.avatar ?? '',
+    final authUid = ref.watch(authProvider.select((a) => a.uid));
+    final myAvatar = ref.watch(
+      authProvider.select((a) => a.profile?.avatar ?? ''),
     );
-    final myNickname = context.select<AuthProvider, String>(
-      (a) => a.profile?.nickname ?? '-',
+    final myNickname = ref.watch(
+      authProvider.select((a) => a.profile?.nickname ?? '-'),
     );
-    final myRegistered = context.select<AuthProvider, bool>(
-      (a) => a.profile?.isRegistered ?? false,
+    final myRegistered = ref.watch(
+      authProvider.select((a) => a.profile?.isRegistered ?? false),
     );
     // Status diri sendiri + ghost mode — untuk dot badge di avatar sendiri.
-    final myStatus = context.select<AuthProvider, String>(
-      (a) => a.profile?.status ?? 'offline',
+    final myStatus = ref.watch(
+      authProvider.select((a) => a.profile?.status ?? 'offline'),
     );
-    final myInvisible = context.select<AuthProvider, bool>(
-      (a) => a.invisibleEnabled,
+    final myInvisible = ref.watch(
+      authProvider.select((a) => a.invisibleEnabled),
     );
     super.build(context);
     final s = context.watch<LocaleProvider>().s;

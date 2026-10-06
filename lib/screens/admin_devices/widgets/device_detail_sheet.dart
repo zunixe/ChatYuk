@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
-import '../../../providers/auth_provider.dart';
+import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../core/admin_err.dart';
 import '../../../utils.dart';
@@ -170,7 +171,7 @@ class DeviceDetailSheet extends StatelessWidget {
     )) {
       return;
     }
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (auth.excludedDevices.contains(installId)) return;
     final ok = await auth.excludeDeviceCascade(installId);
     if (!context.mounted) return;

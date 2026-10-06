@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/fonts.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/auth_provider.dart';
+import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../core/admin_err.dart';
 
 /// Pilih font global aplikasi (katalog AppFonts) — berlaku semua user
 /// realtime. Default = Poppins + Roboto (perilaku lama).
-class AppFontTile extends StatelessWidget {
+class AppFontTile extends ConsumerWidget {
   const AppFontTile({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
+    final auth = ref.watch(authProvider);
     final currentKey = auth.appFontFamily;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -113,7 +114,7 @@ class _AppFontSheetState extends State<AppFontSheet> {
     if (guardOfflineCtx(context, context.read<LocaleProvider>().s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
     final s = context.read<LocaleProvider>().s;
     setState(() => _saving = true);
-    await context.read<AuthProvider>().setAppFontFamily(_selected);
+    await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setAppFontFamily(_selected);
     if (!mounted) return;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context)

@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../providers/riverpod/room_provider.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import 'private_rooms_screen.dart';
@@ -48,7 +48,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
   Future<void> _initCountry() async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profileCountry = auth.profile?.country ?? 'Indonesia';
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_prefKey);

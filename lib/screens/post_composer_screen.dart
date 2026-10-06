@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
@@ -55,16 +55,16 @@ ProcessedPhoto? processPostImageDim(List<int> bytes) {
 
 /// Composer post timeline — header profil, visibilitas, text form + hashtag
 /// chip badge, multi-foto (galeri multi-pick & kamera), tombol Post pin bawah.
-class PostComposerScreen extends StatefulWidget {
+class PostComposerScreen extends ConsumerStatefulWidget {
   const PostComposerScreen({super.key});
 
   @override
-  State<PostComposerScreen> createState() => _PostComposerScreenState();
+  ConsumerState<PostComposerScreen> createState() => _PostComposerScreenState();
 }
 
 enum _MediaSource { gallery, camera }
 
-class _PostComposerScreenState extends State<PostComposerScreen> {
+class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
   final _picker = ImagePicker();
   final _textCtrl = TextEditingController();
   final List<Uint8List> _images = [];
@@ -210,7 +210,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
   /// User anonim (belum lengkapi email) tidak bisa posting — info ke Profil.
   Future<bool> _ensureRegistered() async {
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (auth.profile?.isRegistered ?? false) return true;
     await showDialog<bool>(
       context: context,
@@ -271,7 +271,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
 
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final uid = context.read<AuthProvider>().uid;
+      final uid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
       final paths = <String>[];
       if (uid != null && _images.isNotEmpty) {
         final uploads = _images.map(
@@ -327,8 +327,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
     PerfProbe.buildCount('PostComposer');
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
-    final profile = auth.profile;
+    final profile = ref.watch(authProvider.select((a) => a.profile));
     final myName = profile?.nickname ?? 'Anon';
     final hashtags = _extractHashtags(_textCtrl.text);
 
@@ -367,7 +366,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                       shape: BoxShape.circle,
                     ),
                     child: ProfileAvatar(
-                      uid: auth.uid ?? '',
+                      uid: profile?.uid ?? '',
                       name: myName,
                       size: 46,
                       borderRadius: 23,

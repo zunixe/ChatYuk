@@ -9,7 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models/message_model.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
@@ -201,7 +201,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// test supaya alur caption diuji tanpa `compute()` (isolate di test-fake
   /// bisa menggantung).
   Future<String?> processViewOnceBytes(Uint8List bytes) async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     return auth.watermarkEnabled
         ? compute(processViewOnceImage, (bytes, photoSeed))
         : compute(processChatPhoto, bytes);
@@ -387,7 +387,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     if (path == null || path.isEmpty) return;
     if (!mounted) return;
     final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -429,7 +429,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     MessageModel? reply,
     bool isOnce = false,
   }) async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -597,7 +597,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     String text = '',
     MessageModel? reply,
   }) async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;

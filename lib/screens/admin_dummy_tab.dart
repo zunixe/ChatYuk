@@ -12,7 +12,7 @@ import '../main.dart' show resumeWarmup;
 import '../core/admin_gate.dart';
 import '../core/admin_err.dart';
 import '../core/cache/message_cache.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import 'admin_dummy/widgets/dummy_ai_sheet.dart';
 import 'admin_dummy/widgets/dummy_story_sheet.dart';
 import 'admin_dummy/widgets/dummy_card.dart';
@@ -510,7 +510,7 @@ class _AdminDummyTabState extends State<AdminDummyTab>
       ),
     );
     if (confirmed != true) return;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     try {
       await auth.becomeDummy(item['uid'] as String);
       if (!mounted) return;

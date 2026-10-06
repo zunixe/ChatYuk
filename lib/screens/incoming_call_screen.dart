@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
@@ -170,7 +170,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     // (RLS dsb), pakai id deterministik — jangan jatuh ke fullscreen.
     var effMode = mode;
     var chatId = widget.chatId;
-    final auth0 = context.read<AuthProvider>();
+    final auth0 = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile0 = auth0.profile;
     if (widget.callType == 'video' && chatId.isEmpty && auth0.uid != null) {
       try {
@@ -195,7 +195,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     }
 
     if (!mounted) return;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile = auth.profile;
     final s = context.read<LocaleProvider>().s;
     final session = await ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).startSession(

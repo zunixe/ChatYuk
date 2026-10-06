@@ -5,7 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../widgets/post_card.dart';
@@ -136,7 +136,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
       _current == 0 ? 'all' : (_current == 1 ? 'following' : 'mine');
 
   Future<void> _load({bool refresh = false, bool skipIfFresh = false}) async {
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (auth.uid == null) return;
     // Gerbang Timeline absolut: anon (belum registrasi) TIDAK bisa lihat feed.
     // Jangan tembak RPC `list_posts` (pasti raise ANON_DISABLED → layar error
@@ -162,6 +162,8 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         ref.watch(timelineProvider.select((t) => t.loading));
     final fetchFailed =
         ref.watch(timelineProvider.select((t) => t.fetchFailed));
+    final anonBlocked =
+        ref.watch(authProvider.select((a) => a.anonTimelineBlocked));
     final scope = _scope;
     // Debounce search: filter pakai _appliedSearch (di-update 250ms
     // setelah keystroke terakhir) — tiap huruf tidak rebuild seluruh list.
@@ -267,7 +269,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
             icon: const Icon(Icons.add_circle_outline),
             color: Colors.white,
             onPressed: () {
-              final auth = context.read<AuthProvider>();
+              final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
               if (!(auth.profile?.isRegistered ?? false)) {
                 showAnonPromptDialog(context);
                 return;
@@ -297,8 +299,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
               // Empty state HANYA saat fetch selesai & benar-benar kosong. Saat
               // loading pertama kali (atau tab switch) tampilkan spinner — jangan
               // blink ke "Belum ada postingan" kalau sebenarnya ada data.
-              child: context.select<AuthProvider, bool>(
-                          (a) => a.anonTimelineBlocked)
+              child: anonBlocked
                       // Gerbang Timeline absolut: anon tidak bisa lihat feed.
                       // Tampilkan ajakan daftar (bukan error retry dari RPC
                       // yang memang selalu ditolak server).
@@ -388,7 +389,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                             // Semua tab: "Ketuk +" bisa diklik — seragam, anon popup, registered ke composer
                             actionLabel: s.emptyTimelineCta,
                             onAction: () {
-                              final auth = context.read<AuthProvider>();
+                              final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
                               if (!(auth.profile?.isRegistered ?? false)) {
                                 showAnonPromptDialog(context);
                                 return;

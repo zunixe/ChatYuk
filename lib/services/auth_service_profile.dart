@@ -152,12 +152,12 @@ mixin AuthServiceProfileMx on AuthBase {
   }
 
   /// Stream realtime profil sendiri — poin, status, email terdaftar, dll.
-  /// Dipakai AuthProvider untuk update badge di seluruh app tanpa reload.
+  /// Dipakai AuthNotifier untuk update badge di seluruh app tanpa reload.
   /// Stream update profil sendiri + kunci kolom yang HADIR di payload.
   ///
   /// Payload realtime TIDAK memuat kolom yang di-revoke dari role
   /// authenticated (mis. about/status/avatar/last_seen) — pemanggil WAJIB
-  /// merge berdasarkan [keys] (lihat AuthProvider.mergeProfileEvent),
+  /// merge berdasarkan [keys] (lihat AuthNotifier.mergeProfileEvent),
   /// bukan replace mentah (kolom hilang akan tertimpa default kosong).
   Stream<({UserModel model, Set<String> keys})> onMyProfileUpdates() {
     final id = uid;
@@ -324,7 +324,7 @@ mixin AuthServiceProfileMx on AuthBase {
     // Satu jalur penulis: RPC update_device_fcm_token sudah menulis ke
     // user_devices DAN profiles.fcm_token (kompatibilitas klien lama).
     // Tulis profiles langsung di sini dihapus — duplikat penulis membuat
-    // race saat dua pemanggil (main.dart lazy + AuthProvider) jalan serentak.
+    // race saat dua pemanggil (main.dart lazy + AuthNotifier) jalan serentak.
     try {
       final installId = await DeviceInfoService.instance.installId();
       await _sb.rpc(

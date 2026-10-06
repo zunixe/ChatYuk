@@ -11,7 +11,7 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../core/nav_guard.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
@@ -179,7 +179,7 @@ class _RoomTile extends StatelessWidget {
     final liveUid = '${room['live_uid'] ?? ''}';
     final isLive = liveUid.isNotEmpty;
     final amOwner = '${room['owner_id'] ?? ''}' ==
-        Provider.of<AuthProvider>(context, listen: false).uid;
+        ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),

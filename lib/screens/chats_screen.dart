@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import 'group_screen.dart';
@@ -168,7 +168,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                         showCreateGroupDialog(context);
                         break;
                       case 'read_all':
-                        final uid = context.read<AuthProvider>().uid;
+                        final uid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
                         if (uid == null || uid.isEmpty) return;
                         ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).markAllChatsRead(uid);
                         break;

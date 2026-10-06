@@ -8,7 +8,7 @@ import '../providers/riverpod/device_info_provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/regions.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
 import 'register_screen.dart';
@@ -19,14 +19,14 @@ import '../providers/theme_provider.dart';
 import '../widgets/profile_form_card.dart';
 import '../widgets/auth_header.dart';
 
-class EntryScreen extends StatefulWidget {
+class EntryScreen extends ConsumerStatefulWidget {
   const EntryScreen({super.key});
 
   @override
-  State<EntryScreen> createState() => _EntryScreenState();
+  ConsumerState<EntryScreen> createState() => _EntryScreenState();
 }
 
-class _EntryScreenState extends State<EntryScreen> {
+class _EntryScreenState extends ConsumerState<EntryScreen> {
   final _nicknameCtrl = TextEditingController();
   final _nicknameFocus = FocusNode();
   GeoService get _geo => ProviderScope.containerOf(context, listen: false).read(locationProvider).geo;
@@ -102,13 +102,13 @@ class _EntryScreenState extends State<EntryScreen> {
     }
     // Nickname terlarang langsung ditolak tanpa RPC (kecuali admin).
     if (isBannedNickname(val) &&
-        !context.read<AuthProvider>().isRealAdmin) {
+        !ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isRealAdmin) {
       final s = context.read<LocaleProvider>().s;
       setState(() => _nicknameError = s.errNicknameBanned);
       return;
     }
     _nicknameDebounce = Timer(const Duration(milliseconds: 600), () async {
-      final available = await context.read<AuthProvider>().isNicknameAvailable(
+      final available = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isNicknameAvailable(
         val,
       );
       if (mounted) {
@@ -122,13 +122,13 @@ class _EntryScreenState extends State<EntryScreen> {
     final s = context.read<LocaleProvider>().s;
     setState(() => _googleLoading = true);
     try {
-      final result = await context.read<AuthProvider>().signInWithGoogle();
+      final result = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signInWithGoogle();
       if (!mounted) return;
       // User membatalkan dialog Google — kembali diam-diam.
       if (result == 'canceled') return;
       if (result == 'link_prompt') {
         // Email sudah ada di akun lain — tanya apakah mau link
-        final auth = context.read<AuthProvider>();
+        final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
         final nickname = auth.pendingLinkNickname ?? s.unknownUser;
         final confirm = await showDialog<bool>(
           context: context,
@@ -149,9 +149,9 @@ class _EntryScreenState extends State<EntryScreen> {
         );
         if (!mounted) return;
         if (confirm == true) {
-          await context.read<AuthProvider>().confirmLinkGoogle();
+          await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).confirmLinkGoogle();
         } else {
-          context.read<AuthProvider>().cancelLinkGoogle();
+          ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).cancelLinkGoogle();
           // Gate profil di _AuthGate menampilkan popup isian otomatis.
         }
       } else if (result == 'new') {
@@ -203,7 +203,7 @@ class _EntryScreenState extends State<EntryScreen> {
       ).showSnackBar(SnackBar(content: Text(s.errNicknameInvalid)));
       return;
     }
-    final auth0 = context.read<AuthProvider>();
+    final auth0 = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (isBannedNickname(nick) && !auth0.isRealAdmin) {
       ScaffoldMessenger.of(
         context,
@@ -218,7 +218,7 @@ class _EntryScreenState extends State<EntryScreen> {
     _entered = true;
     setState(() => _loading = true);
     dlog('[ENTRY] _enter start nick=$nick');
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     try {
       await auth.registerProfile(
         nickname: nick,
@@ -321,9 +321,9 @@ class _EntryScreenState extends State<EntryScreen> {
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final requireRegistration = context
-        .watch<AuthProvider>()
-        .requireRegistration;
+    final requireRegistration = ref.watch(
+      authProvider.select((a) => a.requireRegistration),
+    );
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: Stack(

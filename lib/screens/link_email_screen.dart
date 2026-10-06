@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
 import '../providers/theme_provider.dart';
@@ -54,7 +55,7 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
 
     setState(() => _loading = true);
     try {
-      await context.read<AuthProvider>().linkEmailToAccount(email, password);
+      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).linkEmailToAccount(email, password);
       if (!mounted) return;
       // Bonus register DIHAPUS (overhaul coin: tidak ada poin gratis).
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,7 +84,7 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
+    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(title: Text(s.titleLinkEmail)),

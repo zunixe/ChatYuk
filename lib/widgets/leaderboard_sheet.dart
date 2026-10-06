@@ -11,7 +11,7 @@ import '../config/strings.dart';
 import '../models/user_model.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
@@ -28,7 +28,7 @@ import 'profile_avatar.dart';
 /// tab Mingguan/Sepanjang Masa, highlight top-3, daftar padat, bar
 /// peringkat-diri di bawah. Tap nama → profil user; ada tombol
 /// Ikuti/Tambah Teman cepat di tiap baris.
-class LeaderboardSheet extends StatefulWidget {
+class LeaderboardSheet extends ConsumerStatefulWidget {
   const LeaderboardSheet({super.key});
 
   /// Cache hasil Top Aktif per-scope (weekly/alltime) — supaya buka ulang
@@ -74,10 +74,10 @@ class LeaderboardSheet extends StatefulWidget {
   }
 
   @override
-  State<LeaderboardSheet> createState() => _LeaderboardSheetState();
+  ConsumerState<LeaderboardSheet> createState() => _LeaderboardSheetState();
 }
 
-class _LeaderboardSheetState extends State<LeaderboardSheet> {
+class _LeaderboardSheetState extends ConsumerState<LeaderboardSheet> {
   PointsNotifier get _service => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
   String _scope = 'weekly';
   bool _loading = true;
@@ -377,7 +377,7 @@ class _SegmentedScope extends StatelessWidget {
 }
 
 /// Satu baris peringkat (compact). Top-3 di-highlight dengan medali + tint.
-class LeaderboardRow extends StatelessWidget {
+class LeaderboardRow extends ConsumerWidget {
   final Map<String, dynamic> entry;
   final S s;
   /// 'weekly' | 'alltime' — supaya label top-3 sesuai tab yang aktif.
@@ -390,13 +390,13 @@ class LeaderboardRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final rank = (entry['rank'] as num?)?.toInt() ?? 0;
     final nickname = entry['nickname']?.toString() ?? '—';
     final uid = entry['uid']?.toString() ?? '';
     final gender = entry['gender']?.toString() ?? '';
     final registered = entry['is_registered'] == true;
-    final myUid = context.select<AuthProvider, String?>((a) => a.uid);
+    final myUid = ref.watch(authProvider.select((a) => a.uid));
     final isSelf = uid.isNotEmpty && uid == myUid;
 
     // TANPA ANGKA: skor/jumlah pesan TIDAK ditampilkan. Angka besar (mis.

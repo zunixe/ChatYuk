@@ -126,6 +126,15 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   bool _loading = true;
   bool _failed = false;
   bool _opening = false;
+  // Spinner TERTUNDA: baca disk yang cepat (ms) tidak boleh mem-flash
+  // spinner — tampilkan kotak hitam polos sampai terbukti lambat (>300ms,
+  // berarti benar-benar mengunduh). Kunci anti-kedip cold start.
+  bool _slow = false;
+  Timer? _slowTimer;
+  // Poster sinkron (initState, HIT disk) tampil INSTAN tanpa fade.
+  // Poster async (datang belakangan) fade-in halus. Tanpa pembedaan ini,
+  // fade selalu jalan → justru terlihat seperti loading/kedip.
+  bool _fadePoster = false;
   // Terkunci lokal setelah ditonton (optimistis, tanpa menunggu realtime) —
   // pengirim tetap boleh melihat videonya sendiri.
   bool _lockedLocal = false;
@@ -159,10 +168,12 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       try {
         final hit = MediaDiskCache.instance.readSync(_posterKey);
         if (hit != null && hit.isNotEmpty) {
+          dlog('[VideoBubble] poster HIT-sync key=${_posterKey.hashCode} bytes=${hit.length}');
           _poster = hit;
           _loading = false;
           return;
         }
+        dlog('[VideoBubble] poster MISS-sync key=${_posterKey.hashCode} → async');
       } catch (_) {}
     }
     // LAZY: tunda 1 frame — bubble yang belum benar-benar tampil (di luar
@@ -182,6 +193,12 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     if (widget.videoData != oldWidget.videoData) {
       unawaited(_loadPoster());
     }
+  }
+
+  @override
+  void dispose() {
+    _slowTimer?.cancel();
+    super.dispose();
   }
 
   /// True bila videoData berupa path storage (bukan base64 lokal).
@@ -247,23 +264,46 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
           MediaDiskCache.instance.readSync(_posterKey) ??
           await MediaDiskCache.instance.read(_posterKey);
       if (cached != null && cached.isNotEmpty) {
+        dlog('[VideoBubble] poster HIT disk key=${_posterKey.hashCode} bytes=${cached.length}');
         if (!mounted) return;
+        _stopSlow();
         setState(() {
           _poster = cached;
+          _fadePoster = true;
           _loading = false;
           _failed = false;
         });
         return;
       }
+      dlog('[VideoBubble] poster MISS disk key=${_posterKey.hashCode} → generate');
     } catch (_) {}
     setState(() {
       _loading = true;
       _failed = false;
     });
+    _armSlow();
     // Bungkus bagian yang MENGUNDUH video + generate frame dengan gate
     // (bukan cache disk read di atas yang instan). Poster lalu disimpan ke
     // disk — pemanggilan berikutnya tidak lewat gate lagi.
     await _posterGate.run(() => _generatePoster());
+    _stopSlow();
+  }
+
+  /// Nyalakan timer spinner-tertunda (cancel dulu bila ada).
+  void _armSlow() {
+    _slowTimer?.cancel();
+    _slowTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && _loading && _poster == null) {
+        setState(() => _slow = true);
+      }
+    });
+  }
+
+  /// Matikan timer + flag spinner-tertunda.
+  void _stopSlow() {
+    _slowTimer?.cancel();
+    _slowTimer = null;
+    _slow = false;
   }
 
   Future<void> _generatePoster() async {
@@ -284,6 +324,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         if (!mounted) return;
         setState(() {
           _poster = thumb;
+          _fadePoster = true;
           _loading = false;
         });
         _cachePoster(thumb);
@@ -310,6 +351,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       if (!mounted) return;
       setState(() {
         _poster = thumb;
+        _fadePoster = true;
         _loading = false;
       });
       _cachePoster(thumb);
@@ -327,7 +369,11 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   /// Simpan poster ke cache disk (fire-and-forget) — cold start berikutnya
   /// langsung tampil dari disk tanpa generate frame / unduh video.
   void _cachePoster(Uint8List? thumb) {
-    if (thumb == null || thumb.isEmpty) return;
+    if (thumb == null || thumb.isEmpty) {
+      dlog('[VideoBubble] poster generate KOSONG key=${_posterKey.hashCode}');
+      return;
+    }
+    dlog('[VideoBubble] poster tulis disk key=${_posterKey.hashCode} bytes=${thumb.length}');
     unawaited(MediaDiskCache.instance.write(_posterKey, thumb));
   }
 
@@ -451,26 +497,40 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (_poster != null)
-                Image.memory(
-                  _poster!,
-                  fit: BoxFit.cover,
-                  cacheWidth: 400,
-                  gaplessPlayback: true,
-                )
-              else
+              // Lapisan poster SELALU di tree — kemunculannya fade-in
+              // halus (tidak pop). Placeholder di bawah hanya saat null.
+              AnimatedOpacity(
+                opacity: _poster != null ? 1 : 0,
+                duration: _fadePoster
+                    ? const Duration(milliseconds: 220)
+                    : Duration.zero,
+                curve: Curves.easeOut,
+                child: _poster != null
+                    ? Image.memory(
+                        _poster!,
+                        fit: BoxFit.cover,
+                        cacheWidth: 400,
+                        gaplessPlayback: true,
+                      )
+                    : Container(color: Colors.black87),
+              ),
+              if (_poster == null)
                 Container(
                   color: Colors.black87,
                   alignment: Alignment.center,
+                  // Spinner hanya bila TERBUKTI lambat (_slow). Baca disk
+                  // yang selesai <300ms tidak pernah mem-flash spinner.
                   child: _loading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.4,
-                            color: Colors.white,
-                          ),
-                        )
+                      ? (_slow
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const SizedBox())
                       : Icon(
                           _failed
                               ? Icons.refresh_rounded
