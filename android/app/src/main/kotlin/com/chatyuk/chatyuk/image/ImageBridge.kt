@@ -29,6 +29,7 @@ import kotlin.math.roundToInt
  *  - `decodeAvatar(base64,maxPx)`          → ByteArray (JPEG thumb) / null
  *  - `processJpeg(bytes,maxPx,quality)`    → String base64 (resize+JPEG) / null
  *  - `processViewOnce(bytes,seed)`         → String base64 (watermark+JPEG) / null
+ *  - `detectWatermark(bytes,candidates,threshold)` → List<{seed,rho,z,matched}>
  *  - `processPost(bytes,maxW,quality)`     → {bytes,w,h} (resize lebar tetap) / null
  *  - `processStory(bytes,maxPx,quality)`   → String base64 (resize 1-sumbu) / null
  *  - `processSquare(bytes,size,quality)`   → String base64 (crop-stretch persegi) / null
@@ -159,6 +160,21 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                         val seed = call.argument<String>("seed") ?: ""
                         val jpeg = ForensicWatermark.embedToBase64(raw, seed)
                         val out = jpeg?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
+                        main.post { result.success(out) }
+                    }
+                    "detectWatermark" -> {
+                        val raw = call.argument<ByteArray>("bytes")
+                        val candidates = call.argument<List<String>>("candidates") ?: emptyList()
+                        val threshold = call.argument<Double>("threshold") ?: 2.0
+                        val res = ForensicWatermark.detect(raw, candidates, threshold)
+                        val out = res.map {
+                            mapOf(
+                                "seed" to it.seed,
+                                "rho" to it.rho,
+                                "z" to it.z,
+                                "matched" to it.matched,
+                            )
+                        }
                         main.post { result.success(out) }
                     }
                     "processPost" -> {

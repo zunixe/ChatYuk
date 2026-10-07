@@ -278,4 +278,32 @@ void main() {
     final d = img.decodeImage(base64Decode(out!))!;
     expect(d.width, 200);
   });
+
+  test('detectWatermark fallback → seed benar matched', () async {
+    // Foto bertekstur (gradien + noise) agar DCT punya konten.
+    final im = img.Image(width: 1200, height: 1200);
+    for (var y = 0; y < 1200; y++) {
+      for (var x = 0; x < 1200; x++) {
+        final n = ((x * 7 + y * 13) % 32) - 16;
+        im.setPixelRgb(x, y, ((x * 255 ~/ 1200) + n).clamp(0, 255),
+            ((y * 255 ~/ 1200) + n).clamp(0, 255), (((x + y) * 255 ~/ 2400) + n).clamp(0, 255));
+      }
+    }
+    final src = Uint8List.fromList(img.encodeJpg(im, quality: 92));
+    final embedded = base64Decode((await NativeImage.processViewOnce(src, 'victim-uid-123'))!);
+
+    final res = await NativeImage.detectWatermark(
+      embedded,
+      const ['victim-uid-123', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'],
+    );
+    expect(res, isNotNull);
+    expect(res!.isNotEmpty, isTrue);
+    expect(res.first.seed, 'victim-uid-123');
+    expect(res.first.matched, isTrue, reason: 'z=${res.first.z}');
+  }, timeout: const Timeout(Duration(minutes: 5)));
+
+  test('detectWatermark kandidat kosong → list kosong', () async {
+    final r = await NativeImage.detectWatermark(_jpeg(100, 100), const []);
+    expect(r, isEmpty);
+  });
 }

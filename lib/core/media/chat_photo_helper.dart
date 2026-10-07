@@ -240,6 +240,13 @@ String? dartProcessJpegB64((Uint8List, int, int) args) {
   return base64Encode(img.encodeJpg(resized, quality: quality));
 }
 
+/// Fallback DART deteksi watermark (alat forensik admin). Top-level untuk
+/// `compute()`. Return daftar hasil (urut menurun rho) atau null.
+List<WatermarkDetect>? dartDetectWatermark((Uint8List, List<String>, double) args) {
+  final (bytes, candidates, threshold) = args;
+  return ForensicWatermark.detect(bytes, candidates);
+}
+
 /// Fallback DART thumbnail dari base64: resize lebar ke [maxW] + JPEG q[quality].
 /// Paritas `decodeThumbB64` (width 256, quality 80). Top-level untuk compute().
 String? dartThumbB64((String, int, int) args) {

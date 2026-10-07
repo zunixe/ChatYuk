@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'chat_photo_helper.dart' as dartimg;
+import 'forensic_watermark.dart';
 
 /// Pipeline gambar NATIVE (Kotlin `BitmapFactory`) via MethodChannel
 /// `com.chatyuk.chatyuk/image`, dengan **fallback transparan** ke Dart
@@ -207,6 +208,41 @@ class NativeImage {
       } catch (_) {}
     }
     return compute(dartimg.processViewOnceImage, (src, seed));
+  }
+
+  /// Deteksi watermark forensik: kandidat seed → hasil [{seed,rho,z,matched}]
+  /// urut menurun rho. Native `ForensicWatermark.detect`; fallback Dart
+  /// `ForensicWatermark.detect` di isolate (alat admin, jarang).
+  static Future<List<WatermarkDetect>?> detectWatermark(
+    Uint8List src,
+    List<String> candidates, {
+    double threshold = 2.0,
+  }) async {
+    if (src.isEmpty || candidates.isEmpty) return const [];
+    if (await isAvailable()) {
+      try {
+        final r = await _ch.invokeMethod<List<dynamic>>('detectWatermark', {
+          'bytes': src,
+          'candidates': candidates,
+          'threshold': threshold,
+        });
+        if (r != null) {
+          return r.map((e) {
+            final m = (e as Map).cast<String, dynamic>();
+            return WatermarkDetect(
+              seed: m['seed'] as String,
+              rho: (m['rho'] as num).toDouble(),
+              z: (m['z'] as num).toDouble(),
+              matched: m['matched'] as bool,
+            );
+          }).toList();
+        }
+      } catch (_) {}
+    }
+    return compute(
+      dartimg.dartDetectWatermark,
+      (src, candidates, threshold),
+    );
   }
 
   /// Foto POST timeline: resize ke LEBAR tetap [maxW] (rasio dipertahankan) +
