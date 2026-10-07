@@ -1,28 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import 'group_media_screen.dart';
 import 'room_members_sheet.dart';
+import '../config/theme.dart';
 
 /// Layar info grup ala WA: ikon, nama, deskripsi, pemilik, anggota,
 /// dibuat, expiry + token undangan (owner). Dibuka dari menu ⋮ grup.
-class GroupInfoScreen extends StatefulWidget {
+class GroupInfoScreen extends ConsumerStatefulWidget {
   final RoomModel room;
   final String myRole; // owner | admin | member
   const GroupInfoScreen({super.key, required this.room, required this.myRole});
 
   @override
-  State<GroupInfoScreen> createState() => _GroupInfoScreenState();
+  ConsumerState<GroupInfoScreen> createState() => _GroupInfoScreenState();
 }
 
-class _GroupInfoScreenState extends State<GroupInfoScreen> {
+class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
   List<Map<String, dynamic>> _members = [];
   String? _joinToken;
   bool _loading = true;
@@ -68,7 +67,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final room = widget.room;
     final expired = room.expiresAt != null &&
         room.expiresAt!.isBefore(DateTime.now());

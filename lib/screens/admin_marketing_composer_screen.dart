@@ -1,29 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_quill/flutter_quill.dart' as quill;
-import 'package:provider/provider.dart';
 import 'package:vsc_quill_delta_to_html/vsc_quill_delta_to_html.dart';
 
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
-import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Composer email marketing — editor WYSIWYG (flutter_quill).
 /// Hasil editor (Delta) dikonversi ke HTML via vsc_quill_delta_to_html,
 /// lalu disimpan ke campaign.
-class AdminMarketingComposerScreen extends StatefulWidget {
+class AdminMarketingComposerScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? campaign;
   const AdminMarketingComposerScreen({super.key, this.campaign});
 
   @override
-  State<AdminMarketingComposerScreen> createState() =>
+  ConsumerState<AdminMarketingComposerScreen> createState() =>
       _AdminMarketingComposerScreenState();
 }
 
 class _AdminMarketingComposerScreenState
-    extends State<AdminMarketingComposerScreen> {
+    extends ConsumerState<AdminMarketingComposerScreen> {
   late final quill.QuillController _ctrl;
   final _nameCtrl = TextEditingController();
   final _subjectCtrl = TextEditingController();
@@ -96,7 +96,7 @@ class _AdminMarketingComposerScreenState
   }
 
   Future<void> _save({required bool thenSend}) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (_subjectCtrl.text.trim().isEmpty || _deltaToHtml().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.adminMktSaveFail)),
@@ -104,7 +104,7 @@ class _AdminMarketingComposerScreenState
       return;
     }
     setState(() => _busy = true);
-    final a = context.read<AdminProvider>();
+    final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     try {
       final id = await a.saveCampaign(
         id: (widget.campaign?['id'] as num?)?.toInt(),
@@ -138,7 +138,7 @@ class _AdminMarketingComposerScreenState
   }
 
   void _preview() {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final html = _deltaToHtml();
     showModalBottomSheet(
       context: context,
@@ -174,8 +174,8 @@ class _AdminMarketingComposerScreenState
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
 
     return Localizations.override(
       context: context,

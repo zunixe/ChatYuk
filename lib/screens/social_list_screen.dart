@@ -1,19 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/riverpod/social_provider.dart';
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../widgets/person_avatar.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import 'user_info_screen.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
+import '../providers/riverpod/social_provider.dart';
 
 /// Daftar sosial (followers / following / friends / subscribers).
 /// `kind` menentukan tipe; `userId` menentukan user yang diambil (diri sendiri
 /// bila null). Default 'followers'.
-class SocialListScreen extends StatefulWidget {
+class SocialListScreen extends ConsumerStatefulWidget {
   final String kind;
   final String? userId;
   final String? title;
@@ -25,10 +24,10 @@ class SocialListScreen extends StatefulWidget {
   });
 
   @override
-  State<SocialListScreen> createState() => _SocialListScreenState();
+  ConsumerState<SocialListScreen> createState() => _SocialListScreenState();
 }
 
-class _SocialListScreenState extends State<SocialListScreen> {
+class _SocialListScreenState extends ConsumerState<SocialListScreen> {
   SocialNotifier get _service => ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
   bool _loading = true;
   List<Map<String, dynamic>> _items = [];
@@ -56,8 +55,8 @@ class _SocialListScreenState extends State<SocialListScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('SocialList');
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final title =
         widget.title ??
         switch (widget.kind) {

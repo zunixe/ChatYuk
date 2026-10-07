@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../utils.dart';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:provider/provider.dart';
 
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../config/theme.dart';
 import '../core/perf/perf_probe.dart';
 import 'story_camera_capture_screen.dart';
@@ -15,15 +15,15 @@ import 'story_camera_capture_screen.dart';
 /// - Tap → composer story (video dipotong per 15 dtk, maks 2 segmen)
 ///
 /// Return [StoryCaptureResult]/[File] yang dipilih, atau null kalau batal.
-class StoryCameraPickerScreen extends StatefulWidget {
+class StoryCameraPickerScreen extends ConsumerStatefulWidget {
   const StoryCameraPickerScreen({super.key});
 
   @override
-  State<StoryCameraPickerScreen> createState() =>
+  ConsumerState<StoryCameraPickerScreen> createState() =>
       _StoryCameraPickerScreenState();
 }
 
-class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
+class _StoryCameraPickerScreenState extends ConsumerState<StoryCameraPickerScreen>
     with WidgetsBindingObserver {
   final ScrollController _scrollCtrl = ScrollController();
   final List<AssetEntity> _photos = [];
@@ -89,7 +89,7 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
   /// Dialog sekali saat akses sebagian: tawarkan pilih foto lain
   /// (buka pemilih sistem) atau izinkan semua via Pengaturan.
   void _showPartialDialog() {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -277,7 +277,7 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -308,7 +308,7 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: _openCamera,
-                    child: Text(context.read<LocaleProvider>().s.storyCamera),
+                    child: Text(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.storyCamera),
                   ),
                 ],
               ),

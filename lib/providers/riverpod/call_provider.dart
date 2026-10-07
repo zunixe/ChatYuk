@@ -91,6 +91,18 @@ class CallState {
     this.activeChatId,
   });
 
+  @override
+  bool operator ==(Object other) =>
+      other is CallState &&
+      other.activeCallId == activeCallId &&
+      other.activeSession == activeSession &&
+      other.activeMode == activeMode &&
+      other.activeChatId == activeChatId;
+
+  @override
+  int get hashCode =>
+      Object.hash(activeCallId, activeSession, activeMode, activeChatId);
+
   bool get inCall => activeCallId != null;
 }
 
@@ -123,12 +135,6 @@ class CallNotifier extends Notifier<CallState> {
       activeMode: _activeMode,
       activeChatId: _activeChatId,
     );
-  }
-
-  void _bindCallUi() {
-    _ui.onAccept = (callId) => _onSystemAccept(callId);
-    _ui.onDecline = (callId) => _onSystemDecline(callId);
-    _ui.onEnd = (callId) => _onSystemEnd(callId);
   }
 
   StreamSubscription<Map<String, dynamic>>? _incomingSub;

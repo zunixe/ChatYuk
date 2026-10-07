@@ -1,6 +1,6 @@
 // Verifikasi pengumpulan data untuk Play Console Data Safety
 import 'package:flutter/services.dart';
-import 'lib/providers/auth_provider.dart';
+import 'lib/providers/riverpod/auth_provider.dart';
 import 'lib/services/avatar_service.dart';
 
 void main() async {
@@ -28,7 +28,7 @@ void main() async {
   
   // 3. Cek AuthProvider (data pengguna)
   try {
-    final auth = AuthProvider();
+    final auth = AuthNotifier(autoInit: false);
     final user = auth.profile;
     print('✓ user data tersedia: ${user?.uid}');
   } catch (e) {

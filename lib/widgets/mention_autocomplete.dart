@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../utils/mention.dart';
 
 /// Panel saran mention `@` yang mengambang DI ATAS composer (tidak menggeser
@@ -102,7 +102,7 @@ class _MentionAutocompleteState extends State<MentionAutocomplete> {
   @override
   Widget build(BuildContext context) {
     if (_token == null) return const SizedBox.shrink();
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final items = _items;
     if (items.isEmpty) return const SizedBox.shrink();
     final selected = _selected.clamp(0, items.length - 1);

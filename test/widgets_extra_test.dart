@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/config/theme.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/widgets/reply_quote.dart';
 import 'package:chatyuk/widgets/room_icon.dart';
 import 'package:chatyuk/widgets/story_text_overlay.dart';
@@ -12,12 +11,9 @@ import 'package:chatyuk/widgets/story_text_overlay.dart';
 void main() {
   final s = S(isId: true);
 
-  Widget wrap(Widget child) => MaterialApp(
-        home: ChangeNotifierProvider<LocaleProvider>(
-          create: (_) => LocaleProvider(),
-          child: Scaffold(body: child),
-        ),
-      );
+  Widget wrap(Widget child) => ProviderScope(child: MaterialApp(
+        home:  Scaffold(body: child),
+      ));
 
   group('RoomIcon', () {
     testWidgets('kategori dikenal → Material icon, bukan emoji',

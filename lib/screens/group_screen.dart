@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../core/admin_gate.dart';
 import '../core/nav_guard.dart';
 import '../core/perf/perf_probe.dart';
 import '../models/room_model.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/room_icon.dart';
 import 'room_chat_screen.dart';
+import '../config/theme.dart';
 
 /// Tab "Grup": list grup private milikku + FAB buat grup.
 /// Dipindah dari lobby_screen (dulu tab Private di dalam Room).
@@ -79,7 +78,7 @@ class _GroupListState extends ConsumerState<_GroupList> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('Group');
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // PERF: dulu `watch<RoomProvider>()` penuh → SELURUH daftar grup rebuild
     // tiap RoomProvider notify (4 realtime sub: counts/private/membership/
     // presence → sering). `select` hanya field yang dirender; `myGroups`
@@ -190,7 +189,7 @@ const _roomIconChoices = [
 
 /// Dialog buat grup — publik: dipakai FAB tab Grup DAN menu ⋮ chat list.
 Future<void> showCreateGroupDialog(BuildContext context) async {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
   final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
   // Admin privilege hanya ada di build admin (flavor-gate) —
@@ -199,7 +198,7 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
   // Gate ANON: bikin grup khusus terdaftar (server juga menolak).
   // Sesi dummy (admin jadi anon) diizinkan — server bypass dummy.
   if (auth.isAnonymous && !auth.dummySessionActive) {
-    final ls = context.read<LocaleProvider>().s;
+    final ls = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showAnonPromptDialog(
       context,
       title: ls.promptCompleteEmailGroupTitle,
@@ -534,7 +533,7 @@ class _GroupCard extends ConsumerWidget {
   }
 
   Future<void> _enter(BuildContext context) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final rooms = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
@@ -657,7 +656,7 @@ class _GroupCard extends ConsumerWidget {
   }
 
   Future<void> _ownerMenu(BuildContext context) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final rooms = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final action = await showModalBottomSheet<String>(
@@ -742,7 +741,7 @@ class _GroupCard extends ConsumerWidget {
   }
 
   Future<bool> _confirmDelete(BuildContext context) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final rooms = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     final ok = await showDialog<bool>(
@@ -776,7 +775,7 @@ class _GroupCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     // PERF: dulu `watch<RoomProvider>()` penuh di SETIAP kartu → semua kartu
     // rebuild tiap provider notify (counts/presence/membership sering).

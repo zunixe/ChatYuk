@@ -3,18 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../widgets/post_card.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/skeleton_card.dart';
 import 'post_composer_screen.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import '../core/perf/perf_probe.dart';
+import '../config/theme.dart';
 
 /// Timeline feed: tab Semua / Mengikuti + infinite scroll + refresh.
 class TimelineScreen extends ConsumerStatefulWidget {
@@ -150,9 +149,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('Timeline');
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     super.build(context);
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // Rebuild granular: hanya rebuild saat daftar post / hasMore benar-benar
     // berubah (bukan tiap notifyListeners — mis. pricing, loading).
     final postsRaw = ref.watch(timelineProvider.select((t) => t.posts));

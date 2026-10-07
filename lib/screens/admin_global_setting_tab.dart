@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'admin_global_setting/widgets/setting_tiles.dart';
 import 'admin_global_setting/widgets/ai_global_tile.dart';
 import 'admin_global_setting/widgets/app_font_settings.dart';
 import 'admin_global_setting/widgets/excluded_devices.dart';
 import 'admin_global_setting/widgets/privacy_bypass_tile.dart';
 import 'admin_global_setting/widgets/update_config_tile.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 
 /// Admin panel — tab "Global Setting".
 /// Berisi semua toggle pengaturan global aplikasi (screenshot, watermark,
@@ -15,12 +15,12 @@ import '../providers/theme_provider.dart';
 /// Catatan screenshot: setting "izinkan screenshot aplikasi" HANYA berlaku
 /// untuk ChatYuk user. Build admin selalu bisa screenshot (untuk kebutuhan
 /// dokumentasi/dukungan admin).
-class AdminGlobalSettingTab extends StatelessWidget {
+class AdminGlobalSettingTab extends ConsumerWidget {
   const AdminGlobalSettingTab({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(themeProvider);
     return ListView(
       padding: EdgeInsets.fromLTRB(
         16,

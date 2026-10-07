@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Bypass privasi: ON = akun admin melihat semua field profil user
 /// (foto/status/last_seen/about/story) tanpa filter visibility.
 /// Server tetap menegakkan: user biasa tidak terdampak (cek email admin).
-class PrivacyBypassTile extends StatefulWidget {
+class PrivacyBypassTile extends ConsumerStatefulWidget {
   const PrivacyBypassTile({super.key});
 
   @override
-  State<PrivacyBypassTile> createState() => _PrivacyBypassTileState();
+  ConsumerState<PrivacyBypassTile> createState() => _PrivacyBypassTileState();
 }
 
-class _PrivacyBypassTileState extends State<PrivacyBypassTile> {
+class _PrivacyBypassTileState extends ConsumerState<PrivacyBypassTile> {
   bool _loading = true;
   bool _enabled = false;
 
@@ -27,7 +27,7 @@ class _PrivacyBypassTileState extends State<PrivacyBypassTile> {
 
   Future<void> _load() async {
     try {
-      final st = await context.read<AdminProvider>().getPointSettings();
+      final st = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getPointSettings();
       if (!mounted) return;
       setState(() {
         _enabled = st['privacy_bypass_enabled'] == true;
@@ -41,7 +41,7 @@ class _PrivacyBypassTileState extends State<PrivacyBypassTile> {
   Future<void> _toggle(bool v) async {
     setState(() => _enabled = v);
     try {
-      await context.read<AdminProvider>().setPrivacyBypass(v);
+      await ProviderScope.containerOf(context, listen: false).read(adminProvider).setPrivacyBypass(v);
     } catch (_) {
       if (mounted) setState(() => _enabled = !v);
     }
@@ -49,7 +49,7 @@ class _PrivacyBypassTileState extends State<PrivacyBypassTile> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(

@@ -2,16 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    hide Provider, ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/mixins/chat_selection_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/chat_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/riverpod/locale_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/message_reaction_service.dart';
 
@@ -20,6 +19,13 @@ import '../supabase_test_client.dart';
 class MockAuthService extends Mock implements AuthService {}
 
 class MockAuthService2 extends Mock implements AuthService {}
+
+class _TestLocale extends LocaleNotifier {
+  final String _lang;
+  _TestLocale(this._lang);
+  @override
+  LocaleState build() => LocaleState(_lang);
+}
 
 /// Harness minimal untuk `ChatSelectionMixin` — kontraknya mandiri (tidak
 /// bergantung mixin lain), jadi cukup host kecil.
@@ -128,13 +134,8 @@ Future<SelHostState> pumpSel(WidgetTester tester,
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
-        ],
-        child: MaterialApp(
-            home: SelHost(auth: auth, chat: chat, showAppBar: showAppBar)),
-      ),
+      child: MaterialApp(
+          home: SelHost(auth: auth, chat: chat, showAppBar: showAppBar)),
     ),
   );
   return tester.state<SelHostState>(find.byType(SelHost));
@@ -319,11 +320,7 @@ void main() {
       final mockAuth = AuthNotifier(authService: mockSvc2, autoInit: false);
       final chat = ChatNotifier();
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<LocaleProvider>(
-                create: (_) => LocaleProvider()),
-          ],
+        ProviderScope(
           child: MaterialApp(
               home: SelHost(auth: mockAuth, chat: chat, showAppBar: true)),
         ),
@@ -433,22 +430,18 @@ void main() {
       SelHostState.deleteResults.clear();
       SelHostState.undeleteResults.clear();
       SharedPreferences.setMockInitialValues({});
-      final lp = LocaleProvider();
-      await lp.setLang(lang);
       final container = ProviderContainer(
-        overrides: [authProvider.overrideWith(() => auth)],
+        overrides: [
+          authProvider.overrideWith(() => auth),
+          localeProvider.overrideWith(() => _TestLocale(lang)),
+        ],
       );
       addTearDown(container.dispose);
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: MultiProvider(
-            providers: [
-              ChangeNotifierProvider<LocaleProvider>.value(value: lp),
-            ],
-            child: MaterialApp(
-              home: Scaffold(body: SelHost(auth: auth, chat: chat)),
-            ),
+          child: MaterialApp(
+            home: Scaffold(body: SelHost(auth: auth, chat: chat)),
           ),
         ),
       );
@@ -539,14 +532,8 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: MultiProvider(
-            providers: [
-              ChangeNotifierProvider<LocaleProvider>(
-                create: (_) => LocaleProvider(),
-              ),
-            ],
-            child: MaterialApp(home: Scaffold(body: SelHost(auth: auth, chat: chat))),
-          ),
+          child: MaterialApp(
+              home: Scaffold(body: SelHost(auth: auth, chat: chat))),
         ),
       );
       return tester.state<SelHostState>(find.byType(SelHost));
@@ -615,7 +602,7 @@ void main() {
       await tester.pump();
 
       expect(got, 'rahasia');
-      expect(find.text(s.context.read<LocaleProvider>().s.msgMessageCopied),
+      expect(find.text(S(isId: true).msgMessageCopied),
           findsOneWidget);
       expect(s.selectedIds, isEmpty);
     });

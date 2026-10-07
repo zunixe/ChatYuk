@@ -7,17 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    hide Provider, ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/auth_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/social_provider.dart';
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
-import 'package:chatyuk/providers/timeline_provider.dart';
 import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/services/auth_service.dart';
@@ -26,7 +19,6 @@ import 'package:chatyuk/services/timeline_service.dart';
 import 'package:chatyuk/core/cache/post_photo_cache.dart';
 import 'package:chatyuk/widgets/post_card.dart';
 
-import 'supabase_test_client.dart';
 import 'test_helper.dart';
 
 /// Fase 5 — PostCard: render + perilaku kunci (logic-only, tanpa jaringan).
@@ -131,9 +123,6 @@ void main() {
 
   Future<void> pump(WidgetTester tester, Map<String, dynamic> post,
       {SocialState socialState = const SocialState()}) async {
-    final locale = LocaleProvider();
-    final tp = TimelineProvider(service: timeline, autoInit: false);
-    final ap = AuthProvider(authService: auth, autoInit: false);
     final container = ProviderContainer(
       overrides: [
         socialProvider.overrideWith(() => TestSocial(socialState)),
@@ -143,25 +132,13 @@ void main() {
         authProvider.overrideWith(() => TestAuth(auth)),
       ],
     );
-    addTearDown(() {
-      tp.dispose();
-      ap.dispose();
-      locale.dispose();
-      container.dispose();
-    });
+    addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: locale),
-            ChangeNotifierProvider.value(value: tp),
-            ChangeNotifierProvider.value(value: ap),
-          ],
-          child: MaterialApp(
-            home: Scaffold(
-              body: SingleChildScrollView(child: PostCard(post: post)),
-            ),
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: PostCard(post: post)),
           ),
         ),
       ),

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/mixins/voice_recorder_mixin.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 
 /// Harness minimal `VoiceRecorderMixin` — kontraknya mandiri (2 method).
 /// Fokus: state machine timer/lock/pause/cancel, BUKAN plugin `record`
@@ -36,10 +35,7 @@ class VoiceHostState extends State<VoiceHost> with VoiceRecorderMixin<VoiceHost>
 
 Future<VoiceHostState> pumpVoice(WidgetTester tester) async {
   await tester.pumpWidget(
-    ChangeNotifierProvider<LocaleProvider>(
-      create: (_) => LocaleProvider(),
-      child: const MaterialApp(home: VoiceHost()),
-    ),
+     const ProviderScope(child: MaterialApp(home: VoiceHost())),
   );
   return tester.state<VoiceHostState>(find.byType(VoiceHost));
 }

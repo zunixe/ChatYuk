@@ -220,7 +220,6 @@ mixin ChatServicePrivateChatListMx on ChatBase {
       final b64 = await StoragePhotoService.instance.download(data);
       if (b64 == null || b64.isEmpty) return;
       await PhotoCache.instance.save('private_$chatId', id, b64);
-      dlog('[prefetch] photo $id cached for $chatId');
     } catch (_) {}
   }
 

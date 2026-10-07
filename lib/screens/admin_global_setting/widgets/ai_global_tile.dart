@@ -1,24 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../core/admin_err.dart';
 import 'provider_section.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// AI Bot global: master switch semua balasan AI dummy + rate limit
 /// (maks balasan per chat per jam & jeda minimal antar balasan).
-class AiGlobalTile extends StatefulWidget {
+class AiGlobalTile extends ConsumerStatefulWidget {
   const AiGlobalTile({super.key});
 
   @override
-  State<AiGlobalTile> createState() => _AiGlobalTileState();
+  ConsumerState<AiGlobalTile> createState() => _AiGlobalTileState();
 }
 
-class _AiGlobalTileState extends State<AiGlobalTile> {
-  AdminProvider get _svc => context.read<AdminProvider>();
+class _AiGlobalTileState extends ConsumerState<AiGlobalTile> {
+  AdminProvider get _svc => ProviderScope.containerOf(context, listen: false).read(adminProvider);
   bool _loading = true;
   bool _globalEnabled = true;
   int _maxReplies = 20;
@@ -63,7 +64,7 @@ class _AiGlobalTileState extends State<AiGlobalTile> {
   }
 
   Future<void> _toggle(bool v) async {
-    if (guardOfflineCtx(context, context.read<LocaleProvider>().s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
+    if (guardOfflineCtx(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
     setState(() => _globalEnabled = v);
     try {
       await _svc.setAiSettings(globalEnabled: v);
@@ -77,7 +78,7 @@ class _AiGlobalTileState extends State<AiGlobalTile> {
     final minCtrl = TextEditingController(text: '$_minInterval');
     bool guardTmp = _guardEnabled;
     bool aiAiTmp = _aiAiEnabled;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -219,7 +220,7 @@ class _AiGlobalTileState extends State<AiGlobalTile> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(

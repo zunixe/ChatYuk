@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/privacy_settings.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/privacy_provider.dart';
 import 'privacy_settings/widgets/privacy_exclusions_sheet.dart';
+import '../config/theme.dart';
 
 /// Pengaturan Privasi — struktur & gaya sama dengan halaman Notifikasi
 /// (kartu bgCard, ikon lingkaran 36, divider indent 52).
@@ -132,7 +131,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
   }
 
   Future<void> _choose(String field, PrivacySettings p) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final current = _valueOf(field, p);
     final selected = await showModalBottomSheet<PrivacyVisibility>(
       context: context,
@@ -197,7 +196,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
     String field, {
     required PrivacyVisibility mode,
   }) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final provider = ref.read(privacyProvider.notifier);
     await provider.ensureExcludable();
     if (!mounted) return null;
@@ -251,7 +250,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final p = ref.watch(privacyProvider).settings;
     // PERF (§26b): dulu 3× `watch<PointsProvider>()` → SELURUH halaman
     // privasi rebuild tiap PointsProvider notify (refresh beberapa kali saat
@@ -360,7 +359,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
   Future<void> _buyGhost(bool want) async {
     if (!want) return; // tidak bisa mematikan lebih awal (habis sendiri)
     final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

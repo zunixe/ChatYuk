@@ -2,17 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/app_flavor.dart';
 import '../core/admin_gate.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../config/theme.dart';
 import 'point_history/widgets/history_tile.dart';
 import 'point_history/widgets/yukcoin_header.dart';
 import 'point_history/widgets/yukcoin_how_to.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../utils.dart';
+import '../config/app_flavor.dart';
 
 /// Halaman pusat YukCoin: saldo, cara dapat, cara pakai, dan riwayat.
 /// Dulu hanya "History Poin" — sekarang diperluas jadi hub YukCoin.
@@ -56,8 +55,8 @@ class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     // PERF: `watch` penuh → seluruh riwayat rebuild tiap PointsProvider
     // notify (refresh berkala). `select` snapshot nilai yang dirender;
     // aksi dipanggil via `read`.

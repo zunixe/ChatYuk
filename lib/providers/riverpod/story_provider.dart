@@ -24,6 +24,16 @@ class StoryState {
     this.error,
   });
 
+  @override
+  bool operator ==(Object other) =>
+      other is StoryState &&
+      other.loading == loading &&
+      other.error == error &&
+      listEquals(other.tray, tray);
+
+  @override
+  int get hashCode => Object.hash(loading, error, Object.hashAll(tray));
+
   bool get hasOwnStory => tray.any((t) => t.own && t.slideCount > 0);
 
   StoryTrayItem? get ownItem {
@@ -89,6 +99,11 @@ class StoryNotifier extends Notifier<StoryState> {
   List<StoryTrayItem> get tray => _tray;
   bool get loading => _loading;
   String? get error => _error;
+
+  /// Test hook: reset gate TTL refresh silent (45 dtk) agar refresh silent
+  /// berikutnya benar-benar menembak `fetchTrayRaw` (dipakai unit test).
+  void debugResetTrayTtl() => _lastTrayRefreshAt = null;
+
   bool get hasOwnStory => _tray.any((t) => t.own && t.slideCount > 0);
   StoryTrayItem? get ownItem {
     for (final t in _tray) {

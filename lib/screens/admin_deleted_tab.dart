@@ -1,34 +1,34 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import 'admin_deleted/widgets/deleted_card.dart';
 import 'admin_deleted/widgets/deleted_detail_sheet.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../widgets/admin_error_view.dart';
-import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../main.dart' show resumeWarmup;
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../utils.dart';
 import '../core/ui/scroll_pagination.dart';
 import '../widgets/search_field.dart';
 import '../widgets/filter_chip_pill.dart';
 import '../core/admin_err.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Admin: arsip user yang sudah dihapus (tab Terhapus).
 /// Setiap entry = snapshot user yang pernah ada; klik → detail + riwayat
 /// device yang tersisa (device milik hardware, tidak ikut terhapus).
-class AdminDeletedTab extends StatefulWidget {
+class AdminDeletedTab extends ConsumerStatefulWidget {
   const AdminDeletedTab({super.key});
 
   @override
-  State<AdminDeletedTab> createState() => _AdminDeletedTabState();
+  ConsumerState<AdminDeletedTab> createState() => _AdminDeletedTabState();
 }
 
-class _AdminDeletedTabState extends State<AdminDeletedTab>
+class _AdminDeletedTabState extends ConsumerState<AdminDeletedTab>
     with WidgetsBindingObserver {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
@@ -45,13 +45,13 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    Future.microtask(() => context.read<AdminProvider>().fetchDeleted());
+    Future.microtask(() => ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchDeleted());
     _startRefreshTimer();
     _pagination = ScrollPagination(
       controller: _scrollCtrl,
       onLoadMore: () {
         if (!mounted) return;
-        context.read<AdminProvider>().fetchMoreDeleted();
+        ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchMoreDeleted();
       },
     );
   }
@@ -62,7 +62,7 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     // paginasi yang sedang di-scroll user (dulu tiap 15 dtk buang load-more).
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
-      final p = context.read<AdminProvider>();
+      final p = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       // Lewati polling kalau user sudah load-more (jangan reset paginasi).
       if (p.deleted.length > 100) return;
       p.fetchDeleted();
@@ -80,7 +80,7 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
       if (mounted && _refreshTimer == null) {
         unawaited(
           resumeWarmup().then((_) {
-            if (mounted) context.read<AdminProvider>().fetchDeleted();
+            if (mounted) ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchDeleted();
           }),
         );
         _startRefreshTimer();
@@ -164,7 +164,7 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
 
     setState(() => _batchDeleting = true);
     final count =
-        await context.read<AdminProvider>().deleteBatchUsers(selectedItems);
+        await ProviderScope.containerOf(context, listen: false).read(adminProvider).deleteBatchUsers(selectedItems);
     if (!mounted) return;
     setState(() {
       _batchDeleting = false;
@@ -235,11 +235,11 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     // GRANULAR: rebuild hanya saat domain DELETED berubah.
-    context.select<AdminProvider, int>((p) => p.revDeleted);
-    final admin = context.read<AdminProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(adminProvider.select((p) => p.revDeleted));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ref.watch(localeProvider).s;
     // Hitung sekali per build — dulu `_filtered()` dipanggil di dalam
     // `itemBuilder` sehingga daftar difilter ulang untuk SETIAP baris (O(n²)
     // pada 100+ item) dan hasilnya tidak stabil antar frame.
@@ -489,8 +489,8 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     BuildContext context,
     Map<String, dynamic> d,
   ) async {
-    final admin = context.read<AdminProvider>();
-    final s = context.read<LocaleProvider>().s;
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final nick = '${d['nickname'] ?? ''}';
     final uid = '${d['user_id'] ?? ''}';
     List<Map<String, dynamic>> devices = const [];

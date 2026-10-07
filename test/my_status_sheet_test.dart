@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/config/theme.dart';
 import 'package:chatyuk/models/privacy_settings.dart';
-import 'package:chatyuk/providers/privacy_provider.dart';
+import 'package:chatyuk/providers/riverpod/privacy_provider.dart';
 import 'package:chatyuk/screens/online_users_screen.dart';
 import 'package:chatyuk/services/privacy_service.dart';
 import 'package:chatyuk/widgets/person_avatar.dart';
@@ -16,6 +16,10 @@ import 'package:chatyuk/widgets/person_avatar.dart';
 import 'test_helper.dart';
 
 class MockPrivacyService extends Mock implements PrivacyService {}
+
+class _TestPrivacy extends PrivacyNotifier {
+  _TestPrivacy(PrivacyService svc) : super(svc);
+}
 
 /// Mengunci fitur "Status kamu" (halaman Pengguna Online):
 /// - Pemetaan visibilitas → chip + subbaris (khususnya kasus "kecuali N orang"
@@ -91,7 +95,7 @@ void main() {
 
   group('MyStatusSheet (widget)', () {
     late MockPrivacyService svc;
-    late PrivacyProvider privacy;
+    late ProviderContainer container;
 
     void stubSettings(PrivacySettings st) {
       when(() => svc.fetch()).thenAnswer((_) async => st);
@@ -99,10 +103,11 @@ void main() {
 
     setUp(() {
       svc = MockPrivacyService();
-      privacy = PrivacyProvider(service: svc);
+      container = ProviderContainer(
+        overrides: [privacyProvider.overrideWith(() => _TestPrivacy(svc))],
+      );
+      addTearDown(container.dispose);
     });
-
-    tearDown(() => privacy.dispose());
 
     Future<void> pump(
       WidgetTester tester, {
@@ -112,10 +117,10 @@ void main() {
       String gender = 'male',
     }) async {
       stubSettings(st);
-      await privacy.load();
+      await container.read(privacyProvider.notifier).load();
       await tester.pumpWidget(
-        ChangeNotifierProvider<PrivacyProvider>.value(
-          value: privacy,
+        UncontrolledProviderScope(
+          container: container,
           child: MaterialApp(
             home: Scaffold(
               body: MyStatusSheet(
@@ -126,7 +131,6 @@ void main() {
                 gender: gender,
                 status: status,
                 invisible: invisible,
-                privacy: privacy,
               ),
             ),
           ),

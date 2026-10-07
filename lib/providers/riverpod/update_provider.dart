@@ -56,6 +56,26 @@ class UpdateState {
         progress: progress ?? this.progress,
         fromPlay: fromPlay ?? this.fromPlay,
       );
+
+  @override
+  bool operator ==(Object other) =>
+      other is UpdateState &&
+      other.phase == phase &&
+      other.force == force &&
+      other.latestVersion == latestVersion &&
+      other.notes == notes &&
+      other.progress == progress &&
+      other.fromPlay == fromPlay;
+
+  @override
+  int get hashCode => Object.hash(
+        phase,
+        force,
+        latestVersion,
+        notes,
+        progress,
+        fromPlay,
+      );
 }
 
 /// Provider fitur update (Riverpod) — jembatan screen (dialog) ↔ service.

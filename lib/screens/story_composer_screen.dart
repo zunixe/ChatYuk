@@ -5,19 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
-import 'package:video_player/video_player.dart';
 import 'dart:ui' as ui;
 
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/story_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../widgets/story_text_overlay.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'package:video_player/video_player.dart';
 
 /// Hasil proses gambar — dipindah balik dari isolate dalam satu pesan.
 class _ProcessedStory {
@@ -88,7 +87,7 @@ Uint8List encodeRawRgbaToJpg(RawJpg p) {
 /// Halaman buat story: preview foto 9:16 + teks overlay (drag bebas,
 /// warna/ukuran/latar) + pilih visibility. Anon tidak sampai ke sini
 /// (tombol + tersembunyi; RLS server juga menolak).
-class StoryComposerScreen extends StatefulWidget {
+class StoryComposerScreen extends ConsumerStatefulWidget {
   final XFile picked;
   /// Penanda video EKSPLISIT dari kamera/galeri — jangan tebak dari
   /// ekstensi file (kamera Xiaomi bisa menyimpan ekstensi lain sehingga
@@ -101,10 +100,10 @@ class StoryComposerScreen extends StatefulWidget {
   });
 
   @override
-  State<StoryComposerScreen> createState() => _StoryComposerScreenState();
+  ConsumerState<StoryComposerScreen> createState() => _StoryComposerScreenState();
 }
 
-class _StoryComposerScreenState extends State<StoryComposerScreen> {
+class _StoryComposerScreenState extends ConsumerState<StoryComposerScreen> {
   final _textCtrl = TextEditingController();
   final _textFocus = FocusNode();
   Uint8List? _bytes;
@@ -207,7 +206,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     final ms = ctrl.value.duration.inMilliseconds;
     if (ms < 1000) {
       if (mounted) {
-        final s = context.read<LocaleProvider>().s;
+        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s.storyVideoTooShort)),
         );
@@ -223,7 +222,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   /// satu story. Poster 1 frame jadi thumbnail tray.
   Future<void> _publishVideo() async {
     if (_publishing) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     final ctrl = _videoCtrl;
@@ -550,7 +549,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
 
   Future<void> _publish() async {
     if (_publishing) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     if (uid == null || _bytes == null) return;
@@ -737,7 +736,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return PopScope(
       canPop: false,
       // Back (sistem/gesture) → konfirmasi dulu, jangan langsung keluar.
@@ -1255,7 +1254,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
       if (mounted) Navigator.pop(context);
       return;
     }
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final discard = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'
     hide Provider, ChangeNotifierProvider, Consumer;
-import 'package:provider/provider.dart';
 
 import '../config/strings.dart';
 import '../config/theme.dart';
@@ -11,7 +10,7 @@ import '../core/nav_guard.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../utils.dart';
 import '../widgets/anon_prompt_dialog.dart';
@@ -27,14 +26,14 @@ import 'private_chat_screen.dart';
 /// Tap baris → buka private chat; ikon call di kanan → panggil ulang jenis
 /// panggilan terakhir. Data dibaca lewat [CallProvider] (screen dilarang
 /// import `services/`).
-class CallHistoryScreen extends StatefulWidget {
+class CallHistoryScreen extends ConsumerStatefulWidget {
   const CallHistoryScreen({super.key});
 
   @override
-  State<CallHistoryScreen> createState() => _CallHistoryScreenState();
+  ConsumerState<CallHistoryScreen> createState() => _CallHistoryScreenState();
 }
 
-class _CallHistoryScreenState extends State<CallHistoryScreen> {
+class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
   List<CallHistoryEntry>? _entries;
   Map<String, String> _names = const {};
   Map<String, String> _genders = const {};
@@ -108,7 +107,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
     final profile = auth.profile;
     final me = auth.uid;
     if (me == null) return;
-    final otherName = _nameFor(e.otherUid, context.read<LocaleProvider>().s);
+    final otherName = _nameFor(e.otherUid, ProviderScope.containerOf(context, listen: false).read(localeProvider).s);
     final navKey = navKeyChat(chat.privateChatId(me, e.otherUid));
     if (!tryClaimNav(navKey)) return;
     try {
@@ -141,7 +140,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   /// Panggil ulang jenis panggilan terakhir — gate anon/dummy + izin
   /// kamera/mikrofon, sama persis dengan alur panggil dari layar chat.
   Future<void> _redial(CallHistoryEntry e) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile = auth.profile;
     final call = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
@@ -241,7 +240,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       appBar: AppBar(title: Text(s.menuRecentCalls)),
       body: RefreshIndicator(
@@ -287,7 +286,7 @@ class _CallHistoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = Provider.of<LocaleProvider>(context).s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final missed = entry.isMissedIncoming;
     // Ikon arah: hijau = keluar/terjawab, merah = masuk tak terjawab
     // (gaya WhatsApp). Teks hari/bulan + jam ikut warna status supaya

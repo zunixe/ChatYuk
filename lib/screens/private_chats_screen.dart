@@ -3,20 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/social_actions.dart';
 import 'private_chat_screen.dart';
-import '../providers/call_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/call_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/app_gesture.dart';
 import '../core/perf/perf_probe.dart';
@@ -24,6 +22,7 @@ import '../core/nav_guard.dart';
 import '../core/chat/chat_filter.dart';
 import '../core/chat/chat_location.dart';
 import '../widgets/filter_chip_pill.dart';
+import '../config/theme.dart';
 
 class PrivateChatsScreen extends ConsumerStatefulWidget {
   final bool embedded;
@@ -144,7 +143,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   /// Aksi massal gaya WhatsApp — pin, mute, arsip untuk semua terpilih.
   /// Tombol menampilkan AKSI (misal semua sudah pin → tawarkan unpin).
   Future<void> _pinSelected(String uid, bool pin) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final ids = _selected.toList();
     _clearSelection();
@@ -161,7 +160,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   }
 
   Future<void> _muteSelected(String uid, bool mute) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final ids = _selected.toList();
     _clearSelection();
@@ -178,7 +177,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   }
 
   Future<void> _archiveSelected(String uid, bool archive) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final ids = _selected.toList();
     _clearSelection();
@@ -197,7 +196,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   }
 
   Future<void> _confirmDeleteSelected(String uid) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -430,7 +429,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            context.read<LocaleProvider>().s.deleteSelectedSuccess(ids.length),
+            ProviderScope.containerOf(context, listen: false).read(localeProvider).s.deleteSelectedSuccess(ids.length),
           ),
         ),
       );
@@ -633,9 +632,9 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('ChatList');
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final blocked =
         ref.watch(chatProvider.select((c) => c.blockedUids));
     // PERF (§26): JANGAN select SELURUH daftar online — list itu berubah
@@ -973,8 +972,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
                                           onPressed: () =>
                                               Navigator.of(ctx).pop(false),
                                           child: Text(
-                                            context
-                                                .read<LocaleProvider>()
+                                            ProviderScope.containerOf(context, listen: false).read(localeProvider)
                                                 .s
                                                 .btnCancel,
                                           ),
@@ -1490,7 +1488,7 @@ class _FriendButtonState extends ConsumerState<_FriendButton> {
 
   Future<void> _onTap(bool isFriend, bool pending) async {
     if (_busy) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     // Putus teman / batalkan lewat helper bersama (dialog + snackbar).
     if (isFriend) {
@@ -1525,11 +1523,13 @@ class _FriendButtonState extends ConsumerState<_FriendButton> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
-    ref.watch(socialProvider);
-    final social = ref.read(socialProvider.notifier);
-    final isFriend = social.isFriend(widget.otherUid);
-    final pending = social.isPendingFriendRequest(widget.otherUid);
+    final s = ref.watch(localeProvider).s;
+    final (:isFriend, :pending) = ref.watch(
+      socialProvider.select((s) => (
+        isFriend: s.isFriend(widget.otherUid),
+        pending: s.isPendingFriendRequest(widget.otherUid),
+      )),
+    );
     final icon = isFriend
         ? Icons.group_remove_rounded
         : (pending ? Icons.cancel_rounded : Icons.person_add_alt_rounded);

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/user_model.dart';
 import '../../utils/mention.dart';
@@ -12,6 +13,13 @@ import '../../core/cache/photo_cache.dart';
 class ChatState {
   final List<String> blockedUids;
   const ChatState({this.blockedUids = const []});
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChatState && listEquals(other.blockedUids, blockedUids);
+
+  @override
+  int get hashCode => Object.hashAll(blockedUids);
 
   bool isBlocked(String uid) => blockedUids.contains(uid);
 }

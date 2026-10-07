@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
 import '../../../providers/riverpod/auth_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../core/admin_err.dart';
 import '../../../utils.dart';
 import '../../../widgets/detail_row.dart';
 import '../../../widgets/sheet_drag_handle.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Bottom sheet detail satu device → daftar user yang pernah login.
 class DeviceDetailSheet extends StatelessWidget {
@@ -161,7 +160,7 @@ class DeviceDetailSheet extends StatelessWidget {
   /// "muncul lagi" sebagai device baru.
   Future<void> _excludeDevice(BuildContext context, String installId) async {
     if (installId.isEmpty) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     // Aksi tulis: tidak boleh jalan saat offline (gagal separuh jalan).
     if (guardOfflineCtx(
       context,
@@ -186,8 +185,8 @@ class DeviceDetailSheet extends StatelessWidget {
     if (ok) {
       // Tutup sheet + refresh daftar supaya item ter-exclude langsung hilang.
       Navigator.pop(context);
-      context.read<AdminProvider>().invalidateStatsDetail();
-      await context.read<AdminProvider>().fetchDevices();
+      ProviderScope.containerOf(context, listen: false).read(adminProvider).invalidateStatsDetail();
+      await ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchDevices();
     }
   }
 

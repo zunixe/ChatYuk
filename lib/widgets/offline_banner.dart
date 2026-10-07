@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../providers/riverpod/connectivity_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../config/theme.dart';
 
 /// Banner "tidak ada koneksi" global — tampil di atas semua layar via
 /// MaterialApp.builder saat connectivity none. Non-blocking (IgnorePointer
@@ -45,7 +44,7 @@ class OfflineBanner extends ConsumerWidget {
                       ),
                       const SizedBox(width: 8),
                       Builder(builder: (ctx) {
-                        final s = ctx.watch<LocaleProvider>().s;
+                        final s = ref.watch(localeProvider).s;
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(

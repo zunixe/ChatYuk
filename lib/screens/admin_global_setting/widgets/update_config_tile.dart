@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../core/admin_err.dart';
 import '../../../utils.dart' show formatRelativeTime;
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Konfigurasi popup update aplikasi (app_settings). Admin mengisi versi
 /// terbaru/minimum + catatan; klien menampilkan popup saat masuk app.
-class UpdateConfigTile extends StatefulWidget {
+class UpdateConfigTile extends ConsumerStatefulWidget {
   const UpdateConfigTile({super.key});
 
   @override
-  State<UpdateConfigTile> createState() => _UpdateConfigTileState();
+  ConsumerState<UpdateConfigTile> createState() => _UpdateConfigTileState();
 }
 
-class _UpdateConfigTileState extends State<UpdateConfigTile> {
+class _UpdateConfigTileState extends ConsumerState<UpdateConfigTile> {
   final _latestCtrl = TextEditingController();
   final _minCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
@@ -40,8 +40,8 @@ class _UpdateConfigTileState extends State<UpdateConfigTile> {
   }
 
   Future<void> _load() async {
-    final cfg = await context.read<AdminProvider>().getUpdateConfig();
-    final lastPush = await context.read<AdminProvider>().getUpdatePushAt();
+    final cfg = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getUpdateConfig();
+    final lastPush = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getUpdatePushAt();
     if (!mounted) return;
     setState(() {
       _enabled = cfg?['update_enabled'] == true;
@@ -54,11 +54,11 @@ class _UpdateConfigTileState extends State<UpdateConfigTile> {
   }
 
   Future<void> _save() async {
-    if (guardOfflineCtx(context, context.read<LocaleProvider>().s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
-    final s = context.read<LocaleProvider>().s;
+    if (guardOfflineCtx(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     setState(() => _busy = true);
     try {
-      await context.read<AdminProvider>().saveUpdateConfig(
+      await ProviderScope.containerOf(context, listen: false).read(adminProvider).saveUpdateConfig(
             enabled: _enabled,
             latestVersion: _latestCtrl.text,
             minVersion: _minCtrl.text,
@@ -81,7 +81,7 @@ class _UpdateConfigTileState extends State<UpdateConfigTile> {
   /// Push popup update manual: konfirmasi → RPC admin_push_update → refresh
   /// label waktu. Popup tampil di app user saat mereka membuka app.
   Future<void> _push() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (guardOfflineCtx(
       context,
       s.adminNeedsConnection,
@@ -110,8 +110,8 @@ class _UpdateConfigTileState extends State<UpdateConfigTile> {
     if (ok != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await context.read<AdminProvider>().pushUpdate();
-      final at = await context.read<AdminProvider>().getUpdatePushAt();
+      await ProviderScope.containerOf(context, listen: false).read(adminProvider).pushUpdate();
+      final at = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getUpdatePushAt();
       if (!mounted) return;
       setState(() => _lastPushAt = at ?? DateTime.now());
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,7 +129,7 @@ class _UpdateConfigTileState extends State<UpdateConfigTile> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(

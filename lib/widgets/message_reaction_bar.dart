@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
+import '../providers/riverpod/locale_provider.dart';
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
 
 const kQuickReactions = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 
@@ -110,7 +110,7 @@ Future<void> showMoreReactions(
   BuildContext context,
   void Function(String emoji) onReact,
 ) async {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   await showModalBottomSheet(
     context: context,
     backgroundColor: AppTheme.bgCard,

@@ -64,7 +64,7 @@ class ChatStreamSession {
   /// Jumlah foto terbaru yang di-decrypt upfront saat chat dibuka (lazy
   /// penuh). Cukup untuk mengisi viewport awal + margin scroll; foto lama
   /// di-load saat bubble-nya di-build.
-  static const int _lazyPhotoHeadCount = 20;
+  static const int _lazyPhotoHeadCount = 12;
 
   final SupabaseClient _sb;
   final String cacheKey;
@@ -150,10 +150,11 @@ class ChatStreamSession {
     // tak terbatas saat user scroll ke atas (loadOlder tak pernah memangkas) →
     // tiap emit `controller.add(...)` menyalin list makin besar + ListView
     // makin panjang → "ngelag makin lama dipakai", pulih setelah tutup-buka
-    // chat (state sesi dibuat ulang). 300 = jauh lebih dari cukup untuk
-    // viewport + scroll mundur wajar; pesan lebih lama dibaca ulang dari disk
-    // saat di-scroll (pagination tetap jalan).
-    const _maxMessages = 300;
+    // chat (state sesi dibuat ulang). 100 = cukup untuk viewport + scroll
+    // mundur wajar; pesan lebih lama dibaca ulang dari disk saat di-scroll
+    // (pagination tetap jalan). Diturunkan 300→150→100 agar footprint Dart
+    // kecil di HP memori ketat (kurangi halaman ter-swap → ngetik tak freeze).
+    const _maxMessages = 100;
     // Kursor paginasi TERPISAH dari `_current.first`: trim memangkas pesan
     // terlama dari `_current`, tapi kursor harus tetap menunjuk ke pesan
     // TERLAMA yang pernah dimuat sesi ini — kalau pakai `_current.first`

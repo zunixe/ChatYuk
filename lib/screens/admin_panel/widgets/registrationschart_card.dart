@@ -1,15 +1,16 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import 'registrations_sheet.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Kartu "Registrasi Email" untuk Ringkasan admin — dirapikan supaya
 /// informatif untuk CEO: KPI (total, baru bulan ini, konversi anon,
@@ -21,14 +22,14 @@ import '../../../providers/locale_provider.dart';
 ///   - `admin_registrations_monthly(12)` → tren bulanan
 ///   - `admin_registrations_daily(y,m)` → bar harian
 ///   - `admin_attribution_summary(0)`  → sumber (dipakai sheet)
-class AdminRegistrationsChartCard extends StatefulWidget {
+class AdminRegistrationsChartCard extends ConsumerStatefulWidget {
   const AdminRegistrationsChartCard();
   @override
-  State<AdminRegistrationsChartCard> createState() =>
+  ConsumerState<AdminRegistrationsChartCard> createState() =>
       AdminRegistrationsChartCardState();
 }
 
-class AdminRegistrationsChartCardState extends State<AdminRegistrationsChartCard> {
+class AdminRegistrationsChartCardState extends ConsumerState<AdminRegistrationsChartCard> {
   static const _barW = 16.0;
   static const _chartH = 96.0;
   late DateTime _month;
@@ -42,17 +43,17 @@ class AdminRegistrationsChartCardState extends State<AdminRegistrationsChartCard
   }
 
   void _fetch() {
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     admin.fetchRegistrationsDaily(_month.year, _month.month);
     admin.fetchRegistrationInsights();
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // GRANULAR: data registrasi bagian dari domain STATS.
-    context.select<AdminProvider, int>((p) => p.revStats);
-    final admin = context.read<AdminProvider>();
+    ref.watch(adminProvider.select((p) => p.revStats));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
 
     return Container(
       padding: const EdgeInsets.all(14),

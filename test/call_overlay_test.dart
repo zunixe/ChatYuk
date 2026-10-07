@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/services/call_service.dart';
 import 'package:chatyuk/widgets/chat_call_overlay.dart';
 
@@ -23,10 +22,8 @@ void main() {
       isCaller: true,
     );
     await tester.pumpWidget(
-      MaterialApp(
-        home: ChangeNotifierProvider<LocaleProvider>.value(
-          value: LocaleProvider(),
-          child: Scaffold(
+      ProviderScope(child: MaterialApp(
+        home:  Scaffold(
             body: Stack(
               children: [
                 Positioned.fill(
@@ -39,8 +36,7 @@ void main() {
               ],
             ),
           ),
-        ),
-      ),
+      )),
     );
     await tester.pumpAndSettle();
     for (var i = 0; i < 12; i++) {

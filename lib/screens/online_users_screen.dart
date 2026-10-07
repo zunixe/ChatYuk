@@ -7,8 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
-import '../providers/riverpod/location_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -17,7 +15,7 @@ import '../models/user_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import '../providers/riverpod/nav_provider.dart';
@@ -46,7 +44,7 @@ import 'story_camera_capture_screen.dart';
 import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
 import '../providers/riverpod/story_provider.dart';
-import '../providers/call_provider.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/privacy_provider.dart';
 import '../models/privacy_settings.dart';
 import '../widgets/sheet_drag_handle.dart';
@@ -58,6 +56,7 @@ import '../widgets/social_actions.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import '../providers/riverpod/location_provider.dart';
 
 // Cache render avatar (bytes + ImageProvider stabil per-uid) kini MODULAR di
 // `widgets/user_avatar.dart` (dipakai lintas halaman user-facing). Layar ini
@@ -292,7 +291,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   bool _uploadingAvatar = false;
 
   Future<void> _pickAndUploadAvatar() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -496,7 +495,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   /// terpisah + efeknya dinyatakan di baris visibilitas (bukan ditulis
   /// "Invisible" yang menyesatkan).
   Future<void> _showMyStatusSheet() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     // Muat visibilitas bila belum pernah dimuat (lazy; tak ada RPC baru bila
     // sudah ter-cache di provider).
@@ -775,15 +774,18 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     // seluruh halaman Online ikut rebuild tiap StoryProvider notify. Bungkus
     // Consumer sempit: HANYA tray ini yang rebuild saat story berubah.
     return rv.Consumer(
-      builder: (ctx, ref, _) => _storyTrayContent(
-        ctx,
-        ref.watch(storyProvider),
-        myAvatar,
-        myNickname,
-        myRegistered,
-        myStatus,
-        invisible,
-      ),
+      builder: (ctx, ref, _) {
+        PerfProbe.buildCount('Story.tray');
+        return _storyTrayContent(
+          ctx,
+          ref.watch(storyProvider),
+          myAvatar,
+          myNickname,
+          myRegistered,
+          myStatus,
+          invisible,
+        );
+      },
     );
   }
 
@@ -892,7 +894,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     _dismissUnreadBubble();
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final myUid = auth.uid;
     final myName = auth.profile?.nickname ?? 'Anon';
     if (myUid == null || user.uid == myUid) return;
@@ -1028,7 +1030,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     Offset globalPos,
   ) async {
     final myUid = ProviderScope.containerOf(cardCtx, listen: false).read(authProvider.notifier).uid;
-    final s = cardCtx.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(cardCtx, listen: false).read(localeProvider).s;
     if (myUid == null) return;
     final ids = [myUid, user.uid]..sort();
     final chatId = '${ids[0]}_${ids[1]}';
@@ -1291,7 +1293,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
       authProvider.select((a) => a.invisibleEnabled),
     );
     super.build(context);
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: AppTheme.bgScreen,
@@ -1429,6 +1431,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                   key: const ValueKey('title'),
                   builder: (ctx, ref, __) {
                     final prov = ref.watch(onlineUsersProvider);
+                    PerfProbe.buildCount('Online.title');
                     // Hitung sama seperti list: exclude self + blocked +
                     // hidden + dedupe by uid/nickname, supaya angka = kartu.
                     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
@@ -1638,6 +1641,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
           rv.Consumer(
             builder: (ctx, ref, __) {
               final provider = ref.watch(onlineUsersProvider);
+              PerfProbe.buildCount('Online.list');
               final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
               // Ukur biaya filter per emission (kandidat optimasi QA).
               // Partisi: utama = filter penuh + !hidden; kotak bawah =
@@ -2258,7 +2262,7 @@ class _OnlinePillState extends ConsumerState<_OnlinePill>
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final isTimeline = _mode == OnlinePillMode.timeline;
     // Mode Global Room menampilkan jumlah online kategori General (ringkas).
@@ -2518,7 +2522,7 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
   }
 
   String _fieldText() {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final n = widget.selected.length;
     if (n == 0) return s.filterAll;
     if (n == 1) {
@@ -2551,7 +2555,7 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return OverlayPortal(
       controller: _portal,
       overlayChildBuilder: (overlayCtx) {
@@ -2818,7 +2822,7 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
   }
 }
 
-class _UserCard extends StatelessWidget {
+class _UserCard extends ConsumerWidget {
   final UserModel user;
   final VoidCallback onTap;
   final void Function(Color avatarColor) onAvatarTap;
@@ -2850,8 +2854,8 @@ class _UserCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     final color = user.gender == 'male'
         ? AppTheme.male
         : user.gender == 'female'
@@ -3043,10 +3047,13 @@ class _UserCard extends StatelessWidget {
                       if (user.isRegistered)
                         rv.Consumer(
                           builder: (ctx, ref, __) {
-                            ref.watch(socialProvider);
+                            final (:isFriend, :pending) = ref.watch(
+                              socialProvider.select((s) => (
+                                isFriend: s.isFriend(user.uid),
+                                pending: s.isPendingFriendRequest(user.uid),
+                              )),
+                            );
                             final sp = ref.read(socialProvider.notifier);
-                            final isFriend = sp.isFriend(user.uid);
-                            final pending = sp.isPendingFriendRequest(user.uid);
                             final tip = isFriend
                                 ? s.btnUnfriend
                                 : (pending
@@ -3490,7 +3497,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
 
   void _showMuteSheet() {
     final it = widget.item;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -3665,7 +3672,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
                 width: 67,
                 child: Text(
                   it.own
-                      ? context.read<LocaleProvider>().s.storyMine
+                      ? ProviderScope.containerOf(context, listen: false).read(localeProvider).s.storyMine
                       : it.authorName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -3717,7 +3724,7 @@ class _OwnAddTile extends StatelessWidget {
             // nama di tile story, TANPA gradient shadow.
             const SizedBox(height: 2),
             Text(
-              context.read<LocaleProvider>().s.storyAddToStory,
+              ProviderScope.containerOf(context, listen: false).read(localeProvider).s.storyAddToStory,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,

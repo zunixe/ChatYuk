@@ -1,22 +1,22 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
+import '../../../config/theme.dart';
 
 /// Chip indikator mendengarkan panggilan audio di monitor chat admin.
-class AudioListenChip extends StatefulWidget {
+class AudioListenChip extends ConsumerStatefulWidget {
   final WatchSession session;
   const AudioListenChip({super.key, required this.session});
 
   @override
-  State<AudioListenChip> createState() => _AudioListenChipState();
+  ConsumerState<AudioListenChip> createState() => _AudioListenChipState();
 }
 
-class _AudioListenChipState extends State<AudioListenChip>
+class _AudioListenChipState extends ConsumerState<AudioListenChip>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   Timer? _tick;
@@ -50,7 +50,7 @@ class _AudioListenChipState extends State<AudioListenChip>
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final sess = widget.session;
     final sec = sess.call.elapsedSeconds;
     // Status call NYATA: header tidak boleh selalu "Mendengarkan…" saat call

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/single_child_widget.dart';
 
 /// Jembatan netral antara build USER dan build ADMIN.
 ///
@@ -13,9 +12,6 @@ import 'package:provider/single_child_widget.dart';
 class AdminGate {
   /// Builder halaman Admin Panel. Null pada build user.
   static WidgetBuilder? panelBuilder;
-
-  /// Provider tambahan untuk MultiProvider di app.dart (mis. AdminProvider).
-  static List<SingleChildWidget> extraProviders = const [];
 
   /// Section pengaturan admin di halaman Profil:
   /// [header] = tile buka panel (+divider), sebelum baris Notifikasi.

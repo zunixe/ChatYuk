@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:chatyuk/providers/chat_provider.dart';
+import 'package:chatyuk/providers/riverpod/chat_provider.dart';
 import 'package:chatyuk/services/chat_service.dart';
 
 class MockChatService extends Mock implements ChatService {}
@@ -10,14 +10,12 @@ class MockChatService extends Mock implements ChatService {}
 /// Regresi: `.select('id')` + 0-rows (blokir RLS) → false, bukan sukses palsu.
 void main() {
   late MockChatService service;
-  late ChatProvider provider;
+  late ChatNotifier provider;
 
   setUp(() {
     service = MockChatService();
-    provider = ChatProvider(service: service);
+    provider = ChatNotifier(service: service);
   });
-
-  tearDown(() => provider.dispose());
 
   group('deleteRoomMessage bool', () {
     test('sukses → true', () async {

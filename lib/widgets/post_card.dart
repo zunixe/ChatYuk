@@ -7,18 +7,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/user_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
+import '../core/media/native_image.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 import '../services/avatar_service.dart';
@@ -32,6 +31,7 @@ import 'person_avatar.dart';
 import 'user_avatar.dart'
     show cachedUserAvatarBytes, rememberAvatarBytes;
 import '../screens/user_info_screen.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Kirim teks share ke chat pribadi user lain. Return true bila terkirim.
 /// Dipakai bersama oleh share post & share komentar (counter + snackbar
@@ -341,7 +341,7 @@ class _PostCardState extends ConsumerState<PostCard> {
         : (curCount - 1).clamp(0, 1 << 31);
     tp.updatePost(_id, {'isLiked': optLiked, 'likeCount': optCount});
     setState(() => _busy = true);
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     try {
       final res = await tp.toggleLike(_id);
       if (!mounted) return;
@@ -391,7 +391,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   }
 
   Future<void> _submitComment(String text, {int? parentId}) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     // Id unik per kiriman — dua komentar cepat tidak tabrakan saat
@@ -482,7 +482,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   }
 
   Future<void> _share() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final author = _p['authorName'] as String? ?? 'Anon';
     final authorUid = _p['authorId'] as String? ?? '';
     final authorGender = _p['authorGender'] as String? ?? '';
@@ -514,7 +514,7 @@ class _PostCardState extends ConsumerState<PostCard> {
     if (!ok) return false;
     await _bumpShareCount();
     if (!mounted) return true;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(s.shareSentTo(user.nickname))));
@@ -534,7 +534,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   }
 
   Future<void> _boost() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
     final confirm = await showDialog<bool>(
       context: context,
@@ -579,7 +579,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   }
 
   String _visibilityLabel(String v) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     switch (v) {
       case 'followers':
         return s.visFollowers;
@@ -602,7 +602,7 @@ class _PostCardState extends ConsumerState<PostCard> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.read<LocaleProvider>().s.msgRegisterToFollow),
+          content: Text(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.msgRegisterToFollow),
         ),
       );
       return;
@@ -626,7 +626,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('PostCard');
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final uid = ref.watch(authProvider.select((a) => a.uid));
     final authorId = _p['authorId'] as String? ?? '';
     final isAuthor = authorId.isNotEmpty && authorId == uid;
@@ -733,7 +733,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                               color: AppTheme.textSecondary,
                             ),
                           ),
-                          SizedBox(width: 6),
+                          const SizedBox(width: 3),
                           _visibilityIcon(
                             _p['visibility'] as String? ?? 'public',
                           ),
@@ -1015,7 +1015,7 @@ class _PostCardState extends ConsumerState<PostCard> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 12, color: color),
-        const SizedBox(width: 3),
+        const SizedBox(width: 2),
         Text(
           _visibilityLabel(v),
           style: AppText.micro.copyWith(
@@ -1187,7 +1187,7 @@ class _PostCardState extends ConsumerState<PostCard> {
 ///  - `TextField` dibungkus RepaintBoundary sehingga ketikan hanya
 ///    merepaint dirinya sendiri,
 ///  - tinggi sheet tetap 70% & bar input naik sendiri di atas keyboard.
-class _CommentSheet extends StatefulWidget {
+class _CommentSheet extends ConsumerStatefulWidget {
   final String postId;
   final TextEditingController ctrl;
   final GlobalKey<_CommentsListState> commentsKey;
@@ -1200,10 +1200,10 @@ class _CommentSheet extends StatefulWidget {
   });
 
   @override
-  State<_CommentSheet> createState() => _CommentSheetState();
+  ConsumerState<_CommentSheet> createState() => _CommentSheetState();
 }
 
-class _CommentSheetState extends State<_CommentSheet> {
+class _CommentSheetState extends ConsumerState<_CommentSheet> {
   int _replyToId = 0;
   String _replyToName = '';
 
@@ -1236,7 +1236,7 @@ class _CommentSheetState extends State<_CommentSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final replying = _replyToId > 0;
     // Tinggi tetap 70% layar — loading/empty/isi sama persis (anti glitch).
     final sheetH = MediaQuery.sizeOf(context).height * 0.7;
@@ -1385,16 +1385,16 @@ class _CommentSheetState extends State<_CommentSheet> {
   }
 }
 
-class _CommentsList extends StatefulWidget {
+class _CommentsList extends ConsumerStatefulWidget {
   final String postId;
   final void Function(int id, String name)? onReply;
   const _CommentsList({super.key, required this.postId, this.onReply});
 
   @override
-  State<_CommentsList> createState() => _CommentsListState();
+  ConsumerState<_CommentsList> createState() => _CommentsListState();
 }
 
-class _CommentsListState extends State<_CommentsList> {
+class _CommentsListState extends ConsumerState<_CommentsList> {
   List<Map<String, dynamic>>? _items;
   bool _busy = false;
   // true setelah fetch pertama selesai (atau cache ada) — sebelum itu
@@ -1552,7 +1552,7 @@ class _CommentsListState extends State<_CommentsList> {
 
   Future<void> _share(Map<String, dynamic> c) async {
     final id = (c['id'] as num?)?.toInt() ?? 0;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final author = c['authorName'] as String? ?? 'Anon';
     final text = (c['text'] as String? ?? '').trim();
     // Komentar = teks komentar + link ChatYuk (bilingual via strings).
@@ -1579,7 +1579,7 @@ class _CommentsListState extends State<_CommentsList> {
   Future<bool> _shareCommentToUser(UserModel user, String content) async {
     final ok = await sendShareToUser(context, user, content);
     if (!ok || !mounted) return ok;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(s.shareSentTo(user.nickname))));
@@ -1604,7 +1604,7 @@ class _CommentsListState extends State<_CommentsList> {
   Future<void> _delete(Map<String, dynamic> c) async {
     final id = (c['id'] as num?)?.toInt() ?? 0;
     if (id <= 0) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dctx) => AlertDialog(
@@ -1653,7 +1653,7 @@ class _CommentsListState extends State<_CommentsList> {
       // menyisakan celah / tidak mengubah tinggi sheet.
       return Center(
         child: Text(
-          context.watch<LocaleProvider>().s.commentEmpty,
+          ref.watch(localeProvider).s.commentEmpty,
           style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
         ),
       );
@@ -1978,7 +1978,7 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
         isPath ? await AvatarB64Service.instance.getByPath(avatar) : avatar;
     if (b64.isEmpty || !mounted) return;
     if (_resolvedFor != avatar) return;
-    final bytes = await compute(_decodeAvatarB64, b64);
+    final bytes = await NativeImage.decodeBytes(b64);
     if (bytes == null || !mounted || _resolvedFor != avatar) return;
     rememberAvatarBytes(_uid, bytes);
     setState(() => _bytes = bytes);
@@ -2028,14 +2028,6 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
       ),
     );
     return tap == null ? img : GestureDetector(onTap: tap, child: img);
-  }
-}
-
-Uint8List? _decodeAvatarB64(String b64) {
-  try {
-    return base64Decode(b64);
-  } catch (_) {
-    return null;
   }
 }
 
@@ -2129,7 +2121,7 @@ class _CommentAvatarState extends State<_CommentAvatar> {
     final b64 =
         isPath ? await AvatarB64Service.instance.getByPath(avatar) : avatar;
     if (b64.isEmpty || !mounted || _resolvedFor != avatar) return;
-    final bytes = await compute(_decodeAvatarB64, b64);
+    final bytes = await NativeImage.decodeBytes(b64);
     if (bytes == null || !mounted || _resolvedFor != avatar) return;
     rememberAvatarBytes(widget.uid, bytes);
     setState(() => _bytes = bytes);

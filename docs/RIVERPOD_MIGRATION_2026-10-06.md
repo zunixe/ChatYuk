@@ -23,23 +23,39 @@ File baru: `lib/providers/riverpod/{social,online_users,story,timeline,room,poin
 File lama (`lib/providers/*_provider.dart`) BELUM dihapus â€” masih dipakai test
 unit lama. Hapus di akhir migrasi (sesudah Locale/Theme/Admin).
 
-## Sisa (belum migrasi)
+## Selesai (lanjutan sesi 2026-10-07, Windows)
 
-1. **LocaleProvider** (121 file, 166 watch) â€” mekanis, codemod di akhir.
-2. **ThemeProvider** (45 file; `riverpod/theme_provider.dart` sudah ada tapi belum di-wire).
-3. **AdminProvider** + `lib/providers/admin/`.
-4. Hapus file provider lama + rapikan test yang masih import path lama.
+1. **LocaleProvider** â€” `riverpod/locale_provider.dart` + mirror `AppLocale`
+   (untuk `main.dart` non-widget). 119 file lib dikonversi; 58 kelas widget â†’
+   Consumer. Test lama (42 file) migrasi off `LocaleProvider`/`ThemeProvider`.
+2. **ThemeProvider** â€” `riverpod/theme_provider.dart` di-wire; 41 file lib.
+3. **AdminProvider** â€” tetap kelas ChangeNotifier besar, tapi kini dikelola
+   Riverpod (`riverpod/admin_provider.dart` = `ChangeNotifierProvider`).
+   `AdminGate.extraProviders` dihapus.
+4. **Cleanup tuntas:**
+   - 9 file provider lama DIHAPUS: auth, chat, social, points, story,
+     timeline, room, online_users, call (+ locale, theme).
+   - `admin_provider.dart` + `lib/providers/admin/` tetap (kelas utama).
+   - **Dependency `provider` DIHAPUS dari `pubspec.yaml`.** Tidak ada lagi
+     `package:provider` di `lib/` maupun `test/`.
+   - `lib/providers/` tinggal `admin_provider.dart` (kelas) + `riverpod/`.
 
 ## Test
 
-- `dart analyze lib/` â†’ 0 error (setelah tiap fase).
-- Full `flutter test`: **12 gagal pra-ada** (test masih import provider lama
-  yang file-nya dihapus fase 1d: privacy/avatar/nav/storage/dll + 2 flaky
-  `story_provider_test`). Bukan dari migrasi ini.
-- Pola test widget baru: `ProviderContainer` + `UncontrolledProviderScope` +
-  `TestXxx extends XxxNotifier` (build override hermetic). PENTING: kalau kode
-  baca **getter notifier langsung** (bukan state), override juga getter-nya
-  (kasus `TestAuth.profile/uid` di `chat_send_flow_test`).
+- `flutter analyze` (seluruh project) â†’ **0 error / 0 warning**.
+- Full `flutter test` â†’ **1800 lulus / 0 gagal (100% hijau)**.
+- Fix test legacy: `new_providers`, `passthrough_providers`, `storage_provider`,
+  `story_viewer_avatar`, `my_status_sheet`, `privacy_*`, `providers_test`,
+  `settings_account`, `points/room/timeline/story/chat/social/online_users`
+  provider tests, `flow_*`, `auth_login_flow`, `post_*`, `user_info_seed`, dll.
+- `storage_paths`: `StoragePhotoService._stamp()` (counter monotonik) â€” cap
+  microsecond tak unik di Windows.
+- 2 test `story_provider`: TTL gate 45 dtk â†’ tambah `debugResetTrayTtl()`.
+- Pola test: `ProviderContainer` + `UncontrolledProviderScope` +
+  `TestXxx extends XxxNotifier` (build override hermetic); listener via
+  `container.listen(provider, ...)`; dispose container di dalam test body bila
+  ada timer pending.
+
 
 ## Insiden hari ini
 
@@ -70,3 +86,62 @@ unit lama. Hapus di akhir migrasi (sesudah Locale/Theme/Admin).
 - `lib/providers/points_provider.dart` (guard billing)
 - `supabase/migrations/20261006200000_call_billing_master_toggle.sql`
 - `supabase/tests/call_billing_toggle_test.sql`
+
+
+---
+
+# Optimasi Memori — "sama kaya WhatsApp" (2026-10-07, Windows)
+
+Keluhan: private chat "ngetik ngelag / freeze lalu kedelte semua" di HP.
+
+## Diagnosa (terukur `dumpsys meminfo` + `PerfProbe` di device)
+
+- **Render SEHAT**: `frames=686 build[p50=1.7 p90=4.5 max=20.1ms] janky=2`. Bukan
+  rebuild UI/Riverpod (list/composer TIDAK rebuild per-ketikan).
+- **Swap = biang**: ChatYuk `SwapPss 58–134MB`, Native heap reserved **~541MB**
+  (used cuma ~55MB). vs WhatsApp: `SwapPss 5.7MB`, native heap **96MB**.
+  ? engine Flutter/Dart menahan arena besar (base64+bytes hidup di heap Dart,
+  disalin lintas isolate); proses di-swap; saat ngetik, page ter-swap di-fault
+  balik = stall ? karakter muncul borongan.
+- Kontaminasi: build **profile** menyalakan semua `dlog` (`kDebugMode||kProfileMode`)
+  ? overhead. RILIS membuang `dlog`.
+
+## Fase A — Tuning Dart (tanpa native)
+
+- **A1** Hapus `dlog` hot-path: `[ONLINE-EMIT]` (presence), `[TYPING]`, `[PHOTO-DBG]`,
+  `[AVATAR]` verbose, `[prefetch]`. (Sisakan log error.)
+- **A2** Trim agresif: saat composer fokus + memory-pressure + background ? buang
+  `PhotoCache`/`PostPhotoCache`/`decodedImageCache`/Flutter `imageCache`
+  (`ImageCacheHygiene.clearAll` sudah meng-cover app-cache terdaftar).
+- **A3** Retensi: `ChatStreamSession._maxMessages` 300?150?**100**;
+  `_decodedCacheMax` 16?**12**; `imageCache` 80/48MB?**60/24MB**.
+
+## Fase B — Native image pipeline (Kotlin, MethodChannel)
+
+- **B0–B2** `android/.../image/ImageBridge.kt`, channel
+  `com.chatyuk.chatyuk/image`, dijalankan di **executor background** +
+  **`LruCache` native 24MB** (bytes gambar tak hidup di Dart heap — kunci
+  kenapa WA stabil). Metode: `aspectRatio`, `decodeThumb`, `decodeAvatar`,
+  `decodeBytes`, `decodeWithDims`, `processJpeg`.
+- **Fallback transparan**: `lib/core/media/native_image.dart` (`NativeImage`)
+  jatuh ke `compute`+`package:image` bila channel tak ada (unit test/PC/
+  kegagalan native). Semua jalur Dart lama tetap ada.
+- **B3** Call-site dimigrasi: avatar (`user_avatar`, `profile_avatar`,
+  `leaderboard_screen`, `post_card`), thumbnail (`async_photo`), bubble+viewer
+  chat (`private_chat_message`), proses-kirim foto (`chat_photo_send_mixin`).
+  View-once **watermark tetap Dart** (algoritma embed belum di native).
+
+## Hasil (device release, 2026-10-07)
+
+| Metrik | Sebelum | Sesudah A+B |
+|---|---|---|
+| SwapPss (user) | 58–134 MB | **175 KB** |
+| Native heap reserved | ~541 MB | **62 MB** |
+| analyze (lib+test) | 0/0 | **0/0** |
+| flutter test | 1800 hijau | **1808 hijau** |
+
+Gate terpenuhi: SwapPss < 20MB, Native heap < 150MB. Build release user+admin
+terpasang & jalan (tanpa crash / MissingPlugin pada channel image).
+
+Catatan: pengukuran "sesudah" di device berbeda (192.168.18.72) yang tidak
+sedang tertekan swap — angka "sebelum" dari device lama (192.168.137.215).

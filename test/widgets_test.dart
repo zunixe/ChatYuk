@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/strings.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/widgets/chat_ui_shared.dart';
 import 'package:chatyuk/widgets/empty_state_view.dart';
 
@@ -16,12 +15,9 @@ void main() {
     await initSupabaseForTest();
   });
 
-  Widget wrap(Widget child) => MaterialApp(
-        home: ChangeNotifierProvider<LocaleProvider>(
-          create: (_) => LocaleProvider(),
-          child: Scaffold(body: child),
-        ),
-      );
+  Widget wrap(Widget child) => ProviderScope(child: MaterialApp(
+        home:  Scaffold(body: child),
+      ));
 
   group('EmptyStateView', () {
     testWidgets('tampilkan ikon + judul + hint', (tester) async {

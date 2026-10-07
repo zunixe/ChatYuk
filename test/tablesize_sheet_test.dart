@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/providers/admin_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/riverpod/admin_provider.dart';
+import 'package:chatyuk/providers/riverpod/locale_provider.dart';
 import 'package:chatyuk/screens/admin_panel/widgets/tablesize_sheet.dart';
 import 'package:chatyuk/services/admin_service.dart';
 
 class MockAdminService extends Mock implements AdminService {}
+
+class _TestLocale extends LocaleNotifier {
+  final String _lang;
+  _TestLocale(this._lang);
+  @override
+  LocaleState build() => LocaleState(_lang);
+}
 
 /// Widget test diagnosis: sheet breakdown tabel harus render baris tanpa
 /// NoSuchMethodError (abu-abu di release = build gagal).
@@ -36,16 +44,12 @@ void main() {
   });
 
   Future<void> pumpSheet(WidgetTester t, {String lang = 'id'}) async {
-    final admin = AdminProvider(service: service);
-    addTearDown(admin.dispose);
     SharedPreferences.setMockInitialValues({});
-    final lp = LocaleProvider();
-    await lp.setLang(lang);
     await t.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AdminProvider>.value(value: admin),
-          ChangeNotifierProvider<LocaleProvider>.value(value: lp),
+      ProviderScope(
+        overrides: [
+          localeProvider.overrideWith(() => _TestLocale(lang)),
+          adminProvider.overrideWith((ref) => AdminProvider(service: service)),
         ],
         child: MaterialApp(
           home: Scaffold(

@@ -2,20 +2,19 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/riverpod/location_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import 'nearby/widgets/nearby_card.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 
 import 'private_chat_screen.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
+import '../providers/riverpod/location_provider.dart';
 
 /// Cache bytes avatar hasil decode base64 — decode cukup sekali per avatar
 /// (bukan setiap rebuild kartu), kapasitas dibatasi supaya tidak bocor.
@@ -23,14 +22,14 @@ import '../providers/theme_provider.dart';
 /// Fitur "Orang Sekitar": cari user online/idle dalam radius tertentu
 /// berdasarkan lokasi (GPS bila diizinkan, else perkiraan IP), tampilkan
 /// jarak tiap user, dan bisa langsung chat.
-class NearbyScreen extends StatefulWidget {
+class NearbyScreen extends ConsumerStatefulWidget {
   const NearbyScreen({super.key});
 
   @override
-  State<NearbyScreen> createState() => _NearbyScreenState();
+  ConsumerState<NearbyScreen> createState() => _NearbyScreenState();
 }
 
-class _NearbyScreenState extends State<NearbyScreen> {
+class _NearbyScreenState extends ConsumerState<NearbyScreen> {
   LocationService get _loc => ProviderScope.containerOf(context, listen: false).read(locationProvider).location;
   double _radiusKm = 50;
   bool _loading = true;
@@ -124,7 +123,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
         setState(() => _loading = false);
         ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).showOutOfPointsDialog(
               context,
-              context.read<LocaleProvider>().s.isId,
+              ProviderScope.containerOf(context, listen: false).read(localeProvider).s.isId,
             );
         return;
       }
@@ -157,7 +156,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
   /// Dialog tawaran ulang akses GPS: bawa user ke Pengaturan bila dialog
   /// native Android sudah tidak muncul lagi (permission permanently denied).
   Future<void> _promptEnableGps() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final go = await showDialog<bool>(
       context: context,
       builder: (dctx) => AlertDialog(
@@ -192,7 +191,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
   Future<void> _startChat(Map<String, dynamic> u) async {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final myUid = auth.uid;
     final otherUid = '${u['uid']}';
     if (myUid == null || otherUid == myUid) return;
@@ -247,8 +246,8 @@ class _NearbyScreenState extends State<NearbyScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('Nearby');
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
@@ -413,7 +412,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
 /// Slider radius dengan state SENDIRI — geser hanya rebuild widget ini,
 /// bukan seluruh layar + daftar (dulu setState di parent = list rebuild tiap
 /// frame → patah-patah). [onChanged] = nilai live; [onChangeEnd] = trigger query.
-class _RadiusSlider extends StatefulWidget {
+class _RadiusSlider extends ConsumerStatefulWidget {
   final double initial;
   final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
@@ -424,15 +423,15 @@ class _RadiusSlider extends StatefulWidget {
   });
 
   @override
-  State<_RadiusSlider> createState() => _RadiusSliderState();
+  ConsumerState<_RadiusSlider> createState() => _RadiusSliderState();
 }
 
-class _RadiusSliderState extends State<_RadiusSlider> {
+class _RadiusSliderState extends ConsumerState<_RadiusSlider> {
   late double _v = widget.initial;
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Column(
       children: [
         Padding(

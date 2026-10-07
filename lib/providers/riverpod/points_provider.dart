@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -58,6 +59,41 @@ class PointsState {
     this.nearbyCost = 25,
     this.featureFlags = const {},
   });
+
+  @override
+  bool operator ==(Object other) =>
+      other is PointsState &&
+      other.points == points &&
+      other.enabledRaw == enabledRaw &&
+      other.enabledConfirmed == enabledConfirmed &&
+      other.bonusBalance == bonusBalance &&
+      other.earnedBalance == earnedBalance &&
+      other.yukcoinV2Active == yukcoinV2Active &&
+      other.ghostMode == ghostMode &&
+      other.extraPhotoSlots == extraPhotoSlots &&
+      other.photoUnlockOnce == photoUnlockOnce &&
+      other.photoUnlockPerm == photoUnlockPerm &&
+      other.roomCreatePaid == roomCreatePaid &&
+      other.roomCreatePwPaid == roomCreatePwPaid &&
+      other.roomJoinPaid == roomJoinPaid &&
+      other.roomExtendPaid == roomExtendPaid &&
+      other.bonusMultiplier == bonusMultiplier &&
+      other.callAudioCostPerMin == callAudioCostPerMin &&
+      other.callVideoCostPerMin == callVideoCostPerMin &&
+      other.filterGenderCost == filterGenderCost &&
+      other.nearbyCost == nearbyCost &&
+      mapEquals(other.featureFlags, featureFlags);
+
+  @override
+  int get hashCode => Object.hashAll([
+        points, enabledRaw, enabledConfirmed, bonusBalance, earnedBalance,
+        yukcoinV2Active, ghostMode, extraPhotoSlots, photoUnlockOnce,
+        photoUnlockPerm, roomCreatePaid, roomCreatePwPaid, roomJoinPaid,
+        roomExtendPaid, bonusMultiplier, callAudioCostPerMin,
+        callVideoCostPerMin, filterGenderCost, nearbyCost,
+        Object.hashAllUnordered(featureFlags.entries
+            .map((e) => Object.hash(e.key, e.value))),
+      ]);
 
   bool get enabled => enabledConfirmed && enabledRaw;
   int get paidBalance => earnedBalance;
@@ -128,7 +164,6 @@ class PointsNotifier extends Notifier<PointsState>
   int _nearbyCost = 25;
 
   Map<String, dynamic> _featureFlags = {};
-  bool _photoCostsLoaded = false;
 
   @override
   PointsState build() {

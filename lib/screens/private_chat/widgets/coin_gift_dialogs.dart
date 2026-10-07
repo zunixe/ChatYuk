@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 
 import '../../../config/gifts.dart';
 import '../../../config/theme.dart';
 import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/chat_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 
 /// Klaster dialog koin & pemilih gift untuk chat 1:1.
 ///
@@ -24,7 +23,7 @@ void showReportUserDialog(
   required String reportedName,
 }) {
   String reason = '';
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -73,7 +72,7 @@ Future<int?> showSendCoinDialog(
   required bool pointsEnabled,
   required int paidBalance,
 }) {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   final amountCtrl = TextEditingController();
   int selected = 0;
   const presets = [5, 10, 25, 50, 100];
@@ -333,7 +332,7 @@ Future<GiftItem?> showGiftPickerSheet(
   required int bonusBalance,
   required int bonusMultiplier,
 }) {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   return showModalBottomSheet<GiftItem>(
     context: context,
     backgroundColor: AppTheme.bgCard,

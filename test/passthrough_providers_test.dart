@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:chatyuk/providers/message_reaction_provider.dart';
-import 'package:chatyuk/providers/notification_prefs_provider.dart';
+import 'package:chatyuk/providers/riverpod/message_reaction_provider.dart';
+import 'package:chatyuk/providers/riverpod/notification_prefs_provider.dart';
 import 'package:chatyuk/services/message_reaction_service.dart';
 
 class MockMessageReactionService extends Mock
@@ -14,11 +14,11 @@ void main() {
 
   group('MessageReactionProvider passthrough', () {
     late MockMessageReactionService service;
-    late MessageReactionProvider provider;
+    late MessageReactionNotifier provider;
 
     setUp(() {
       service = MockMessageReactionService();
-      provider = MessageReactionProvider(service: service);
+      provider = MessageReactionNotifier(service);
     });
 
     test('toggleReaction meneruskan semua argumen + hasil', () async {
@@ -115,7 +115,7 @@ void main() {
     setUp(() => SharedPreferences.setMockInitialValues({}));
 
     test('setEnabled + isEnabled + allPrefs konsisten', () async {
-      final p = NotificationPrefsProvider();
+      final p = NotificationPrefsNotifier();
 
       // Default semua true.
       expect(await p.isEnabled('chat'), isTrue);
@@ -129,7 +129,7 @@ void main() {
     });
 
     test('mute per-chat: set → true, unset → false', () async {
-      final p = NotificationPrefsProvider();
+      final p = NotificationPrefsNotifier();
 
       expect(await p.isChatMuted('chat-x'), isFalse);
       await p.setChatMuted('chat-x', true);

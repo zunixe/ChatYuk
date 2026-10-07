@@ -2,22 +2,21 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/riverpod/location_provider.dart';
 import '../providers/riverpod/device_info_provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/regions.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../utils.dart';
 import 'register_screen.dart';
 import 'login_screen.dart';
 import 'donate_screen.dart';
 import 'legal_screen.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/profile_form_card.dart';
 import '../widgets/auth_header.dart';
+import '../providers/riverpod/location_provider.dart';
 
 class EntryScreen extends ConsumerStatefulWidget {
   const EntryScreen({super.key});
@@ -80,7 +79,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
     });
     // Auto-set bahasa dari lokasi — hanya jika belum pernah disimpan
     if (mounted) {
-      await context.read<LocaleProvider>().setLangFromCountry(
+      await ProviderScope.containerOf(context, listen: false).read(localeProvider.notifier).setLangFromCountry(
         finalInfo.country,
       );
     }
@@ -103,7 +102,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
     // Nickname terlarang langsung ditolak tanpa RPC (kecuali admin).
     if (isBannedNickname(val) &&
         !ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isRealAdmin) {
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       setState(() => _nicknameError = s.errNicknameBanned);
       return;
     }
@@ -112,14 +111,14 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
         val,
       );
       if (mounted) {
-        final s = context.read<LocaleProvider>().s;
+        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
         setState(() => _nicknameError = available ? null : s.errNicknameTaken);
       }
     });
   }
 
   Future<void> _signInWithGoogle() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     setState(() => _googleLoading = true);
     try {
       final result = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signInWithGoogle();
@@ -177,7 +176,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
 
   Future<void> _enter() async {
     if (_entered) return; // guard double submit
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final nick = _nicknameCtrl.text.trim();
     if (nick.isEmpty) {
       ScaffoldMessenger.of(
@@ -319,8 +318,8 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final requireRegistration = ref.watch(
       authProvider.select((a) => a.requireRegistration),
     );

@@ -27,17 +27,14 @@ mixin ChatServiceTypingMx on ChatBase {
     final senderId = data['sender_id'] as String?;
     final myId = _sb.auth.currentUser?.id;
     if (senderId == null || senderId == myId) {
-      dlog('[TYPING] fanout drop chat=$chatId sender=$senderId me=$myId keys=${data.keys.toList()}');
       return;
     }
     final ts = (data['ts'] as num?)?.toInt() ??
         DateTime.now().millisecondsSinceEpoch;
     final subs = _typingSubs[chatId];
     if (subs == null || subs.isEmpty) {
-      dlog('[TYPING] fanout no-subs chat=$chatId (bubble tak bisa tampil)');
       return;
     }
-    dlog('[TYPING] fanout ok chat=$chatId subs=${subs.length}');
     for (final c in subs.toList()) {
       if (!c.isClosed) c.add(((data['kind'] as String?) ?? 'typing', ts));
     }
@@ -61,12 +58,10 @@ mixin ChatServiceTypingMx on ChatBase {
     c.onBroadcast(
       event: 'typing',
       callback: (raw) {
-        dlog('[TYPING] onBroadcast chat=$chatId raw=$raw');
         _fanoutTyping(chatId, raw);
       },
     );
     c.subscribe((status, error) {
-      dlog('[TYPING] subscribe $chatId -> $status err=$error');
     });
     _typingChannels[chatId] = c;
     return c;
@@ -100,7 +95,6 @@ mixin ChatServiceTypingMx on ChatBase {
   Stream<(String, int)> getTypingPulseStream(String chatId) {
     final controller = StreamController<(String, int)>.broadcast();
     _typingChannel(chatId);
-    dlog('[TYPING] subscriber registered for $chatId');
     _typingSubs.putIfAbsent(chatId, () => {}).add(controller);
     controller.onCancel = () {
       _typingSubs[chatId]?.remove(controller);

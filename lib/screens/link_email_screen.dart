@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../utils.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
+import '../config/theme.dart';
 
-class LinkEmailScreen extends StatefulWidget {
+class LinkEmailScreen extends ConsumerStatefulWidget {
   const LinkEmailScreen({super.key});
 
   @override
-  State<LinkEmailScreen> createState() => _LinkEmailScreenState();
+  ConsumerState<LinkEmailScreen> createState() => _LinkEmailScreenState();
 }
 
-class _LinkEmailScreenState extends State<LinkEmailScreen> {
+class _LinkEmailScreenState extends ConsumerState<LinkEmailScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
@@ -31,7 +30,7 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
   }
 
   Future<void> _link() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
     final confirm = _confirmCtrl.text;
@@ -82,8 +81,8 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
 
     return Scaffold(

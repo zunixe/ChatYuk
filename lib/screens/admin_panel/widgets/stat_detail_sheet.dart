@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:url_launcher/url_launcher.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart';
 import 'avatar_circle.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Bottom sheet rincian satu kartu statistik: daftar user/room/pesan.
 /// [item] = record (judul, subtitle, ikon, warna, key detail).
@@ -14,8 +14,8 @@ Future<void> showStatDetailSheet(
   BuildContext context,
   (String, String, IconData, Color, String) item,
 ) async {
-  final admin = context.read<AdminProvider>();
-  final s = context.read<LocaleProvider>().s;
+  final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
 
   final key = item.$5;
   // 4 kunci user dimuat ber-paginasi (RPC admin_stats_users_page) supaya

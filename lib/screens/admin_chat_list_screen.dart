@@ -1,34 +1,34 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../widgets/admin_error_view.dart';
 import '../models/active_call_model.dart';
 import '../core/perf/perf_probe.dart';
-import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../core/admin_err.dart';
 import '../utils.dart';
 import '../main.dart' show resumeWarmup;
 import 'admin_chat_view_screen.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../core/ui/scroll_pagination.dart';
 import '../core/nav_guard.dart';
 import '../widgets/gender_avatar.dart';
 import '../widgets/app_gesture.dart';
 import 'user_info_screen.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Admin: daftar semua percakapan user (monitoring).
-class AdminChatListScreen extends StatefulWidget {
+class AdminChatListScreen extends ConsumerStatefulWidget {
   const AdminChatListScreen({super.key});
 
   @override
-  State<AdminChatListScreen> createState() => _AdminChatListScreenState();
+  ConsumerState<AdminChatListScreen> createState() => _AdminChatListScreenState();
 }
 
-class _AdminChatListScreenState extends State<AdminChatListScreen>
+class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
     with WidgetsBindingObserver {
   Timer? _refreshTimer;
   Timer? _callTimer;
@@ -42,7 +42,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(() {
       admin.loadChatOrg();
       admin.fetchChats();
@@ -61,7 +61,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
   void _startTimers() {
     _refreshTimer?.cancel();
     _callTimer?.cancel();
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     // 30 dtk (dulu 15) — cukup fresh tanpa rebuild berlebihan.
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
@@ -86,7 +86,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
       if (_refreshTimer == null) {
         unawaited(
           resumeWarmup().then((_) {
-            if (mounted) context.read<AdminProvider>().fetchActiveCalls();
+            if (mounted) ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchActiveCalls();
           }),
         );
         _startTimers();
@@ -230,7 +230,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
   /// True bila SEMUA chat kategori [cat] sudah ada di daftar yang termuat →
   /// chip bisa tampil instan tanpa fetch/pindai lagi.
   bool _categoryFullyLoaded(String cat) {
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     final want = admin.categoryChatIds(cat);
     if (want.isEmpty) return true;
     final have = admin.chats.map((c) => '${c['chat_id']}').toSet();
@@ -260,7 +260,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     }
     // Kategori KOSONG (belum ada chat dipetakan) → tak ada yang dicari.
     // Tampilkan empty-state, JANGAN spinner.
-    final wants = context.read<AdminProvider>().categoryChatIds(activeCategory);
+    final wants = ProviderScope.containerOf(context, listen: false).read(adminProvider).categoryChatIds(activeCategory);
     if (wants.isEmpty) {
       _categorySearching = false;
       return;
@@ -280,7 +280,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
         _categorySearching = false;
         return;
       }
-      final admin = context.read<AdminProvider>();
+      final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       final cat = admin.activeChatCategory;
       if (cat == null || cat.isEmpty) {
         _autoLoadingCategory = false;
@@ -304,15 +304,15 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('AdminChatList');
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     // GRANULAR: layar ini menampilkan dua domain sekaligus — daftar chat
     // (revChats) DAN badge call aktif (revCalls) — jadi harus bergantung ke
     // keduanya. Tanpa ini, setiap notify dari domain lain (stats/devices/
     // deleted) ikut me-rebuild layar monitor yang berat.
-    context.select<AdminProvider, int>((p) => p.revChats);
-    context.select<AdminProvider, int>((p) => p.revCalls);
-    final admin = context.read<AdminProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(adminProvider.select((p) => p.revChats));
+    ref.watch(adminProvider.select((p) => p.revCalls));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ref.watch(localeProvider).s;
     // Hitung SEKALI per build: dulu `_sortedFiltered()` (filter+sort)
     // dipanggil di empty-check + itemCount + di dalam itemBuilder per baris
     // (O(n²) saat scroll). Hasilnya dipakai ulang di bawah.
@@ -651,8 +651,8 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     Map<String, dynamic> chat, {
     required String label,
   }) async {
-    final s = context.read<LocaleProvider>().s;
-    final admin = context.read<AdminProvider>();
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     final chatId = '${chat['chat_id'] ?? ''}';
     if (chatId.isEmpty) return;
     final pinned = admin.isChatPinned(chatId);
@@ -745,8 +745,8 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     String chatId,
     String? current,
   ) async {
-    final s = context.read<LocaleProvider>().s;
-    final admin = context.read<AdminProvider>();
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -847,8 +847,8 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
 
   /// Kelola kategori (rename / hapus) — dari long-press chip kategori.
   Future<void> _manageCategory(BuildContext context, String cat) async {
-    final s = context.read<LocaleProvider>().s;
-    final admin = context.read<AdminProvider>();
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -1110,7 +1110,7 @@ class _AdminChatCard extends StatelessWidget {
           // membaca ini lebih dulu → frame pertama langsung terisi.
           // (Dulu `preloadMessages` = cache stream user, bukan yang dipakai
           // monitor → tetap RPC server saat buka.)
-          context.read<AdminProvider>().prefetchChatMessages(id);
+          ProviderScope.containerOf(context, listen: false).read(adminProvider).prefetchChatMessages(id);
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -1401,7 +1401,7 @@ class _AdminChatCard extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
 
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     final ok = await admin.deleteChat(
       chat['chat_id'] as String? ?? '',
       selected.toList(),

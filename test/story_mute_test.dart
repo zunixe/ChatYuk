@@ -1,8 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/models/story_model.dart';
-import 'package:chatyuk/providers/story_provider.dart';
+import 'package:chatyuk/providers/riverpod/story_provider.dart';
 import 'package:chatyuk/services/story_service.dart';
 
 import 'test_helper.dart';
@@ -52,7 +53,8 @@ void main() {
 
   group('StoryProvider.toggleStoryMute', () {
     late MockStoryService service;
-    late StoryProvider provider;
+    late ProviderContainer container;
+    late StoryNotifier provider;
 
     setUp(() {
       service = MockStoryService();
@@ -62,10 +64,13 @@ void main() {
           .thenAnswer((_) => Stream<String>.empty());
       when(() => service.setStoryMuted(any(), any()))
           .thenAnswer((_) async => true);
-      provider = StoryProvider(service: service);
+      container = ProviderContainer(overrides: [
+        storyProvider.overrideWith(() => StoryNotifier(service: service)),
+      ]);
+      provider = container.read(storyProvider.notifier);
     });
 
-    tearDown(() => provider.dispose());
+    tearDown(() => container.dispose());
 
     test('mute → flag + pindah belakang', () async {
       // Tray diisi lewat refresh dengan stub fetchTrayRaw (kontrak provider).

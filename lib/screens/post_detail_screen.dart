@@ -1,23 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../widgets/post_card.dart';
 import '../core/perf/perf_probe.dart';
+import '../config/theme.dart';
 
 /// Detail 1 postingan — dibuka dari tap notifikasi "postingan baru".
 /// Memakai ulang PostCard (like/komen/share) supaya perilaku identik feed.
-class PostDetailScreen extends StatefulWidget {
+class PostDetailScreen extends ConsumerStatefulWidget {
   final String postId;
   const PostDetailScreen({super.key, required this.postId});
 
   @override
-  State<PostDetailScreen> createState() => _PostDetailScreenState();
+  ConsumerState<PostDetailScreen> createState() => _PostDetailScreenState();
 }
 
-class _PostDetailScreenState extends State<PostDetailScreen> {
+class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   Map<String, dynamic>? _post;
   bool _loading = true;
 
@@ -44,7 +43,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('PostDetail');
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.titlePostDetail)),

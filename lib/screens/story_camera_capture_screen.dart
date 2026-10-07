@@ -1,12 +1,12 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:provider/provider.dart';
-import '../providers/locale_provider.dart';
 import '../utils.dart';
+import '../providers/riverpod/locale_provider.dart';
 
 /// Hasil jepret/rekam kamera story. `isVideo` dibuat EKSPLISIT (bukan tebak
 /// ekstensi file — kamera Xiaomi bisa menyimpan ekstensi tak terduga
@@ -194,7 +194,7 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
         final mic = await Permission.microphone.request();
         audio = mic.isGranted || mic.isLimited;
         if (!audio && mounted) {
-          final s = context.read<LocaleProvider>().s;
+          final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(s.storyMicNeeded)),
           );
@@ -266,7 +266,7 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
 
   void _toastRecordFail() {
     if (!mounted) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(s.storyRecordFail)),
     );
@@ -288,7 +288,7 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
         final mic = await Permission.microphone.request();
         if (!mic.isGranted && !mic.isLimited) {
           if (mounted) {
-            final s = context.read<LocaleProvider>().s;
+            final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(s.storyMicNeeded)),
             );

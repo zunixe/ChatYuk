@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/models/message_model.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/widgets/private_chat_message.dart';
 
 /// Functional: bubble chat nyata — swipe kanan ≥48px memicu balas,
@@ -23,14 +22,11 @@ void main() {
         timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
       );
 
-  Widget wrap(Widget child) => MaterialApp(
-        home: ChangeNotifierProvider<LocaleProvider>(
-          create: (_) => LocaleProvider(),
-          child: Scaffold(
+  Widget wrap(Widget child) => ProviderScope(child: MaterialApp(
+        home:  Scaffold(
             body: SizedBox(width: 360, height: 200, child: child),
           ),
-        ),
-      );
+      ));
 
   Widget bubble({
     required MessageModel m,

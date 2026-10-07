@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/config/strings_admin.dart';
 import 'package:chatyuk/models/active_call_model.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/screens/admin_chat/widgets/audio_listen_chip.dart';
 import 'package:chatyuk/services/admin_call_watch_service.dart';
 
@@ -42,14 +41,9 @@ void main() {
 
   Future<void> pumpChip(WidgetTester tester, WatchSession session) async {
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
-        ],
-        child: MaterialApp(
+       ProviderScope(child: MaterialApp(
           home: Scaffold(body: AudioListenChip(session: session)),
-        ),
-      ),
+        )),
     );
     await tester.pump(const Duration(milliseconds: 50));
   }

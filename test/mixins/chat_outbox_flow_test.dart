@@ -3,9 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    hide Provider, ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -14,12 +12,22 @@ import 'package:chatyuk/core/cache/message_store.dart';
 import 'package:chatyuk/core/cache/offline_outbox.dart';
 import 'package:chatyuk/mixins/chat_outbox_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
-import 'package:chatyuk/providers/auth_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/models/user_model.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/services/points_service.dart';
 
 class MockPointsService extends Mock implements PointsService {}
+
+class _TestAuth extends AuthNotifier {
+  _TestAuth() : super(autoInit: false);
+  @override
+  AuthData build() => const AuthData(uid: 'u-me', loading: false);
+  @override
+  String? get uid => 'u-me';
+  @override
+  UserModel? get profile => null;
+}
 
 class TestPoints extends PointsNotifier {
   final int deductResult;
@@ -107,26 +115,18 @@ Future<OutboxHostState> pumpOutbox(
     (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 50},
   );
 
-  final auth = AuthProvider(autoInit: false);
-
   final container = ProviderContainer(
     overrides: [
-      pointsProvider.overrideWith(() => TestPoints(deductResult: deductResult))
+      pointsProvider.overrideWith(() => TestPoints(deductResult: deductResult)),
+      authProvider.overrideWith(_TestAuth.new),
     ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider()),
-          ChangeNotifierProvider<AuthProvider>.value(value: auth),
-        ],
-        child: MaterialApp(
-          home: OutboxHost(online: online, sendThrows: sendThrows),
-        ),
+      child: MaterialApp(
+        home: OutboxHost(online: online, sendThrows: sendThrows),
       ),
     ),
   );

@@ -12,12 +12,14 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.chatyuk.chatyuk.call.CallConnection
 import com.chatyuk.chatyuk.call.CallUiBridge
+import com.chatyuk.chatyuk.image.ImageBridge
 import android.content.Intent
 
 class MainActivity : FlutterActivity() {
     private val channel = "com.chatyuk.chatyuk/window"
     private val callUiChannel = "com.chatyuk.chatyuk/call_ui"
     private val updateChannel = "com.chatyuk.chatyuk/update"
+    private val imageChannel = "com.chatyuk.chatyuk/image"
     private val tiktokChannel = TikTokBridge.CHANNEL
     private var bootOverlay: FrameLayout? = null
     private var wasSecureAtPause = false
@@ -183,6 +185,13 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 tiktokBridge?.handle(call, result) ?: result.success(false)
             }
+
+        // Pipeline gambar native (BitmapFactory) + LRU native — decode/encode
+        // avatar/thumbnail/proses-kirim foto di native heap (bukan Dart heap).
+        ImageBridge(
+            this,
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, imageChannel),
+        ).attach()
 
         handleCallIntent(intent)
     }

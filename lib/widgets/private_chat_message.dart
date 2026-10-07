@@ -10,17 +10,15 @@ import 'chat_video_bubble.dart';
 import 'media_caption_time.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/chat/chat_location.dart';
-import '../widgets/location_bubble.dart';
+import '../core/media/native_image.dart';import '../widgets/location_bubble.dart';
 import '../core/screen_secure_service.dart';
 import '../services/storage_photo_service.dart';
 import 'app_gesture.dart';
@@ -30,6 +28,7 @@ import 'link_preview.dart';
 import '../core/media/link_preview_service.dart';
 import '../core/media/image_cache_hygiene.dart';
 import '../core/media/chat_photo_helper.dart';
+import '../config/theme.dart';
 
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
 // ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.
@@ -171,7 +170,7 @@ final decodedImageCache = <int, DecodedImage>{};
 // PERF: 40 → 16. Tiap entri = bytes foto asli (bisa ~2-3MB). 40 entri bisa
 // menahan ~80-120MB → GC storm seiring pemakaian. 16 cukup untuk bubble yang
 // tampil sekaligus saat scroll; foto lain dibaca ulang dari cache disk/chat.
-const _decodedCacheMax = 16;
+const _decodedCacheMax = 12;
 // Daftarkan pembersih ke hygiene logout (satu titik, lihat
 // core/media/image_cache_hygiene.dart) — bytes foto user lama tidak boleh
 // tinggal di RAM setelah ganti akun. Lazy: dipanggil saat cache pertama diisi.
@@ -447,7 +446,7 @@ class CodeBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final normalized = code.replaceAll('\t', '  ');
     return Container(
       width: double.infinity,
@@ -1019,7 +1018,7 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final timeStr = formatBubbleTime(msg.timestamp);
     // Pesan yang dihapus (soft delete).
     // - Chat biasa: cukup teks redup "Pesan ini telah dihapus".
@@ -1450,7 +1449,7 @@ class MessageBubble extends StatelessWidget {
                       else if (msg.type == 'coin')
                         Builder(
                           builder: (context) {
-                            final s = context.read<LocaleProvider>().s;
+                            final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
                             final amount = int.tryParse(msg.text) ?? 0;
                             return Row(
                               mainAxisSize: MainAxisSize.min,
@@ -1485,7 +1484,7 @@ class MessageBubble extends StatelessWidget {
                       else if (msg.type == 'gift')
                         Builder(
                           builder: (context) {
-                            final s = context.read<LocaleProvider>().s;
+                            final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
                             final g = giftById(msg.text);
                             final emoji = g?.emoji ?? '🎁';
                             final name = g == null
@@ -1795,7 +1794,7 @@ class _DeferredImageState extends State<DeferredImage> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return GestureDetector(
       onTap: _busy
           ? null
@@ -1979,10 +1978,16 @@ class _MessageImageState extends State<MessageImage> {
   // Cadangkan ukuran placeholder dari header gambar (sinkron, tanpa isolate).
   // Base64 → baca dimensi JPEG/PNG langsung; path storage / tak dikenal →
   // biarkan ukuran lama (gapless, jangan kembali ke kotak).
+  //
+  // PERF: decode HANYA prefix header (bukan SELURUH base64) — foto besar bisa
+  // ratusan KB; decode penuh di UI thread saat bubble mount/rebuild (mis. ada
+  // pesan baru saat user mengetik) = stall input ("ngetik berenti").
   void _reservePlaceholder(String data) {
     if (data.isEmpty || StoragePhotoService.instance.isPath(data)) return;
     try {
-      final dims = parseImageDimensions(base64Decode(data));
+      var dims = parseImageDimensions(_decodeHeaderPrefix(data));
+      // Header di luar prefix (EXIF besar) → fallback decode penuh (jarang).
+      dims ??= parseImageDimensions(base64Decode(data));
       if (dims == null) return;
       final s = photoViewSize(dims.width, dims.height);
       _phW = s.width;
@@ -1990,9 +1995,18 @@ class _MessageImageState extends State<MessageImage> {
     } catch (_) {}
   }
 
+  /// Decode prefix base64 (header gambar) agar tak men-decode seluruh foto.
+  static Uint8List _decodeHeaderPrefix(String b64) {
+    const maxChars = 16384; // ~12 KB bytes — cukup untuk JPEG SOF/PNG/WebP.
+    if (b64.length <= maxChars) return base64Decode(b64);
+    var chunk = b64.substring(0, maxChars);
+    final rem = chunk.length % 4;
+    if (rem != 0) chunk = chunk.substring(0, chunk.length - rem);
+    return base64Decode(chunk);
+  }
+
   Future<void> _decode(int key, int gen) async {
     var data = widget.imageData;
-    dlog('[PHOTO-DBG] MessageImage ${widget.messageId} inLen=${data.length} isPath=${StoragePhotoService.instance.isPath(data)}');
     // LAZY PENUH: imageData kosong tapi file lokal ada (foto lama yang tidak
     // ikut bulk-decrypt saat buka chat) → pulihkan thumb dari disk. Tanpa ini
     // foto lama tampil "ketuk untuk memuat" selamanya.
@@ -2044,7 +2058,6 @@ class _MessageImageState extends State<MessageImage> {
         }
       } catch (_) {}
       data = await StoragePhotoService.instance.download(data) ?? '';
-      dlog('[PHOTO-DBG] MessageImage ${widget.messageId} downloaded len=${data.length}');
     }
     if (!mounted || gen != _gen) return;
     if (data.isEmpty) {
@@ -2072,7 +2085,8 @@ class _MessageImageState extends State<MessageImage> {
     // decode penuh) — placeholder menyesuaikan sekali ke bentuk benar,
     // piksel menyusul fade-in tanpa lompatan lagi.
     try {
-      final dims = parseImageDimensions(base64Decode(data));
+      var dims = parseImageDimensions(_decodeHeaderPrefix(data));
+      dims ??= parseImageDimensions(base64Decode(data));
       if (dims != null && mounted && gen == _gen) {
         final s = photoViewSize(dims.width, dims.height);
         setState(() {
@@ -2081,11 +2095,17 @@ class _MessageImageState extends State<MessageImage> {
         });
       }
     } catch (_) {}
-    final decoded = await compute(decodeImageB64, data);
-    dlog('[PHOTO-DBG] MessageImage ${widget.messageId} decoded=${decoded != null && decoded.width > 0}');
+    final res = await NativeImage.decodeWithDims(data);
     if (!mounted || gen != _gen) return;
-    if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
+    if (res == null) {
       // Decode gagal — jangan cache null (dipaksa `!` dulu bikin crash).
+      setState(() {
+        _loading = false;
+      });
+      return;
+    }
+    final decoded = DecodedImage(res.bytes, res.width, res.height);
+    if (decoded.width <= 0 || decoded.height <= 0) {
       setState(() {
         _loading = false;
       });
@@ -2127,7 +2147,7 @@ class _MessageImageState extends State<MessageImage> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final decoded = _decoded;
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       // Foto biasa: belum keload = spinner; gagal = "ketuk untuk memuat".
@@ -2430,9 +2450,13 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       data = await StoragePhotoService.instance.download(data) ?? '';
     }
     if (data.isEmpty) return;
-    final decoded = await compute(decodeImageB64, data);
+    final res = await NativeImage.decodeWithDims(data);
     if (!mounted) return;
-    setState(() => _decoded = decoded);
+    setState(() {
+      _decoded = res == null
+          ? null
+          : DecodedImage(res.bytes, res.width, res.height);
+    });
   }
 
   @override
@@ -2495,11 +2519,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       data = await StoragePhotoService.instance.download(data) ?? '';
       if (data.isEmpty) return;
     }
-    final decoded = await compute(decodeImageB64, data);
-    if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
+    final res = await NativeImage.decodeWithDims(data);
+    if (res == null || res.width <= 0 || res.height <= 0) {
       // Decode gagal — jangan set _tick.decoded ke null/rusak.
       return;
     }
+    final decoded = DecodedImage(res.bytes, res.width, res.height);
     _tick.decoded = decoded;
     if (!mounted) return;
     setState(() => _decoded = decoded);
@@ -2608,7 +2633,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   }
 
   Widget _buildAdminView(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final decoded = _decoded;
     final w = decoded != null ? _viewWidth(decoded) : 200.0;
     final h = decoded != null ? _viewHeight(decoded) : 200.0;
@@ -2736,7 +2761,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     return ValueListenableBuilder<ViewOnceState>(
       valueListenable: _tick.stateNotifier,
       builder: (_, st, _) {
-        final s = context.read<LocaleProvider>().s;
+        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
 
         // Pengirim lihat foto asli + badge
         if (widget.isMe) {
@@ -3078,7 +3103,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
         final b64 = await loader();
         final t1 = DateTime.now();
         if (b64 == null || b64.isEmpty || !mounted) continue;
-        final bytes = await compute(b64ToBytes, b64);
+        final bytes = await NativeImage.decodeBytes(b64);
         final t2 = DateTime.now();
         if (bytes == null || !mounted) return;
         dlog('[PHOTO-TIME] viewer full b64=${(b64.length / 1024).round()}KB '
@@ -3123,7 +3148,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final bytes = _fullBytes ?? widget.bytes;
     return Scaffold(
       backgroundColor: Colors.black,

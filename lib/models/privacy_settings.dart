@@ -113,4 +113,46 @@ class PrivacySettings {
       exclusions: exclusions ?? this.exclusions,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is PrivacySettings &&
+      other.presence == presence &&
+      other.lastSeen == lastSeen &&
+      other.profilePhoto == profilePhoto &&
+      other.about == about &&
+      other.story == story &&
+      other.leaderboard == leaderboard &&
+      other.readReceipts == readReceipts &&
+      _exclusionsEqual(other.exclusions, exclusions);
+
+  @override
+  int get hashCode => Object.hash(
+        presence,
+        lastSeen,
+        profilePhoto,
+        about,
+        story,
+        leaderboard,
+        readReceipts,
+        Object.hashAllUnordered(exclusions.entries
+            .map((e) => Object.hash(e.key, Object.hashAllUnordered(e.value)))),
+      );
+
+  static bool _exclusionsEqual(
+    Map<String, Set<String>> a,
+    Map<String, Set<String>> b,
+  ) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      final other = b[entry.key];
+      if (other == null) return false;
+      if (other.length != entry.value.length) return false;
+      for (final v in entry.value) {
+        if (!other.contains(v)) return false;
+      }
+    }
+    return true;
+  }
 }

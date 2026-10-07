@@ -4,15 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
 import '../config/theme.dart';
+import '../core/media/native_image.dart';
 import '../utils.dart';
-
-Uint8List? _decodeBase64(String b64) {
-  try {
-    return base64Decode(b64);
-  } catch (_) {
-    return null;
-  }
-}
 
 // Top-level untuk compute() — decode + resize ke thumbnail kecil (~256px).
 // Grid galeri tidak perlu memegang gambar penuh 800px; render jadi ringan.
@@ -82,7 +75,11 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
   }
 
   Future<void> _decode() async {
-    final bytes = await compute(decodeThumbB64, widget.base64);
+    final bytes = await NativeImage.decodeThumb(
+      widget.base64,
+      maxPx: 256,
+      quality: 80,
+    );
     if (!mounted) return;
     if (bytes != null && _cache.length < 300) _cache[widget.base64] = bytes;
     setState(() => _bytes = bytes);
@@ -150,7 +147,7 @@ class _AsyncPhotoViewerState extends State<AsyncPhotoViewer> {
   }
 
   Future<void> _decode() async {
-    final bytes = await compute(_decodeBase64, widget.base64);
+    final bytes = await NativeImage.decodeBytes(widget.base64);
     if (!mounted) return;
     setState(() => _bytes = bytes);
   }
@@ -244,7 +241,7 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar>
 
   Future<void> _decode() async {
     final src = widget.base64;
-    final bytes = await compute(_decodeBase64, src);
+    final bytes = await NativeImage.decodeBytes(src);
     if (!mounted) return;
     if (bytes != null) {
       if (_cache.length < 200) _cache[src] = bytes;
@@ -263,13 +260,12 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar>
     if (tried >= 2) return;
     await Future<void>.delayed(const Duration(milliseconds: 300));
     if (!mounted || widget.base64 != src) return;
-    final retry = await compute(_decodeBase64, src);
+    final retry = await NativeImage.decodeBytes(src);
     if (!mounted || widget.base64 != src) return;
     if (retry != null) {
       if (_cache.length < 200) _cache[src] = retry;
       setState(() => _bytes = retry);
       _fade.forward();
-      dlog('[AVATAR] decode-retry OK len=${src.length}');
     } else {
       dlog('[AVATAR] decode-retry GAGAL len=${src.length} keep-old=${_bytes != null}');
     }

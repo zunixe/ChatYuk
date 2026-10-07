@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
+import '../providers/riverpod/locale_provider.dart';
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
 
 // Sheet emoji bersama untuk input chat (private chat & room chat).
 class EmojiPickerSheet {
@@ -65,7 +65,7 @@ class EmojiPickerSheet {
   ];
 
   static void show(BuildContext context, TextEditingController controller) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgCard,

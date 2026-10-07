@@ -192,3 +192,50 @@ String? processChatImageHd(Uint8List bytes) {
         );
   return base64Encode(img.encodeJpg(resized, quality: 90));
 }
+
+// -- Fallback DART untuk NativeImage (dipakai bila channel native tak ada) --
+// Top-level agar bisa dijalankan lewat `compute()`.
+
+/// (bytes, maxPx, quality) ? JPEG bytes (thumb / avatar) atau null.
+Uint8List? dartDecodeThumbBytes((Uint8List, int, int) args) {
+  final (bytes, maxPx, quality) = args;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final w = decoded.width;
+  final h = decoded.height;
+  final img.Image resized = (w <= maxPx && h <= maxPx)
+      ? decoded
+      : img.copyResize(
+          decoded,
+          width: w > h ? maxPx : null,
+          height: h >= w ? maxPx : null,
+        );
+  return Uint8List.fromList(img.encodeJpg(resized, quality: quality));
+}
+
+/// (bytes, maxPx, quality) ? base64 JPEG (proses kirim generik) atau null.
+String? dartProcessJpegB64((Uint8List, int, int) args) {
+  final (bytes, maxPx, quality) = args;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final w = decoded.width;
+  final h = decoded.height;
+  final img.Image resized = (w <= maxPx && h <= maxPx)
+      ? decoded
+      : img.copyResize(
+          decoded,
+          width: w > h ? maxPx : null,
+          height: h >= w ? maxPx : null,
+        );
+  return base64Encode(img.encodeJpg(resized, quality: quality));
+}

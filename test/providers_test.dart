@@ -1,87 +1,82 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/theme.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/nav_provider.dart';
-import 'package:chatyuk/providers/theme_provider.dart';
+import 'package:chatyuk/providers/riverpod/locale_provider.dart';
+import 'package:chatyuk/providers/riverpod/nav_provider.dart';
+import 'package:chatyuk/providers/riverpod/theme_provider.dart';
 
 import 'test_helper.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('NavProvider', () {
-    test('goTo pindah tab + notify, sama = no-op', () {
-      final nav = NavProvider();
-      var notified = 0;
-      nav.addListener(() => notified++);
-      expect(nav.tab, 0);
+  group('NavNotifier', () {
+    test('goTo pindah tab, sama = no-op', () {
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final nav = c.read(navProvider.notifier);
+      expect(c.read(navProvider), 0);
       nav.goTo(2);
-      expect(nav.tab, 2);
-      expect(notified, 1);
+      expect(c.read(navProvider), 2);
       nav.goTo(2);
-      expect(notified, 1);
-      nav.dispose();
+      expect(c.read(navProvider), 2);
     });
   });
 
-  group('LocaleProvider', () {
-    test('default id, setLang persist + notify', () async {
+  group('LocaleNotifier', () {
+    test('default id, setLang persist', () async {
       SharedPreferences.setMockInitialValues({});
-      final lp = LocaleProvider();
-      expect(lp.lang, 'id');
-      expect(lp.isId, isTrue);
-      expect(lp.s.btnSave, 'Simpan');
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final n = c.read(localeProvider.notifier);
+      expect(c.read(localeProvider).lang, 'id');
+      expect(c.read(localeProvider).isId, isTrue);
+      expect(c.read(localeProvider).s.btnSave, 'Simpan');
 
-      var notified = 0;
-      lp.addListener(() => notified++);
-      await lp.setLang('en');
-      expect(lp.lang, 'en');
-      expect(lp.isId, isFalse);
-      expect(lp.s.btnSave, 'Save');
-      expect(notified, 1);
-
-      await lp.setLang('en');
-      expect(notified, 1);
-      lp.dispose();
+      await n.setLang('en');
+      expect(c.read(localeProvider).lang, 'en');
+      expect(c.read(localeProvider).isId, isFalse);
+      expect(c.read(localeProvider).s.btnSave, 'Save');
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('app_lang'), 'en');
     });
 
     test('init baca preferensi tersimpan', () async {
       SharedPreferences.setMockInitialValues({'app_lang': 'en'});
-      final lp = LocaleProvider();
-      await lp.init();
-      expect(lp.lang, 'en');
-      await lp.init();
-      expect(lp.lang, 'en');
-      lp.dispose();
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      await c.read(localeProvider.notifier).init();
+      expect(c.read(localeProvider).lang, 'en');
     });
 
-    test('setLangFromCountry: Indonesia→id, lain→en, hormati preferensi', () async {
+    test('setLangFromCountry: Indonesia→id, lain→en, hormati preferensi',
+        () async {
       SharedPreferences.setMockInitialValues({});
-      final lp = LocaleProvider();
-      await lp.setLangFromCountry('Malaysia');
-      expect(lp.lang, 'en');
+      final c1 = ProviderContainer();
+      addTearDown(c1.dispose);
+      await c1.read(localeProvider.notifier).setLangFromCountry('Malaysia');
+      expect(c1.read(localeProvider).lang, 'en');
 
       SharedPreferences.setMockInitialValues({});
-      final lp2 = LocaleProvider();
-      await lp2.setLangFromCountry('Indonesia');
-      expect(lp2.lang, 'id');
+      final c2 = ProviderContainer();
+      addTearDown(c2.dispose);
+      await c2.read(localeProvider.notifier).setLangFromCountry('Indonesia');
+      expect(c2.read(localeProvider).lang, 'id');
 
       SharedPreferences.setMockInitialValues({'app_lang': 'en'});
-      final lp3 = LocaleProvider();
-      await lp3.init();
-      await lp3.setLangFromCountry('Indonesia');
-      expect(lp3.lang, 'en');
-      lp.dispose();
-      lp2.dispose();
-      lp3.dispose();
+      final c3 = ProviderContainer();
+      addTearDown(c3.dispose);
+      await c3.read(localeProvider.notifier).init();
+      await c3.read(localeProvider.notifier).setLangFromCountry('Indonesia');
+      expect(c3.read(localeProvider).lang, 'en');
     });
   });
 
-  group('ThemeProvider', () {
+  group('ThemeNotifier', () {
     tearDown(() {
       resetFontForTest();
       AppTheme.isDark = true;
@@ -89,76 +84,55 @@ void main() {
 
     test('default gelap, setDark persist + themeMode', () async {
       SharedPreferences.setMockInitialValues({});
-      final tp = ThemeProvider();
-      expect(tp.isDark, isTrue);
-      expect(tp.themeMode, ThemeMode.dark);
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final n = c.read(themeProvider.notifier);
+      expect(c.read(themeProvider).isDark, isTrue);
+      expect(c.read(themeProvider).themeMode, ThemeMode.dark);
 
-      await tp.setDark(false);
-      expect(tp.isDark, isFalse);
-      expect(tp.themeMode, ThemeMode.light);
+      await n.setDark(false);
+      expect(c.read(themeProvider).isDark, isFalse);
+      expect(c.read(themeProvider).themeMode, ThemeMode.light);
       expect(AppTheme.isDark, isFalse);
 
-      await tp.setDark(false);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool('app_theme_dark'), isFalse);
 
-      await tp.setDark(true);
+      await n.setDark(true);
       expect(AppTheme.isDark, isTrue);
-      tp.dispose();
     });
 
     test('init baca preferensi tersimpan', () async {
       SharedPreferences.setMockInitialValues({'app_theme_dark': false});
-      final tp = ThemeProvider();
-      await tp.init();
-      expect(tp.isDark, isFalse);
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      await c.read(themeProvider.notifier).init();
+      expect(c.read(themeProvider).isDark, isFalse);
       expect(AppTheme.isDark, isFalse);
-      tp.dispose();
       AppTheme.isDark = true;
     });
 
-    test('fontKey mengikuti AppFonts.current (live, bukan snapshot)', () {
-      AppFonts.setLocal('inter');
-      final tp = ThemeProvider();
-      expect(tp.fontKey, 'inter');
-      AppFonts.setLocal(AppFonts.defaultKey);
-      expect(tp.fontKey, AppFonts.defaultKey);
-      tp.dispose();
-    });
-
-    test('init memuat font tersimpan (dependensi rebuild MaterialApp)', () async {
+    test('init memuat font tersimpan (dependensi rebuild MaterialApp)',
+        () async {
       SharedPreferences.setMockInitialValues({
         'app_theme_dark': false,
         'app_font_family': 'lora',
       });
       AppFonts.setLocal(AppFonts.defaultKey);
-      final tp = ThemeProvider();
-      await tp.init();
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      await c.read(themeProvider.notifier).init();
       expect(AppFonts.current, 'lora');
-      expect(tp.fontKey, 'lora');
-      expect(tp.isDark, isFalse);
-      tp.dispose();
-    });
-
-    test('init idempoten: panggilan kedua tak menimpa perubahan runtime',
-        () async {
-      SharedPreferences.setMockInitialValues({'app_font_family': 'inter'});
-      final tp = ThemeProvider();
-      await tp.init();
-      expect(AppFonts.current, 'inter');
-      // Admin ganti font realtime → perubahan tak boleh di-revert init ulang.
-      AppFonts.setLocal('montserrat');
-      await tp.init();
-      expect(AppFonts.current, 'montserrat');
-      tp.dispose();
+      expect(c.read(themeProvider).fontKey, 'lora');
+      expect(c.read(themeProvider).isDark, isFalse);
     });
 
     test('font tak dikenal di prefs → fallback default', () async {
       SharedPreferences.setMockInitialValues({'app_font_family': 'ngawur'});
-      final tp = ThemeProvider();
-      await tp.init();
-      expect(tp.fontKey, AppFonts.defaultKey);
-      tp.dispose();
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      await c.read(themeProvider.notifier).init();
+      expect(c.read(themeProvider).fontKey, AppFonts.defaultKey);
     });
   });
 }

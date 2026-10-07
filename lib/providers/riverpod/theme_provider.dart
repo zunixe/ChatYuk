@@ -29,7 +29,6 @@ class ThemeNotifier extends Notifier<ThemeState> {
 
   @override
   ThemeState build() {
-    Future.microtask(init);
     return ThemeState(true, AppFonts.current);
   }
 

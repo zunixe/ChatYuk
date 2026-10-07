@@ -1,11 +1,12 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/models/user_model.dart';
-import 'package:chatyuk/providers/online_users_provider.dart';
+import 'package:chatyuk/providers/riverpod/online_users_provider.dart';
 import 'package:chatyuk/services/chat_service.dart';
 import 'package:chatyuk/core/cache/message_cache.dart';
 
@@ -39,7 +40,8 @@ UserModel _u(
 void main() {
   late MockChatService service;
   late StreamController<List<UserModel>> stream;
-  late OnlineUsersProvider provider;
+  late ProviderContainer container;
+  late OnlineUsersNotifier provider;
 
   setUpAll(() async {
     await initSupabaseForTest();
@@ -54,11 +56,14 @@ void main() {
     service = MockChatService();
     stream = StreamController<List<UserModel>>.broadcast();
     when(() => service.getOnlineUsers()).thenAnswer((_) => stream.stream);
-    provider = OnlineUsersProvider(service: service);
+    container = ProviderContainer(overrides: [
+      onlineUsersProvider.overrideWith(() => OnlineUsersNotifier(service: service)),
+    ]);
+    provider = container.read(onlineUsersProvider.notifier);
   });
 
   tearDown(() async {
-    provider.dispose();
+    container.dispose();
     await stream.close();
   });
 
@@ -156,7 +161,10 @@ void main() {
         final svc = MockChatService();
         final ctl = StreamController<List<UserModel>>.broadcast();
         when(() => svc.getOnlineUsers()).thenAnswer((_) => ctl.stream);
-        final p = OnlineUsersProvider(service: svc);
+        final c = ProviderContainer(overrides: [
+          onlineUsersProvider.overrideWith(() => OnlineUsersNotifier(service: svc)),
+        ]);
+        final p = c.read(onlineUsersProvider.notifier);
         ctl.add([_u('a', 'online')]);
         fake.elapse(const Duration(milliseconds: 100));
         expect(p.users.map((u) => u.uid).toList(), ['a']);
@@ -167,7 +175,7 @@ void main() {
         // Timer habis tanpa emit isi → list dibersihkan, tidak nempel.
         fake.elapse(const Duration(seconds: 8));
         expect(p.users, isEmpty);
-        p.dispose();
+        c.dispose();
         ctl.close();
       });
     });
@@ -195,13 +203,16 @@ void main() {
         // FakeAsync tidak memalsukan DateTime.now → kendalikan jam hold
         // lewat seam holdNow (prinsip sama seperti jitterRandom).
         var now = DateTime(2026, 9, 17, 12, 0, 0);
-        final prevClock = OnlineUsersProvider.holdNow;
-        OnlineUsersProvider.holdNow = () => now;
+        final prevClock = OnlineUsersNotifier.holdNow;
+        OnlineUsersNotifier.holdNow = () => now;
         try {
           final svc = MockChatService();
           final ctl = StreamController<List<UserModel>>.broadcast();
           when(() => svc.getOnlineUsers()).thenAnswer((_) => ctl.stream);
-          final p = OnlineUsersProvider(service: svc);
+          final c = ProviderContainer(overrides: [
+            onlineUsersProvider.overrideWith(() => OnlineUsersNotifier(service: svc)),
+          ]);
+          final p = c.read(onlineUsersProvider.notifier);
           ctl.add([_u('a', 'online'), _u('idle1', 'idle')]);
           fake.elapse(const Duration(milliseconds: 100));
           expect(p.users.map((u) => u.uid).toSet(), {'a', 'idle1'});
@@ -212,10 +223,10 @@ void main() {
           now = now.add(const Duration(seconds: 15));
           fake.elapse(const Duration(seconds: 15));
           expect(p.users.map((u) => u.uid).toList(), ['a']);
-          p.dispose();
+          c.dispose();
           ctl.close();
         } finally {
-          OnlineUsersProvider.holdNow = prevClock;
+          OnlineUsersNotifier.holdNow = prevClock;
         }
       });
     });
@@ -264,7 +275,7 @@ void main() {
   group('fetchUserCounts (header total user)', () {
     test('sukses → total registered + anon tersimpan & notify', () async {
       var notified = 0;
-      provider.addListener(() => notified++);
+      container.listen(onlineUsersProvider, (_, __) => notified++);
       when(() => service.userCounts())
           .thenAnswer((_) async => (registered: 355, anon: 136));
 

@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/models/story_model.dart';
-import 'package:chatyuk/providers/story_provider.dart';
+import 'package:chatyuk/providers/riverpod/story_provider.dart';
 import 'package:chatyuk/services/story_service.dart';
 
 import 'test_helper.dart';
@@ -24,7 +25,8 @@ void main() {
   late MockStoryService service;
   late StreamController<String> stories;
   late StreamController<String> views;
-  late StoryProvider provider;
+  late ProviderContainer container;
+  late StoryNotifier provider;
 
   setUpAll(() async {
     await initSupabaseForTest();
@@ -39,11 +41,14 @@ void main() {
     when(
       () => service.fetchTrayRaw(),
     ).thenAnswer((_) async => [_tray('u1').toMap()]);
-    provider = StoryProvider(service: service);
+    container = ProviderContainer(overrides: [
+      storyProvider.overrideWith(() => StoryNotifier(service: service)),
+    ]);
+    provider = container.read(storyProvider.notifier);
   });
 
   tearDown(() async {
-    provider.dispose();
+    container.dispose();
     await stories.close();
     await views.close();
   });
@@ -51,7 +56,7 @@ void main() {
   group('refresh tray', () {
     test('memuat tray + loading mati + notify', () async {
       var notified = 0;
-      provider.addListener(() => notified++);
+      container.listen(storyProvider, (_, __) => notified++);
       await provider.refresh();
       expect(provider.tray.map((t) => t.authorId).toList(), ['u1']);
       expect(provider.loading, isFalse);
@@ -99,6 +104,7 @@ void main() {
       await provider.refresh();
       expect(provider.tray, isNotEmpty);
       when(() => service.fetchTrayRaw()).thenAnswer((_) async => []);
+      provider.debugResetTrayTtl();
       await provider.refresh(silent: true);
       expect(
         provider.tray,
@@ -144,6 +150,7 @@ void main() {
       await provider.refresh();
       verify(() => service.fetchTrayRaw()).called(1);
       clearInteractions(service);
+      provider.debugResetTrayTtl();
       stories.add('ping');
       await Future.delayed(const Duration(milliseconds: 1200));
       verify(() => service.fetchTrayRaw()).called(1);

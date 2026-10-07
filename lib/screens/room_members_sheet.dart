@@ -1,21 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/room_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../widgets/sheet_drag_handle.dart';
 import '../widgets/person_avatar.dart';
+import '../config/theme.dart';
 
 /// Bottom sheet anggota private room: role, kick, jadikan admin,
 /// izinkan broadcast, dan antrean approval (untuk admin).
-class RoomMembersSheet extends StatefulWidget {
+class RoomMembersSheet extends ConsumerStatefulWidget {
   const RoomMembersSheet({
     super.key,
     required this.roomId,
@@ -28,10 +27,10 @@ class RoomMembersSheet extends StatefulWidget {
   final VoidCallback onChanged;
 
   @override
-  State<RoomMembersSheet> createState() => _RoomMembersSheetState();
+  ConsumerState<RoomMembersSheet> createState() => _RoomMembersSheetState();
 }
 
-class _RoomMembersSheetState extends State<RoomMembersSheet> {
+class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
   List<Map<String, dynamic>> _members = [];
   List<Map<String, dynamic>> _pending = [];
   bool _loading = true;
@@ -46,7 +45,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
   @override
   void initState() {
     super.initState();
-    s = context.read<LocaleProvider>().s;
+    s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     _load();
   }
 
@@ -94,7 +93,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric), backgroundColor: AppTheme.danger),
+        SnackBar(content: Text(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errGeneric), backgroundColor: AppTheme.danger),
       );
     }
   }
@@ -107,7 +106,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgPasswordReset)));
       _pwCtrl.clear();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric)));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errGeneric)));
     } finally {
       if (mounted) setState(() => _pwSaving = false);
     }
@@ -189,7 +188,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
 
     return DraggableScrollableSheet(
       expand: false,
@@ -469,7 +468,7 @@ Future<void> showGroupInvitePicker({
   required Set<String> excludeUids,
   required VoidCallback onInvited,
 }) async {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   final myUid = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).prvUid;
   // Snapshot chat yang sudah ada di memori — tampilkan daftar orang SEKETIKA
   // saat sheet dibuka (dulu StreamBuilder menunggu fetch server 300-760ms →

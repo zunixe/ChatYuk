@@ -43,6 +43,28 @@ class TimelineState {
     this.boostBonus = 150,
     this.postsDailyLimit = 5,
   });
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimelineState &&
+      other.loading == loading &&
+      other.hasMore == hasMore &&
+      other.fetchFailed == fetchFailed &&
+      other.boostPaid == boostPaid &&
+      other.boostBonus == boostBonus &&
+      other.postsDailyLimit == postsDailyLimit &&
+      listEquals(other.posts, posts);
+
+  @override
+  int get hashCode => Object.hash(
+        loading,
+        hasMore,
+        fetchFailed,
+        boostPaid,
+        boostBonus,
+        postsDailyLimit,
+        Object.hashAll(posts),
+      );
 }
 
 /// State timeline: feed, like/comment/share/boost, biaya boost (Riverpod).

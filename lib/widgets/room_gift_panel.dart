@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../../config/gifts.dart';
 import '../../config/theme.dart';
-import '../../providers/locale_provider.dart';
+import '../../providers/riverpod/locale_provider.dart';
 import '../../providers/riverpod/points_provider.dart';
+import '../../config/gifts.dart';
 
 /// Panel pilih gift untuk room live (ala streaming).
 /// Return `GiftPick` (gift + qty) saat user tap item.
-class RoomGiftPanel extends StatefulWidget {
+class RoomGiftPanel extends ConsumerStatefulWidget {
   const RoomGiftPanel({super.key, required this.points});
 
   final PointsNotifier points;
@@ -27,7 +26,7 @@ class RoomGiftPanel extends StatefulWidget {
   }
 
   @override
-  State<RoomGiftPanel> createState() => _RoomGiftPanelState();
+  ConsumerState<RoomGiftPanel> createState() => _RoomGiftPanelState();
 }
 
 class GiftPick {
@@ -37,7 +36,7 @@ class GiftPick {
   int get total => gift.coins * qty;
 }
 
-class _RoomGiftPanelState extends State<RoomGiftPanel> {
+class _RoomGiftPanelState extends ConsumerState<RoomGiftPanel> {
   int _qty = 1;
 
   bool _canAfford(GiftItem g, int qty) {
@@ -48,7 +47,7 @@ class _RoomGiftPanelState extends State<RoomGiftPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
       child: Column(

@@ -1,9 +1,9 @@
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import 'app_gesture.dart';
 
 // ── Shared chat UI: satu sumber untuk PrivateChatScreen & RoomChatScreen ──
@@ -176,7 +176,7 @@ class _ChatTypingBubbleState extends State<ChatTypingBubble>
             const Icon(Icons.mic_rounded, color: Colors.red, size: 16),
             const SizedBox(width: 6),
             Text(
-              context.read<LocaleProvider>().s.recordingStatus,
+              ProviderScope.containerOf(context, listen: false).read(localeProvider).s.recordingStatus,
               style: AppText.chatBodySmall.copyWith(
                 color: AppTheme.textSecondary,
               ),

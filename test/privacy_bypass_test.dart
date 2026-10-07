@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/providers/admin_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/riverpod/admin_provider.dart';
+import 'package:chatyuk/providers/riverpod/locale_provider.dart';
 import 'package:chatyuk/screens/admin_global_setting/widgets/privacy_bypass_tile.dart';
 import 'package:chatyuk/services/admin_service.dart';
 
 class MockAdminService extends Mock implements AdminService {}
+
+class _TestLocale extends LocaleNotifier {
+  final String _lang;
+  _TestLocale(this._lang);
+  @override
+  LocaleState build() => LocaleState(_lang);
+}
 
 void main() {
   late MockAdminService service;
@@ -47,13 +55,11 @@ void main() {
   group('PrivacyBypassTile', () {
     Future<void> pumpTile(WidgetTester t, {String lang = 'id'}) async {
       SharedPreferences.setMockInitialValues({});
-      final lp = LocaleProvider();
-      await lp.setLang(lang);
       await t.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<AdminProvider>.value(value: provider),
-            ChangeNotifierProvider<LocaleProvider>.value(value: lp),
+        ProviderScope(
+          overrides: [
+            localeProvider.overrideWith(() => _TestLocale(lang)),
+            adminProvider.overrideWith((ref) => AdminProvider(service: service)),
           ],
           child: const MaterialApp(
             home: Scaffold(body: PrivacyBypassTile()),

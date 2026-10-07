@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../core/chat/chat_location.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import 'media_caption_time.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Bubble pesan LOKASI (ala WhatsApp): peta mini + label, tap → Google Maps.
 ///
 /// Peta hanya-pandang (tanpa interaksi) supaya tidak merebut gesture scroll
 /// chat. Bila tile gagal dimuat (offline), latar abu + ikon tetap tampil —
 /// tombol buka Google Maps tetap bisa ditekan.
-class LocationBubble extends StatelessWidget {
+class LocationBubble extends ConsumerWidget {
   final ChatLocation location;
 
   /// Lebar kartu (default 220). Pakai `double.infinity` di preview composer.
@@ -112,8 +112,8 @@ class LocationBubble extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     return GestureDetector(
       // opaque: seluruh area bubble menerima tap walau child (peta) tidak
       // hit-testable di beberapa kondisi → tap pasti sampai ke handler.

@@ -6,15 +6,15 @@ import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
 
 import '../models/message_model.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../utils.dart';
 import '../core/media/chat_photo_helper.dart';
+import '../core/media/native_image.dart';
 import '../core/photo_quality_pref.dart';
 import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
@@ -176,14 +176,14 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   Future<String?> photoProcess(Uint8List bytes) async {
     if (bytes.length > 10 * 1024 * 1024) {
       if (mounted) {
-        final s = context.read<LocaleProvider>().s;
+        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
         showChatSnack(context, s.msgFileTooLarge);
       }
       return null;
     }
-    final base64 = await compute(processChatImage, bytes);
+    final base64 = await NativeImage.processJpeg(bytes);
     if (base64 == null && mounted) {
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       showChatSnack(context, s.errPhotoRead);
     }
     return base64;
@@ -204,7 +204,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     return auth.watermarkEnabled
         ? compute(processViewOnceImage, (bytes, photoSeed))
-        : compute(processChatPhoto, bytes);
+        : NativeImage.processJpeg(bytes, maxPx: 1200, quality: 82);
   }
 
   /// Kirim view-once (watermark bila aktif).
@@ -223,7 +223,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     final base64 = await processViewOnceBytes(bytes);
     if (base64 == null) {
       if (mounted) {
-        final s = context.read<LocaleProvider>().s;
+        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
         showChatSnack(context, s.errPhotoRead);
       }
       return;
@@ -316,7 +316,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     String path, {
     required void Function(String) toast,
   }) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final storage = ProviderScope.containerOf(context, listen: false).read(storageProvider);
     // 1) Cek durasi ASLI sebelum kompres (tolak >60 dtk lebih awal —
     //    jangan buang waktu kompres video 5 menit).
@@ -386,7 +386,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     final path = pendingVideoPath;
     if (path == null || path.isEmpty) return;
     if (!mounted) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
@@ -433,7 +433,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
 
     // Preview lokal (base64 data-uri) supaya bubble langsung tampil —
     // path storage baru ada setelah upload.
@@ -578,7 +578,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     var payload = base64;
     final original = pendingPhotoOriginal;
     if (photoHd && original != null) {
-      payload = await compute(processChatImageHd, original) ?? base64;
+      payload = await NativeImage.processJpeg(original, maxPx: 1920, quality: 90) ?? base64;
     }
     await _sendImageLike(
       base64: payload,
@@ -663,7 +663,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       setState(() => outboxPending.removeWhere((m) => m.id == pendingPhoto.id));
       photoClearViewTimer();
       if (!mounted) return;
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       if (r == -1) {
         pp.showOutOfPointsDialog(context, s.isId);
       } else {
@@ -681,7 +681,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         if (!outboxIsOnline) throw const SocketException('photo upload failed');
         safeUnawaited(pp.refundChatPoint(effKind));
         if (mounted) {
-          final s = context.read<LocaleProvider>().s;
+          final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
           showChatSnack(context, s.errSendPhoto);
           setState(
             () => outboxPending.removeWhere((m) => m.id == pendingPhoto.id),
@@ -730,7 +730,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
           setState(
             () => outboxPending.removeWhere((m) => m.id == pendingPhoto.id),
           );
-          final s = context.read<LocaleProvider>().s;
+          final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
           showChatSnack(context, s.errSendPhoto);
         }
       }

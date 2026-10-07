@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/theme.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/services/storage_photo_service.dart';
 import 'package:chatyuk/widgets/chat_video_bubble.dart';
 
@@ -143,13 +142,10 @@ void main() {
     // Bug: `video_once_expired` dengan image_data kosong (dikosongkan server
     // saat ditonton, pola sama foto) tidak dirender apa pun → bubble kosong
     // tanpa teks. Kartu terkunci WAJIB tetap muncul + tulisannya "video".
-    Widget host(ChatVideoBubble b) => ChangeNotifierProvider(
-      create: (_) => LocaleProvider(),
-      child: MaterialApp(
+    Widget host(ChatVideoBubble b) =>  ProviderScope(child: MaterialApp(
         theme: AppTheme.lightTheme,
         home: Scaffold(body: Center(child: b)),
-      ),
-    );
+      ));
 
     testWidgets('locked + data kosong → kartu "Video sudah kadaluarsa"', (
       tester,

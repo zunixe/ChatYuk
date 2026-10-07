@@ -43,6 +43,26 @@ class OnlineUsersState {
     this.hiddenUids = const {},
   });
 
+  @override
+  bool operator ==(Object other) =>
+      other is OnlineUsersState &&
+      other.error == error &&
+      other.loaded == loaded &&
+      other.totalRegistered == totalRegistered &&
+      other.totalAnon == totalAnon &&
+      listEquals(other.users, users) &&
+      setEquals(other.hiddenUids, hiddenUids);
+
+  @override
+  int get hashCode => Object.hash(
+        error,
+        loaded,
+        totalRegistered,
+        totalAnon,
+        Object.hashAll(users),
+        Object.hashAllUnordered(hiddenUids),
+      );
+
   int get hiddenCount => hiddenUids.length;
   bool isHidden(String uid) => hiddenUids.contains(uid);
   bool get hasLoaded => loaded;

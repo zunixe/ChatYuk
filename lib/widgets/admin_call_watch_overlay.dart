@@ -1,12 +1,12 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:provider/provider.dart';
 
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../services/admin_call_watch_service.dart';
 import 'profile_avatar.dart';
 
@@ -14,7 +14,7 @@ import 'profile_avatar.dart';
 /// ChatCallOverlay private chat: video utama setengah layar atas (bisa
 /// di-resize drag), peserta kedua jadi bubble kecil yang bisa di-drag,
 /// chat tetap tampil di bawahnya. Tanpa tombol end/mute — admin penonton.
-class AdminCallWatchOverlay extends StatefulWidget {
+class AdminCallWatchOverlay extends ConsumerStatefulWidget {
   final WatchSession session;
   final VoidCallback onExpand;
 
@@ -25,10 +25,10 @@ class AdminCallWatchOverlay extends StatefulWidget {
   });
 
   @override
-  State<AdminCallWatchOverlay> createState() => _AdminCallWatchOverlayState();
+  ConsumerState<AdminCallWatchOverlay> createState() => _AdminCallWatchOverlayState();
 }
 
-class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
+class _AdminCallWatchOverlayState extends ConsumerState<AdminCallWatchOverlay> {
   Offset? _bubblePos;
   double? _remoteH;
 
@@ -50,7 +50,7 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final sess = widget.session;
     final mq = MediaQuery.of(context);
     final appBarH =
@@ -362,16 +362,16 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
 }
 
 /// Layar pantau fullscreen — expand dari overlay.
-class AdminCallWatchFullScreen extends StatefulWidget {
+class AdminCallWatchFullScreen extends ConsumerStatefulWidget {
   final WatchSession session;
   const AdminCallWatchFullScreen({super.key, required this.session});
 
   @override
-  State<AdminCallWatchFullScreen> createState() =>
+  ConsumerState<AdminCallWatchFullScreen> createState() =>
       _AdminCallWatchFullScreenState();
 }
 
-class _AdminCallWatchFullScreenState extends State<AdminCallWatchFullScreen> {
+class _AdminCallWatchFullScreenState extends ConsumerState<AdminCallWatchFullScreen> {
   Offset? _pipPos;
   double _pipScale = 1.0;
   bool _recording = false;
@@ -425,7 +425,7 @@ class _AdminCallWatchFullScreenState extends State<AdminCallWatchFullScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final sess = widget.session;
     final main = sess.participants[sess.mainIndex];
     final other = sess.participants[1 - sess.mainIndex];

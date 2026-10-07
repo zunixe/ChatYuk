@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
+import '../providers/riverpod/locale_provider.dart';
 import '../services/message_reaction_service.dart';
 import 'profile_avatar.dart';
+import '../config/theme.dart';
 
 Future<void> showReactionDetailSheet(
   BuildContext context, {
@@ -43,7 +43,7 @@ class _Reactor {
   });
 }
 
-class _ReactionDetailSheet extends StatefulWidget {
+class _ReactionDetailSheet extends ConsumerStatefulWidget {
   final String chatType;
   final String messageId;
   final String myUid;
@@ -58,10 +58,10 @@ class _ReactionDetailSheet extends StatefulWidget {
   });
 
   @override
-  State<_ReactionDetailSheet> createState() => _ReactionDetailSheetState();
+  ConsumerState<_ReactionDetailSheet> createState() => _ReactionDetailSheetState();
 }
 
-class _ReactionDetailSheetState extends State<_ReactionDetailSheet> {
+class _ReactionDetailSheetState extends ConsumerState<_ReactionDetailSheet> {
   List<_Reactor> _reactors = [];
   bool _loading = true;
 
@@ -105,7 +105,7 @@ class _ReactionDetailSheetState extends State<_ReactionDetailSheet> {
   }
 
   Future<void> _remove(_Reactor r) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await MessageReactionService.instance.removeReaction(
       chatType: widget.chatType,
       messageId: widget.messageId,
@@ -124,7 +124,7 @@ class _ReactionDetailSheetState extends State<_ReactionDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final counts = <String, int>{};
     for (final r in _reactors) {
       counts[r.emoji] = (counts[r.emoji] ?? 0) + 1;

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 
 import '../config/strings.dart';
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/update_provider.dart';
 
 /// Tampilkan popup update. Guard: hanya satu dialog pada satu waktu.
@@ -42,7 +41,7 @@ class _UpdateDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final st = ref.watch(updateProvider);
     final phase = st.phase;
     // Fase idle = dialog sudah selesai (mis. setelah snooze) → tutup.

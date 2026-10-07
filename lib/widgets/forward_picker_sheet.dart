@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import 'profile_avatar.dart';
+import '../config/theme.dart';
 
 class ForwardTarget {
   final String chatType;
@@ -45,18 +44,18 @@ Future<ForwardTarget?> showForwardSheet(BuildContext context) async {
   );
 }
 
-class _ForwardSheet extends StatefulWidget {
+class _ForwardSheet extends ConsumerStatefulWidget {
   const _ForwardSheet();
   @override
-  State<_ForwardSheet> createState() => _ForwardSheetState();
+  ConsumerState<_ForwardSheet> createState() => _ForwardSheetState();
 }
 
-class _ForwardSheetState extends State<_ForwardSheet> {
+class _ForwardSheetState extends ConsumerState<_ForwardSheet> {
   String _q = '';
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final myUid = auth.uid ?? '';
     final chats = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).lastPrivateChatsSnapshot(myUid) ?? const [];

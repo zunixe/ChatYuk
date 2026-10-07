@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../providers/riverpod/nav_provider.dart';
+import '../config/theme.dart';
 
 /// Dialog "lengkapi email" untuk user anon yang mencoba aksi terbatas —
 /// dipakai FAB "+" (app.dart), CTA timeline tab Postinganku, dan ikon
@@ -18,7 +17,7 @@ void showAnonPromptDialog(
   String? message,
   IconData icon = Icons.edit_rounded,
 }) {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(

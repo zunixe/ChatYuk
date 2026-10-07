@@ -1,31 +1,32 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:provider/provider.dart';
 
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart';
 import '../../../widgets/detail_row.dart';
 import 'tablesize_sheet.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
-class AdminStorageUsageCard extends StatefulWidget {
+class AdminStorageUsageCard extends ConsumerStatefulWidget {
   const AdminStorageUsageCard();
   @override
-  State<AdminStorageUsageCard> createState() => AdminStorageUsageCardState();
+  ConsumerState<AdminStorageUsageCard> createState() => AdminStorageUsageCardState();
 }
 
-class AdminStorageUsageCardState extends State<AdminStorageUsageCard> {
+class AdminStorageUsageCardState extends ConsumerState<AdminStorageUsageCard> {
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
       if (!mounted) return;
-      final a = context.read<AdminProvider>();
+      final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       a.fetchStorageStats();
       a.fetchCfUsage();
     });
@@ -33,7 +34,7 @@ class AdminStorageUsageCardState extends State<AdminStorageUsageCard> {
 
   Future<void> _retry() async {
     if (!mounted) return;
-    final a = context.read<AdminProvider>();
+    final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     await a.fetchStorageStats(force: true);
     if (!mounted) return;
     await a.fetchCfUsage();
@@ -41,10 +42,10 @@ class AdminStorageUsageCardState extends State<AdminStorageUsageCard> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // GRANULAR: data storage bagian dari domain STATS.
-    context.select<AdminProvider, int>((p) => p.revStats);
-    final admin = context.read<AdminProvider>();
+    ref.watch(adminProvider.select((p) => p.revStats));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     final st = admin.storageStats;
     final loading = admin.storageStatsLoading && st == null;
     final failed = !loading && st == null && admin.storageStatsError;

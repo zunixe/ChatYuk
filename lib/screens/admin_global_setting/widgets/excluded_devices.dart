@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
 import '../../../providers/riverpod/auth_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../core/admin_err.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Exclude perangkat (install_id): perangkat yang di-exclude tidak dihitung
 /// di ringkasan (users/aktif/anon) & disembunyikan dari tab Perangkat.
@@ -17,8 +16,10 @@ class ExcludedDevicesTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = ref.watch(authProvider);
+    final s = ref.watch(localeProvider).s;
+    final count = ref.watch(
+      authProvider.select((a) => a.excludedDevices.length),
+    );
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -62,10 +63,10 @@ class ExcludedDevicesTile extends ConsumerWidget {
                 Text(
                   s.adminExcludeCount.replaceFirst(
                     '%d',
-                    '${auth.excludedDevices.length}',
+                    '$count',
                   ),
                   style: AppText.caption.copyWith(
-                    color: auth.excludedDevices.isEmpty
+                    color: count == 0
                         ? AppTheme.textSecondary
                         : AppTheme.danger,
                   ),
@@ -99,14 +100,14 @@ class ExcludedDevicesTile extends ConsumerWidget {
 
 /// Bottom sheet kelola daftar install_id ter-exclude: lihat, tambah manual,
 /// hapus per item. Simpan via AdminProvider.setExcludedDevices (RPC).
-class ExcludedDevicesSheet extends StatefulWidget {
+class ExcludedDevicesSheet extends ConsumerStatefulWidget {
   const ExcludedDevicesSheet({super.key});
 
   @override
-  State<ExcludedDevicesSheet> createState() => _ExcludedDevicesSheetState();
+  ConsumerState<ExcludedDevicesSheet> createState() => _ExcludedDevicesSheetState();
 }
 
-class _ExcludedDevicesSheetState extends State<ExcludedDevicesSheet> {
+class _ExcludedDevicesSheetState extends ConsumerState<ExcludedDevicesSheet> {
   late List<String> _ids;
   final _inputCtrl = TextEditingController();
   bool _saving = false;
@@ -125,7 +126,7 @@ class _ExcludedDevicesSheetState extends State<ExcludedDevicesSheet> {
   }
 
   void _add() {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final id = _inputCtrl.text.trim();
     if (id.isEmpty) {
       setState(() => _error = s.adminExcludeEmptyId);
@@ -151,8 +152,8 @@ class _ExcludedDevicesSheetState extends State<ExcludedDevicesSheet> {
   }
 
   Future<void> _save() async {
-    if (guardOfflineCtx(context, context.read<LocaleProvider>().s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
-    final s = context.read<LocaleProvider>().s;
+    if (guardOfflineCtx(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     setState(() => _saving = true);
     final ok = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setExcludedDevices(_ids);
     if (!mounted) return;
@@ -169,7 +170,7 @@ class _ExcludedDevicesSheetState extends State<ExcludedDevicesSheet> {
       // Server sudah hapus cache stats; client cukup fetch ulang + buang
       // cache detail 60 detik supaya daftar user juga segar.
       try {
-        final admin = context.read<AdminProvider>();
+        final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
         admin.invalidateStatsDetail();
         unawaited(admin.refreshStats());
         unawaited(admin.fetchDevices());
@@ -181,7 +182,7 @@ class _ExcludedDevicesSheetState extends State<ExcludedDevicesSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(

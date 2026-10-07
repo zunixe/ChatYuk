@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 
 import '../models/message_model.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/chat/chat_location.dart';
@@ -87,6 +86,20 @@ mixin ChatSendMixin<T extends StatefulWidget>
   /// Batalkan mode edit (kosongkan state edit di layar).
   void sendCancelEdit();
 
+  /// Kosongkan composer dengan nilai VALID (selection offset 0, composing
+  /// range kosong). `TextEditingController.clear()` memakai
+  /// `TextEditingValue.empty` yang selection-nya offset -1 (INVALID) → saat
+  /// IME Android masih aktif/meng-compose, engine bisa mengirim balik nilai
+  /// lama sehingga teks "muncul lagi" setelah terkirim. Setel eksplisit agar
+  /// benar-benar bersih.
+  void sendClearComposer() {
+    sendMsgCtrl.value = const TextEditingValue(
+      text: '',
+      selection: TextSelection.collapsed(offset: 0),
+      composing: TextRange.empty,
+    );
+  }
+
   /// Simpan perubahan pesan yang sedang diedit (private: editPrivateMessage,
   /// room: editRoomMessage). Return true bila server menerima.
   Future<bool> sendEditPersist(MessageModel editing, String raw);
@@ -122,7 +135,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
     // Soft gate anon: fitur anon OFF → tawarkan daftar, jangan kirim.
     if (ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).anonBlocked) {
       if (!mounted) return;
-      final ls = context.read<LocaleProvider>().s;
+      final ls = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       showAnonPromptDialog(
         context,
         title: ls.promptCompleteEmailChatTitle,
@@ -146,13 +159,13 @@ mixin ChatSendMixin<T extends StatefulWidget>
         sendCancelEdit();
         return;
       }
-      sendMsgCtrl.clear();
+      sendClearComposer();
       setState(() => sendEditingMessage = null);
       sendIsSending = true;
       try {
         final ok = await sendEditPersist(editing, raw);
         if (mounted) {
-          final s = context.read<LocaleProvider>().s;
+          final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
           showChatSnack(context, ok ? s.msgEdited : s.errSendFailed);
         }
       } finally {
@@ -173,7 +186,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
         sendPendingVideoPath!.isNotEmpty) {
       final reply = sendReplyingTo;
       final text = sendMsgCtrl.text.trim();
-      sendMsgCtrl.clear();
+      sendClearComposer();
       setState(() {
         sendReplyingTo = null;
       });
@@ -197,7 +210,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
       final loc = sendPendingLocation!;
       final reply = sendReplyingTo;
       final caption = sendMsgCtrl.text.trim();
-      sendMsgCtrl.clear();
+      sendClearComposer();
       setState(() {
         sendPendingLocation = null;
         sendReplyingTo = null;
@@ -215,7 +228,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
     if (hasPhoto) {
       final photoB64 = sendPendingPhotoBase64!;
       final reply = sendReplyingTo;
-      sendMsgCtrl.clear();
+      sendClearComposer();
       setState(() {
         sendPendingPhotoBase64 = null;
         sendReplyingTo = null;
@@ -230,7 +243,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
     }
 
     // ── Pesan teks ──
-    sendMsgCtrl.clear();
+    sendClearComposer();
     sendIsSending = true;
     final reply = sendReplyingTo;
     final mentions = parseMentions(text, candidates: sendMentionCandidates());
@@ -289,7 +302,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
       setState(() => outboxPending.remove(pending));
       sendIsSending = false;
       if (!mounted) return;
-      final ss = context.read<LocaleProvider>().s;
+      final ss = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       if (remaining == -1) {
         pp.showOutOfPointsDialog(context, ss.isId);
       } else {
@@ -317,7 +330,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
         safeUnawaited(pp.refundChatPoint('text'));
         if (mounted) {
           setState(() => outboxPending.remove(pending));
-          final s = context.read<LocaleProvider>().s;
+          final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
           final blockedByOther =
               e.toString().contains('42501') ||
               e.toString().toLowerCase().contains('insufficient_privilege') ||

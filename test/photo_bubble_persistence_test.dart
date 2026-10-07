@@ -1,13 +1,12 @@
 import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/core/media/chat_photo_helper.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/widgets/private_chat_message.dart';
 
 /// Mengunci anti-kedip bubble foto private chat: placeholder langsung
@@ -173,18 +172,15 @@ void main() {
   group('MessageImage placeholder penerima', () {
     Future<void> pumpPhoto(WidgetTester t, String b64, String id) {
       return t.pumpWidget(
-        MaterialApp(
-          home: ChangeNotifierProvider(
-            create: (_) => LocaleProvider(),
-            child: Scaffold(
+        ProviderScope(child: MaterialApp(
+          home:  Scaffold(
               body: MessageImage(
                 imageData: b64,
                 chatKey: 'private_a_b',
                 messageId: id,
               ),
             ),
-          ),
-        ),
+        )),
       );
     }
 

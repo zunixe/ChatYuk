@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
-import 'package:chatyuk/providers/auth_provider.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
 
 import '../supabase_test_client.dart';
@@ -208,8 +208,7 @@ void main() {
 
   test('Provider tidak lagi hardcode service (DI tetap ada)', () {
     final svc = AuthService.forTest(fakeSupabaseClient(handler: buildHandler()));
-    final provider = AuthProvider(authService: svc, autoInit: false);
+    final provider = AuthNotifier(authService: svc, autoInit: false);
     expect(provider, isNotNull);
-    provider.dispose();
   });
 }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
 import 'panel_card.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Daftar user yang dilaporkan + jumlah laporan.
 class ReportedUsersCard extends StatelessWidget {
@@ -147,7 +148,7 @@ class ForceLogoutCard extends StatelessWidget {
               try {
                 // Await — forceLogout melempar saat gagal; tanpa await
                 // error jadi unhandled dan toast "sukses" tampil keliru.
-                await context.read<AdminProvider>().forceLogout(uid);
+                await ProviderScope.containerOf(context, listen: false).read(adminProvider).forceLogout(uid);
                 onToast(s.adminForceLogoutDone(uid.substring(0, 8)));
                 logoutCtrl.clear();
               } catch (e) {

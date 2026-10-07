@@ -1,27 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../widgets/sheet_drag_handle.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Kartu "Sebaran Negara" untuk Ringkasan admin: bar horizontal negara
 /// dengan user terbanyak. Ketuk negara → sheet daftar kota + jumlahnya.
-class AdminGeoStatsCard extends StatefulWidget {
+class AdminGeoStatsCard extends ConsumerStatefulWidget {
   const AdminGeoStatsCard();
   @override
-  State<AdminGeoStatsCard> createState() => _AdminGeoStatsCardState();
+  ConsumerState<AdminGeoStatsCard> createState() => _AdminGeoStatsCardState();
 }
 
-class _AdminGeoStatsCardState extends State<AdminGeoStatsCard> {
+class _AdminGeoStatsCardState extends ConsumerState<AdminGeoStatsCard> {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<AdminProvider>().fetchCountryStats();
+      if (mounted) ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchCountryStats();
     });
   }
 
@@ -29,8 +29,8 @@ class _AdminGeoStatsCardState extends State<AdminGeoStatsCard> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
-    final admin = context.watch<AdminProvider>();
+    final s = ref.watch(localeProvider).s;
+    final admin = ref.watch(adminProvider);
     final list = admin.countryStats;
 
     return Container(
@@ -215,7 +215,7 @@ class _AdminGeoStatsCardState extends State<AdminGeoStatsCard> {
     S s,
     String country,
   ) async {
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.bgScreen,

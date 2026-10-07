@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
 import '../../../utils.dart';
 import 'section_card.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Sheet riwayat story harian dummy (biasa). Menampilkan N hari terakhir
 /// + status terisi/kosong supaya ketahuan hari mana yang belum
@@ -67,7 +67,7 @@ class _DummyStorySheetState extends State<DummyStorySheet> {
   @override
   void initState() {
     super.initState();
-    _future = context.read<AdminProvider>().getDummyStories(
+    _future = ProviderScope.containerOf(context, listen: false).read(adminProvider).getDummyStories(
           widget.uid,
           days: 14,
         );
@@ -75,7 +75,7 @@ class _DummyStorySheetState extends State<DummyStorySheet> {
 
   void _refresh() {
     setState(() {
-      _future = context.read<AdminProvider>().getDummyStories(
+      _future = ProviderScope.containerOf(context, listen: false).read(adminProvider).getDummyStories(
             widget.uid,
             days: 14,
           );
@@ -89,7 +89,7 @@ class _DummyStorySheetState extends State<DummyStorySheet> {
       SnackBar(content: Text(s.dummyStoryGenerating)),
     );
     try {
-      final result = await context.read<AdminProvider>().generateDummyStory(
+      final result = await ProviderScope.containerOf(context, listen: false).read(adminProvider).generateDummyStory(
             widget.uid,
             storyDate: storyDate,
           );

@@ -1,13 +1,13 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:provider/provider.dart';
 
 import '../config/strings.dart';
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../services/call_service.dart';
 import '../core/call/call_permissions.dart';
 import '../core/perf/perf_probe.dart';
@@ -22,7 +22,7 @@ import '../utils.dart';
 /// - Chat tetap tampil & aktif di bawah di belakang overlay.
 ///
 /// Dipasang sebagai anak [Stack] body chat via Positioned.fill.
-class ChatCallOverlay extends StatefulWidget {
+class ChatCallOverlay extends ConsumerStatefulWidget {
   final CallSession session;
   final VoidCallback onExpand;
   final VoidCallback onEnd;
@@ -35,10 +35,10 @@ class ChatCallOverlay extends StatefulWidget {
   });
 
   @override
-  State<ChatCallOverlay> createState() => _ChatCallOverlayState();
+  ConsumerState<ChatCallOverlay> createState() => _ChatCallOverlayState();
 }
 
-class _ChatCallOverlayState extends State<ChatCallOverlay> {
+class _ChatCallOverlayState extends ConsumerState<ChatCallOverlay> {
   Offset? _bubblePos;
   double? _remoteH;
 
@@ -110,7 +110,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('CallOverlay');
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final sess = widget.session;
     final isVideo = sess.callType == 'video';
     final inCall = sess.phase == CallPhase.inCall;

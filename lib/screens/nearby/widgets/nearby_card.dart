@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../../../config/theme.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../widgets/user_avatar.dart';
 
-class NearbyCard extends StatelessWidget {
+class NearbyCard extends ConsumerWidget {
   final Map<String, dynamic> data;
   final VoidCallback onTap;
   const NearbyCard({super.key, required this.data, required this.onTap});
@@ -18,8 +18,8 @@ class NearbyCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     final nickname = '${data['nickname'] ?? ''}';
     final gender = '${data['gender'] ?? ''}';
     final age = (data['age'] as num?)?.toInt() ?? 0;

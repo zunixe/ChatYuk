@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../core/admin_err.dart';
 import '../../../utils.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Daftar provider AI: tap = expand (model, base URL, API key),
 /// radio = provider yang dipakai edge function. Bisa tambah baru.
-class ProviderListSection extends StatefulWidget {
+class ProviderListSection extends ConsumerStatefulWidget {
   const ProviderListSection({super.key});
 
   @override
-  State<ProviderListSection> createState() => _ProviderListSectionState();
+  ConsumerState<ProviderListSection> createState() => _ProviderListSectionState();
 }
 
-class _ProviderListSectionState extends State<ProviderListSection> {
-  AdminProvider get _svc => context.read<AdminProvider>();
+class _ProviderListSectionState extends ConsumerState<ProviderListSection> {
+  AdminProvider get _svc => ProviderScope.containerOf(context, listen: false).read(adminProvider);
   bool _loading = true;
   bool _failed = false;
   List<Map<String, dynamic>> _items = const [];
@@ -54,7 +55,7 @@ class _ProviderListSectionState extends State<ProviderListSection> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
@@ -131,7 +132,7 @@ class _ProviderListSectionState extends State<ProviderListSection> {
 }
 
 /// Satu kartu provider: radio + label + model; expand = edit 4 field.
-class ProviderCard extends StatefulWidget {
+class ProviderCard extends ConsumerStatefulWidget {
   final Map<String, dynamic> data;
   final bool expanded;
   final bool isNew;
@@ -148,11 +149,11 @@ class ProviderCard extends StatefulWidget {
   });
 
   @override
-  State<ProviderCard> createState() => _ProviderCardState();
+  ConsumerState<ProviderCard> createState() => _ProviderCardState();
 }
 
-class _ProviderCardState extends State<ProviderCard> {
-  AdminProvider get _svc => context.read<AdminProvider>();
+class _ProviderCardState extends ConsumerState<ProviderCard> {
+  AdminProvider get _svc => ProviderScope.containerOf(context, listen: false).read(adminProvider);
   late final TextEditingController _labelCtrl;
   late final TextEditingController _modelCtrl;
   late final TextEditingController _storyModelCtrl;
@@ -233,8 +234,8 @@ class _ProviderCardState extends State<ProviderCard> {
   }
 
   Future<void> _save() async {
-    if (guardOfflineCtx(context, context.read<LocaleProvider>().s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
-    final s = context.read<LocaleProvider>().s;
+    if (guardOfflineCtx(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     setState(() => _busy = true);
     try {
       await _svc.saveAiProvider(
@@ -267,7 +268,7 @@ class _ProviderCardState extends State<ProviderCard> {
   }
 
   Future<void> _activate() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     setState(() => _activating = true);
     try {
       await _svc.activateAiProvider('${widget.data['id']}');
@@ -287,7 +288,7 @@ class _ProviderCardState extends State<ProviderCard> {
   }
 
   Future<void> _delete() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     // Tangkap messenger + callback SEBELUM await: card bisa ter-unmount
     // saat RPC berjalan (rebuild parent) — feedback + refresh list harus
     // tetap jalan walau card sudah tidak mounted (bug "hapus tapi muncul lagi").
@@ -379,7 +380,7 @@ class _ProviderCardState extends State<ProviderCard> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final active = widget.data['is_active'] == true && !widget.isNew;
     final model = '${widget.data['default_model'] ?? ''}';
     return Container(
