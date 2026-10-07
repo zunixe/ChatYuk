@@ -42,6 +42,19 @@ class NativeImage {
     return _available!;
   }
 
+  /// Lepaskan cache byte native + minta allocator mengembalikan arena ke OS.
+  ///
+  /// Dipanggil saat app di-background: arena native (jemalloc/scudo) membengkak
+  /// karena alokasi byte gambar besar berulang dan TIDAK menyusut sendiri
+  /// (terukur reserved ~542MB / used ~57MB). No-op bila channel tak ada.
+  static Future<void> trim() async {
+    try {
+      await _ch.invokeMethod<dynamic>('trim', const {});
+    } catch (_) {
+      // tanpa native (unit test/desktop) → tak ada yang perlu dibuang.
+    }
+  }
+
   /// Dimensi dari HEADER saja (tanpa decode penuh). Fallback: parseImageDimensions Dart.
   static Future<({int width, int height})?> aspectRatio(String base64) async {
     if (base64.isEmpty) return null;
@@ -344,6 +357,97 @@ class NativeImage {
       } catch (_) {}
     }
     return compute(dartimg.dartAspectRatios, list);
+  }
+
+  /// Thumbnail dari base64: resize lebar ke [maxW] + JPEG [quality] → base64.
+  /// Fallback: `dartThumbB64` di isolate.
+  static Future<String?> processThumbB64(
+    String base64, {
+    int maxW = 256,
+    int quality = 80,
+  }) async {
+    if (base64.isEmpty) return null;
+    if (await isAvailable()) {
+      try {
+        final r = await _ch.invokeMethod<String>('processThumbB64', {
+          'base64': base64,
+          'maxW': maxW,
+          'quality': quality,
+        });
+        if (r != null && r.isNotEmpty) return r;
+        return null;
+      } catch (_) {}
+    }
+    return compute(dartimg.dartThumbB64, (base64, maxW, quality));
+  }
+
+  /// raw RGBA (dari `ui.Image.toByteData`) → JPEG bytes.
+  /// Fallback: `dartRawRgbaToJpg` di isolate.
+  static Future<Uint8List?> processRawRgba(
+    Uint8List rgba,
+    int w,
+    int h, {
+    int quality = 90,
+  }) async {
+    if (rgba.isEmpty || w <= 0 || h <= 0) return null;
+    if (rgba.length < w * h * 4) return null;
+    if (await isAvailable()) {
+      try {
+        final r = await _ch.invokeMethod<Uint8List>('processRawRgba', {
+          'bytes': rgba,
+          'w': w,
+          'h': h,
+          'quality': quality,
+        });
+        if (r != null && r.isNotEmpty) return r;
+        return null;
+      } catch (_) {}
+    }
+    return compute(dartimg.dartRawRgbaToJpg, (rgba, w, h, quality));
+  }
+
+  /// Downscale base64 ke lebar [targetWidth] (bila lebih besar) + JPEG
+  /// [quality] → base64. Fallback: `dartDownscaleB64` di isolate.
+  static Future<String?> downscaleB64(
+    String base64, {
+    int targetWidth = 512,
+    int quality = 75,
+  }) async {
+    if (base64.isEmpty) return null;
+    if (await isAvailable()) {
+      try {
+        final r = await _ch.invokeMethod<String>('downscaleB64', {
+          'base64': base64,
+          'targetWidth': targetWidth,
+          'quality': quality,
+        });
+        if (r != null && r.isNotEmpty) return r;
+        return null;
+      } catch (_) {}
+    }
+    return compute(dartimg.dartDownscaleB64, (base64, targetWidth, quality));
+  }
+
+  /// Downscale bytes gambar ke lebar [targetWidth] (bila lebih besar) + JPEG
+  /// [quality] → bytes. Fallback: `dartDownscaleBytes` di isolate.
+  static Future<Uint8List?> downscaleBytes(
+    Uint8List src, {
+    int targetWidth = 1024,
+    int quality = 82,
+  }) async {
+    if (src.isEmpty) return null;
+    if (await isAvailable()) {
+      try {
+        final r = await _ch.invokeMethod<Uint8List>('downscaleBytes', {
+          'bytes': src,
+          'targetWidth': targetWidth,
+          'quality': quality,
+        });
+        if (r != null && r.isNotEmpty) return r;
+        return null;
+      } catch (_) {}
+    }
+    return compute(dartimg.dartDownscaleBytes, (src, targetWidth, quality));
   }
 
   static Uint8List? _tryB64(String b64) {

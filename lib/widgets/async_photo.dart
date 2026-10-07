@@ -1,30 +1,9 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 
 import '../config/theme.dart';
 import '../core/media/native_image.dart';
 import '../utils.dart';
-
-// Top-level untuk compute() — decode + resize ke thumbnail kecil (~256px).
-// Grid galeri tidak perlu memegang gambar penuh 800px; render jadi ringan.
-@visibleForTesting
-Uint8List? decodeThumbB64(String b64) {
-  try {
-    final bytes = base64Decode(b64);
-    final image = img.decodeImage(bytes);
-    if (image == null) return null;
-    final thumb = img.copyResize(
-      image,
-      width: 256,
-      interpolation: img.Interpolation.linear,
-    );
-    return img.encodeJpg(thumb, quality: 80);
-  } catch (_) {
-    return null;
-  }
-}
 
 /// Foto thumbnail grid — decode + resize di isolate, tampil placeholder dulu.
 class AsyncPhotoThumbnail extends StatefulWidget {

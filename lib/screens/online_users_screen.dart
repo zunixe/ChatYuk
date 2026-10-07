@@ -55,7 +55,6 @@ import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/social_actions.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
-import 'package:image/image.dart' as img;
 import '../core/media/native_image.dart';
 import '../providers/riverpod/location_provider.dart';
 
@@ -80,28 +79,8 @@ ImageProvider _cappedAvatarImage(Uint8List bytes) =>
 void clearAllAvatarCaches() => ua.clearAllAvatarCaches();
 
 /// Proses avatar (crop 1:1 sudah dilakukan cropper) → resize 640 + JPEG q85.
-/// Publik + `@visibleForTesting` supaya kontrak ukuran/kualitas diuji.
-@visibleForTesting
-String? processAvatarImage(Uint8List bytes) {
-  // image 4.x MELEMPAR untuk bytes korup/pendek — jangan biarkan crash.
-  final img.Image? decoded;
-  try {
-    decoded = img.decodeImage(bytes);
-  } catch (_) {
-    return null;
-  }
-  if (decoded == null) return null;
-  // 640px (dulu 1024) + q85 (dulu 90): avatar tampil maksimal ~108px fisik,
-  // 640 sudah >5× resolusi tampil (tajam di semua DPI) tapi file ~50% lebih
-  // kecil — hemat storage & bandwidth upload/tampil di list online.
-  final resized = img.copyResize(
-    decoded,
-    width: 640,
-    height: 640,
-    interpolation: img.Interpolation.cubic,
-  );
-  return base64Encode(img.encodeJpg(resized, quality: 85));
-}
+/// Kini di NATIVE via `NativeImage.processSquare` (fallback Dart di
+/// chat_photo_helper.dart). Konstanta kontrak diekspos untuk test.
 
 // Avatar SELALU JPEG (sama seperti profile_screen & foto chat). Dulu memakai
 // encoder WebP native FlutterImageCompress, tapi hasilnya membawa ICC

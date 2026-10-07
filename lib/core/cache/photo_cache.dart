@@ -1,54 +1,19 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import '../../utils.dart';
-import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
+import '../media/native_image.dart';
 import 'message_cache.dart';
 
-/// Turunkan gambar ke lebar [targetWidth] TANPA decode full-res.
-///
-/// Sama seperti `_jpegDownscaled` di post_photo_cache: Skia `instantiateImageCodec`
-/// men-downscale SAAT decode (targetWidth) sehingga alokasi RGBA hanya seukuran
-/// target, bukan full-res (12MP ≈ 48MB). Bug lama `img.decodeImage` + `copyResize`
-/// men-decode penuh dulu → spike memori + lag saat foto masuk chat.
-Future<String?> _jpegDownscaledB64(Uint8List bytes, int targetWidth, int quality) async {
-  ui.Codec? codec;
-  ui.Image? image;
-  try {
-    codec = await ui.instantiateImageCodec(bytes, targetWidth: targetWidth);
-    final frame = await codec.getNextFrame();
-    image = frame.image;
-    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    if (data == null) return null;
-    final img.Image converted = img.Image.fromBytes(
-      width: image.width,
-      height: image.height,
-      bytes: data.buffer,
-      numChannels: 4,
-      order: img.ChannelOrder.rgba,
-    );
-    return base64Encode(img.encodeJpg(converted, quality: quality));
-  } catch (_) {
-    return null;
-  } finally {
-    image?.dispose();
-    codec?.dispose();
-  }
-}
-
-// Thumbnail JPEG kecil (~512px) dari base64. Bukan di compute isolate —
-// decode via Skia targetWidth (lihat _jpegDownscaledB64).
-// CATATAN: decode via Skia targetWidth (bukan img.decodeImage) supaya tidak
-// men-decode full-res — lihat _jpegDownscaledB64.
+// Thumbnail JPEG kecil (~512px) dari base64 — kini di NATIVE
+// (`NativeImage.downscaleB64`, fallback Dart) supaya decode+encode tidak
+// memakai heap Dart. Lihat lib/core/media/native_image.dart.
 @visibleForTesting
 Future<String?> genThumb(Map<String, dynamic> args) async {
   try {
     final b64 = args['b64'] as String;
-    final bytes = base64Decode(b64);
-    return await _jpegDownscaledB64(bytes, 512, 75);
+    return await NativeImage.downscaleB64(b64, targetWidth: 512, quality: 75);
   } catch (_) {
     return null;
   }

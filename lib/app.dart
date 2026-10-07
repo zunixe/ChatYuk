@@ -19,6 +19,7 @@ import 'core/cache/message_cache.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/image_cache_hygiene.dart';
+import 'core/media/native_image.dart';
 import 'providers/riverpod/connectivity_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
 import 'providers/riverpod/theme_provider.dart';
@@ -759,6 +760,11 @@ class _MainNavState extends ConsumerState<_MainNav>
           ..clear()
           ..clearLiveImages();
       } catch (_) {}
+      // Arena native (jemalloc) membengkak karena alokasi byte gambar besar
+      // berulang dan TIDAK menyusut sendiri (terukur reserved ~542MB / used
+      // ~57MB). Minta native membuang cache + kembalikan arena ke OS; saat
+      // resume gambar di-decode ulang dari disk (murah). Fire-and-forget.
+      unawaited(NativeImage.trim());
     } else if (state == AppLifecycleState.detached) {
       // App di-kill/force-close → set idle (offline otomatis setelah threshold).
       auth.goIdle();
@@ -864,6 +870,10 @@ class _MainNavState extends ConsumerState<_MainNav>
     try {
       ImageCacheHygiene.clearAll();
     } catch (_) {}
+    // Sinyal memori menipis dari OS → kembalikan juga arena native (jemalloc)
+    // ke OS via JNI malloc_trim (docs/PERFORMANCE.md §27). No-op bila lib
+    // native tak ada.
+    unawaited(NativeImage.trim());
   }
 
   /// Pindah tab utama (juga dipanggil NavProvider dari screen lain).

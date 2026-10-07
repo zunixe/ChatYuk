@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
 import 'package:chatyuk/widgets/async_photo.dart';
+import 'package:chatyuk/core/media/native_image.dart';
 
 /// Fase 1 — memastikan CAP decode (`cacheWidth`) benar-benar terpasang pada
 /// widget gambar kecil. Regresi di sini = gambar full-res di-raster ulang
@@ -45,27 +46,39 @@ void main() {
     expect(resize.allowUpscaling, isFalse);
   });
 
-  testWidgets('decodeThumbB64 mengecilkan gambar besar ke 256px',
+  testWidgets('processThumbB64 mengecilkan gambar besar ke 256px',
       (tester) async {
-    final out = decodeThumbB64(_b64Jpeg(1000, 1000));
+    String? out;
+    await tester.runAsync(() async {
+      out = await NativeImage.processThumbB64(_b64Jpeg(1000, 1000));
+    });
     expect(out, isNotNull);
-    final decoded = img.decodeImage(out!)!;
+    final decoded = img.decodeImage(base64Decode(out!))!;
     expect(decoded.width, 256);
     expect(decoded.height, 256);
   });
 
-  test('decodeThumbB64 gambar kecil tidak diperbesar', () {
-    final out = decodeThumbB64(_b64Jpeg(100, 100));
+  testWidgets('processThumbB64 gambar kecil tidak diperbesar', (tester) async {
+    String? out;
+    await tester.runAsync(() async {
+      out = await NativeImage.processThumbB64(_b64Jpeg(100, 100));
+    });
     expect(out, isNotNull);
-    final decoded = img.decodeImage(out!)!;
-    // copyResize(width:256) memperbesar — perilaku existing; pastikan tidak crash
-    // & hasilnya tetap gambar valid.
+    final decoded = img.decodeImage(base64Decode(out!))!;
     expect(decoded.width, greaterThan(0));
   });
 
-  test('decodeThumbB64 bytes bukan gambar → null, tidak crash', () {
-    expect(decodeThumbB64('not base64 !!!'), isNull);
-    expect(decodeThumbB64(base64Encode(Uint8List.fromList([1, 2, 3]))), isNull);
+  testWidgets('processThumbB64 bytes bukan gambar → null, tidak crash',
+      (tester) async {
+    late String? a, b, c;
+    await tester.runAsync(() async {
+      a = await NativeImage.processThumbB64('not base64 !!!');
+      b = await NativeImage.processThumbB64(base64Encode(Uint8List.fromList([1, 2, 3])));
+      c = await NativeImage.processThumbB64('');
+    });
+    expect(a, isNull);
+    expect(b, isNull);
+    expect(c, isNull);
   });
 
   // ── ANTI-KEDIP AVATAR (regresi nyata: "kadang ada kadang hilang") ──

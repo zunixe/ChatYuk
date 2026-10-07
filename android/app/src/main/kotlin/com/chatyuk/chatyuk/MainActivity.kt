@@ -25,6 +25,7 @@ class MainActivity : FlutterActivity() {
     private var wasSecureAtPause = false
     private var callUiBridge: CallUiBridge? = null
     private var tiktokBridge: TikTokBridge? = null
+    private var imageBridge: ImageBridge? = null
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,6 +100,32 @@ class MainActivity : FlutterActivity() {
         if (!wasSecureAtPause) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
+    }
+
+    /**
+     * Sinyal langsung dari OS saat memori menipis / app di-background.
+     *
+     * Arena native (jemalloc) membengkak karena decode gambar berulang dan
+     * TIDAK menyusut sendiri (terukur reserved ~542MB / used ~57MB) → RSS
+     * proses tinggi → GC/paging berat saat interaksi (gejala "ngelag").
+     * Buang cache gambar native + kembalikan arena ke OS di sini.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        when (level) {
+            android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN,
+            android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND,
+            android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE,
+            android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE,
+            android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW,
+            android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL,
+            -> imageBridge?.trim()
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        imageBridge?.trim()
     }
 
     private fun hideBootOverlay(fade: Boolean) {
@@ -188,10 +215,10 @@ class MainActivity : FlutterActivity() {
 
         // Pipeline gambar native (BitmapFactory) + LRU native — decode/encode
         // avatar/thumbnail/proses-kirim foto di native heap (bukan Dart heap).
-        ImageBridge(
+        imageBridge = ImageBridge(
             this,
             MethodChannel(flutterEngine.dartExecutor.binaryMessenger, imageChannel),
-        ).attach()
+        ).also { it.attach() }
 
         handleCallIntent(intent)
     }
