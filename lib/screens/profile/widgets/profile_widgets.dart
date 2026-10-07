@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../../../config/theme.dart';
 import '../../../models/user_photo.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../widgets/async_photo.dart';
 
 /// Chip kecil di header profil (mis. "Online"/verified) — putih transparan.
@@ -324,21 +324,21 @@ class ProfileActionGrid extends StatelessWidget {
 /// Tile setelan ukuran font chat (slider) — berlaku untuk bubble chat,
 /// nama pengirim, dan jam pesan. Tersimpan lokal (SharedPreferences) dan
 /// langsung terlihat di preview.
-class ProfileChatFontTile extends StatefulWidget {
+class ProfileChatFontTile extends ConsumerStatefulWidget {
   const ProfileChatFontTile({super.key});
 
   @override
-  State<ProfileChatFontTile> createState() => _ProfileChatFontTileState();
+  ConsumerState<ProfileChatFontTile> createState() => _ProfileChatFontTileState();
 }
 
-class _ProfileChatFontTileState extends State<ProfileChatFontTile> {
+class _ProfileChatFontTileState extends ConsumerState<ProfileChatFontTile> {
   // Slider bekerja pada INDEX step (0..steps) → label berupa ANGKA ukuran
   // font (pt), lebih rapat & intuitif daripada persen.
   late int _step = ChatTextScale.stepIndex;
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final mult = ChatTextScale.multOfStep(_step);
     return Material(
       color: Colors.transparent,

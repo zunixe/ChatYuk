@@ -59,10 +59,20 @@ class StoragePhotoService {
           value.contains('.mp4') ||
           value.contains('.mov'));
 
+  /// Cap waktu unik: microseconds + counter monotonik.
+  ///
+  /// `microsecondsSinceEpoch` saja TIDAK menjamin unik di platform resolusi
+  /// rendah (Windows ~1 ms) → dua upload cepat menghasilkan path SAMA → file
+  /// tertimpa. Counter menjamin unik lintas-panggilan.
+  static int _pathSeq = 0;
+  static String _stamp() {
+    _pathSeq = (_pathSeq + 1) & 0xFFFFFF;
+    return '${DateTime.now().microsecondsSinceEpoch}_$_pathSeq';
+  }
+
   /// Path untuk foto baru di chat. Tidak bergantung messageId (yang baru
   /// diketahui setelah insert) — cukup chatId + timestamp unik.
-  String newPath(String chatId) =>
-      'chat/$chatId/${DateTime.now().microsecondsSinceEpoch}.jpg';
+  String newPath(String chatId) => 'chat/$chatId/${_stamp()}.jpg';
 
   /// Path avatar user. Versi pakai timestamp (cache-buster): path berubah
   /// tiap upload → device penonton & CDN Storage tidak lagi menyajikan
@@ -114,15 +124,15 @@ class StoragePhotoService {
 
   /// Path foto galeri user (indeks/detik untuk keunikan).
   String photoPath(String uid) =>
-      'gallery/$uid/${DateTime.now().microsecondsSinceEpoch}.jpg';
+      'gallery/$uid/${_stamp()}.jpg';
 
   /// Path foto post timeline.
   String postImagePath(String uid) =>
-      'posts/$uid/${DateTime.now().microsecondsSinceEpoch}.jpg';
+      'posts/$uid/${_stamp()}.jpg';
 
   /// Path foto story (slide).
   String storyPath(String uid) =>
-      'story/$uid/${DateTime.now().microsecondsSinceEpoch}.jpg';
+      'story/$uid/${_stamp()}.jpg';
 
   /// Upload foto story → Storage. Return path atau null.
   Future<String?> uploadStoryImage({
@@ -142,7 +152,7 @@ class StoragePhotoService {
 
   /// Path video story (slide mp4, maks 15 dtk).
   String storyVideoPath(String uid) =>
-      'story/$uid/${DateTime.now().microsecondsSinceEpoch}.mp4';
+      'story/$uid/${_stamp()}.mp4';
 
   /// Upload video story → Storage. Return path atau null.
   Future<String?> uploadStoryVideo({
@@ -255,7 +265,7 @@ class StoragePhotoService {
   /// Path video chat. Pola sama [newPath] (chatId + timestamp, tanpa
   /// messageId yang baru diketahui setelah insert).
   String chatVideoPath(String chatId) =>
-      'chat/$chatId/${DateTime.now().microsecondsSinceEpoch}.mp4';
+      'chat/$chatId/${_stamp()}.mp4';
 
   /// True bila path video chat (`chat/....mp4`).
   bool isChatVideoPath(String v) =>
@@ -329,7 +339,7 @@ class StoragePhotoService {
 
   /// Path voice message.
   String voicePath(String chatId) =>
-      'voice/$chatId/${DateTime.now().microsecondsSinceEpoch}.m4a';
+      'voice/$chatId/${_stamp()}.m4a';
 
   /// Upload foto post timeline → Storage. Return path atau null.
   Future<String?> uploadPostImage({
@@ -350,7 +360,7 @@ class StoragePhotoService {
   /// Path ikon room global. Folder = uid pembuat (syarat policy
   /// storage_object_owner_ok cabang room-icons).
   String roomIconPath(String uid, {String ext = 'jpg'}) =>
-      'room-icons/$uid/${DateTime.now().microsecondsSinceEpoch}.$ext';
+      'room-icons/$uid/${_stamp()}.$ext';
 
   /// Upload ikon room global → Storage. Return path atau null jika gagal.
   /// Dipanggil SEBELUM create (path disimpan di rooms.icon).

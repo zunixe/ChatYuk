@@ -3,8 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../config/strings.dart';
 import '../core/nav_guard.dart';
 import '../utils.dart';
@@ -12,7 +10,7 @@ import '../models/user_model.dart';
 import '../models/user_photo.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/call_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/auth_provider.dart';
@@ -22,11 +20,12 @@ import '../widgets/async_photo.dart';
 import '../widgets/social_actions.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../core/call/call_permissions.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
 import 'social_list_screen.dart';
 import '../core/perf/perf_probe.dart';
+import '../config/theme.dart';
 
 class UserInfoScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -162,7 +161,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   }
 
   Future<void> _toggleFollow() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final targetRegistered = _profile?.isRegistered ?? false;
     if (auth.isAnonymous || !(auth.profile?.isRegistered ?? false)) {
@@ -196,7 +195,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   }
 
   Future<void> _addFriend() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final targetRegistered = _profile?.isRegistered ?? false;
     if (auth.isAnonymous || !(auth.profile?.isRegistered ?? false)) {
@@ -350,7 +349,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   }
 
   Future<void> _subscribe() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final profile = _profile;
     if (profile == null) return;
     final price = profile.subscriptionPrice;
@@ -431,7 +430,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   /// Mulai panggilan audio/video (caller) ke user yang sedang dilihat.
   /// Video darat di dalam chat (overlay), audio di layar penuh.
   Future<void> _startCall(BuildContext ctx, String callType) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile = auth.profile;
     final name = _profile?.nickname ?? widget.fallbackName;
@@ -558,7 +557,7 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   /// Buka chat pribadi dengan user yang sedang dilihat.
   /// Buat/ambil chatId dulu, lalu push PrivateChatScreen.
   Future<void> _startChat() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final profile = _profile;
@@ -798,8 +797,8 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('UserInfo');
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final profile = _profile;
     final pointsEnabled =
         ref.watch(pointsProvider.select((p) => p.enabled));
@@ -1481,7 +1480,7 @@ class _ChatIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return Tooltip(
       message: s.btnChatNow,
       child: Material(
@@ -1609,7 +1608,7 @@ class _LoadErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),

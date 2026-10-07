@@ -1,28 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../config/theme.dart';
-import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../utils.dart';
 import '../config/strings_admin.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Admin: daftar pesan Hubungi Kami dari pengguna.
-class AdminContactTab extends StatefulWidget {
+class AdminContactTab extends ConsumerStatefulWidget {
   const AdminContactTab({super.key});
 
   @override
-  State<AdminContactTab> createState() => _AdminContactTabState();
+  ConsumerState<AdminContactTab> createState() => _AdminContactTabState();
 }
 
-class _AdminContactTabState extends State<AdminContactTab> {
+class _AdminContactTabState extends ConsumerState<AdminContactTab> {
   final _scrollCtrl = ScrollController();
 
   @override
   void initState() {
     super.initState();
     Future.microtask(
-      () => context.read<AdminProvider>().fetchContactMessages(),
+      () => ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchContactMessages(),
     );
     _scrollCtrl.addListener(_onScroll);
   }
@@ -34,7 +34,7 @@ class _AdminContactTabState extends State<AdminContactTab> {
   }
 
   void _onScroll() {
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     if (!_scrollCtrl.hasClients) return;
     if (_scrollCtrl.position.pixels >=
         _scrollCtrl.position.maxScrollExtent - 300) {
@@ -43,7 +43,7 @@ class _AdminContactTabState extends State<AdminContactTab> {
   }
 
   Future<void> _confirmDelete(Map<String, dynamic> msg) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -62,17 +62,17 @@ class _AdminContactTabState extends State<AdminContactTab> {
       ),
     );
     if (ok == true) {
-      context.read<AdminProvider>().deleteContactMessage(msg['id'] as String);
+      ProviderScope.containerOf(context, listen: false).read(adminProvider).deleteContactMessage(msg['id'] as String);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     // GRANULAR: rebuild hanya saat domain CONTACT berubah.
-    context.select<AdminProvider, int>((p) => p.revContact);
-    final admin = context.read<AdminProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(adminProvider.select((p) => p.revContact));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ref.watch(localeProvider).s;
 
     final unread = admin.contactMessages
         .where((m) => m['is_read'] != true)
@@ -174,7 +174,7 @@ class _AdminContactTabState extends State<AdminContactTab> {
   }
 
   Widget _messageCard(BuildContext context, Map<String, dynamic> msg) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final read = msg['is_read'] == true;
     final name = (msg['name'] as String?)?.trim().isNotEmpty == true
         ? msg['name'] as String
@@ -255,7 +255,7 @@ class _AdminContactTabState extends State<AdminContactTab> {
                     color: AppTheme.textSecondary,
                   ),
                   tooltip: read ? s.labelNew : s.labelRead,
-                  onPressed: () => context.read<AdminProvider>().setContactRead(
+                  onPressed: () => ProviderScope.containerOf(context, listen: false).read(adminProvider).setContactRead(
                     msg['id'] as String,
                     read: !read,
                   ),

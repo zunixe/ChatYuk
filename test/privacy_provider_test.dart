@@ -1,20 +1,31 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/models/privacy_settings.dart';
-import 'package:chatyuk/providers/privacy_provider.dart';
+import 'package:chatyuk/providers/riverpod/privacy_provider.dart';
 import 'package:chatyuk/services/privacy_service.dart';
 
 class MockPrivacyService extends Mock implements PrivacyService {}
 
+class _TestPrivacy extends PrivacyNotifier {
+  _TestPrivacy(PrivacyService svc) : super(svc);
+}
+
 void main() {
   late MockPrivacyService service;
-  late PrivacyProvider provider;
+  late ProviderContainer container;
 
   setUp(() {
     service = MockPrivacyService();
-    provider = PrivacyProvider(service: service);
+    container = ProviderContainer(
+      overrides: [privacyProvider.overrideWith(() => _TestPrivacy(service))],
+    );
+    addTearDown(container.dispose);
   });
+
+  PrivacyState state() => container.read(privacyProvider);
+  PrivacyNotifier notifier() => container.read(privacyProvider.notifier);
 
   test('load mengisi settings dari server', () async {
     when(() => service.fetch()).thenAnswer(
@@ -24,11 +35,11 @@ void main() {
       ),
     );
 
-    await provider.load();
+    await notifier().load();
 
-    expect(provider.settings.presence, PrivacyVisibility.friends);
-    expect(provider.settings.readReceipts, isFalse);
-    expect(provider.loading, isFalse);
+    expect(state().settings.presence, PrivacyVisibility.friends);
+    expect(state().settings.readReceipts, isFalse);
+    expect(state().loading, isFalse);
   });
 
   test('update menerapkan hasil server dan memanggil service', () async {
@@ -45,9 +56,9 @@ void main() {
       (_) async => const PrivacySettings(presence: PrivacyVisibility.nobody),
     );
 
-    await provider.update(presence: PrivacyVisibility.nobody);
+    await notifier().update(presence: PrivacyVisibility.nobody);
 
-    expect(provider.settings.presence, PrivacyVisibility.nobody);
+    expect(state().settings.presence, PrivacyVisibility.nobody);
     verify(
       () => service.update(
         presence: PrivacyVisibility.nobody,
@@ -75,9 +86,9 @@ void main() {
       (_) async => const PrivacySettings(presence: PrivacyVisibility.everyone),
     );
 
-    await provider.update(presence: PrivacyVisibility.nobody);
+    await notifier().update(presence: PrivacyVisibility.nobody);
 
-    expect(provider.settings.presence, PrivacyVisibility.everyone);
+    expect(state().settings.presence, PrivacyVisibility.everyone);
   });
 
   test('ensureExcludable memuat teman sekali saja (cached)', () async {
@@ -87,22 +98,22 @@ void main() {
       ],
     );
 
-    await provider.ensureExcludable();
-    await provider.ensureExcludable();
+    await notifier().ensureExcludable();
+    await notifier().ensureExcludable();
 
-    expect(provider.excludable.length, 1);
-    expect(provider.excludable.first['nickname'], 'Budi');
-    expect(provider.excludableLoaded, isTrue);
+    expect(state().excludable.length, 1);
+    expect(state().excludable.first['nickname'], 'Budi');
+    expect(state().excludableLoaded, isTrue);
     verify(() => service.excludableUsers()).called(1);
   });
 
   test('ensureExcludable gagal → daftar tetap kosong tanpa crash', () async {
     when(() => service.excludableUsers()).thenThrow(Exception('offline'));
 
-    await provider.ensureExcludable();
+    await notifier().ensureExcludable();
 
-    expect(provider.excludable, isEmpty);
-    expect(provider.excludableLoading, isFalse);
+    expect(state().excludable, isEmpty);
+    expect(state().excludableLoading, isFalse);
   });
 
   test('updateExclusions menyimpan daftar pengecualian', () async {
@@ -115,9 +126,9 @@ void main() {
       ),
     );
 
-    await provider.updateExclusions('last_seen', {'u1'});
+    await notifier().updateExclusions('last_seen', {'u1'});
 
-    expect(provider.settings.exclusions['last_seen'], {'u1'});
-    expect(provider.settings.lastSeen, PrivacyVisibility.friendsExcept);
+    expect(state().settings.exclusions['last_seen'], {'u1'});
+    expect(state().settings.lastSeen, PrivacyVisibility.friendsExcept);
   });
 }

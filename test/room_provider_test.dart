@@ -1,8 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/models/room_model.dart';
-import 'package:chatyuk/providers/room_provider.dart';
+import 'package:chatyuk/providers/riverpod/room_provider.dart';
 import 'package:chatyuk/services/chat_service.dart';
 import 'package:chatyuk/services/room_service.dart';
 
@@ -51,8 +52,14 @@ void main() {
         .thenAnswer((_) => const Stream.empty());
   });
 
-  RoomProvider make() =>
-      RoomProvider(service: service, chatService: chat, autoInit: false);
+  RoomNotifier make() {
+    final c = ProviderContainer(overrides: [
+      roomProvider.overrideWith(() =>
+          RoomNotifier(service: service, chatService: chat, autoInit: false)),
+    ]);
+    addTearDown(c.dispose);
+    return c.read(roomProvider.notifier);
+  }
 
   group('reload', () {
     test('sukses → rooms terisi, hasLoaded true, error null', () async {
@@ -63,7 +70,6 @@ void main() {
       expect(p.rooms.length, 2);
       expect(p.hasLoaded, isTrue);
       expect(p.error, isNull);
-      p.dispose();
     });
 
     test('error → error terisi, hasLoaded tetap true (tidak crash)', () async {
@@ -72,7 +78,6 @@ void main() {
       await p.reload();
       expect(p.error, isNotNull);
       expect(p.hasLoaded, isTrue);
-      p.dispose();
     });
   });
 
@@ -84,7 +89,6 @@ void main() {
       final res = await p.joinPrivateRoom('r9');
       expect(res['ok'], true);
       expect(p.memberRoomIds.contains('r9'), isTrue);
-      p.dispose();
     });
 
     test('ok=false → memberRoomIds tidak berubah', () async {
@@ -93,7 +97,6 @@ void main() {
       final p = make();
       await p.joinPrivateRoom('r9', password: 'x');
       expect(p.memberRoomIds.contains('r9'), isFalse);
-      p.dispose();
     });
   });
 
@@ -104,7 +107,6 @@ void main() {
       await p.deleteRoom('r1');
       verify(() => service.deleteRoom('r1')).called(1);
       verify(() => service.fetchPrivateRooms(any())).called(greaterThan(0));
-      p.dispose();
     });
 
     test('extendRoom → kembalikan hasil service', () async {
@@ -113,7 +115,6 @@ void main() {
       final p = make();
       final res = await p.extendRoom('r1');
       expect(res['minutes'], 30);
-      p.dispose();
     });
   });
 
@@ -126,7 +127,6 @@ void main() {
       clearInteractions(service);
       await p.setCountry(p.country); // sama → early return
       verifyNever(() => service.fetchRooms(any()));
-      p.dispose();
     });
 
     test('negara beda → country berubah & reload', () async {
@@ -136,7 +136,6 @@ void main() {
       await p.setCountry('SG');
       expect(p.country, 'SG');
       verify(() => service.fetchRooms('SG')).called(greaterThan(0));
-      p.dispose();
     });
   });
 
@@ -188,7 +187,6 @@ void main() {
       expect(list.first.unread, 7);
       expect(list.first.isLive, isTrue);
       expect(list.first.memberCount, 100);
-      p.dispose();
     });
 
     test('kategori: filter id + 0 online tetap tampil', () async {
@@ -202,7 +200,6 @@ void main() {
       final list = p.exploreRooms;
       expect(list.length, 1);
       expect(list.first.id, 'g1');
-      p.dispose();
     });
 
     test('createGlobalRoom → kategori tanpa password', () async {
@@ -226,7 +223,6 @@ void main() {
             country: any(named: 'country'),
             category: 'curhat',
           )).called(1);
-      p.dispose();
     });
 
     test('markRoomRead → badge lokal nol', () async {
@@ -240,7 +236,6 @@ void main() {
       await p.markRoomRead('r1');
       expect(p.exploreRooms.first.unread, 0);
       verify(() => service.markRoomRead('r1')).called(1);
-      p.dispose();
     });
   });
 }

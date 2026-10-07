@@ -1,16 +1,17 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../core/chat/chat_location.dart';
+import '../core/perf/perf_probe.dart';
 import '../mixins/voice_recorder_mixin.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../utils/mention.dart';
 import 'chat_video_bubble.dart';
 import 'mic_record_button.dart';
@@ -20,7 +21,7 @@ import 'composer_link_preview.dart';
 import 'emoji_picker_sheet.dart';
 import 'location_bubble.dart';
 
-class ChatComposerInput extends StatefulWidget {
+class ChatComposerInput extends ConsumerStatefulWidget {
   final TextEditingController controller;
   final FocusNode? focusNode;
   final VoidCallback onSend;
@@ -111,12 +112,17 @@ class ChatComposerInput extends StatefulWidget {
   });
 
   @override
-  State<ChatComposerInput> createState() => _ChatComposerInputState();
+  ConsumerState<ChatComposerInput> createState() => _ChatComposerInputState();
 }
 
-class _ChatComposerInputState extends State<ChatComposerInput>
+class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
     with VoiceRecorderMixin<ChatComposerInput> {
   Uint8List? _decodedPhoto;
+
+  /// True bila teks tidak kosong — dipakai tombol kirim vs mic. Di-update
+  /// HANYA saat boolean berubah (bukan tiap keystroke) supaya subtree tombol
+  /// (AnimatedSwitcher + MicRecordButton) tidak rebuild per karakter.
+  late final ValueNotifier<bool> _hasText;
 
   // ── Kontrak VoiceRecorderMixin ──
   @override
@@ -129,11 +135,11 @@ class _ChatComposerInputState extends State<ChatComposerInput>
 
   @override
   String voicePermissionMessage() =>
-      context.read<LocaleProvider>().s.errVoicePermission;
+      ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errVoicePermission;
 
   @override
   String voiceTooShortMessage() =>
-      context.read<LocaleProvider>().s.errVoiceTooShort;
+      ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errVoiceTooShort;
 
 
 
@@ -146,6 +152,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
   void initState() {
     super.initState();
     widget.controller.addListener(_onChanged);
+    _hasText = ValueNotifier<bool>(widget.controller.text.trim().isNotEmpty);
     _decodePhoto();
   }
 
@@ -158,6 +165,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
   @override
   void dispose() {
     widget.controller.removeListener(_onChanged);
+    _hasText.dispose();
     disposeVoiceRecorder();
     super.dispose();
   }
@@ -176,8 +184,10 @@ class _ChatComposerInputState extends State<ChatComposerInput>
   }
 
   void _onChanged() {
-    // Rebuild ditangani ValueListenableBuilder (tombol send/mic) — di sini
-    // hanya sinyal typing ke lawan (throttle di sisi layar).
+    // Rebuild tombol kirim/mic ditangani `_hasText` (hanya saat berubah).
+    final hasText = widget.controller.text.trim().isNotEmpty;
+    if (_hasText.value != hasText) _hasText.value = hasText;
+    // Hanya sinyal typing ke lawan (throttle di sisi layar).
     widget.onTyping?.call();
   }
 
@@ -215,7 +225,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
   /// Pilihan timer view-once saat preview (private): normal / 1x / 3s / 10s.
   /// -1 = tanpa timer (sentinel supaya dismiss tidak ikut me-reset).
   Future<void> _pickViewTimer(BuildContext context) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final picked = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -278,7 +288,8 @@ class _ChatComposerInputState extends State<ChatComposerInput>
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    PerfProbe.buildCount('Composer');
+    final s = ref.watch(localeProvider).s;
     return Container(
       padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
       decoration: BoxDecoration(
@@ -354,8 +365,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Text(
-                                context
-                                    .read<LocaleProvider>()
+                                ProviderScope.containerOf(context, listen: false).read(localeProvider)
                                     .s
                                     .photoHdLabel,
                                 style: AppText.label.copyWith(
@@ -393,8 +403,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                                   const SizedBox(width: 4),
                                   Text(
                                     _viewTimerLabel(
-                                      context
-                                          .read<LocaleProvider>()
+                                      ProviderScope.containerOf(context, listen: false).read(localeProvider)
                                           .s,
                                     ),
                                     style: AppText.label.copyWith(
@@ -788,9 +797,9 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                     _decodedPhoto != null,
                     voiceRecording,
                   ),
-                  child: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: widget.controller,
-                  builder: (context, value, _) {
+                  child: ValueListenableBuilder<bool>(
+                  valueListenable: _hasText,
+                  builder: (context, hasText, _) {
                     // Dependensi eksplisit ke _ForceRebuild: pemicu rebuild
                     // saat foto/video pending berubah (tanpa ini
                     // InheritedWidget tak berpengaruh — tak ada dependant).
@@ -832,7 +841,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                         )
                       // Ada video/lokasi pending = tombol kirim (bukan mic),
                       // supaya bisa dikirim tanpa caption.
-                      : (value.text.trim().isEmpty &&
+                      : (!hasText &&
                               _decodedPhoto == null &&
                               widget.pendingVideoPath == null &&
                               widget.pendingLocation == null

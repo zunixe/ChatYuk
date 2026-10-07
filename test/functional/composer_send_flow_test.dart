@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/widgets/chat_composer_input.dart';
 
 /// Functional: composer → ketik → tombol kirim → `onSend` terpanggil 1×.
@@ -10,17 +9,14 @@ import 'package:chatyuk/widgets/chat_composer_input.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Widget wrap(Widget child) => MaterialApp(
-        home: ChangeNotifierProvider<LocaleProvider>(
-          create: (_) => LocaleProvider(),
-          child: Scaffold(
+  Widget wrap(Widget child) => ProviderScope(child: MaterialApp(
+        home:  Scaffold(
             body: Align(
               alignment: Alignment.bottomCenter,
               child: SizedBox(height: 320, child: child),
             ),
           ),
-        ),
-      );
+      ));
 
   ChatComposerInput build({
     required TextEditingController ctrl,

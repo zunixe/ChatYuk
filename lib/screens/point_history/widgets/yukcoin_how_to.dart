@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../../../config/strings.dart';
 import '../../../config/theme.dart';
 import '../../../providers/riverpod/points_provider.dart';
+import '../../../config/strings.dart';
 
 /// Section "Cara dapat" & "Cara pakai YukCoin". Harga diambil dari provider
 /// (default sesuai migration; sumber kebenaran tetap server).

@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../config/strings.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
 import '../../../models/room_model.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart';
 import '../../../widgets/room_icon.dart';
+import '../../../config/strings.dart';
 
 /// Kartu room ala gambar: ikon | nama + preview + member•online |
 /// waktu/Live + badge unread. Live HANYA grup (isLive dari server).
-class RoomExploreCard extends StatelessWidget {
+class RoomExploreCard extends ConsumerWidget {
   final RoomModel room;
   final VoidCallback onTap;
   const RoomExploreCard({super.key, required this.room, required this.onTap});
@@ -40,8 +40,8 @@ class RoomExploreCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     final title =
         room.name.isNotEmpty ? room.name : s.roomName(room.category);
     return Container(

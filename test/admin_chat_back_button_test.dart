@@ -1,23 +1,35 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/core/cache/message_cache.dart';
 import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/providers/admin_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/theme_provider.dart';
+import 'package:chatyuk/providers/riverpod/admin_provider.dart';
 import 'package:chatyuk/screens/admin_chat_view_screen.dart'
     show AdminChatViewScreen, computeMonitorLeftUid, tryClaimChatPush, releaseChatPush;
 import 'package:chatyuk/services/admin_service.dart';
 import 'package:chatyuk/services/avatar_service.dart';
 
 class MockAdminService extends Mock implements AdminService {}
+
+/// AdminProvider uji dengan `dispose` idempoten — instance dipakai bersama
+/// oleh Riverpod (override) DAN tearDown test, jadi dispose bisa 2×.
+class _TestAdmin extends AdminProvider {
+  bool _done = false;
+  _TestAdmin({super.service, super.sb});
+  @override
+  void dispose() {
+    if (_done) return;
+    _done = true;
+    super.dispose();
+  }
+}
 
 class MockSbClient extends Mock implements SupabaseClient {}
 
@@ -107,7 +119,7 @@ void main() {
     AvatarB64Service.instance.setForUid(uidAnggi, tinyPng);
     AvatarB64Service.instance.setForUid(uidJaky, tinyPng);
 
-    admin = AdminProvider(service: service, sb: sb);
+    admin = _TestAdmin(service: service, sb: sb);
   });
 
   tearDown(() => admin.dispose());
@@ -144,12 +156,8 @@ void main() {
       ]),
     );
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AdminProvider>.value(value: admin),
-          ChangeNotifierProvider(create: (_) => LocaleProvider()),
-          ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ],
+      ProviderScope(
+        overrides: [adminProvider.overrideWith((ref) => admin)],
         child: MaterialApp(
           home: Builder(
             builder: (ctx) => Scaffold(
@@ -229,12 +237,8 @@ void main() {
       ]),
     );
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AdminProvider>.value(value: admin),
-          ChangeNotifierProvider(create: (_) => LocaleProvider()),
-          ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ],
+      ProviderScope(
+        overrides: [adminProvider.overrideWith((ref) => admin)],
         child: MaterialApp(
           home: Builder(
             builder: (ctx) => Scaffold(

@@ -1,11 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../widgets/person_avatar.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
+import '../config/theme.dart';
 
 class FriendRequestsScreen extends ConsumerStatefulWidget {
   const FriendRequestsScreen({super.key});
@@ -43,7 +42,7 @@ class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
 
   Future<void> _respond(Map<String, dynamic> req, bool accept) async {
     final id = (req['id'] as num?)?.toInt() ?? 0;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await _service.respondFriendRequest(id, accept);
@@ -63,7 +62,7 @@ class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
   Future<void> _cancel(Map<String, dynamic> req) async {
     final id = (req['id'] as num?)?.toInt() ?? 0;
     final targetUid = '${req['uid'] ?? ''}';
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final messenger = ScaffoldMessenger.of(context);
     try {
       final ok = await _service.cancelFriendRequest(id, targetUid: targetUid);
@@ -82,8 +81,8 @@ class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     // Request masuk selagi layar terbuka → muat ulang (realtime provider
     // sudah update count; daftar lokal ikut segar tanpa pull-to-refresh).
     final count = ref.watch(
@@ -173,7 +172,7 @@ class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
   }
 }
 
-class _RequestTile extends StatelessWidget {
+class _RequestTile extends ConsumerWidget {
   final Map<String, dynamic> entry;
   final bool pending;
   final VoidCallback? onAccept;
@@ -188,8 +187,8 @@ class _RequestTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     final name = '${entry['nickname'] ?? 'Anon'}';
     final uid = '${entry['uid'] ?? ''}';
     final registered = entry['is_registered'] == true;

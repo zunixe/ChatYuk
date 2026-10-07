@@ -4,8 +4,6 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:provider/provider.dart';
-import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/message_reaction_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../providers/riverpod/notification_prefs_provider.dart';
@@ -21,9 +19,10 @@ import '../providers/riverpod/storage_provider.dart';
 import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/location_provider.dart';
 import '../providers/riverpod/points_provider.dart';
+import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/admin_gate.dart';
 import '../core/nav_guard.dart';
@@ -54,7 +53,7 @@ import '../widgets/room_gift_panel.dart';
 import '../config/gifts.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import 'package:flutter/services.dart';
 import '../widgets/message_reaction_bar.dart';
 import '../mixins/chat_selection_mixin.dart';
@@ -62,6 +61,7 @@ import '../mixins/chat_outbox_mixin.dart';
 import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/chat_send_mixin.dart';
 import '../core/perf/perf_probe.dart';
+import '../providers/riverpod/call_provider.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 class RoomChatScreen extends ConsumerStatefulWidget {
@@ -200,7 +200,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   MessageModel? get photoReplyingTo => replyingTo;
   @override
   void photoClearComposerText() {
-    _msgCtrl.clear();
+    sendClearComposer();
     if (mounted) setState(() => replyingTo = null);
   }
 
@@ -225,7 +225,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       if (_myRole == null) {
         showChatSnack(
           context,
-          context.read<LocaleProvider>().s.privateRoomNeedApproval,
+          ProviderScope.containerOf(context, listen: false).read(localeProvider).s.privateRoomNeedApproval,
         );
         return false;
       }
@@ -265,7 +265,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     if (pp.enabled) {
       pp.showPointsToast(
         context,
-        context.read<LocaleProvider>().s.pointsDeduct(1),
+        ProviderScope.containerOf(context, listen: false).read(localeProvider).s.pointsDeduct(1),
       );
     }
     // Bonus "first room chat" DIHAPUS (overhaul coin: tidak ada poin gratis).
@@ -321,6 +321,23 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   bool _isGrantedBroadcast = false;
   StreamSubscription<Map<String, Map<String, int>>>? _reactionsSub;
 
+  // ── Memo derivasi list (anti-lag slide/interaksi di room ramai) ───────────
+  // `StreamBuilder.builder` ikut rebuild saat PARENT setState (pilih teks,
+  // buka menu, reaksi/starred berubah, dsb), bukan cuma saat stream emit.
+  // Dulu tiap rebuild itu menghitung ulang: salin list gabungan + set
+  // `deletedIds` + bangun `items` (satu ChatItem per pesan) → O(N) tiap
+  // interaksi → "slide berat" saat room panjang & ramai (General).
+  // Sekarang derivasi (items + deletedIds) di-CACHE: dihitung ulang HANYA
+  // saat (a) referensi list pesan berubah, (b) jumlah `_pending` berubah,
+  // atau (c) label tanggal berubah (locale/hari). Rebuild parent lain =
+  // cache hit → O(1). Pola sama seperti `private_chat_screen._deriveItems`.
+  List<ChatItem> _cachedItems = const [];
+  Set<String> _cachedDeletedIds = const {};
+  List<MessageModel>? _cacheItemsMsgsSrc;
+  int _cacheItemsPendingLen = -1;
+  String _cacheItemsLocale = '';
+  DateTime? _cacheItemsDay;
+
   // PERF (pola private chat): stream reaksi/starred bisa emit sering (tiap
   // orang reaksi di room). setState LANGSUNG = rebuild SELURUH RoomChatScreen
   // (appbar + voice strip + semua bubble) tiap emission → jank saat room
@@ -335,6 +352,47 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       if (mounted) setState(() {});
     });
   }
+
+  /// Derivasikan `(items, deletedIds)` di-cache berbasis IDENTITAS list pesan
+  /// sumber ([msgsSrc], referensinya stabil dari stream antar rebuild parent)
+  /// + jumlah `_pending` + locale + hari. `all` dipakai untuk hasil.
+  (List<ChatItem>, Set<String>) _deriveItems(
+    S s,
+    List<MessageModel> msgsSrc,
+    List<MessageModel> all, {
+    required DateTime day,
+  }) {
+    final locale = s.isId ? 'id' : 'en';
+    if (identical(_cacheItemsMsgsSrc, msgsSrc) &&
+        _cacheItemsPendingLen == _pending.length &&
+        _cacheItemsLocale == locale &&
+        _cacheItemsDay == day) {
+      return (_cachedItems, _cachedDeletedIds);
+    }
+    final deletedIds = <String>{
+      for (final m in all)
+        if (m.isDeleted) m.id,
+    };
+    final items = <ChatItem>[];
+    String? prevDateKey;
+    for (final m in all) {
+      final local = m.timestamp.toLocal();
+      final dateKey = '${local.year}-${local.month}-${local.day}';
+      if (prevDateKey != dateKey) {
+        items.add(ChatItem.date(dateChipLabel(m.timestamp, s)));
+      }
+      prevDateKey = dateKey;
+      items.add(ChatItem.message(m));
+    }
+    _cacheItemsMsgsSrc = msgsSrc;
+    _cacheItemsPendingLen = _pending.length;
+    _cacheItemsLocale = locale;
+    _cacheItemsDay = day;
+    _cachedItems = items;
+    _cachedDeletedIds = deletedIds;
+    return (items, deletedIds);
+  }
+
   StreamSubscription<Set<String>>? _starredSub;
   bool get isPrivateRoom => widget.room.isPrivate == true;
   bool get canModerate =>
@@ -399,7 +457,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   /// di stage → toggle mute; belum stage → naik stage.
   Future<void> _onMicTap() async {
     if (_voiceJoining) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final messenger = ScaffoldMessenger.of(context);
     var session = _voiceSession;
     if (session == null) {
@@ -472,7 +530,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   Future<void> _showVoiceDiagnostics() async {
     final session = _voiceSession;
     if (session == null || !mounted) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     Map<String, dynamic>? diag;
     try {
       diag = await session
@@ -593,7 +651,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   /// Tap avatar speaker lain → sheet mute (hanya bila boleh moderasi).
   Future<void> _onSpeakerTap(String uid) async {
     if (!canModerateVoice || !mounted) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final session = _voiceSession;
     if (session == null) return;
     final names = {for (final u in _lastRoomUsers) u.uid: u.nickname};
@@ -968,7 +1026,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _openRoomGiftPanel() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (!auth.canUsePaid) {
       showChatSnack(
@@ -1068,7 +1126,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       final cnt = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).broadcastCount(widget.room.id);
       if (cnt >= 4) {
         if (!mounted) return;
-        final s = context.read<LocaleProvider>().s;
+        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
         showChatSnack(context, s.roomBroadcastFull, backgroundColor: AppTheme.danger);
         return;
       }
@@ -1094,10 +1152,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       if (!mounted) return;
       // Foreground service: broadcast tetap hidup saat app di-background
       ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStartLive(
-          text: context.read<LocaleProvider>().s.broadcastLiveNotif);
+          text: ProviderScope.containerOf(context, listen: false).read(localeProvider).s.broadcastLiveNotif);
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString().contains('Broadcast full') ? context.read<LocaleProvider>().s.roomBroadcastFull : '$e';
+      final msg = e.toString().contains('Broadcast full') ? ProviderScope.containerOf(context, listen: false).read(localeProvider).s.roomBroadcastFull : '$e';
       showChatSnack(context, msg);
       _broadcastSession = null;
     }
@@ -1122,7 +1180,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     if (!mounted) return;
     // Foreground service: menonton broadcast tetap hidup di background
     ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStartLive(
-        text: context.read<LocaleProvider>().s.broadcastWatchingNotif);
+        text: ProviderScope.containerOf(context, listen: false).read(localeProvider).s.broadcastWatchingNotif);
     await session.requestStream();
     if (mounted) setState(() {});
   }
@@ -1136,7 +1194,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       payload: {'nickname': _auth.profile?.nickname ?? ''},
     );
     if (!mounted) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showChatSnack(context, s.roomHandRaised, duration: const Duration(seconds: 2));
   }
 
@@ -1201,7 +1259,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _toggleMute() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final next = !_muted;
     try {
       // Sinkron ke server (rooms.muted_by) + cermin lokal — model sama
@@ -1216,7 +1274,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   /// Cari pesan dalam room: sheet hasil → tap lompat ke pesan
   /// (loadOlder berulang bila belum termuat, maks 10x).
   Future<void> _openRoomSearch() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final qCtrl = TextEditingController();
     List<Map<String, dynamic>> results = [];
     bool searching = false;
@@ -1366,7 +1424,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   /// Submenu "Lainnya": keluar grup (+ hapus grup khusus owner).
   void _showMoreMenu() {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final isOwner = _myRole == 'owner';
     // Admin build boleh hapus SETIAP room (server cek owner/admin ulang).
     final canDelete = isOwner || AdminGate.enabled;
@@ -1417,14 +1475,14 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(context.read<LocaleProvider>().s.btnCancel),
+            child: Text(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.btnCancel),
           ),
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
               await fn();
             },
-            child: Text(context.read<LocaleProvider>().s.btnDelete),
+            child: Text(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.btnDelete),
           ),
         ],
       ),
@@ -1440,7 +1498,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       if (!mounted) return;
       showChatSnack(
         context,
-        context.read<LocaleProvider>().s.errGeneric,
+        ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errGeneric,
         backgroundColor: AppTheme.danger,
       );
     }
@@ -1455,7 +1513,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       if (!mounted) return;
       showChatSnack(
         context,
-        context.read<LocaleProvider>().s.errGeneric,
+        ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errGeneric,
         backgroundColor: AppTheme.danger,
       );
     }
@@ -1679,7 +1737,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     final profile = auth.profile;
     if (uid == null || profile == null) return;
     // Konfirmasi: lokasi akan terlihat semua anggota room.
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (dctx) => AlertDialog(
@@ -1814,7 +1872,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
           return;
         }
         if (mounted) {
-          showChatSnack(context, context.read<LocaleProvider>().s.errVoiceUploadFailed);
+          showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errVoiceUploadFailed);
         }
         return;
       }
@@ -1857,7 +1915,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         } catch (_) {}
       }
       if (mounted) {
-        showChatSnack(context, context.read<LocaleProvider>().s.errSendFailed);
+        showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errSendFailed);
       }
     }
   }
@@ -1879,7 +1937,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('RoomChat');
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     // Koneksi pulih → flush outbox. `ref.listen` WAJIB di build (bukan
     // initState) — Riverpod mengelolanya (aman saat dispose).
     ref.listen<bool>(connectivityProvider, (prev, next) {
@@ -1887,7 +1945,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       if (mounted && next) flushOutbox();
     });
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // select (bukan watch penuh): perubahan saldo/poin tidak perlu
     // me-rebuild seluruh layar room — hanya flag enabled yang dipakai.
     final points = ref.watch(pointsProvider.select((p) => p.enabled));
@@ -2351,8 +2409,17 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
               children: [
                 StreamBuilder<List<MessageModel>>(
                   stream: _msgsStream,
+                  // FRAME PERTAMA LANGSUNG: data awal dari cache memori
+                  // (sinkron) → pesan "nempel" sejak frame pertama (ala
+                  // WhatsApp), bukan layar kosong lalu muncul. Pola sama
+                  // seperti private chat.
+                  initialData:
+                      MessageCache.instance.peekMessages(
+                        'room_${widget.room.id}',
+                      ) ??
+                      const <MessageModel>[],
               builder: (_, snap) {
-                final s = context.read<LocaleProvider>().s;
+                final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
                 // Persisten anti-glitch bawah: saat stream belum emit /
                 // blip kosong, tampilkan batch terakhir (_lastMsgs diisi
                 // listener tiap emisi) — list tidak kedip hilang.
@@ -2363,7 +2430,12 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                     : (raw ?? []);
                 // Bubble optimistik milik sendiri (centang-1) selalu tampil
                 // di ujung list — walau offline, walau stream belum emit.
-                final all = [...msgs, ..._pending];
+                // `_pending` biasanya kosong: jangan alokasi list gabungan
+                // tiap build kalau tidak perlu (identitas `msgs` stabil dari
+                // stream → `_deriveItems` tetap cache-hit).
+                final all = _pending.isEmpty
+                    ? msgs
+                    : [...msgs, ..._pending];
                 if (all.isEmpty) {
                   // Room baru/kosong — tampilkan layar kosong saja,
                   // tanpa ikon/teks "mulai percakapan".
@@ -2381,21 +2453,15 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                 // pola WhatsApp — item list berisi pesan + separator tanggal.
                 // PRIVASI: kumpulan id pesan terhapus — quote reply yang
                 // menunjuk pesan ini dirender "Pesan dihapus", bukan isinya.
-                final deletedIds = {
-                  for (final m in all)
-                    if (m.isDeleted) m.id,
-                };
-                final items = <ChatItem>[];
-                String? prevDateKey;
-                for (final m in all) {
-                  final local = m.timestamp.toLocal();
-                  final dateKey = '${local.year}-${local.month}-${local.day}';
-                  if (prevDateKey != dateKey) {
-                    items.add(ChatItem.date(dateChipLabel(m.timestamp, s)));
-                  }
-                  prevDateKey = dateKey;
-                  items.add(ChatItem.message(m));
-                }
+                // Derivasi di-CACHE (lihat `_deriveItems`): rebuild parent
+                // (reaksi/starred/typing/menu) tidak lagi menghitung O(N).
+                final now = DateTime.now();
+                final (items, deletedIds) = _deriveItems(
+                  s,
+                  msgs,
+                  all,
+                  day: DateTime(now.year, now.month, now.day),
+                );
                 return ListView.builder(
                   controller: _scrollCtrl,
                   reverse: true,
@@ -2411,7 +2477,11 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                     final selected = selectedIds.contains(m.id);
                     final reacts = reactions[m.id];
                     final starred = starredIds.contains(m.id);
-                    return Container(
+                    // RepaintBoundary per baris: satu bubble berubah
+                    // (reaksi/star/centang/highlight) tidak merepaint seluruh
+                    // list panjang. Pola sama seperti kartu list lain.
+                    return RepaintBoundary(
+                      child: Container(
                       // Tanpa wash biru selebar baris (sama private chat —
                       // hanya border bubble). Wash tersisa hanya untuk flash
                       // sesaat saat lompat ke pesan (_highlightId).
@@ -2520,6 +2590,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                             ],
                           ),
                         ),
+                      ),
                       ),
                       ),
                     );
@@ -2732,12 +2803,12 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     if (msg.senderId == auth.uid) return;
     if (_sheetOpen) return;
     if (ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).isBlocked(msg.senderId)) {
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       showChatSnack(context, s.msgBlocked);
       return;
     }
     _sheetOpen = true;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
 
     showModalBottomSheet(
       context: context,
@@ -2816,7 +2887,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
               ),
               onTap: () async {
                 final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
-                final locale = context.read<LocaleProvider>();
+                final locale = ProviderScope.containerOf(context, listen: false).read(localeProvider);
                 // User sudah dihapus (akun tidak ada) → jangan buka chat,
                 // policy RLS menolak insert chat dengan participant yang hilang.
                 final active = await chat.isUserActive(msg.senderId);
@@ -2860,7 +2931,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                   }
                 } catch (e) {
                   if (mounted) {
-                    final s = context.read<LocaleProvider>().s;
+                    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
                     showChatSnack(context, s.errGeneric);
                   }
                 }
@@ -2919,7 +2990,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 }
 
 
-class _BroadcastStage extends StatelessWidget {
+class _BroadcastStage extends ConsumerWidget {
   const _BroadcastStage(
       {required this.session, required this.isBroadcaster, this.onMinimize, this.compact = false});
 
@@ -2929,8 +3000,8 @@ class _BroadcastStage extends StatelessWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     final tiles = <Widget>[];
     if (isBroadcaster && session.localRendererReady) {
       tiles.add(RTCVideoView(session.localRenderer,

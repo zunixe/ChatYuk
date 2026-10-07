@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Consumer;
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -13,8 +12,8 @@ import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/social_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
@@ -188,8 +187,8 @@ class _LeaderboardSheetState extends ConsumerState<LeaderboardSheet> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final media = MediaQuery.of(context);
     final maxH = media.size.height * 0.82;
 
@@ -692,9 +691,10 @@ class _FollowTextButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return rv.Consumer(
       builder: (ctx, ref, _) {
-        ref.watch(socialProvider);
+        final following = ref.watch(
+          socialProvider.select((s) => s.isFollowing(uid)),
+        );
         final sp = ref.read(socialProvider.notifier);
-        final following = sp.isFollowing(uid);
         return Tooltip(
           message:
               '${following ? s.btnUnfollow : s.btnFollow} · ${s.sheetFollowDesc}',
@@ -785,11 +785,14 @@ class _AddFriendIconButtonState extends State<_AddFriendIconButton> {
   Widget build(BuildContext context) {
     return rv.Consumer(
       builder: (ctx, ref, _) {
-        ref.watch(socialProvider);
+        final (:isFriend, :pending) = ref.watch(
+          socialProvider.select((s) => (
+            isFriend: s.isFriend(widget.uid),
+            pending: s.isPendingFriendRequest(widget.uid),
+          )),
+        );
         final sp = ref.read(socialProvider.notifier);
         final s = widget.s;
-        final isFriend = sp.isFriend(widget.uid);
-        final pending = sp.isPendingFriendRequest(widget.uid);
         final tip = isFriend
             ? s.btnUnfriend
             : (pending
@@ -864,7 +867,7 @@ class _RankBadge extends StatelessWidget {
 }
 
 /// Bar peringkat-pribadi yang menempel di bawah sheet.
-class _MyRankBar extends StatelessWidget {
+class _MyRankBar extends ConsumerWidget {
   final int? rank;
   final double bottomInset;
   const _MyRankBar({
@@ -873,8 +876,8 @@ class _MyRankBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     return Container(
       padding: EdgeInsets.only(
         left: 16,

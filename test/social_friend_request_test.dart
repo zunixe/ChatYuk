@@ -1,14 +1,23 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:chatyuk/providers/social_provider.dart';
+import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/services/social_service.dart';
 
 import 'supabase_test_client.dart';
 
 class MockSocialService extends Mock implements SocialService {}
 
-/// Mengunci kontrak aksi friend request di `SocialProvider`:
+/// SocialNotifier uji: build() hermetic (tanpa langganan realtime/auth).
+class _TestSocial extends SocialNotifier {
+  _TestSocial(SocialService svc)
+      : super(service: svc, sb: fakeSupabaseClient());
+  @override
+  SocialState build() => const SocialState();
+}
+
+/// Mengunci kontrak aksi friend request di `SocialNotifier`:
 /// - `sendFriendRequest` → 'pending' | 'friends' | 'failed' (JANGAN '').
 /// - `respondFriendRequest` sinkron state lokal (friends/counter) setelah accept.
 /// - `cancelFriendRequest` benar-benar menghapus dari set pending.
@@ -19,13 +28,26 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late MockSocialService svc;
+  final containers = <ProviderContainer>[];
 
   setUp(() {
     svc = MockSocialService();
   });
 
-  SocialProvider prov() =>
-      SocialProvider(service: svc, sb: fakeSupabaseClient(), autoInit: false);
+  tearDown(() {
+    for (final c in containers) {
+      c.dispose();
+    }
+    containers.clear();
+  });
+
+  SocialNotifier prov() {
+    final c = ProviderContainer(
+      overrides: [socialProvider.overrideWith(() => _TestSocial(svc))],
+    );
+    containers.add(c);
+    return c.read(socialProvider.notifier);
+  }
 
   group('sendFriendRequest', () {
     test('sukses → "pending" + pending lokal di-set', () async {
@@ -36,7 +58,6 @@ void main() {
       expect(r, 'pending');
       expect(p.isPendingFriendRequest('u2'), isTrue);
       expect(p.isFriend('u2'), isFalse);
-      p.dispose();
     });
 
     test('sudah teman → "friends" + friends lokal di-set', () async {
@@ -47,7 +68,6 @@ void main() {
       expect(r, 'friends');
       expect(p.isFriend('u2'), isTrue);
       expect(p.isPendingFriendRequest('u2'), isFalse);
-      p.dispose();
     });
 
     test('gagal (exception) → "failed" (bukan "" / bukan sukses)', () async {
@@ -59,7 +79,6 @@ void main() {
       expect(p.isPendingFriendRequest('u2'), isFalse);
       // 'failed' != 'pending'/'friends' → UI tidak menampilkan sukses.
       expect(r == 'pending' || r == 'friends', isFalse);
-      p.dispose();
     });
 
     test('respons server tanpa ok → "failed"', () async {
@@ -67,14 +86,12 @@ void main() {
           .thenAnswer((_) async => {'reason': 'whatever'});
       final p = prov();
       expect(await p.sendFriendRequest('u2'), 'failed');
-      p.dispose();
     });
 
     test('target kosong → "failed" tanpa panggil service', () async {
       final p = prov();
       expect(await p.sendFriendRequest(''), 'failed');
       verifyNever(() => svc.sendFriendRequest(any()));
-      p.dispose();
     });
   });
 
@@ -100,7 +117,6 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 30));
       expect(p.isFriend('u-from'), isTrue);
       expect(p.friendRequestCount, 0);
-      p.dispose();
     });
   });
 
@@ -115,7 +131,6 @@ void main() {
       final ok = await p.cancelFriendRequest(9, targetUid: 'u3');
       expect(ok, isTrue);
       expect(p.isPendingFriendRequest('u3'), isFalse);
-      p.dispose();
     });
 
     test('non-pending (server ok:false) → return false, tidak ubah state',
@@ -126,7 +141,6 @@ void main() {
       final p = prov();
       final ok = await p.cancelFriendRequest(9, targetUid: 'u3');
       expect(ok, isFalse);
-      p.dispose();
     });
   });
 }

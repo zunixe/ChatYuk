@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../config/strings.dart';
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 
 /// Aksi sosial bersama (putus teman / batalkan permintaan teman) — satu
@@ -97,7 +97,7 @@ Future<bool> runUnfriend(
   String targetUid,
   String name,
 ) async {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   if (!await confirmUnfriend(context, s, name)) return false;
   final ok = await doUnfriend(sp, targetUid);
   if (context.mounted) {
@@ -115,7 +115,7 @@ Future<bool> runCancelRequest(
   String targetUid,
   String name,
 ) async {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   if (!await confirmCancelRequest(context, s, name)) return false;
   final ok = await cancelFriendRequestFor(sp, targetUid);
   if (context.mounted) {

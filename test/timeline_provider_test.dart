@@ -1,7 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:chatyuk/providers/timeline_provider.dart';
+import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
 import 'package:chatyuk/services/timeline_service.dart';
 
 import 'test_helper.dart';
@@ -45,14 +46,18 @@ void main() {
               cursor: any(named: 'cursor'),
               cursorBoosted: any(named: 'cursorBoosted')))
           .thenAnswer((_) async => [_post('p1'), _post('p2')]);
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       await tp.load('all', refresh: true);
       expect(tp.loading, isFalse);
       expect(tp.fetchFailed, isFalse);
       expect(tp.posts.map((p) => p['id']), ['p1', 'p2']);
       // <30 item = ujung feed.
       expect(tp.hasMore, isFalse);
-      tp.dispose();
     });
 
     test('server jawab kosong saat refresh → feed dikosongkan, bukan error',
@@ -61,7 +66,12 @@ void main() {
               cursor: any(named: 'cursor'),
               cursorBoosted: any(named: 'cursorBoosted')))
           .thenAnswer((_) async => [_post('p1')]);
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       await tp.load('all', refresh: true);
       expect(tp.posts, isNotEmpty);
 
@@ -72,7 +82,6 @@ void main() {
       await tp.load('all', refresh: true);
       expect(tp.posts, isEmpty);
       expect(tp.fetchFailed, isFalse);
-      tp.dispose();
     });
 
     test('network error → feed lama dipertahankan + fetchFailed', () async {
@@ -80,7 +89,12 @@ void main() {
               cursor: any(named: 'cursor'),
               cursorBoosted: any(named: 'cursorBoosted')))
           .thenAnswer((_) async => [_post('p1')]);
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       await tp.load('all', refresh: true);
       expect(tp.posts.length, 1);
 
@@ -93,7 +107,6 @@ void main() {
       expect(tp.posts.length, 1);
       expect(tp.fetchFailed, isTrue);
       expect(tp.loading, isFalse);
-      tp.dispose();
     });
 
     test('refresh selalu fetch ulang (instan dari cache, server menyusul)',
@@ -102,7 +115,12 @@ void main() {
               cursor: any(named: 'cursor'),
               cursorBoosted: any(named: 'cursorBoosted')))
           .thenAnswer((_) async => [_post('p1')]);
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       await tp.load('all', refresh: true);
       expect(tp.posts.map((p) => p['id']), ['p1']);
 
@@ -116,13 +134,17 @@ void main() {
       verify(() => service.listPosts(any(),
           cursor: any(named: 'cursor'),
           cursorBoosted: any(named: 'cursorBoosted'))).called(2);
-      tp.dispose();
     });
   });
 
   group('cache komentar (TTL)', () {
     test('cacheComments → isCommentsFresh true, hasCommentsCache true', () {
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       expect(tp.hasCommentsCache('p1'), isFalse);
       expect(tp.isCommentsFresh('p1'), isFalse);
 
@@ -133,29 +155,36 @@ void main() {
       expect(tp.hasCommentsCache('p1'), isTrue);
       expect(tp.isCommentsFresh('p1'), isTrue);
       expect(tp.getCachedComments('p1')!.length, 1);
-      tp.dispose();
     });
 
     test('addCommentToCache menambah tanpa mengubah TTL freshness', () {
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       tp.cacheComments('p1', [
         {'id': 1},
       ]);
       tp.addCommentToCache('p1', {'id': 2});
       expect(tp.getCachedComments('p1')!.length, 2);
       expect(tp.isCommentsFresh('p1'), isTrue);
-      tp.dispose();
     });
 
     test('removeCommentFromCache menghapus id tertentu', () {
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       tp.cacheComments('p1', [
         {'id': 1},
         {'id': 2},
       ]);
       tp.removeCommentFromCache('p1', 1);
       expect(tp.getCachedComments('p1')!.map((c) => c['id']), [2]);
-      tp.dispose();
     });
 
     test('deleteComment: service + buang dari cache + kurangi counter', () async {
@@ -164,7 +193,12 @@ void main() {
               cursorBoosted: any(named: 'cursorBoosted')))
           .thenAnswer((_) async => [{..._post('p1'), 'commentCount': 2}]);
       when(() => service.deleteComment(any())).thenAnswer((_) async {});
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       await tp.load('all', refresh: true);
       tp.cacheComments('p1', [
         {'id': 7, 'text': 'hapus saya'},
@@ -174,18 +208,21 @@ void main() {
       verify(() => service.deleteComment(7)).called(1);
       expect(tp.getCachedComments('p1')!.map((c) => c['id']), [8]);
       expect(tp.posts.first['commentCount'], 1);
-      tp.dispose();
     });
 
     test('resetCache mengosongkan cache + timestamp komentar', () {
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       tp.cacheComments('p1', [
         {'id': 1},
       ]);
       tp.resetCache();
       expect(tp.hasCommentsCache('p1'), isFalse);
       expect(tp.isCommentsFresh('p1'), isFalse);
-      tp.dispose();
     });
   });
 
@@ -195,18 +232,22 @@ void main() {
               cursor: any(named: 'cursor'),
               cursorBoosted: any(named: 'cursorBoosted')))
           .thenAnswer((_) async => [_post('p1')]);
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       await tp.load('all', refresh: true);
 
       var notifies = 0;
-      tp.addListener(() => notifies++);
+      c.listen(timelineProvider, (_, __) => notifies++);
       // Event update untuk post yang tidak ada di feed.
       tp.debugOnNewPost({
         'event': 'update',
         'row': {'id': 'lain', 'like_count': 9},
       });
       expect(notifies, 0, reason: 'post tak ada di feed → jangan rebuild');
-      tp.dispose();
     });
 
     test('update post ADA di feed dengan nilai berubah → notify', () async {
@@ -214,18 +255,22 @@ void main() {
               cursor: any(named: 'cursor'),
               cursorBoosted: any(named: 'cursorBoosted')))
           .thenAnswer((_) async => [_post('p1')]);
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       await tp.load('all', refresh: true);
 
       var notifies = 0;
-      tp.addListener(() => notifies++);
+      c.listen(timelineProvider, (_, __) => notifies++);
       tp.debugOnNewPost({
         'event': 'update',
         'row': {'id': 'p1', 'like_count': 5},
       });
       expect(notifies, 1);
       expect(tp.posts.first['likeCount'], 5);
-      tp.dispose();
     });
 
     test('update tanpa perubahan nilai → tidak notify (no-op)', () async {
@@ -233,18 +278,22 @@ void main() {
               cursor: any(named: 'cursor'),
               cursorBoosted: any(named: 'cursorBoosted')))
           .thenAnswer((_) async => [_post('p1')]);
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       await tp.load('all', refresh: true);
 
       var notifies = 0;
-      tp.addListener(() => notifies++);
+      c.listen(timelineProvider, (_, __) => notifies++);
       // Nilai sama dengan yang sudah ada (likeCount 0).
       tp.debugOnNewPost({
         'event': 'update',
         'row': {'id': 'p1', 'like_count': 0},
       });
       expect(notifies, 0);
-      tp.dispose();
     });
   });
 
@@ -258,7 +307,12 @@ void main() {
         await Future<void>.delayed(const Duration(seconds: 10));
         return [_post('late1')];
       });
-      final tp = TimelineProvider(service: service);
+      final c = ProviderContainer(overrides: [
+        timelineProvider.overrideWith(
+            () => TimelineNotifier(service: service, autoInit: false)),
+      ]);
+      addTearDown(c.dispose);
+      final tp = c.read(timelineProvider.notifier);
       final sw = Stopwatch()..start();
       await tp.load('all', refresh: true);
       sw.stop();
@@ -268,7 +322,6 @@ void main() {
         lessThan(const Duration(seconds: 4)),
         reason: 'pull-refresh tidak boleh menunggu RPC sampai timeout',
       );
-      tp.dispose();
     });
   });
 }

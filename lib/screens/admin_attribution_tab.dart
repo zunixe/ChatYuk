@@ -1,32 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../services/attribution_service.dart';
 import '../widgets/admin_error_view.dart';
 import '../widgets/app_gesture.dart';
 import 'admin_devices/widgets/user_detail_sheet.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Admin: tab Atribusi — user datang dari kanal mana (FB/IG/Google/TikTok/
 /// referral/organik) + kampanye. Sumber data: Play Install Referrer (kolom
 /// attribution_* di user_devices). Klik kanal → daftar user-nya.
-class AdminAttributionTab extends StatefulWidget {
+class AdminAttributionTab extends ConsumerStatefulWidget {
   const AdminAttributionTab({super.key});
 
   @override
-  State<AdminAttributionTab> createState() => _AdminAttributionTabState();
+  ConsumerState<AdminAttributionTab> createState() => _AdminAttributionTabState();
 }
 
-class _AdminAttributionTabState extends State<AdminAttributionTab> {
+class _AdminAttributionTabState extends ConsumerState<AdminAttributionTab> {
   @override
   void initState() {
     super.initState();
-    final a = context.read<AdminProvider>();
+    final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(() {
       a.fetchAttribution();
       a.fetchAttributionUsers();
@@ -55,11 +56,11 @@ class _AdminAttributionTabState extends State<AdminAttributionTab> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     // GRANULAR: rebuild hanya saat domain ATTRIBUTION berubah.
-    context.select<AdminProvider, int>((p) => p.revAttribution);
-    final admin = context.read<AdminProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(adminProvider.select((p) => p.revAttribution));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ref.watch(localeProvider).s;
     final summary = admin.attrSummary;
     final sources = _asList(summary?['sources']);
     final campaigns = _asList(summary?['campaigns']);
@@ -315,7 +316,7 @@ class _AdminAttributionTabState extends State<AdminAttributionTab> {
   }
 
   Future<void> _openUsers(S s, String source) async {
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     await admin.fetchAttributionUsers(source: source);
     if (!mounted) return;
     showModalBottomSheet(
@@ -338,7 +339,7 @@ class _AdminAttributionTabState extends State<AdminAttributionTab> {
 }
 
 /// Sheet daftar user 1 kanal (pagination + tap → detail user).
-class _AttributionUsersSheet extends StatefulWidget {
+class _AttributionUsersSheet extends ConsumerStatefulWidget {
   const _AttributionUsersSheet({
     required this.source,
     required this.s,
@@ -354,10 +355,10 @@ class _AttributionUsersSheet extends StatefulWidget {
   final IconData icon;
 
   @override
-  State<_AttributionUsersSheet> createState() => _AttributionUsersSheetState();
+  ConsumerState<_AttributionUsersSheet> createState() => _AttributionUsersSheetState();
 }
 
-class _AttributionUsersSheetState extends State<_AttributionUsersSheet> {
+class _AttributionUsersSheetState extends ConsumerState<_AttributionUsersSheet> {
   final _scrollCtrl = ScrollController();
 
   @override
@@ -366,7 +367,7 @@ class _AttributionUsersSheetState extends State<_AttributionUsersSheet> {
     _scrollCtrl.addListener(() {
       if (_scrollCtrl.position.pixels >=
           _scrollCtrl.position.maxScrollExtent - 200) {
-        final a = context.read<AdminProvider>();
+        final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
         if (a.attrUsersHasMore) a.loadMoreAttributionUsers();
       }
     });
@@ -381,7 +382,7 @@ class _AttributionUsersSheetState extends State<_AttributionUsersSheet> {
   Future<void> _openUser(Map<String, dynamic> u) async {
     final uid = '${u['user_id'] ?? ''}';
     if (uid.isEmpty) return;
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     final detail = await admin.getUserDetail(uid);
     if (!mounted) return;
     showModalBottomSheet(
@@ -399,8 +400,8 @@ class _AttributionUsersSheetState extends State<_AttributionUsersSheet> {
   @override
   Widget build(BuildContext context) {
     // GRANULAR: daftar user per kanal bagian dari domain ATTRIBUTION.
-    context.select<AdminProvider, int>((p) => p.revAttribution);
-    final admin = context.read<AdminProvider>();
+    ref.watch(adminProvider.select((p) => p.revAttribution));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     final users = admin.attrUsers;
     return DraggableScrollableSheet(
       expand: false,

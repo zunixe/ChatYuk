@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
+import '../core/media/native_image.dart';
 import '../utils.dart';
 
 /// Avatar user (berbasis FOTO) yang MODULAR untuk semua halaman user-facing:
@@ -121,14 +122,6 @@ void _boundAvatarMap(Map<String, Object?> m) {
 
 /// Decode base64 avatar di isolate — B64 besar dari network tidak boleh
 /// block UI thread saat scroll list.
-Uint8List? _decodeAvatarB64Iso(String b64) {
-  try {
-    return base64Decode(b64);
-  } catch (_) {
-    return null;
-  }
-}
-
 class _UserAvatarState extends State<UserAvatar> {
   ImageProvider? _provider;
   String? _asyncResolvingFor;
@@ -160,16 +153,8 @@ class _UserAvatarState extends State<UserAvatar> {
     // (gejala "kadang ada kadang hilang").
     _boundAvatarMap(_avatarBytesByUid);
     _boundAvatarMap(_avatarImageByUid);
-    final srcType = src.isEmpty
-        ? 'EMPTY'
-        : src.startsWith('avatars/')
-        ? 'PATH'
-        : 'B64';
     // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
     if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) {
-      dlog(
-        '[AVATAR] $_uid8 KEEP ($srcType) t=${DateTime.now().millisecondsSinceEpoch % 100000}',
-      );
       return;
     }
     // Fast-path EMPTY: user tanpa foto (src kosong) yang sudah pernah
@@ -210,7 +195,6 @@ class _UserAvatarState extends State<UserAvatar> {
         );
         _boundAvatarMap(_avatarBytesByUid);
         _boundAvatarMap(_avatarImageByUid);
-        dlog('[AVATAR] $_uid8 FROM-DISK');
       }
       // Tidak ada di disk → biarkan inisial; batch network akan mengisi.
       return;
@@ -218,9 +202,6 @@ class _UserAvatarState extends State<UserAvatar> {
     // Instance MemoryImage stabil per-uid → pakai apa adanya.
     final stable = _avatarImageByUid[widget.uid];
     if (stable != null && _provider != stable) {
-      dlog(
-        '[AVATAR] $_uid8 SWAP-STABLE t=${DateTime.now().millisecondsSinceEpoch % 100000}',
-      );
       _provider = stable;
       return;
     }
@@ -234,7 +215,7 @@ class _UserAvatarState extends State<UserAvatar> {
         // B64 besar dari network batch → decode di isolate agar scroll
         // tidak jank; poll initState menampilkan hasilnya saat siap.
         _asyncResolvingFor = src;
-        compute(_decodeAvatarB64Iso, src).then((decoded) {
+        NativeImage.decodeBytes(src).then((decoded) {
           _asyncResolvingFor = null;
           if (decoded == null || decoded.isEmpty) {
             dlog(

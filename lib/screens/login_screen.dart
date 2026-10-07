@@ -1,18 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/riverpod/location_provider.dart';
 import '../providers/riverpod/device_info_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../utils.dart';
 import 'register_screen.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
+import '../providers/riverpod/location_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   final String? prefillEmail;
   // Data profile untuk di-register setelah login pertama kali (dari RegisterScreen)
   final String? pendingNickname;
@@ -34,10 +33,10 @@ class LoginScreen extends StatefulWidget {
   });
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   late final TextEditingController _emailCtrl;
   final _passwordCtrl = TextEditingController();
   bool _loading = false;
@@ -58,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
 
@@ -136,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on AuthException catch (e) {
       // B6: Gunakan AuthException bukan string matching
       if (!mounted) return;
-      final s2 = context.read<LocaleProvider>().s;
+      final s2 = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       final code = e.code ?? e.message.toLowerCase();
       if (code.contains('invalid') ||
           code.contains('credentials') ||
@@ -150,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on Exception catch (e) {
       dlog(e.toString(), tag: 'LOGIN');
       if (!mounted) return;
-      final s2 = context.read<LocaleProvider>().s;
+      final s2 = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       _snack(s2.errGeneric);
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -158,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _forgotPassword() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     String? submittedEmail;
 
     // Ctrl sengaja tidak di-dispose secara eksplisit — biarkan GC mengambil.
@@ -234,7 +233,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     setState(() => _googleLoading = true);
     try {
       final result = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signInWithGoogle();
@@ -317,8 +316,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       appBar: AppBar(title: Text(s.titleLogin)),
       body: SingleChildScrollView(

@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Bottom sheet rincian ukuran tabel database (dibuka dari baris Database
 /// di kartu Ringkasan). Fetch fresh tiap dibuka — RPC hanya baca katalog.
 Future<void> showTableSizeSheet(BuildContext context) {
-  final S s = context.read<LocaleProvider>().s;
-  context.read<AdminProvider>().fetchTableSizes();
+  final S s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+  ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchTableSizes();
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppTheme.bgCard,
@@ -45,7 +45,7 @@ Future<void> showTableSizeSheet(BuildContext context) {
   );
 }
 
-class _TableSizeBody extends StatelessWidget {
+class _TableSizeBody extends ConsumerWidget {
   // WAJIB bertipe S (bukan dynamic): getter admin adalah extension
   // SAdminX — extension tidak jalan di receiver dynamic (NoSuchMethod
   // saat runtime → sheet abu-abu di release).
@@ -53,10 +53,10 @@ class _TableSizeBody extends StatelessWidget {
   const _TableSizeBody({required this.s});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // GRANULAR: data ukuran tabel bagian dari domain STATS.
-    context.select<AdminProvider, int>((p) => p.revStats);
-    final admin = context.read<AdminProvider>();
+    ref.watch(adminProvider.select((p) => p.revStats));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     if (admin.tableSizesLoading && admin.tableSizes.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(strokeWidth: 2),
@@ -82,7 +82,7 @@ class _TableSizeBody extends StatelessWidget {
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: () =>
-                      context.read<AdminProvider>().fetchTableSizes(),
+                      ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchTableSizes(),
                   icon: const Icon(Icons.refresh_rounded, size: 18),
                   label: Text(s.adminRetry),
                 ),

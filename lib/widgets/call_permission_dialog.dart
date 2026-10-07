@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 
 /// Info izin panggilan gagal — dipakai bersama caller (chat & profil user)
 /// dan callee (layar panggilan masuk) supaya perilakunya identik.
@@ -16,7 +16,7 @@ void showCallPermissionDialog(
   required bool video,
   required bool permanentlyDenied,
 }) {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   final message = video ? s.errCallPermissionVideo : s.errCallPermission;
   showDialog<void>(
     context: context,

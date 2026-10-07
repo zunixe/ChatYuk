@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../config/strings_docs.dart' show SDocsX;
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
-import '../../../providers/locale_provider.dart';
-import '../../../providers/theme_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
+import '../../../providers/riverpod/theme_provider.dart';
 import '../../admin_panel/widgets/panel_card.dart';
 import 'flow_diagram.dart';
+import '../../../config/strings_docs.dart' show SDocsX;
 
 /// Daftar dokumentasi DEVELOPER — arsitektur & service ChatYuk.
 /// Termasuk diagram alur (ASCII, scroll horizontal) di bagian atas.
-class DeveloperDocsList extends StatelessWidget {
+class DeveloperDocsList extends ConsumerWidget {
   final String query;
   const DeveloperDocsList({super.key, required this.query});
 
   @override
-  Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final q = query.trim().toLowerCase();
 
     // Diagram: judul + art + kata kunci pencarian.

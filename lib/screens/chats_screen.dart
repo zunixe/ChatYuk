@@ -1,24 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import 'group_screen.dart';
 import 'private_chats_screen.dart';
 import 'lobby_screen.dart';
 import 'call_history_screen.dart';
+import '../config/theme.dart';
 
 /// Menu "Chat" gabungan: sub-tab Pesan (private) + Grup + Room.
-class ChatsScreen extends StatefulWidget {
+class ChatsScreen extends ConsumerStatefulWidget {
   const ChatsScreen({super.key});
 
   @override
-  State<ChatsScreen> createState() => _ChatsScreenState();
+  ConsumerState<ChatsScreen> createState() => _ChatsScreenState();
 }
 
-class _ChatsScreenState extends State<ChatsScreen>
+class _ChatsScreenState extends ConsumerState<ChatsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 3, vsync: this);
   bool _isSearching = false;
@@ -59,7 +58,7 @@ class _ChatsScreenState extends State<ChatsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final tabProgress = _tab.animation!.value;
     final isPesanTab = tabProgress < 0.5;
     // Search ala Pesan berlaku di ketiga tab (Pesan/Grup/Global Room).

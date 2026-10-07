@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
-import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/theme.dart';
 import 'providers/riverpod/auth_provider.dart';
@@ -14,24 +13,18 @@ import 'providers/riverpod/chat_provider.dart';
 import 'services/device_info_service.dart';
 import 'providers/riverpod/message_reaction_provider.dart';
 import 'providers/riverpod/online_users_provider.dart';
-import 'providers/riverpod/points_provider.dart';
-import 'providers/riverpod/social_provider.dart';
 import 'core/admin_gate.dart';
-import 'providers/locale_provider.dart';
+import 'providers/riverpod/locale_provider.dart';
 import 'core/cache/message_cache.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/image_cache_hygiene.dart';
-import 'models/user_model.dart';
 import 'providers/riverpod/connectivity_provider.dart';
-import 'providers/riverpod/call_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
-import 'providers/theme_provider.dart';
+import 'providers/riverpod/theme_provider.dart';
 import 'providers/riverpod/timeline_provider.dart';
-import 'providers/riverpod/story_provider.dart';
 import 'providers/riverpod/update_provider.dart';
 import 'services/chat_service.dart';
-import 'services/boot_overlay.dart';
 import 'core/perf/perf_probe.dart';
 import 'main.dart';
 import 'screens/entry_screen.dart';
@@ -47,18 +40,28 @@ import 'widgets/call_banner.dart';
 import 'widgets/skeleton_card.dart';
 import 'screens/register_screen.dart';
 import 'utils.dart';
+import 'providers/riverpod/social_provider.dart';
+import 'providers/riverpod/call_provider.dart';
+import 'services/boot_overlay.dart';
 
-class ChatYukApp extends StatefulWidget {
+class ChatYukApp extends ConsumerStatefulWidget {
   const ChatYukApp({super.key});
 
   @override
-  State<ChatYukApp> createState() => _ChatYukAppState();
+  ConsumerState<ChatYukApp> createState() => _ChatYukAppState();
 }
 
-class _ChatYukAppState extends State<ChatYukApp> {
+class _ChatYukAppState extends ConsumerState<ChatYukApp> {
   // Provider tab dibuat SEJAK APP START (saat skeleton auth masih tampil) —
   // disk cache (SQLite) menghangat paralel dengan auth init, sehingga begitu
   // skeleton hilang tab langsung menampilkan data, TANPA blink abu skeleton.
+
+  @override
+  void initState() {
+    super.initState();
+    // Muat preferensi tema/font tersimpan SEBELUM frame pertama (idempoten).
+    ref.read(themeProvider.notifier).init();
+  }
 
   @override
   void dispose() {
@@ -67,27 +70,16 @@ class _ChatYukAppState extends State<ChatYukApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        // Refresh perdana story DITUNDA ke post-frame (di
-        // OnlineUsersScreen.initState) — RPC story_tray + subscribe
-        // realtime jangan berebut CPU/network dengan frame pertama.
-        ...AdminGate.extraProviders,
-        // NavProvider: MIGRASI ke Riverpod (navProvider) — dihapus dari sini.
-        ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
-        ChangeNotifierProvider(create: (_) => localeProvider),
-        // ConnectivityProvider: MIGRASI ke Riverpod (connectivityProvider).
-      ],
-      // Selector hanya pada appFontFamily → MaterialApp hanya rebuild saat
-      // font global berubah (bukan tiap notifikasi AuthNotifier).
-      child: _FontGate(
+    // Semua provider kini dikelola Riverpod (ProviderScope di main.dart).
+    return _FontGate(
         builder: (context) =>
             // Rebuild subtree saat ukuran font chat berubah (slider user) —
             // bubble chat langsung menyesuaikan tanpa restart navigasi.
             ValueListenableBuilder<double>(
               valueListenable: ChatTextScale.notifier,
-              builder: (context, _, __) => Consumer2<LocaleProvider, ThemeProvider>(
-                builder: (context, _, theme, _) => MaterialApp(
+              builder: (context, _, __) => _LocaleGate(
+                  builder: (context) => _ThemeModeGate(
+                  builder: (context, themeMode) => MaterialApp(
                   title: 'ChatYuk',
                   debugShowCheckedModeBanner: false,
                   // Tidak pakai `key` agar navigasi tidak ter-reset saat font berubah;
@@ -95,7 +87,7 @@ class _ChatYukAppState extends State<ChatYukApp> {
                   // sudah cukup mengganti ThemeData ke font terbaru.
                   theme: AppTheme.lightTheme,
                   darkTheme: AppTheme.darkTheme,
-                  themeMode: theme.themeMode,
+                  themeMode: themeMode,
                   navigatorKey: navigatorKey,
                   navigatorObservers: [routeTracker],
                   // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
@@ -137,11 +129,12 @@ class _ChatYukAppState extends State<ChatYukApp> {
                   home: _AuthGate(),
                 ),
               ),
+              ),
             ),
-      ),
-    );
+          );
   }
 }
+
 
 /// Keputusan layar root gate (murni, teruji).
 /// URUTAN PENTING: `signingOut` di ATAS `loading` — signOut() men-set
@@ -191,6 +184,31 @@ class _FontGate extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(authProvider.select((a) => a.appFontFamily));
     return builder(context);
+  }
+}
+
+/// Gerbang bahasa (Riverpod) — subtree root rebuild saat bahasa berganti.
+class _LocaleGate extends ConsumerWidget {
+  final Widget Function(BuildContext context) builder;
+  const _LocaleGate({required this.builder});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(localeProvider);
+    return builder(context);
+  }
+}
+
+/// Gerbang ThemeMode (Riverpod) — MaterialApp hanya rebuild saat mode
+/// gelap/terang berubah (bukan saat notify AuthNotifier lain).
+class _ThemeModeGate extends ConsumerWidget {
+  final Widget Function(BuildContext context, ThemeMode mode) builder;
+  const _ThemeModeGate({required this.builder});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeProvider.select((t) => t.themeMode));
+    return builder(context, mode);
   }
 }
 
@@ -296,10 +314,10 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
     final isSignedIn = ref.watch(
       authProvider.select((a) => a.isSignedIn),
     );
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // Watch ThemeProvider supaya seluruh tree rebuild saat mode gelap/terang
     // berubah — warna AppTheme diambil ulang di build().
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
 
     final p0 = profile;
     final isAdminGate0 = ref.watch(
@@ -871,7 +889,7 @@ class _MainNavState extends ConsumerState<_MainNav>
   Widget build(BuildContext context) {
     final tab = ref.watch(navProvider);
     // Rebuild seluruh tab saat mode terang/gelap berubah.
-    final dark = context.watch<ThemeProvider>().isDark;
+    final dark = ref.watch(themeProvider.select((t) => t.isDark));
     if (_pages == null || _pagesDark != dark) {
       _pages = [
         OnlineUsersScreen(),
@@ -905,7 +923,7 @@ class _MainNavState extends ConsumerState<_MainNav>
     final dummySession = ref.watch(
       authProvider.select((a) => a.dummySessionActive),
     );
-    final s = context.read<LocaleProvider>().s;
+    final s = ref.read(localeProvider).s;
     // Tombol Admin Panel melayang (admin sungguhan saja) — HANYA di tab
     // Online (index 0), supaya tidak menutupi konten di tab lain.
     final showAdminFab = AdminGate.panelBuilder != null &&
@@ -1097,7 +1115,7 @@ class _BottomNav extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final uid = ref.watch(authProvider.select((a) => a.uid));
     final chat = ref.read(chatProvider.notifier);
     // Badge hijau = jumlah user online (bukan diri sendiri, bukan diblokir).

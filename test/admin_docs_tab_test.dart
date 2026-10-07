@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/config/strings_docs.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/theme_provider.dart';
 import 'package:chatyuk/screens/admin_docs_tab.dart';
 
 import 'test_helper.dart';
@@ -26,16 +24,8 @@ void main() {
 
   tearDownAll(resetFontForTest);
 
-  Widget wrap() => MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LocaleProvider>(
-            create: (_) => LocaleProvider(),
-          ),
-          ChangeNotifierProvider<ThemeProvider>(
-            create: (_) => ThemeProvider(),
-          ),
-        ],
-        child: const MaterialApp(home: Scaffold(body: AdminDocsTab())),
+  Widget wrap() => ProviderScope(
+        child:  const MaterialApp(home: Scaffold(body: AdminDocsTab())),
       );
 
   testWidgets('mount → sub-tab Pengguna + Developer + kartu user tampil',

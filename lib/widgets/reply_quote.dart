@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../config/theme.dart';
-import 'package:provider/provider.dart';
 
 import '../core/chat/chat_location.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 
 /// Kutipan balasan (reply quote) di dalam bubble chat — dipakai bersama oleh
 /// bubble private (`private_chat_message.dart`) dan bubble room
@@ -55,7 +55,7 @@ class ReplyQuote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final nameStyle = senderColor == null
         ? AppText.chatName
         : AppText.chatName.copyWith(color: senderColor);

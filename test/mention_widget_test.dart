@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/theme.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/utils/mention.dart';
 import 'package:chatyuk/widgets/mention_autocomplete.dart';
 import 'package:chatyuk/widgets/mention_spans.dart';
@@ -120,7 +119,7 @@ void main() {
   });
 
   group('MentionAwareText', () {
-    Widget wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+    Widget wrap(Widget child) => ProviderScope(child: MaterialApp(home: Scaffold(body: child)));
 
     testWidgets('tanpa match → Text polos', (tester) async {
       await tester.pumpWidget(
@@ -143,17 +142,14 @@ void main() {
   });
 
   group('MentionAutocomplete', () {
-    Widget wrap(Widget child) => MaterialApp(
-          home: ChangeNotifierProvider<LocaleProvider>(
-            create: (_) => LocaleProvider(),
-            child: Scaffold(
+    Widget wrap(Widget child) => ProviderScope(child: MaterialApp(
+          home:  Scaffold(
               body: Align(
                 alignment: Alignment.bottomCenter,
                 child: SizedBox(height: 400, child: child),
               ),
             ),
-          ),
-        );
+        ));
 
     testWidgets('panel muncul saat mengetik @ + kandidat tampil',
         (tester) async {

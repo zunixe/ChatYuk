@@ -1,8 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/models/story_model.dart';
-import 'package:chatyuk/providers/story_provider.dart';
+import 'package:chatyuk/providers/riverpod/story_provider.dart';
 import 'package:chatyuk/services/story_service.dart';
 
 class MockStoryService extends Mock implements StoryService {}
@@ -19,7 +20,8 @@ StorySlide slide(String id) => StorySlide(
 /// tampil 1 karena cache slide lama dipakai tanpa cek jumlah.
 void main() {
   late MockStoryService service;
-  late StoryProvider provider;
+  late ProviderContainer container;
+  late StoryNotifier provider;
 
   setUp(() {
     service = MockStoryService();
@@ -27,10 +29,15 @@ void main() {
         .thenAnswer((_) => Stream<String>.empty());
     when(() => service.watchStoryViews())
         .thenAnswer((_) => Stream<String>.empty());
-    provider = StoryProvider(service: service);
+    container = ProviderContainer(
+      overrides: [
+        storyProvider.overrideWith(() => StoryNotifier(service: service)),
+      ],
+    );
+    provider = container.read(storyProvider.notifier);
   });
 
-  tearDown(() => provider.dispose());
+  tearDown(() => container.dispose());
 
   test('cache cocok → tanpa fetch ulang', () async {
     when(() => service.fetchSlides('a'))

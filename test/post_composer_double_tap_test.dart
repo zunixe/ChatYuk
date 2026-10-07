@@ -2,17 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    hide Provider, ChangeNotifierProvider, Consumer;
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/models/user_model.dart';
-import 'package:chatyuk/providers/auth_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/theme_provider.dart';
-import 'package:chatyuk/providers/timeline_provider.dart';
 import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
 import 'package:chatyuk/screens/post_composer_screen.dart';
@@ -65,31 +58,14 @@ void main() {
         lastSeen: DateTime(2026, 1, 1),
       );
 
-  Widget wrap({
-    required AuthProvider auth,
-    required TimelineNotifier timeline,
-    required ProviderContainer container,
-  }) =>
+  Widget wrap({required ProviderContainer container}) =>
       UncontrolledProviderScope(
         container: container,
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider(),
-            ),
-            ChangeNotifierProvider<ThemeProvider>(
-              create: (_) => ThemeProvider(),
-            ),
-            ChangeNotifierProvider<AuthProvider>.value(value: auth),
-          ],
-          child: const MaterialApp(home: PostComposerScreen()),
-        ),
+        child: const MaterialApp(home: PostComposerScreen()),
       );
 
   testWidgets('dobel-tap tombol Post → createPost dipanggil tepat 1x',
       (tester) async {
-    final auth = AuthProvider(autoInit: false);
-    auth.seedProfileForTest(registeredUser());
     final svc = MockTimelineService();
     // RPC lambat → ketukan kedua tiba saat kiriman pertama masih jalan.
     when(() => svc.createPost(
@@ -115,8 +91,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    await tester.pumpWidget(
-        wrap(auth: auth, timeline: timeline, container: container));
+    await tester.pumpWidget(wrap(container: container));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField).first, 'Destination');
@@ -137,6 +112,5 @@ void main() {
 
     // Flush delay 3s load(refresh) + timer lain sebelum teardown.
     await tester.pump(const Duration(seconds: 4));
-    auth.dispose();
   });
 }

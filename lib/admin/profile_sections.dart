@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../core/admin_gate.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../config/strings_admin.dart';
 
 /// Section pengaturan admin di halaman Profil — HANYA di-import oleh
@@ -38,12 +37,12 @@ List<Widget> adminSettingsTail(BuildContext context) {
 
 /// Tile buka Admin Panel — navigasi lewat AdminGate.panelBuilder supaya
 /// file ini tidak perlu meng-import admin_panel_screen langsung.
-class _AdminPanelTile extends StatelessWidget {
+class _AdminPanelTile extends ConsumerWidget {
   const _AdminPanelTile();
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     final builder = AdminGate.panelBuilder;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -89,7 +88,7 @@ class _AdminPanelTile extends StatelessWidget {
 /// Banner sesi dummy — tampil di atas body Profil saat admin sedang
 /// memakai akun dummy. Tombolnya menjalankan [backToAdminFlow].
 Widget? dummySessionBanner(BuildContext context, String? nickname) {
-  final s = context.watch<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   return Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
@@ -178,7 +177,7 @@ Widget? dummySessionBanner(BuildContext context, String? nickname) {
 
 /// Dialog konfirmasi → kembali ke akun admin → snackbar hasil.
 Future<void> backToAdminFlow(BuildContext context) async {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(

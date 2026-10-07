@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../config/room_categories.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
+import '../../../config/room_categories.dart';
 
 /// Baris chip kategori horizontal: Rame (agregat) + 10 kategori.
 /// Scroll ke pinggir ala gambar — chip aktif tint primary.
-class CategoryChips extends StatelessWidget {
+class CategoryChips extends ConsumerWidget {
   final String selected;
   final ValueChanged<String> onSelect;
   const CategoryChips({
@@ -16,8 +16,8 @@ class CategoryChips extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     return SizedBox(
       height: 40,
       child: ListView.separated(

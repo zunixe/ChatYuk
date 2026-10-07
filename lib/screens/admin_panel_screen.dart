@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'
     hide Provider, ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as lpn;
-import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
@@ -12,7 +12,7 @@ import '../config/strings_docs.dart';
 import '../widgets/admin_error_view.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../utils.dart';
 import 'admin_chat_list_screen.dart';
@@ -33,17 +33,18 @@ import 'admin_panel/widgets/stat_detail_sheet.dart';
 import 'admin_panel/widgets/point_tab_cards.dart';
 import 'admin_panel/widgets/overview_cards.dart';
 import 'admin_panel/widgets/app_stats_card.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/app_gesture.dart';
 import '../main.dart' show localNotifications, resumeWarmup;
+import '../providers/riverpod/admin_provider.dart';
 
-class AdminPanelScreen extends StatefulWidget {
+class AdminPanelScreen extends ConsumerStatefulWidget {
   const AdminPanelScreen({super.key});
   @override
-  State<AdminPanelScreen> createState() => _AdminPanelScreenState();
+  ConsumerState<AdminPanelScreen> createState() => _AdminPanelScreenState();
 }
 
-class _AdminPanelScreenState extends State<AdminPanelScreen>
+class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final _bonusCtrl = TextEditingController(text: '100');
   final _logoutCtrl = TextEditingController();
@@ -118,7 +119,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     WidgetsBinding.instance.addObserver(this);
     _tabCtrl = TabController(length: 12, vsync: this);
     _tabCtrl.addListener(_onTabChanged);
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(() => admin.fetchStats());
     _loadPointSettings();
     // Notifikasi device baru / video call aktif.
@@ -177,7 +178,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   void _startNotifyPolling({bool immediate = false}) {
     if (!mounted) return;
     if (immediate) {
-      final a = context.read<AdminProvider>();
+      final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       a.fetchDevices();
       a.fetchActiveCalls();
     }
@@ -185,7 +186,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     // notifikasi "device baru" (RPC ter-index, murah).
     _notifyTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!mounted) return;
-      final a = context.read<AdminProvider>();
+      final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       a.fetchDevices();
       a.fetchActiveCalls();
     });
@@ -224,7 +225,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   Future<void> _loadPointSettings() async {
     try {
-      final data = await context.read<AdminProvider>().getPointSettings();
+      final data = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getPointSettings();
       for (final f in _pointFields) {
         _pointCtrls[f.$1] = TextEditingController(text: '${data[f.$1] ?? ''}');
       }
@@ -249,23 +250,23 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       for (final e in _pointFlags.entries) {
         payload[e.key] = e.value;
       }
-      await context.read<AdminProvider>().updatePointSettings(payload);
+      await ProviderScope.containerOf(context, listen: false).read(adminProvider).updatePointSettings(payload);
       // Sinkron ulang status YukCoin v2 ke provider poin supaya perubahan
       // toggle (mis. membuka jalur topup) langsung terlihat tanpa restart.
       if (mounted) {
         unawaited(ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).refreshYukcoinV2());
         unawaited(ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).refreshMeteredPricing());
       }
-      if (mounted) _toast(context.read<LocaleProvider>().s.adminPointSettingsSaved);
+      if (mounted) _toast(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.adminPointSettingsSaved);
     } catch (e) {
-      if (mounted) _toast(context.read<LocaleProvider>().s.adminSaveFailed('$e'));
+      if (mounted) _toast(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.adminSaveFailed('$e'));
     } finally {
       if (mounted) setState(() => _savingPointSettings = false);
     }
   }
 
   Future<void> _pollStats() async {
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     await admin.refreshStats();
     if (mounted) setState(() => _lastUpdated = DateTime.now());
   }
@@ -299,15 +300,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('AdminPanel');
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     // GRANULAR: JANGAN select revStats di root — dulu itu membuat SELURUH
     // panel + semua tab yang dibangun ikut rebuild tiap statistik berubah
     // (polling 60 dtk / realtime). Hanya tab Overview & Poin yang butuh
     // stats; keduanya membungkus dirinya dengan Consumer<AdminProvider>
     // (lihat body) sehingga tab lain (Perangkat/Terhapus/Chat) tak tersentuh.
     // Nilai non-reaktif dibaca via read (tidak menambah dependency).
-    final admin = context.read<AdminProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ref.watch(localeProvider).s;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -381,15 +382,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(1))
-            Consumer<AdminProvider>(
-              builder: (_, ap, __) =>
-                  _buildOverviewTab(ap, s, ap.stats),
+            rv.Consumer(
+              builder: (ctx, ref, __) {
+                final ap = ref.watch(adminProvider);
+                return _buildOverviewTab(ap, s, ap.stats);
+              },
             )
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(2))
-            Consumer<AdminProvider>(
-              builder: (_, ap, __) => _buildPointTab(ap, s, ap.stats),
+            rv.Consumer(
+              builder: (ctx, ref, __) {
+                final ap = ref.watch(adminProvider);
+                return _buildPointTab(ap, s, ap.stats);
+              },
             )
           else
             const SizedBox.shrink(),

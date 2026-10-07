@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/theme.dart';
 import 'package:chatyuk/core/chat/chat_location.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/widgets/chat_composer_input.dart';
 
 /// Regresi: tombol mic/send berada di dalam ValueListenableBuilder yang
@@ -16,9 +15,7 @@ void main() {
     String? pendingVideoPoster,
     VoidCallback? onSend,
     ChatLocation? pendingLocation,
-  }) => ChangeNotifierProvider(
-    create: (_) => LocaleProvider(),
-    child: MaterialApp(
+  }) =>  ProviderScope(child: MaterialApp(
     theme: AppTheme.lightTheme,
     home: Scaffold(
       body: ChatComposerInput(
@@ -38,8 +35,7 @@ void main() {
         onCancelLocation: () {},
       ),
     ),
-    ),
-  );
+    ));
 
   testWidgets('tanpa teks & tanpa media → tombol MIC (bukan send)', (
     tester,
@@ -116,9 +112,7 @@ void main() {
     ChatLocation? loc;
     late StateSetter setOuter;
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => LocaleProvider(),
-        child: MaterialApp(
+       ProviderScope(child: MaterialApp(
           theme: AppTheme.lightTheme,
           home: Scaffold(
             body: StatefulBuilder(
@@ -138,8 +132,7 @@ void main() {
               },
             ),
           ),
-        ),
-      ),
+        )),
     );
     expect(find.byKey(const ValueKey('send')), findsNothing); // masih mic
     // Lampirkan lokasi → setState pada parent (state composer tetap sama).

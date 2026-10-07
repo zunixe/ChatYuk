@@ -3,11 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 
 import '../models/message_model.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
@@ -155,7 +154,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
             if (mounted) {
               pp.showOutOfPointsDialog(
                 context,
-                context.read<LocaleProvider>().s.isId,
+                ProviderScope.containerOf(context, listen: false).read(localeProvider).s.isId,
               );
             }
             continue;
@@ -217,7 +216,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
         }
       }
       if (sent > 0 && mounted) {
-        showChatSnack(context, context.read<LocaleProvider>().s.msgQueueSent(sent));
+        showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.msgQueueSent(sent));
         outboxScrollToBottom();
       }
     } finally {

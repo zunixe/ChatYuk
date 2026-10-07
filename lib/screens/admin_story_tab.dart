@@ -2,16 +2,15 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
-import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/story_provider.dart';
 import '../widgets/filter_chip_pill.dart';
 import 'admin_story_viewer_screen.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Tab admin: kelola STORY user.
 ///
@@ -20,14 +19,14 @@ import 'admin_story_viewer_screen.dart';
 /// kartu diberi WARNA + ikon sesuai visibilitas (public/pengikut/teman/
 /// private). Tap kartu → viewer fullscreen (lihat seperti story biasa) +
 /// info "terlihat oleh" + panel atur visibilitas + hapus permanen.
-class AdminStoryTab extends StatefulWidget {
+class AdminStoryTab extends ConsumerStatefulWidget {
   const AdminStoryTab({super.key});
 
   @override
-  State<AdminStoryTab> createState() => _AdminStoryTabState();
+  ConsumerState<AdminStoryTab> createState() => _AdminStoryTabState();
 }
 
-class _AdminStoryTabState extends State<AdminStoryTab> {
+class _AdminStoryTabState extends ConsumerState<AdminStoryTab> {
   bool _didInit = false;
 
   @override
@@ -37,16 +36,16 @@ class _AdminStoryTabState extends State<AdminStoryTab> {
     _didInit = true;
     // Muat saat pertama tab dibuka (lazy).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<AdminProvider>().fetchStories();
+      if (mounted) ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchStories();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     // Rebuild HANYA saat domain story berubah (bukan polling domain lain).
-    context.select<AdminProvider, int>((p) => p.revStories);
-    final admin = context.read<AdminProvider>();
-    final s = context.read<LocaleProvider>().s;
+    ref.watch(adminProvider.select((p) => p.revStories));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final stories = admin.stories;
     final loading = admin.storiesLoading;
     final filter = admin.storyFilter;
@@ -173,7 +172,7 @@ class _StoryAdminCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final style = storyVisStyle(item, s);
     final thumb = '${item['image_path'] ?? ''}';
     final name = '${item['author_name'] ?? 'Anon'}';

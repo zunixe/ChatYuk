@@ -9,17 +9,13 @@ import 'package:image/image.dart' as img;
 import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import '../config/theme.dart';
 import 'profile/widgets/profile_widgets.dart';
 import '../config/regions.dart';
 import '../config/strings.dart';
 import '../models/user_photo.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../models/user_model.dart';
 import '../providers/riverpod/device_info_provider.dart';
-import '../providers/locale_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
@@ -36,6 +32,8 @@ import 'social_list_screen.dart';
 import 'friend_requests_screen.dart';
 import 'subscriptions_screen.dart';
 import '../core/perf/perf_probe.dart';
+import 'package:share_plus/share_plus.dart';
+import '../providers/riverpod/locale_provider.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background.
 // Publik + `@visibleForTesting` supaya kontrak resize/kualitas avatar diuji.
@@ -124,7 +122,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // Onboarding + daily login toast
     Future.microtask(() {
       final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       pp.refreshEnabled().then((_) => pp.showOnboardingIfNeeded(context, s));
     });
   }
@@ -148,7 +146,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _saveAbout() async {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final text = _aboutCtrl.text.trim();
     if (text == (auth.profile?.about ?? '')) {
       setState(() => _editingAbout = false);
@@ -173,7 +171,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _addHashtag(String raw) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final tag = raw.trim().replaceAll(RegExp(r'^#+'), '').toLowerCase();
     if (tag.isEmpty) return;
     if (_hashtags.contains(tag)) return;
@@ -200,7 +198,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _saveHashtags(List<String> tags) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final previous = _hashtags;
     setState(() {
       _hashtags = tags;
@@ -230,7 +228,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _pickGalleryFromSource() {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -275,7 +273,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _addGalleryPhoto(ImageSource source) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final picker = ImagePicker();
     final XFile? picked;
     try {
@@ -326,7 +324,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   /// Beli +5 slot foto tambahan (YukCoin v2). Refresh limit setelahnya.
   Future<void> _buyExtraSlots() async {
     final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -362,7 +360,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _confirmDeletePhoto(UserPhoto photo) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -395,7 +393,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _pickAndUpload(ImageSource source) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final picker = ImagePicker();
     final XFile? picked;
     try {
@@ -484,7 +482,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _showAvatarOptions() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final hasAvatar = (auth.profile?.avatar ?? '').isNotEmpty;
     showModalBottomSheet(
@@ -622,7 +620,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _editProfile() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile = auth.profile;
     if (profile == null) return;
@@ -919,7 +917,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
     }
     final avatarBytes = _cachedAvatarBytes;
-    final locale = context.watch<LocaleProvider>();
+    final locale = ref.watch(localeProvider);
     final s = locale.s;
     final avatarColor = profile?.gender == 'male'
         ? AppTheme.male
@@ -2156,7 +2154,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _editSubscriptionPrice(BuildContext context) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
     final current =
         ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile?.subscriptionPrice ?? 0;

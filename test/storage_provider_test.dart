@@ -3,14 +3,14 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:chatyuk/providers/storage_provider.dart';
+import 'package:chatyuk/providers/riverpod/storage_provider.dart';
 import 'package:chatyuk/services/storage_photo_service.dart';
 
 class MockStorageService extends Mock implements StoragePhotoService {}
 
 void main() {
   late MockStorageService svc;
-  late StorageProvider p;
+  late StorageNotifier p;
 
   setUpAll(() {
     registerFallbackValue(Uint8List(0));
@@ -18,7 +18,7 @@ void main() {
 
   setUp(() {
     svc = MockStorageService();
-    p = StorageProvider(service: svc);
+    p = StorageNotifier(svc);
   });
 
   test('upload meneruskan chatId + base64 ke service', () async {

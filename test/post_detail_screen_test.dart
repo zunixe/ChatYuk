@@ -2,24 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    hide Provider, ChangeNotifierProvider, Consumer;
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/models/user_model.dart';
-import 'package:chatyuk/providers/auth_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/social_provider.dart';
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
 import 'package:chatyuk/screens/post_detail_screen.dart';
 import 'package:chatyuk/services/social_service.dart';
 import 'package:chatyuk/services/timeline_service.dart';
-
-import 'supabase_test_client.dart';
 import 'test_helper.dart';
 
 /// Tap notifikasi postingan baru → PostDetailScreen memuat 1 post via
@@ -101,17 +93,8 @@ void main() {
       };
 
   Widget wrap({required Map<String, dynamic>? post}) {
-    final auth = AuthProvider(autoInit: false);
-    auth.seedProfileForTest(registeredUser());
     final svc = MockTimelineService();
     when(() => svc.getPost(any())).thenAnswer((_) async => post);
-    // Tanpa ticker GoTrue (anti "Timer masih pending" saat teardown).
-    final sb = fakeSupabaseClientNoTicker();
-    final social = SocialProvider(
-      service: MockSocialService(),
-      sb: sb,
-      autoInit: false,
-    );
     final container = ProviderContainer(
       overrides: [
         socialProvider.overrideWith(TestSocial.new),
@@ -121,23 +104,10 @@ void main() {
         authProvider.overrideWith(() => TestAuth(registeredUser())),
       ],
     );
-    addTearDown(() {
-      auth.dispose();
-      social.dispose();
-      container.dispose();
-    });
+    addTearDown(container.dispose);
     return UncontrolledProviderScope(
       container: container,
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LocaleProvider>(
-            create: (_) => LocaleProvider(),
-          ),
-          ChangeNotifierProvider<AuthProvider>.value(value: auth),
-          ChangeNotifierProvider<SocialProvider>.value(value: social),
-        ],
-        child: const MaterialApp(home: PostDetailScreen(postId: 'p1')),
-      ),
+      child: const MaterialApp(home: PostDetailScreen(postId: 'p1')),
     );
   }
 

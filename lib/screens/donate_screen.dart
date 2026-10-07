@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../config/strings.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../core/screen_secure_service.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
+import '../config/theme.dart';
 
-class DonateScreen extends StatefulWidget {
+class DonateScreen extends ConsumerStatefulWidget {
   const DonateScreen({super.key});
 
   @override
-  State<DonateScreen> createState() => _DonateScreenState();
+  ConsumerState<DonateScreen> createState() => _DonateScreenState();
 }
 
-class _DonateScreenState extends State<DonateScreen>
+class _DonateScreenState extends ConsumerState<DonateScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tab;
 
@@ -69,15 +69,15 @@ class _DonateScreenState extends State<DonateScreen>
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$label${context.read<LocaleProvider>().s.msgCopied}'),
+        content: Text('$label${ProviderScope.containerOf(context, listen: false).read(localeProvider).s.msgCopied}'),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       appBar: AppBar(
         title: Text(s.titleDonate),
@@ -108,13 +108,13 @@ class _DonateScreenState extends State<DonateScreen>
   }
 }
 
-class _QrisTab extends StatelessWidget {
+class _QrisTab extends ConsumerWidget {
   final void Function(String text, String label) onCopy;
   const _QrisTab({required this.onCopy});
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     return SingleChildScrollView(
       // Insets bawah (nav bar) — edge-to-edge Android 15.
       padding: EdgeInsets.fromLTRB(
@@ -368,7 +368,7 @@ class _ThankYouNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(

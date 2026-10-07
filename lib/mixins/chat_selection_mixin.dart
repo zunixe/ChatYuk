@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -10,7 +10,7 @@ import '../models/message_model.dart';
 import '../models/room_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../services/message_reaction_service.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/forward_picker_sheet.dart';
@@ -226,7 +226,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
       }
     });
     if (res == ToggleResult.failed && mounted) {
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       showChatSnack(context, s.msgReactionFailed);
     }
     clearSelection();
@@ -256,7 +256,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     }
     if (!mounted) return;
     if (anyChanged) setState(() {});
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showChatSnack(
       context,
       res == ToggleResult.added
@@ -273,7 +273,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     if (msg == null || msg.text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: msg.text));
     if (!mounted) return;
-    showChatSnack(context, context.read<LocaleProvider>().s.msgMessageCopied);
+    showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.msgMessageCopied);
     clearSelection();
   }
 
@@ -302,7 +302,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     final results = await Future.wait(ids.map(chatDeleteMessage));
     final failCount = results.where((ok) => !ok).length;
     if (!mounted) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (failCount == 0) {
       showChatSnack(
         context,
@@ -333,7 +333,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     final msg = singleSelected;
     if (msg == null) return;
     hideActionBar();
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     // Konfirmasi biaya.
     final ok = await _confirmYukcoin(s, chatCostUndoMessage);
     if (ok != true || !mounted) {
@@ -381,7 +381,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   /// Edit pesan berbayar. Return false bila user batal / YukCoin kurang.
   Future<bool> _chargeEditIfNeeded(String messageId) async {
     if (!chatYukcoinV2Active) return true;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await _confirmYukcoin(s, chatCostEditMessage);
     if (ok != true || !mounted) return false;
     final charged = await chatChargeYukcoin(
@@ -438,7 +438,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
       } catch (_) {}
     }
     if (!mounted) return;
-    showChatSnack(context, context.read<LocaleProvider>().s.msgForwarded);
+    showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.msgForwarded);
     clearSelection();
   }
 
@@ -498,7 +498,12 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   void cancelEdit() {
     setState(() {
       editingMessage = null;
-      chatMsgCtrl.clear();
+      // Nilai VALID (bukan `TextEditingValue.empty` yg selection -1) agar IME
+      // Android tak mengirim balik teks lama.
+      chatMsgCtrl.value = const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
     });
   }
 
@@ -517,7 +522,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   void cancelReply() => setState(() => replyingTo = null);
 
   PreferredSizeWidget buildSelectionAppBar() {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = chatAuth;
     final single = singleSelected;
     final allMine = selectedMsgs.values.isNotEmpty &&

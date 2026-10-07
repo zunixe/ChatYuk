@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../../../config/theme.dart';
 import '../../../config/fonts.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/riverpod/auth_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../core/admin_err.dart';
+import '../../../config/theme.dart';
 
 /// Pilih font global aplikasi (katalog AppFonts) — berlaku semua user
 /// realtime. Default = Poppins + Roboto (perilaku lama).
@@ -15,9 +14,8 @@ class AppFontTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = ref.watch(authProvider);
-    final currentKey = auth.appFontFamily;
+    final s = ref.watch(localeProvider).s;
+    final currentKey = ref.watch(authProvider.select((a) => a.appFontFamily));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -92,15 +90,15 @@ class AppFontTile extends ConsumerWidget {
 }
 
 /// Bottom sheet picker font + preview live.
-class AppFontSheet extends StatefulWidget {
+class AppFontSheet extends ConsumerStatefulWidget {
   final String currentKey;
   const AppFontSheet({super.key, required this.currentKey});
 
   @override
-  State<AppFontSheet> createState() => _AppFontSheetState();
+  ConsumerState<AppFontSheet> createState() => _AppFontSheetState();
 }
 
-class _AppFontSheetState extends State<AppFontSheet> {
+class _AppFontSheetState extends ConsumerState<AppFontSheet> {
   late String _selected;
   bool _saving = false;
 
@@ -111,8 +109,8 @@ class _AppFontSheetState extends State<AppFontSheet> {
   }
 
   Future<void> _save() async {
-    if (guardOfflineCtx(context, context.read<LocaleProvider>().s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
-    final s = context.read<LocaleProvider>().s;
+    if (guardOfflineCtx(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.adminNeedsConnection, (m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))))) return;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     setState(() => _saving = true);
     await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setAppFontFamily(_selected);
     if (!mounted) return;
@@ -125,7 +123,7 @@ class _AppFontSheetState extends State<AppFontSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(

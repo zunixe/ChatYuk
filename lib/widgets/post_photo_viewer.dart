@@ -1,11 +1,11 @@
 import 'dart:typed_data';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../core/cache/post_photo_cache.dart';
 import 'private_chat_message.dart';
+import '../config/theme.dart';
 
 /// Viewer foto post — popup smooth (fade + scale), bukan halaman baru.
 /// Multi foto: swipe kiri/kanan + counter, zoom pinch, full-res lazy per foto.
@@ -43,7 +43,7 @@ class PostPhotoViewer {
   }
 }
 
-class _ViewerBody extends StatefulWidget {
+class _ViewerBody extends ConsumerStatefulWidget {
   final List<String> paths;
   final List<Uint8List> thumbs;
   final List<double?> aspects;
@@ -56,10 +56,10 @@ class _ViewerBody extends StatefulWidget {
   });
 
   @override
-  State<_ViewerBody> createState() => _ViewerBodyState();
+  ConsumerState<_ViewerBody> createState() => _ViewerBodyState();
 }
 
-class _ViewerBodyState extends State<_ViewerBody> {
+class _ViewerBodyState extends ConsumerState<_ViewerBody> {
   late final int _safeInitial =
       widget.paths.isEmpty ? 0 : widget.initialIndex.clamp(0, widget.paths.length - 1);
   late final PageController _page = PageController(initialPage: _safeInitial);
@@ -73,7 +73,7 @@ class _ViewerBodyState extends State<_ViewerBody> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(

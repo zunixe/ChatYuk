@@ -1,39 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
-import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/admin_error_view.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Detail email campaign — ringkasan metrik + daftar penerima & status.
-class AdminMarketingDetailScreen extends StatefulWidget {
+class AdminMarketingDetailScreen extends ConsumerStatefulWidget {
   final int id;
   const AdminMarketingDetailScreen({super.key, required this.id});
 
   @override
-  State<AdminMarketingDetailScreen> createState() =>
+  ConsumerState<AdminMarketingDetailScreen> createState() =>
       _AdminMarketingDetailScreenState();
 }
 
 class _AdminMarketingDetailScreenState
-    extends State<AdminMarketingDetailScreen> {
+    extends ConsumerState<AdminMarketingDetailScreen> {
   @override
   void initState() {
     super.initState();
-    final a = context.read<AdminProvider>();
+    final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(() => a.fetchMarketingDetail(widget.id));
   }
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    context.select<AdminProvider, int>((p) => p.revMarketing);
-    final admin = context.read<AdminProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    ref.watch(adminProvider.select((p) => p.revMarketing));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ref.watch(localeProvider).s;
     final data = admin.marketingDetail;
     final camp = (data?['campaign'] as Map?)?.cast<String, dynamic>();
     final recs = (data?['recipients'] as List?)

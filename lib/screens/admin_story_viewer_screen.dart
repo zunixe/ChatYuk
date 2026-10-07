@@ -3,15 +3,14 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
-import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/story_provider.dart';
 import 'admin_story_tab.dart' show storyVisStyle;
+import '../providers/riverpod/admin_provider.dart';
 
 /// Viewer story mode ADMIN — tap kartu di tab Story.
 ///
@@ -19,7 +18,7 @@ import 'admin_story_tab.dart' show storyVisStyle;
 /// TANPA fitur user (reply/like). Header menampilkan author + status
 /// "terlihat oleh". Panel bawah: atur visibilitas (public/pengikut/teman/
 /// private) + hapus permanen.
-class AdminStoryViewerScreen extends StatefulWidget {
+class AdminStoryViewerScreen extends ConsumerStatefulWidget {
   /// Daftar slide (map dari `admin_story_all`), urut terbaru-di-atas.
   final List<Map<String, dynamic>> stories;
   final int initialIndex;
@@ -31,10 +30,10 @@ class AdminStoryViewerScreen extends StatefulWidget {
   });
 
   @override
-  State<AdminStoryViewerScreen> createState() => _AdminStoryViewerScreenState();
+  ConsumerState<AdminStoryViewerScreen> createState() => _AdminStoryViewerScreenState();
 }
 
-class _AdminStoryViewerScreenState extends State<AdminStoryViewerScreen> {
+class _AdminStoryViewerScreenState extends ConsumerState<AdminStoryViewerScreen> {
   late final PageController _page;
   late List<Map<String, dynamic>> _slides;
   late int _index;
@@ -78,8 +77,8 @@ class _AdminStoryViewerScreenState extends State<AdminStoryViewerScreen> {
     final m = _cur;
     if (m == null || _busy) return;
     setState(() => _busy = true);
-    final admin = context.read<AdminProvider>();
-    final s = context.read<LocaleProvider>().s;
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await admin.setStoryVisibility('${m['id']}', state);
     if (!mounted) return;
     setState(() {
@@ -107,7 +106,7 @@ class _AdminStoryViewerScreenState extends State<AdminStoryViewerScreen> {
   Future<void> _deleteStory() async {
     final m = _cur;
     if (m == null || _busy) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -131,7 +130,7 @@ class _AdminStoryViewerScreenState extends State<AdminStoryViewerScreen> {
     );
     if (ok != true || !mounted) return;
     setState(() => _busy = true);
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     final success = await admin.deleteStoryAdmin('${m['id']}');
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -154,7 +153,7 @@ class _AdminStoryViewerScreenState extends State<AdminStoryViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     if (_slides.isEmpty) return const SizedBox.shrink();
     final m = _cur!;
     final style = storyVisStyle(m, s);

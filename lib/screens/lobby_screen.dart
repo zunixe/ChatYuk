@@ -2,18 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/admin_gate.dart';
 import '../core/perf/perf_probe.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import 'private_rooms_screen.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/search_dropdown.dart';
 import 'rooms_explore_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
   final bool embedded;
@@ -72,8 +71,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('Lobby');
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     // PERF: build utama hanya butuh `country` — daftar room ada di
     // RoomsExploreScreen (baca sendiri). Dulu `watch<RoomProvider>()` penuh
     // → seluruh layar rebuild tiap notify RoomProvider (sering).

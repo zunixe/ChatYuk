@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../config/strings.dart';
@@ -14,7 +12,7 @@ import '../../../config/theme.dart';
 import '../../../models/story_model.dart';
 import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/chat_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../providers/riverpod/storage_provider.dart';
 import '../../../providers/riverpod/story_provider.dart';
 import '../../../core/cache/media_disk_cache.dart';
@@ -22,6 +20,7 @@ import '../../../utils.dart';
 import '../../../widgets/story_text_overlay.dart';
 import '../../../widgets/story_viewer_avatar.dart';
 import '../../../core/perf/perf_probe.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Cache RAM bytes slide (path → image) — bertahan antar slide/penonton
 /// selama sesi viewer supaya mundur/maju tidak download ulang.
@@ -56,7 +55,7 @@ bool slideCacheShouldEvict(int size, {int max = _kSlideBytesCacheMax}) =>
 /// - Slide milik sendiri: tombol hapus + tombol daftar penonton.
 /// - Slide orang lain: foto SEUKURAN punya pembuat story (bisa digeser
 ///   ke atas/bawah) + kolom balas, like, dan share DI DALAM foto.
-class StoryViewerScreen extends StatefulWidget {
+class StoryViewerScreen extends ConsumerStatefulWidget {
   final List<StoryTrayItem> items;
   final int initialIndex;
 
@@ -67,10 +66,10 @@ class StoryViewerScreen extends StatefulWidget {
   });
 
   @override
-  State<StoryViewerScreen> createState() => _StoryViewerScreenState();
+  ConsumerState<StoryViewerScreen> createState() => _StoryViewerScreenState();
 }
 
-class _StoryViewerScreenState extends State<StoryViewerScreen>
+class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late PageController _pageCtrl;
   late int _person;
@@ -621,7 +620,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   Future<void> _deleteSlide() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
     final ok = await sp.deleteSlide(_slides[_slide].id, _item.authorId);
     if (!mounted) return;
@@ -643,7 +642,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   Future<void> _confirmDelete() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -673,7 +672,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (_viewersOpen) return;
     _viewersOpen = true;
     try {
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       final sp = ProviderScope.containerOf(context, listen: false).read(storyProvider.notifier);
       final slide = _slides[_slide];
       final viewers = await sp.fetchViewers(slide.id);
@@ -853,7 +852,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       }
       return Container(color: Colors.black);
     }
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final rect = _storyRect(context);
     final showReply = !_own && !_loading && _slides.isNotEmpty;
     return GestureDetector(
@@ -1250,7 +1249,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   Future<void> _shareStory() async {
     if (_sharingStory) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final slide = _current;
     if (slide == null) return;
     setState(() => _sharingStory = true);
@@ -1298,7 +1297,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final myUid = auth.uid;
     final authorId = _item.authorId;
     if (myUid == null || authorId.isEmpty || authorId == myUid) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     setState(() => _sendingReply = true);
     try {
       final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
@@ -1434,15 +1433,15 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 /// Badge visibilitas story milik sendiri — ikon + label pendek di
 /// header viewer (Semua orang / Pengikut / Teman), gaya menyatu dgn
 /// header (teks putih + shadow, tanpa kotak supaya tidak berat).
-class _VisibilityBadge extends StatelessWidget {
+class _VisibilityBadge extends ConsumerWidget {
   final String visibility;
   /// Slide private (dulu "dihapus") — hanya pembuat (atau admin) yang lihat.
   final bool ownerOnly;
   const _VisibilityBadge({required this.visibility, this.ownerOnly = false});
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     final isEveryone = visibility == 'everyone';
     final isFriends = visibility == 'friends';
     final icon = ownerOnly

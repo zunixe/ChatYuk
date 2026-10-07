@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../config/strings_docs.dart' show SDocsX;
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/search_field.dart';
 import 'admin_docs/widgets/user_docs_widgets.dart';
 import 'admin_docs/widgets/developer_docs_widgets.dart';
+import '../config/strings_docs.dart' show SDocsX;
 
 /// Admin: tab Dokumentasi — panduan fitur (Pengguna) + arsitektur (Developer).
 /// Seluruh teks lewat `s.` (bilingual, bukan hardcode).
-class AdminDocsTab extends StatefulWidget {
+class AdminDocsTab extends ConsumerStatefulWidget {
   const AdminDocsTab({super.key});
 
   @override
-  State<AdminDocsTab> createState() => _AdminDocsTabState();
+  ConsumerState<AdminDocsTab> createState() => _AdminDocsTabState();
 }
 
-class _AdminDocsTabState extends State<AdminDocsTab> {
+class _AdminDocsTabState extends ConsumerState<AdminDocsTab> {
   final _searchCtrl = TextEditingController();
   String _query = '';
 
@@ -29,8 +29,8 @@ class _AdminDocsTabState extends State<AdminDocsTab> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     return DefaultTabController(
       length: 2,
       child: Column(

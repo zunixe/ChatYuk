@@ -1,17 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../models/user_model.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
 import '../widgets/phone_edit_dialog.dart';
 import 'link_email_screen.dart';
 import 'settings/widgets/settings_menu_tile.dart';
+import '../providers/riverpod/locale_provider.dart';
 
 /// Akun (ala WhatsApp: Pengaturan › Akun): keamanan, email, keluar.
 /// Hapus akun SEMBUNYI di menu ⋮ (AppBar) seperti WhatsApp.
@@ -47,7 +45,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // PERF (§26b): dulu `watch<AuthNotifier>()` → SELURUH halaman rebuild
     // tiap `notifyListeners` AuthNotifier (heartbeat presence berkala) →
     // lag saat masuk menu Akun. Sekarang: `read` untuk memanggil method
@@ -289,7 +287,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     BuildContext context, {
     required bool isSet,
   }) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final currentCtrl = TextEditingController();
     final newCtrl = TextEditingController();
@@ -459,7 +457,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   /// Dialog pemilih tanggal lahir. Menyimpan via AuthNotifier.updateProfile.
   Future<void> _pickBirthDate(BuildContext context) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final now = DateTime.now();
     final current = auth.profile?.birthDate;
@@ -488,7 +486,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   /// Dialog input nomor HP sedunia: pilihan kode negara (+62, +60, …)
   /// + nomor lokal. Hasil disimpan E.164 (mis. +62812…).
   Future<void> _editPhone(BuildContext context) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final full = await showPhoneEditDialog(
       context,
@@ -514,7 +512,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   /// Hapus akun (Google Play account deletion requirement).
   /// Konfirmasi berlapis: dialog ringkasan → dialog ketik HAPUS/DELETE.
   Future<void> _confirmDeleteAccount() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
 
@@ -666,7 +664,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   Future<void> _confirmLogout() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
     final confirmed = await showDialog<bool>(

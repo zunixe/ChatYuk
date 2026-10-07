@@ -1,34 +1,25 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
+import '../core/media/native_image.dart';
 import '../widgets/user_avatar.dart'
     show cachedUserAvatarBytes, rememberAvatarBytes;
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 
 // Top-level untuk compute() — decode avatar base64 di background isolate
-Uint8List? _decodeAvatar(String b64) {
-  try {
-    return base64Decode(b64);
-  } catch (_) {
-    return null;
-  }
-}
-
-class LeaderboardScreen extends StatefulWidget {
+class LeaderboardScreen extends ConsumerStatefulWidget {
   const LeaderboardScreen({super.key});
 
   @override
-  State<LeaderboardScreen> createState() => _LeaderboardScreenState();
+  ConsumerState<LeaderboardScreen> createState() => _LeaderboardScreenState();
 }
 
-class _LeaderboardScreenState extends State<LeaderboardScreen>
+class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     with SingleTickerProviderStateMixin {
   PointsNotifier get _service => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
   late final TabController _tab = TabController(length: 2, vsync: this);
@@ -88,8 +79,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       appBar: AppBar(
         title: Text(s.lbTitle),
@@ -289,7 +280,7 @@ class _AvatarState extends State<_Avatar> {
       if (mounted) setState(() => _bytes = cached);
       return;
     }
-    final b = await compute(_decodeAvatar, b64);
+    final b = await NativeImage.decodeBytes(b64);
     if (b == null) return;
     rememberAvatarBytes(widget.uid, b);
     if (mounted) setState(() => _bytes = b);
@@ -321,14 +312,14 @@ class _AvatarState extends State<_Avatar> {
   }
 }
 
-class _MyRankBar extends StatelessWidget {
+class _MyRankBar extends ConsumerWidget {
   final int? rank;
   final int score;
   const _MyRankBar({required this.rank, required this.score});
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(localeProvider).s;
     return Container(
       padding: EdgeInsets.only(
         left: 16,

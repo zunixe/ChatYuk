@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../core/chat/chat_location.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../services/location_service.dart';
 
 /// Alur lengkap "kirim lokasi" ala WhatsApp: izin → ambil posisi → sheet
@@ -19,7 +19,7 @@ Future<ChatLocation?> pickChatLocation(
   BuildContext context, {
   required ScaffoldMessengerState messenger,
 }) async {
-  final s = context.read<LocaleProvider>().s;
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
   final loc = LocationService();
   // 1. Minta izin (boleh memunculkan dialog sistem).
   final granted = await loc.requestPermission();
@@ -77,7 +77,7 @@ Future<ChatLocation?> showLocationPickerSheet(
   );
 }
 
-class _LocationPickerSheet extends StatefulWidget {
+class _LocationPickerSheet extends ConsumerStatefulWidget {
   final double lat;
   final double lng;
   final int accuracyM;
@@ -88,10 +88,10 @@ class _LocationPickerSheet extends StatefulWidget {
   });
 
   @override
-  State<_LocationPickerSheet> createState() => _LocationPickerSheetState();
+  ConsumerState<_LocationPickerSheet> createState() => _LocationPickerSheetState();
 }
 
-class _LocationPickerSheetState extends State<_LocationPickerSheet> {
+class _LocationPickerSheetState extends ConsumerState<_LocationPickerSheet> {
   late double _lat = widget.lat;
   late double _lng = widget.lng;
   String _address = '';
@@ -143,7 +143,7 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final navPad = MediaQuery.of(context).padding.bottom;
     final bottomPad = navPad > 64 ? navPad : 64.0;
     return Padding(

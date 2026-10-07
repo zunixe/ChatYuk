@@ -4,11 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_update/in_app_update.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/config/strings.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/riverpod/update_provider.dart';
 import 'package:chatyuk/services/app_update_service.dart';
 import 'package:chatyuk/widgets/update_dialog.dart';
@@ -74,13 +72,7 @@ void main() {
 
   Widget wrap(UpdateNotifier n) => UncontrolledProviderScope(
         container: container,
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider(),
-            ),
-          ],
-          child: MaterialApp(
+        child:  MaterialApp(
             home: Scaffold(
               body: Builder(
                 builder: (ctx) => ElevatedButton(
@@ -90,7 +82,6 @@ void main() {
               ),
             ),
           ),
-        ),
       );
 
   setUp(() {
@@ -231,17 +222,10 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider(),
-            ),
-          ],
-          child: MaterialApp(
+        child:  MaterialApp(
             navigatorKey: key,
             home: const Scaffold(body: Text('home')),
           ),
-        ),
       ),
     );
     await p.check(navigatorKey: key);
@@ -264,17 +248,10 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider(),
-            ),
-          ],
-          child: MaterialApp(
+        child:  MaterialApp(
             navigatorKey: key,
             home: const Scaffold(body: Text('home')),
           ),
-        ),
       ),
     );
     Future<void> closeDialog() async {

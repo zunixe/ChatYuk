@@ -4,17 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    hide Provider, ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:chatyuk/core/cache/offline_outbox.dart';
 import 'package:chatyuk/mixins/chat_outbox_mixin.dart';
 import 'package:chatyuk/mixins/chat_photo_send_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/models/user_model.dart';
-import 'package:chatyuk/providers/auth_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
@@ -173,14 +169,10 @@ void main() {
   late MockAuthService mockSvc;
   late MockStorage mockStorage;
 
-  late AuthProvider auth;
-
   setUp(() {
     mockSvc = MockAuthService();
     when(() => mockSvc.uid).thenReturn('u-me');
     when(() => mockSvc.isAnonymous).thenReturn(false);
-    auth = AuthProvider(authService: mockSvc, autoInit: false);
-    auth.seedProfileForTest(profileForTest());
 
     mockStorage = MockStorage();
     StoragePhotoService.overrideInstance(mockStorage);
@@ -194,7 +186,6 @@ void main() {
 
   tearDown(() {
     StoragePhotoService.restoreInstance();
-    auth.dispose();
   });
 
   Future<ViewOnceHostState> pump(WidgetTester tester) async {
@@ -210,15 +201,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider<AuthProvider>.value(value: auth),
-            ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider(),
-            ),
-          ],
-          child: const MaterialApp(home: Scaffold(body: ViewOnceHost())),
-        ),
+        child: const MaterialApp(home: Scaffold(body: ViewOnceHost())),
       ),
     );
     await tester.pump();

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 import '../providers/admin_provider.dart';
 import '../config/regions.dart';
 import '../config/supabase_config.dart';
@@ -17,11 +16,12 @@ import 'admin_dummy/widgets/dummy_ai_sheet.dart';
 import 'admin_dummy/widgets/dummy_story_sheet.dart';
 import 'admin_dummy/widgets/dummy_card.dart';
 import 'admin_dummy/widgets/dummy_form_sheet.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/connectivity_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../utils.dart';
 import '../core/ui/scroll_pagination.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Sesi HP harus akun admin asli (bukan sesi dummy hasil swap "masuk dummy")
 /// — kalau tidak, semua RPC admin melempar 'Unauthorized' (P0001).
@@ -53,16 +53,16 @@ List<Map<String, dynamic>> filterDummies(
 /// email/password) dengan gender/umur/negara/kota, chat sebagai akun itu
 /// (swap sesi tanpa login manual), set status online/idle/offline,
 /// dan hapus akun beserta history chat.
-class AdminDummyTab extends StatefulWidget {
+class AdminDummyTab extends ConsumerStatefulWidget {
   const AdminDummyTab({super.key});
 
   @override
-  State<AdminDummyTab> createState() => _AdminDummyTabState();
+  ConsumerState<AdminDummyTab> createState() => _AdminDummyTabState();
 }
 
-class _AdminDummyTabState extends State<AdminDummyTab>
+class _AdminDummyTabState extends ConsumerState<AdminDummyTab>
     with WidgetsBindingObserver {
-  AdminProvider get _svc => context.read<AdminProvider>();
+  AdminProvider get _svc => ProviderScope.containerOf(context, listen: false).read(adminProvider);
   final _nickCtrl = TextEditingController();
   final _nicknameFocus = FocusNode();
   String? _nicknameError;
@@ -271,7 +271,7 @@ class _AdminDummyTabState extends State<AdminDummyTab>
     final nick = v.trim();
     String? err;
     if (nick.isNotEmpty) {
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       if (nick.length < 3) {
         err = s.errNicknameShort;
       } else if (nick.length > 20) {
@@ -566,8 +566,8 @@ class _AdminDummyTabState extends State<AdminDummyTab>
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(

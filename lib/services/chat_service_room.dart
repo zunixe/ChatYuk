@@ -239,8 +239,12 @@ mixin ChatServiceRoomMx on ChatBase {
     final controller = StreamController<Map<String, int>>.broadcast();
     Timer? timer;
     bool closed = false;
+    // Guard in-flight: di koneksi lambat, RPC ini bisa 1.5-2.3s; tanpa guard
+    // tick 30s bisa menumpuk antrean RPC berat. Skip bila masih jalan.
+    bool inFlight = false;
     Future<void> fetch() async {
-      if (closed || controller.isClosed) return;
+      if (closed || controller.isClosed || inFlight) return;
+      inFlight = true;
       try {
         final c = (country == null || country.trim().isEmpty) ? null : country.trim();
         final res = await measuredRpc(_sb, 'count_room_presence_by_country', params: {'p_country': c});
@@ -251,6 +255,8 @@ mixin ChatServiceRoomMx on ChatBase {
         if (!controller.isClosed) controller.add(map);
       } catch (e) {
         dlog('[getRoomOnlineCounts] rpc error country=$country: $e');
+      } finally {
+        inFlight = false;
       }
     }
 
@@ -258,10 +264,9 @@ mixin ChatServiceRoomMx on ChatBase {
     // ~1.5s) TEPAT saat stream dibuka (frame transisi/boot). Tunda sedikit
     // agar frame pertama layar bersih; badge jumlah menyusul.
     Timer(const Duration(milliseconds: 600), () => fetch());
-    // 30 detik cukup untuk badge jumlah online per room — realtime
-    // presence list tab Online adalah jalur utama; 15s seumur sesi
-    // terlalu boros RPC hanya untuk angka.
-    timer = Timer.periodic(const Duration(seconds: 30), (_) => fetch());
+    // 60 detik: badge angka online per room cukup; RPC berat ini jangan
+    // bersaing dengan jalur realtime (presence list tab Online).
+    timer = Timer.periodic(const Duration(seconds: 60), (_) => fetch());
     // Cleanup stale presence di background (idempotent) — DEFER supaya tidak
     // bersaing dengan RPC frame pertama (dulu langsung saat buka).
     Timer(const Duration(seconds: 2), () {

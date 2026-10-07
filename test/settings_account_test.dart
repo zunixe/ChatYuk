@@ -1,18 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/config/strings.dart';
-import 'package:chatyuk/providers/auth_provider.dart';
-import 'package:chatyuk/providers/chat_provider.dart';
-import 'package:chatyuk/providers/device_info_provider.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
-import 'package:chatyuk/providers/social_provider.dart';
-import 'package:chatyuk/providers/theme_provider.dart';
+import 'package:chatyuk/models/user_model.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
+import 'package:chatyuk/providers/riverpod/chat_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
+import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/screens/account_screen.dart';
 import 'package:chatyuk/screens/settings_screen.dart';
 import 'package:chatyuk/services/auth_service.dart';
@@ -27,47 +27,80 @@ class MockChatService extends Mock implements ChatService {}
 
 class MockSocialService extends Mock implements SocialService {}
 
-/// ChatProvider uji: hitung reset() tanpa menyentuh cache disk.
-class TestChatProvider extends ChatProvider {
-  int resets = 0;
-  TestChatProvider({super.service});
+/// AuthNotifier uji — `isRealAdmin` bisa dipaksa (tanpa User Supabase).
+class TestAuth extends AuthNotifier {
+  final bool admin;
+  TestAuth(MockAuthService svc, {this.admin = false})
+      : super(authService: svc, autoInit: false);
+  @override
+  bool get isRealAdmin => admin;
+}
 
+/// ChatNotifier uji: hitung reset() tanpa menyentuh cache disk.
+class TestChat extends ChatNotifier {
+  TestChat(MockChatService svc) : super(service: svc);
+  int resets = 0;
   @override
   void reset() {
     resets++;
   }
 }
 
+class TestSocial extends SocialNotifier {
+  TestSocial(MockSocialService svc, SupabaseClient sb)
+      : super(service: svc, sb: sb);
+  @override
+  SocialState build() => const SocialState();
+}
+
+class TestPoints extends PointsNotifier {
+  @override
+  PointsState build() => const PointsState();
+}
+
+UserModel profileForTest() => UserModel(
+      uid: 'u-me',
+      nickname: 'Me',
+      gender: 'male',
+      age: 20,
+      country: 'Indonesia',
+      city: 'Jakarta',
+      ipAddress: '',
+      status: 'online',
+      avatar: '',
+      isRegistered: true,
+      loginAt: DateTime.now(),
+      createdAt: DateTime.now(),
+      lastSeen: DateTime.now(),
+    );
+
 /// Alur Pengaturan › Akun (rapihan profil): menu tampil, navigasi jalan,
 /// Keluar terlihat, Hapus Akun sembunyi di ⋮.
 void main() {
   late MockAuthService mockSvc;
-  late AuthProvider auth;
+  late ProviderContainer container;
 
-  Future<void> pumpSettings(WidgetTester t) async {
+  Future<void> pumpSettings(WidgetTester t, {bool admin = false}) async {
     mockSvc = MockAuthService();
     when(() => mockSvc.isAnonymous).thenReturn(false);
+    when(() => mockSvc.isSignedIn).thenReturn(false);
+    when(() => mockSvc.uid).thenReturn('u-me');
     when(() => mockSvc.dummySessionActive).thenReturn(false);
     when(() => mockSvc.emailConfirmed).thenReturn(true);
     when(() => mockSvc.userEmail).thenReturn('a@b.id');
     when(() => mockSvc.hasPassword).thenReturn(false);
     when(() => mockSvc.fetchHasPassword()).thenAnswer((_) async => false);
-    auth = AuthProvider(authService: mockSvc, autoInit: false);
-    addTearDown(auth.dispose);
+    container = ProviderContainer(
+      overrides: [
+        authProvider.overrideWith(() => TestAuth(mockSvc, admin: admin)),
+        pointsProvider.overrideWith(TestPoints.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(authProvider.notifier).seedProfileForTest(profileForTest());
     await t.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: auth),
-          ChangeNotifierProvider<LocaleProvider>(
-            create: (_) => LocaleProvider(),
-          ),
-          ChangeNotifierProvider<ThemeProvider>(
-            create: (_) => ThemeProvider(),
-          ),
-          ChangeNotifierProvider<DeviceInfoProvider>(
-            create: (_) => DeviceInfoProvider(),
-          ),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: const MaterialApp(home: SettingsScreen()),
       ),
     );
@@ -105,7 +138,7 @@ void main() {
     late MockAuthService authSvc;
     late MockChatService chatSvc;
     late MockSocialService socialSvc;
-    late TestChatProvider testChat;
+    late TestChat testChat;
 
     Future<void> pumpAccount(
       WidgetTester t, {
@@ -127,29 +160,27 @@ void main() {
       when(() => authSvc.goOffline()).thenAnswer((_) async {});
       when(() => authSvc.signOut()).thenAnswer((_) async {});
       when(() => authSvc.setPassword(any())).thenAnswer((_) async {});
-      final auth = AuthProvider(authService: authSvc, autoInit: false);
-      addTearDown(auth.dispose);
       chatSvc = MockChatService();
-      testChat = TestChatProvider(service: chatSvc);
-      addTearDown(testChat.dispose);
+      testChat = TestChat(chatSvc);
       socialSvc = MockSocialService();
       when(() => socialSvc.clearAnonSocial()).thenAnswer((_) async {});
-      final social = SocialProvider(
-        service: socialSvc,
-        sb: fakeSupabaseClientNoTicker(),
-        autoInit: false,
+      container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith(() => TestAuth(authSvc, admin: adminEmail)),
+          chatProvider.overrideWith(() => testChat),
+          socialProvider.overrideWith(
+            () => TestSocial(socialSvc, fakeSupabaseClientNoTicker()),
+          ),
+          pointsProvider.overrideWith(TestPoints.new),
+        ],
       );
-      addTearDown(social.dispose);
+      addTearDown(container.dispose);
+      container
+          .read(authProvider.notifier)
+          .seedProfileForTest(profileForTest());
       await t.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<AuthProvider>.value(value: auth),
-            ChangeNotifierProvider<ChatProvider>.value(value: testChat),
-            ChangeNotifierProvider<SocialProvider>.value(value: social),
-            ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider(),
-            ),
-          ],
+        UncontrolledProviderScope(
+          container: container,
           child: const MaterialApp(home: AccountScreen()),
         ),
       );

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/privacy_settings.dart';
@@ -32,6 +33,24 @@ class PrivacyState {
         excludable: excludable ?? this.excludable,
         excludableLoading: excludableLoading ?? this.excludableLoading,
         excludableLoaded: excludableLoaded ?? this.excludableLoaded,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is PrivacyState &&
+      other.settings == settings &&
+      other.loading == loading &&
+      other.excludableLoading == excludableLoading &&
+      other.excludableLoaded == excludableLoaded &&
+      listEquals(other.excludable, excludable);
+
+  @override
+  int get hashCode => Object.hash(
+        settings,
+        loading,
+        excludableLoading,
+        excludableLoaded,
+        Object.hashAll(excludable),
       );
 }
 

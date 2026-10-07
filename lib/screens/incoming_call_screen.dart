@@ -2,24 +2,23 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/theme.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../widgets/profile_avatar.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../core/call/call_permissions.dart';
 import '../utils.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 /// Layar panggilan masuk — muncul saat ada call realtime atau push FCM.
 /// Accept → ganti ke CallScreen (role callee). Decline → status declined.
 /// Kalau caller membatalkan (status canceled) → otomatis tutup.
-class IncomingCallScreen extends StatefulWidget {
+class IncomingCallScreen extends ConsumerStatefulWidget {
   final String callId;
   final String callerUid;
   final String callType; // 'audio' | 'video'
@@ -41,10 +40,10 @@ class IncomingCallScreen extends StatefulWidget {
   });
 
   @override
-  State<IncomingCallScreen> createState() => _IncomingCallScreenState();
+  ConsumerState<IncomingCallScreen> createState() => _IncomingCallScreenState();
 }
 
-class _IncomingCallScreenState extends State<IncomingCallScreen> {
+class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
   CallNotifier get _service => ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
   StreamSubscription<String>? _statusSub;
   final AudioPlayer _ringtonePlayer = AudioPlayer();
@@ -197,7 +196,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     if (!mounted) return;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final profile = auth.profile;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final session = await ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).startSession(
       callId: widget.callId,
       remoteUid: widget.callerUid,
@@ -267,7 +266,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final isVideo = widget.callType == 'video';
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,

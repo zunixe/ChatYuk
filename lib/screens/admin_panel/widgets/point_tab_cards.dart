@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/riverpod/points_provider.dart';
 import 'panel_card.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Ringkasan rata-rata & total poin.
 class PointStatsCard extends StatelessWidget {
@@ -479,7 +479,7 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
 
   Future<void> _load() async {
     try {
-      final res = await context.read<AdminProvider>().getFeatureFlags();
+      final res = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getFeatureFlags();
       if (mounted) setState(() { _flags = res; _loaded = true; });
     } catch (_) {
       if (mounted) setState(() => _loaded = true);
@@ -492,7 +492,7 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
   Future<void> _toggle(String feature, bool v) async {
     setState(() => _saving = true);
     try {
-      final res = await context.read<AdminProvider>().setFeatureFlag(feature, v);
+      final res = await ProviderScope.containerOf(context, listen: false).read(adminProvider).setFeatureFlag(feature, v);
       final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
       await pp.refreshMeteredPricing();
       if (mounted) {

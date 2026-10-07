@@ -1,21 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/strings.dart';
 import '../config/theme.dart';
 import 'missions/widgets/mission_card.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
+import '../config/strings.dart';
 
-class MissionsScreen extends StatefulWidget {
+class MissionsScreen extends ConsumerStatefulWidget {
   const MissionsScreen({super.key});
 
   @override
-  State<MissionsScreen> createState() => _MissionsScreenState();
+  ConsumerState<MissionsScreen> createState() => _MissionsScreenState();
 }
 
-class _MissionsScreenState extends State<MissionsScreen>
+class _MissionsScreenState extends ConsumerState<MissionsScreen>
     with SingleTickerProviderStateMixin {
   PointsNotifier get _service => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
   late final TabController _tab = TabController(length: 3, vsync: this);
@@ -72,7 +71,7 @@ class _MissionsScreenState extends State<MissionsScreen>
   Future<void> _claim(String key, int reward) async {
     if (_claiming != null) return;
     setState(() => _claiming = key);
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     try {
       final res = await _service.claimWeeklyQuest(key, _tzOffset);
       if (!mounted) return;
@@ -98,8 +97,8 @@ class _MissionsScreenState extends State<MissionsScreen>
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final current = _tab.index == 0
         ? _daily
         : _tab.index == 1

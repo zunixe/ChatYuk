@@ -6,15 +6,14 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:video_player/video_player.dart';
 
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../providers/riverpod/chat_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
+import 'package:video_player/video_player.dart';
 
 /// Gate konkurensi sederhana (max N paralel) — dipakai membatasi unduhan
 /// poster video lintas-instance bubble. Mirip `_Semaphore` di
@@ -384,7 +383,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       final file = await _ensureLocalFile();
       if (!mounted) return;
       if (file == null) {
-        final s = context.read<LocaleProvider>().s;
+        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.videoCompressFail)));
@@ -436,7 +435,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     // Jam tetap overlay kanan-bawah di atas kartu (sama seperti foto
     // view-once) supaya penerima tetap tahu waktunya.
     if (_locked) {
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       return Stack(
         clipBehavior: Clip.none,
         children: [
@@ -581,7 +580,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
                         ),
                         const SizedBox(width: 3),
                         Text(
-                          context.read<LocaleProvider>().s.viewTimerOnce,
+                          ProviderScope.containerOf(context, listen: false).read(localeProvider).s.viewTimerOnce,
                           style: AppText.chatTime.copyWith(
                             color: Colors.white,
                           ),
@@ -703,7 +702,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(

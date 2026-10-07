@@ -1,23 +1,22 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/riverpod/location_provider.dart';
 import '../providers/riverpod/device_info_provider.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../utils.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../main.dart';
 import 'login_screen.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/profile_form_card.dart';
 import '../widgets/auth_header.dart';
+import '../providers/riverpod/location_provider.dart';
 
 enum RegisterMode { full, profileOnly }
 
-class RegisterScreen extends StatefulWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   final RegisterMode mode;
   final String? prefillEmail;
 
@@ -28,10 +27,10 @@ class RegisterScreen extends StatefulWidget {
   });
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
@@ -85,7 +84,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _ipAddress = finalInfo.ipAddress;
     });
     if (!mounted) return;
-    await context.read<LocaleProvider>().setLangFromCountry(finalInfo.country);
+    await ProviderScope.containerOf(context, listen: false).read(localeProvider.notifier).setLangFromCountry(finalInfo.country);
   }
 
   @override
@@ -108,7 +107,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // Nickname terlarang langsung ditolak tanpa RPC (kecuali admin).
     if (isBannedNickname(val) &&
         !ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isRealAdmin) {
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       setState(() => _nicknameError = s.errNicknameBanned);
       return;
     }
@@ -117,14 +116,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         val,
       );
       if (mounted) {
-        final s = context.read<LocaleProvider>().s;
+        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
         setState(() => _nicknameError = available ? null : s.errNicknameTaken);
       }
     });
   }
 
   Future<void> _register() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final email = widget.prefillEmail ?? _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
     final confirm = _confirmCtrl.text;
@@ -356,7 +355,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     String country,
     String city,
   ) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ctrl = TextEditingController();
     var resendCooldown = false;
     return await showDialog<bool>(
@@ -480,8 +479,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final profileOnly = widget.mode == RegisterMode.profileOnly;
     // Mode popup: padding nol — pembungkus _ProfileGate sudah memberi
     // jarak horizontal 24 + angkatan keyboard, supaya lebar kartu persis

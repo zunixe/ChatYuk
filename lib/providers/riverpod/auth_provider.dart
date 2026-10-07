@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../main.dart';
@@ -11,7 +10,7 @@ import '../../config/theme.dart';
 import '../../config/fonts.dart';
 import '../../models/user_model.dart';
 import '../../models/user_photo.dart';
-import '../../providers/locale_provider.dart';
+import '../../providers/riverpod/locale_provider.dart';
 import '../../core/admin_gate.dart';
 import '../../services/avatar_service.dart';
 import '../../services/auth_service.dart';
@@ -30,6 +29,7 @@ import '../../core/screen_secure_service.dart';
 import '../../services/storage_photo_service.dart';
 import '../../services/notification_prefs_service.dart';
 import '../../utils.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 // Shortcut untuk fire-and-forget.
 // Tidak membungkam error: log biar kegagalan tetap terlihat di debug.
@@ -92,6 +92,62 @@ class AuthData {
     this.excludedDevices = const [],
     this.notificationsEnabled = true,
   });
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthData &&
+      other.profile == profile &&
+      other.loading == loading &&
+      other.error == error &&
+      other.signingOut == signingOut &&
+      other.uid == uid &&
+      other.isSignedIn == isSignedIn &&
+      other.isAnonymous == isAnonymous &&
+      other.dummySessionActive == dummySessionActive &&
+      other.emailConfirmed == emailConfirmed &&
+      other.userEmail == userEmail &&
+      other.hasPassword == hasPassword &&
+      other.isRealAdmin == isRealAdmin &&
+      other.anonBlocked == anonBlocked &&
+      other.anonTimelineBlocked == anonTimelineBlocked &&
+      other.screenshotEnabled == screenshotEnabled &&
+      other.watermarkEnabled == watermarkEnabled &&
+      other.invisibleEnabled == invisibleEnabled &&
+      other.reengageEnabled == reengageEnabled &&
+      other.requireRegistration == requireRegistration &&
+      other.callAllEnabled == callAllEnabled &&
+      other.callAnonEnabled == callAnonEnabled &&
+      other.appFontFamily == appFontFamily &&
+      other.notificationsEnabled == notificationsEnabled &&
+      listEquals(other.excludedDevices, excludedDevices);
+
+  @override
+  int get hashCode => Object.hashAll([
+        profile,
+        loading,
+        error,
+        signingOut,
+        uid,
+        isSignedIn,
+        isAnonymous,
+        dummySessionActive,
+        emailConfirmed,
+        userEmail,
+        hasPassword,
+        isRealAdmin,
+        anonBlocked,
+        anonTimelineBlocked,
+        screenshotEnabled,
+        watermarkEnabled,
+        invisibleEnabled,
+        reengageEnabled,
+        requireRegistration,
+        callAllEnabled,
+        callAnonEnabled,
+        appFontFamily,
+        notificationsEnabled,
+        Object.hashAll(excludedDevices),
+      ]);
 }
 
 /// Sesi + profil + settings global (Riverpod). Migrasi dari ChangeNotifier.
@@ -1720,7 +1776,7 @@ class AuthNotifier extends Notifier<AuthData> {
   void _promptLocationSettings() {
     final ctx = navigatorKey.currentContext;
     if (ctx == null) return;
-    final s = ctx.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(ctx, listen: false).read(localeProvider).s;
     showDialog(
       context: ctx,
       builder: (dctx) => AlertDialog(

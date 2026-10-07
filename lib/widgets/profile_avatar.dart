@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
+import '../core/media/native_image.dart';
 import '../services/avatar_service.dart';
 import 'user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes;
 
@@ -110,7 +111,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
           setState(() => _bytes = cached);
           return;
         }
-        final bytes = await compute(_decodeAvatarB64, b64);
+        final bytes = await NativeImage.decodeBytes(b64);
         if (!mounted || widget.uid != uid || bytes == null) return;
         rememberAvatarBytes(uid, bytes);
         setState(() => _bytes = bytes);

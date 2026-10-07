@@ -171,10 +171,8 @@ mixin ChatServicePresenceMx on ChatBase {
 
     Future<void> syncFromPresence() async {
       lastSyncAt = DateTime.now();
-      dlog('[ONLINE-EMIT] sync start t=${DateTime.now().millisecondsSinceEpoch % 100000}');
       try {
         final state = RealtimeHub.instance.onlinePresenceState;
-        dlog('[ONLINE-EMIT] presence state keys=${state.keys.length}');
         // Fast path per-country shard: ambil max 50 uid tanpa expand full O(N) (jangan values.expand untuk 1M)
         List<String> firstNPresenceUids(int n) {
           final out = <String>[];
@@ -191,7 +189,6 @@ mixin ChatServicePresenceMx on ChatBase {
         }
 
         final presenceUidsFast = firstNPresenceUids(50);
-        dlog('[ONLINE-EMIT] presenceUidsFast=${presenceUidsFast.length}');
         if (presenceUidsFast.isNotEmpty) {
           try {
             // status/avatar/last_seen sudah di-revoke dari SELECT publik →
@@ -276,7 +273,6 @@ mixin ChatServicePresenceMx on ChatBase {
                   }
                 }
                 if (avatarUpdated) {
-                  dlog('[ONLINE-EMIT] avatar batch updated t=${DateTime.now().millisecondsSinceEpoch}');
                   if (!controller.isClosed) controller.add(List.unmodifiable(cached));
                 }
               }
@@ -292,7 +288,6 @@ mixin ChatServicePresenceMx on ChatBase {
         bool usedRpc = false;
         bool rpcFailed = false;
         try {
-          dlog('[ONLINE-EMIT] calling RPC get_online_users');
           final data = await PerfProbe.timed(
             'online.rpc',
             () => _sb
@@ -303,7 +298,6 @@ mixin ChatServicePresenceMx on ChatBase {
                 // (tanpa socket) hilang dari daftar padahal online.
                 .timeout(const Duration(seconds: 6)),
           );
-          dlog('[ONLINE-EMIT] RPC done rows=${data is List ? data.length : 0}');
           if (data is List && data.isNotEmpty) {
             rpcRows = data;
             usedRpc = true;
@@ -358,7 +352,6 @@ mixin ChatServicePresenceMx on ChatBase {
           // fallback presence_for: jalur itu hanya memuat user ber-socket,
           // sehingga dummy AI yang online akan hilang begitu saja. Pertahankan
           // cache; tick 30s berikutnya akan memperbarui saat jaringan pulih.
-          dlog('[ONLINE-EMIT] rpcFailed & cache n=${cached.length} → keep cache');
           return;
         } else {
           // Fallback hybrid lama jika RPC get_online_users belum deploy/gagal.
@@ -446,7 +439,6 @@ mixin ChatServicePresenceMx on ChatBase {
             MessageCache.instance.saveRawList('online_users', rows);
           }
         } catch (_) {}
-        dlog('[ONLINE-EMIT] slow path n=${pending.length} withAvatar=${pending.where((u) => u.avatar.isNotEmpty && !StoragePhotoService.instance.isAvatarPath(u.avatar)).length} t=${DateTime.now().millisecondsSinceEpoch}');
         if (!controller.isClosed) controller.add(List.unmodifiable(cached));
         // Background download avatar batch 20 (index Map O(1)).
         const avatarBatch = 20;
@@ -509,7 +501,6 @@ mixin ChatServicePresenceMx on ChatBase {
               if (changedUid.isNotEmpty &&
                   cached.any((c) => c.uid == changedUid)) {
                 cached = cached.where((c) => c.uid != changedUid).toList();
-                dlog('[ONLINE-EMIT] profile $st event → drop $changedUid');
                 if (!controller.isClosed) {
                   controller.add(List.unmodifiable(cached));
                 }
@@ -527,7 +518,6 @@ mixin ChatServicePresenceMx on ChatBase {
             )) {
               return;
             }
-            dlog('[ONLINE-EMIT] profile online event → resync');
             debounce?.cancel();
             debounce = Timer(const Duration(milliseconds: 1200), syncFromPresence);
           },

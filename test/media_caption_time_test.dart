@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/core/chat/chat_location.dart';
 import 'package:chatyuk/models/message_model.dart';
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/utils.dart';
 import 'package:chatyuk/widgets/location_bubble.dart';
 import 'package:chatyuk/widgets/private_chat_message.dart';
@@ -15,14 +14,11 @@ import 'package:chatyuk/widgets/private_chat_message.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Widget host(Widget child, {double width = 360}) => ChangeNotifierProvider(
-        create: (_) => LocaleProvider(),
-        child: MaterialApp(
+  Widget host(Widget child, {double width = 360}) =>  ProviderScope(child: MaterialApp(
           home: Scaffold(
             body: SizedBox(width: width, height: 700, child: child),
           ),
-        ),
-      );
+        ));
 
   // ── MAPS ──────────────────────────────────────────────────────────────
   testWidgets('maps + caption pendek: jam rata kanan sejajar tepi peta',

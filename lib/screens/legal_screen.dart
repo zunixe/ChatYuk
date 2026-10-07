@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../models/legal_section.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
+import '../config/theme.dart';
 
 enum LegalKind { privacy, terms }
 
-class LegalScreen extends StatelessWidget {
+class LegalScreen extends ConsumerWidget {
   final LegalKind kind;
   const LegalScreen({super.key, required this.kind});
 
   @override
-  Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       appBar: AppBar(
         title: Text(

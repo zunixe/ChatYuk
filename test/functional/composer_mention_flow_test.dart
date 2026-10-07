@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/utils/mention.dart';
 import 'package:chatyuk/widgets/chat_composer_input.dart';
 
@@ -14,17 +13,14 @@ void main() {
 
   const budi = Mention(uid: 'u-budi', name: 'Budi');
 
-  Widget wrap(Widget child) => MaterialApp(
-        home: ChangeNotifierProvider<LocaleProvider>(
-          create: (_) => LocaleProvider(),
-          child: Scaffold(
+  Widget wrap(Widget child) => ProviderScope(child: MaterialApp(
+        home:  Scaffold(
             body: Align(
               alignment: Alignment.bottomCenter,
               child: SizedBox(height: 400, child: child),
             ),
           ),
-        ),
-      );
+      ));
 
   testWidgets('ketik @ → panel kandidat muncul → pilih → teks @Budi + spasi',
       (tester) async {

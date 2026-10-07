@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import 'admin_devices/widgets/device_group_card.dart';
 import 'admin_devices/widgets/device_card.dart';
@@ -11,26 +11,27 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../main.dart' show resumeWarmup;
 import '../admin/admin_grouping.dart';
 import '../utils.dart';
 import '../core/ui/scroll_pagination.dart';
 import '../widgets/search_field.dart';
 import '../widgets/app_gesture.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Admin: pelacakan device & user (tab Perangkat).
 /// List semua device semua user; klik → detail user (profil + semua device
 /// + daftar chat + riwayat lokasi).
-class AdminDevicesTab extends StatefulWidget {
+class AdminDevicesTab extends ConsumerStatefulWidget {
   const AdminDevicesTab({super.key});
 
   @override
-  State<AdminDevicesTab> createState() => _AdminDevicesTabState();
+  ConsumerState<AdminDevicesTab> createState() => _AdminDevicesTabState();
 }
 
-class _AdminDevicesTabState extends State<AdminDevicesTab>
+class _AdminDevicesTabState extends ConsumerState<AdminDevicesTab>
     with WidgetsBindingObserver {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
@@ -51,12 +52,12 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    Future.microtask(() => context.read<AdminProvider>().fetchDevices());
+    Future.microtask(() => ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchDevices());
     // 30 dtk (dulu 15). Polling hanya refresh halaman-1 diam-diam; kalau
     // user sudah load-more, LEWATI agar tidak reset paginasi + lompat scroll.
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
-      final admin = context.read<AdminProvider>();
+      final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       if (admin.devices.length > 100) return;
       admin.refreshDevicesSilent();
     });
@@ -65,7 +66,7 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
       onLoadMore: () {
         if (!mounted) return;
         if (_byDevice) {
-          context.read<AdminProvider>().fetchMoreDevices();
+          ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchMoreDevices();
         } else {
           _loadAllUsers();
         }
@@ -86,7 +87,7 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
       return;
     }
     _usersLoading = true;
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     try {
       final offset = refresh ? 0 : (_allUsers?.length ?? 0);
       final res = await admin.listStatsUsers(
@@ -163,12 +164,12 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
       if (_refreshTimer == null) {
         unawaited(
           resumeWarmup().then((_) {
-            if (mounted) context.read<AdminProvider>().refreshDevicesSilent();
+            if (mounted) ProviderScope.containerOf(context, listen: false).read(adminProvider).refreshDevicesSilent();
           }),
         );
         _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
           if (!mounted) return;
-          final admin = context.read<AdminProvider>();
+          final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
           if (admin.devices.length > 100) return;
           admin.refreshDevicesSilent();
         });
@@ -212,11 +213,11 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     // GRANULAR: rebuild hanya saat domain DEVICES berubah.
-    context.select<AdminProvider, int>((p) => p.revDevices);
-    final admin = context.read<AdminProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(adminProvider.select((p) => p.revDevices));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ref.watch(localeProvider).s;
     // Hitung SEKALI per build: grouping+sort diulang tiap frame dulu.
     // Per-User TIDAK lagi berbasis device rows (lihat `_usersView`).
     final deviceGroups = _filterGroups(_groupByDevice(admin.devices), _query);
@@ -543,8 +544,8 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   }
 
   Future<void> _showUserDetail(BuildContext context, Map<String, dynamic> d) async {
-    final admin = context.read<AdminProvider>();
-    final s = context.read<LocaleProvider>().s;
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final uid = '${d['user_id'] ?? ''}';
     if (uid.isEmpty) return;
     final detail = await admin.getUserDetail(uid);
@@ -567,7 +568,7 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
     BuildContext context,
     Map<String, dynamic> group,
   ) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,

@@ -13,8 +13,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as lpn;
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
-import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'core/admin_gate.dart';
@@ -22,7 +20,7 @@ import 'app.dart';
 import 'models/room_model.dart';
 import 'providers/riverpod/auth_provider.dart';
 import 'providers/riverpod/call_provider.dart';
-import 'providers/locale_provider.dart';
+import 'providers/riverpod/locale_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
 import 'providers/riverpod/update_provider.dart';
 import 'screens/incoming_call_screen.dart';
@@ -51,13 +49,13 @@ import 'services/meta_analytics_service.dart';
 import 'services/notification_prefs_service.dart';
 import 'services/storage_photo_service.dart';
 import 'services/topup_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 /// Container Riverpod global — untuk akses provider TANPA BuildContext
 /// (mis. bootstrap `checkOnStart` update). Diisi saat runApp.
 ProviderContainer? _rootContainer;
-final LocaleProvider localeProvider = LocaleProvider();
 
 /// Override opsi Firebase untuk build admin (di-set oleh lib/main_admin.dart).
 /// Dipakai juga oleh background isolate handler notifikasi.
@@ -237,7 +235,7 @@ Future<void> _clearChatNotif(String chatKey, {bool cancelShade = true}) async {
     if (cancelShade) {
       await localNotifications.cancel(id: notifIdForKey(chatKey));
     }
-    await _refreshNotifSummary(localeProvider.s);
+    await _refreshNotifSummary(AppLocale.s);
   } catch (_) {}
 }
 
@@ -284,7 +282,7 @@ Future<void> _reshowChatNotif(String chatKey) async {
     if (data == null || entries == null || entries.isEmpty) return;
     final info = notifThreadOf(data);
     if (info == null) return;
-    final s = localeProvider.s;
+    final s = AppLocale.s;
     await localNotifications.show(
       id: notifIdForKey(chatKey),
       title: info.title.isEmpty ? s.notifNewMessage : info.title,
@@ -866,8 +864,8 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
       if (db is String && db.trim().isNotEmpty) return db.trim();
       return null;
     }
-    final title = _pick(data, ['otherName', 'callerName'], localeProvider.s.unknownUser);
-    final body = _notifBody(message, data) ?? localeProvider.s.notifCallEndedBody;
+    final title = _pick(data, ['otherName', 'callerName'], AppLocale.s.unknownUser);
+    final body = _notifBody(message, data) ?? AppLocale.s.notifCallEndedBody;
     String? bigPicPath;
     final avatarUrl2 = data['avatarUrl'] as String?;
     if (avatarUrl2 != null && avatarUrl2.startsWith('http')) {
@@ -948,7 +946,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
     if (await NotificationPrefsService.isOnlineHidden(ouid)) return;
   }
 
-  final s = localeProvider.s;
+  final s = AppLocale.s;
   final type = data['type'];
   final isDataOnly =
       type == 'online' ||
@@ -1123,7 +1121,7 @@ void _openFromData(Map<String, dynamic> data) {
       ? '${data['roomId'] ?? ''}'
       : '${data['chatId'] ?? ''}';
   if (openedKey.isNotEmpty) unawaited(_clearChatNotif(openedKey, cancelShade: false));
-  final s = localeProvider.s;
+  final s = AppLocale.s;
   // Timeline post baru → buka langsung postingannya (detail). Tanpa postId
   // (notif lama) fallback ke tab Timeline seperti dulu.
   if (data['type'] == 'timeline_post' || data['type'] == 'timeline') {
@@ -1293,7 +1291,7 @@ void _openFromMessage(RemoteMessage? message) {
 bool _activeChatNotifHooked = false;
 
 Future<void> _initNotificationsFast() async {
-  await localeProvider.init();
+  await AppLocale.init();
   final androidInit = const lpn.AndroidInitializationSettings('@mipmap/ic_launcher');
   final iosInit = const lpn.DarwinInitializationSettings();
   final settings = lpn.InitializationSettings(android: androidInit, iOS: iosInit);
@@ -1484,12 +1482,14 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // sampai ratusan MB (pernah 500MB → ngetik & buka halaman ngelag).
   //
   // Bubble chat & foto post SUDAH di-cap decode (ResizeImage/cacheWidth ≤1080px
-  // ≈ 4.4MB/bitmap). 80 entri / 48MB: cukup untuk viewport + 1 layar di atas;
+  // ≈ 4.4MB/bitmap). 60 entri / 24MB: cukup untuk viewport + 1 layar di atas;
   // sisanya dibuang & di-decode ulang saat scroll (murah, dari disk cache).
-  // Angka ini sengaja konservatif — prioritas "ringan" > "nol re-decode".
-  // Kalau ada laporan "foto kedip saat scroll", naikkan bertahap 96/64.
-  PaintingBinding.instance.imageCache.maximumSize = 80;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 48 << 20;
+  // Angka ini sengaja konservatif — prioritas "ringan" > "nol re-decode",
+  // terutama di HP yang memorinya ketat (free RAM kecil → halaman ter-swap →
+  // ngetik terasa freeze saat page ter-swap di-fault balik).
+  // Kalau ada laporan "foto kedip saat scroll", naikkan bertahap 72/36.
+  PaintingBinding.instance.imageCache.maximumSize = 60;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 24 << 20;
   kFirebaseOptionsOverride = firebaseOptions;
   // Crashlytics butuh Firebase ter-init dulu — aktifkan pasca-init di bawah.
   // Handler di sini hanya dlog; setelah FlutterError.crashlytics disambung,

@@ -1,18 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/user_model.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../utils.dart';
 import 'gender_avatar.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Bottom sheet bagikan postingan timeline ala Threads.
 ///
@@ -55,7 +54,7 @@ Future<void> showPostShareSheet({
   );
 }
 
-class _PostShareSheet extends StatefulWidget {
+class _PostShareSheet extends ConsumerStatefulWidget {
   final String authorUid;
   final String authorName;
   final String authorGender;
@@ -79,10 +78,10 @@ class _PostShareSheet extends StatefulWidget {
   });
 
   @override
-  State<_PostShareSheet> createState() => _PostShareSheetState();
+  ConsumerState<_PostShareSheet> createState() => _PostShareSheetState();
 }
 
-class _PostShareSheetState extends State<_PostShareSheet> {
+class _PostShareSheetState extends ConsumerState<_PostShareSheet> {
   final _searchCtrl = TextEditingController();
   String _q = '';
   List<UserModel> _users = const [];
@@ -200,7 +199,7 @@ class _PostShareSheetState extends State<_PostShareSheet> {
     try {
       await Clipboard.setData(ClipboardData(text: widget.shareText));
       if (!mounted) return;
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(s.shareCopied)));
@@ -235,7 +234,7 @@ class _PostShareSheetState extends State<_PostShareSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final users = _filtered;
     return SafeArea(
       child: Padding(

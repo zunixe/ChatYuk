@@ -2,19 +2,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:provider/provider.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/call_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/call/call_permissions.dart';
 import '../utils.dart';
 import '../widgets/call_control_button.dart';
 import '../widgets/profile_avatar.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 /// Layar panggilan 1:1 — dipakai caller (menelpon) dan callee (menerima).
 /// Audio: avatar + timer. Video: remote fullscreen + preview lokal kecil.
@@ -84,7 +83,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     WakelockPlus.enable();
     ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).registerCall(widget.callId);
     final profile = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (widget.session != null) {
       // Session sudah dibuat & di-init oleh CallProvider (mode chat / expand).
       _session = widget.session!;
@@ -203,7 +202,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('CallScreen');
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // Toggle admin OFF → semua yang berhubungan koin sembunyi (banner tarif).
     final coinsOn = ref.watch(pointsProvider.select((p) => p.enabled));
     final isVideo = widget.callType == 'video';

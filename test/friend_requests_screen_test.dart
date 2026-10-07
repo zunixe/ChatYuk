@@ -1,17 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    hide Provider, ChangeNotifierProvider, Consumer;
-
-import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
-import 'package:chatyuk/providers/theme_provider.dart';
 import 'package:chatyuk/screens/friend_requests_screen.dart';
 import 'package:chatyuk/services/social_service.dart';
 
-import 'supabase_test_client.dart';
 import 'test_helper.dart';
 
 class MockSocialService extends Mock implements SocialService {}
@@ -58,23 +53,11 @@ void main() {
     final container = ProviderContainer(
       overrides: [socialProvider.overrideWith(() => TestSocial(outbox: outbox))],
     );
-    final locale = LocaleProvider();
-    final theme = ThemeProvider();
-    addTearDown(() {
-      locale.dispose();
-      theme.dispose();
-      container.dispose();
-    });
+    addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: locale),
-            ChangeNotifierProvider.value(value: theme),
-          ],
-          child: const MaterialApp(home: FriendRequestsScreen()),
-        ),
+        child: const MaterialApp(home: FriendRequestsScreen()),
       ),
     );
     await tester.pump();
@@ -83,7 +66,7 @@ void main() {
 
   testWidgets('Batal hanya tampil untuk baris pending', (tester) async {
     await pump(tester);
-    final s = LocaleProvider().s;
+    final s = S(isId: true);
     // Satu tombol Batal (baris pending) — baris accepted/rejected tidak ada.
     expect(find.widgetWithText(TextButton, s.btnCancel), findsOneWidget);
     // Label status untuk riwayat non-pending.

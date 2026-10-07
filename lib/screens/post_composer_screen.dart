@@ -3,20 +3,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
-import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../providers/riverpod/nav_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../core/perf/perf_probe.dart';
+import '../config/theme.dart';
 
 /// Hasil proses satu foto: bytes JPEG + lebar/tinggi (rasio asli).
 /// Publik + `@visibleForTesting` supaya kontrak resize/kualitas bisa dikunci
@@ -146,7 +145,7 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
   /// Bottom sheet pilih sumber foto: Galeri / Kamera.
   Future<void> _pickMediaSource() async {
     if (_picking || _images.length >= _maxImages) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final source = await showModalBottomSheet<_MediaSource>(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -209,7 +208,7 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
 
   /// User anonim (belum lengkapi email) tidak bisa posting — info ke Profil.
   Future<bool> _ensureRegistered() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (auth.profile?.isRegistered ?? false) return true;
     await showDialog<bool>(
@@ -252,7 +251,7 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
     // ketukan kedua selama `await _ensureRegistered()` lolos masuk karena
     // tombol belum disabled (kasus nyata: 2 post "Destination" selisih 124ms).
     if (_posting) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final text = _textCtrl.text.trim();
     if (text.isEmpty && _images.isEmpty) {
       _toast(s.errPostEmpty);
@@ -325,8 +324,8 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('PostComposer');
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final profile = ref.watch(authProvider.select((a) => a.profile));
     final myName = profile?.nickname ?? 'Anon';
     final hashtags = _extractHashtags(_textCtrl.text);
@@ -715,7 +714,7 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
 
   /// Grid foto terpilih + kotak plus di akhir (maks _maxImages).
   Widget _imagesGrid() {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),

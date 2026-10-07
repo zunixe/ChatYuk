@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../core/admin_err.dart';
-import '../../../providers/admin_provider.dart';
 import '../../../utils.dart';
 import '../../../widgets/detail_row.dart';
 import '../../admin_devices/widgets/location_route_map.dart';
 import '../../../widgets/sheet_drag_handle.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Bottom sheet detail satu entry arsip terhapus: profil + riwayat device
 /// + aksi hapus user anon (pending).
@@ -74,7 +74,7 @@ class _DeletedDetailSheetState extends State<DeletedDetailSheet> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _deleting = true);
-    final res = await context.read<AdminProvider>().deleteAnonUser(uid);
+    final res = await ProviderScope.containerOf(context, listen: false).read(adminProvider).deleteAnonUser(uid);
     if (!mounted) return;
     setState(() => _deleting = false);
 

@@ -1,10 +1,11 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/models/user_model.dart';
-import 'package:chatyuk/providers/auth_provider.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
 
 import 'test_helper.dart';
@@ -50,14 +51,22 @@ void main() {
   });
 
   late MockAuthService auth;
-  late AuthProvider provider;
+  late AuthNotifier provider;
 
-  /// Provider tanpa autoInit + notifikasi OFF supaya `updateFcmToken()`
+  /// Notifier tanpa autoInit + notifikasi OFF supaya `updateFcmToken()`
   /// tidak menunggu Firebase (plugin tidak ada di test) — ini punya efek
   /// samping: test lebih cepat & tanpa timer menggantung.
-  Future<AuthProvider> build() async {
+  Future<AuthNotifier> build() async {
     SharedPreferences.setMockInitialValues({'notif_enabled': false});
-    final p = AuthProvider(authService: auth, autoInit: false);
+    final container = ProviderContainer(
+      overrides: [
+        authProvider.overrideWith(
+          () => AuthNotifier(authService: auth, autoInit: false),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final p = container.read(authProvider.notifier);
     await p.loadNotificationPref();
     return p;
   }
@@ -71,13 +80,12 @@ void main() {
     when(() => auth.uid).thenReturn('uid-1');
     when(() => auth.userEmail).thenReturn(null);
     when(() => auth.emailConfirmed).thenReturn(false);
+    when(() => auth.hasPassword).thenReturn(false);
     when(() => auth.currentUser).thenReturn(null);
     when(() => auth.onMyProfileUpdates()).thenAnswer(
       (_) => const Stream<({UserModel model, Set<String> keys})>.empty(),
     );
   });
-
-  tearDown(() => provider.dispose());
 
   group('login anonim', () {
     test('panggil service + simpan profile', () async {

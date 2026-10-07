@@ -148,25 +148,25 @@ void main() {
       var list = await handle.stream.first.timeout(const Duration(seconds: 3));
       expect(list.length, 100);
 
-      // Paginasi berulang → melewati cap 300.
+      // Paginasi berulang → melewati cap 100.
       for (var k = 0; k < 5; k++) {
         oldestFetched -= 100;
         page = k;
         final bigger = handle.stream.firstWhere(
-          (l) => l.length > list.length || l.length == 300,
+          (l) => l.length > list.length || l.length == 100,
         );
         await handle.loadOlder();
         list = await bigger.timeout(const Duration(seconds: 3));
       }
-      expect(list.length, lessThanOrEqualTo(300),
+      expect(list.length, lessThanOrEqualTo(100),
           reason: '[$key] list pesan harus dibatasi (anti tumbuh = lag)');
     }
 
-    test('ROOM: list DIBATASI 300 pesan (anti-tumbuh = lag)', () async {
+    test('ROOM: list DIBATASI 100 pesan (anti-tumbuh = lag)', () async {
       await capTest('room_cap');
     });
 
-    test('GROUP: list DIBATASI 300 pesan (anti-tumbuh = lag)', () async {
+    test('GROUP: list DIBATASI 100 pesan (anti-tumbuh = lag)', () async {
       await capTest('group_cap_123');
     });
 
@@ -174,7 +174,7 @@ void main() {
         () async {
       // Regresi: trim memangkas depan `_current`; kalau `loadOlder` memakai
       // `_current.first` sebagai kursor, `before` mundur → fetch duplikat →
-      // history >300 tak bisa di-scroll. Kursor sesi harus terus mundur.
+      // history >100 tak bisa di-scroll. Kursor sesi harus terus mundur.
       final handler = FakeSupabaseHandler();
       final befores = <String>[];
       handler.on('/rest/v1/messages', (req) {
@@ -209,16 +209,16 @@ void main() {
       final handle = session(handler, 'room_deep').start();
       var list = await handle.stream.first.timeout(const Duration(seconds: 3));
       expect(list.length, 100);
-      // Paginasi 5× (total 600 > cap 300).
+      // Paginasi 5× (total 600 > cap 100).
       for (var k = 0; k < 5; k++) {
         final prevLen = list.length;
         final next = handle.stream.firstWhere(
-          (l) => l.length != prevLen || l.length == 300,
+          (l) => l.length != prevLen || l.length == 100,
         );
         await handle.loadOlder();
         list = await next.timeout(const Duration(seconds: 3));
       }
-      expect(list.length, lessThanOrEqualTo(300));
+      expect(list.length, lessThanOrEqualTo(100));
       // Kursor `before` harus MONOTON MUNDUR (tiap halaman lebih tua) —
       // bukti paginasi jalan terus walau depan list kepangkas trim.
       expect(befores.length, 5);

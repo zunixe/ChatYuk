@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';import 'package:provider/provider.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../providers/riverpod/location_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -11,17 +11,17 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
-class AdminUserMapCard extends StatefulWidget {
+class AdminUserMapCard extends ConsumerStatefulWidget {
   const AdminUserMapCard();
   @override
-  State<AdminUserMapCard> createState() => AdminUserMapCardState();
+  ConsumerState<AdminUserMapCard> createState() => AdminUserMapCardState();
 }
 
-class AdminUserMapCardState extends State<AdminUserMapCard> {
+class AdminUserMapCardState extends ConsumerState<AdminUserMapCard> {
   final MapController _mapCtrl = MapController();
   final Map<String, GeoInfo?> _ipCache = {};
   List<Map<String, dynamic>> _users = [];
@@ -169,7 +169,7 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
       _error = null;
     });
     try {
-      final admin = context.read<AdminProvider>();
+      final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       await admin.fetchHiddenUids();
       final detail = await admin.fetchStatsDetail();
       final list =
@@ -490,7 +490,7 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final withPos = _users
         .where((u) => (u['lat'] as num?) != null && (u['lon'] as num?) != null)
         .length;
@@ -899,7 +899,7 @@ class _LegendExplanations extends StatelessWidget {
 /// (controller tak boleh dipakai dua FlutterMap sekaligus) — di-center pada
 /// posisi peta inline saat dibuka supaya transisi terasa mulus. Data user
 /// dioper sebagai snapshot; sumber tetap kartu (realtime berjalan di sana).
-class _FullscreenMapPage extends StatefulWidget {
+class _FullscreenMapPage extends ConsumerStatefulWidget {
   const _FullscreenMapPage({
     required this.users,
     required this.resolving,
@@ -921,17 +921,17 @@ class _FullscreenMapPage extends StatefulWidget {
   final void Function(Map<String, dynamic>, Color, S) detailBuilder;
 
   @override
-  State<_FullscreenMapPage> createState() => _FullscreenMapPageState();
+  ConsumerState<_FullscreenMapPage> createState() => _FullscreenMapPageState();
 }
 
-class _FullscreenMapPageState extends State<_FullscreenMapPage> {
+class _FullscreenMapPageState extends ConsumerState<_FullscreenMapPage> {
   final MapController _fsCtrl = MapController();
   // Batas marker sama dengan kartu — cegah beban render berlebih.
   static const _maxMarkers = 300;
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final markers = widget.users
         .take(_maxMarkers)
         .map((u) => widget.markerBuilder(u, s))

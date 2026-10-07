@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../config/strings_docs.dart' show SDocsX;
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
-import '../../../providers/locale_provider.dart';
-import '../../../providers/theme_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
+import '../../../providers/riverpod/theme_provider.dart';
 import '../../admin_panel/widgets/panel_card.dart';
+import '../../../config/strings_docs.dart' show SDocsX;
 
 /// Daftar dokumentasi PENGGUNA — semua fitur ChatYuk dengan bahasa sederhana.
-class UserDocsList extends StatelessWidget {
+class UserDocsList extends ConsumerWidget {
   final String query;
   const UserDocsList({super.key, required this.query});
 
   @override
-  Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     final sections = <_DocSection>[
       _DocSection(s.docsUserAuthTitle, s.docsUserAuthBody, Icons.login, Colors.green),
       _DocSection(s.docsUserOnboardTitle, s.docsUserOnboardBody, Icons.flag_outlined, Colors.lightGreen),

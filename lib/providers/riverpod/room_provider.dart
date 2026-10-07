@@ -43,6 +43,36 @@ class RoomState {
     this.exploreLoading = false,
   });
 
+  @override
+  bool operator ==(Object other) =>
+      other is RoomState &&
+      other.country == country &&
+      other.error == error &&
+      other.hasLoaded == hasLoaded &&
+      other.myGroupsLoading == myGroupsLoading &&
+      other.exploreCategory == exploreCategory &&
+      other.exploreLoading == exploreLoading &&
+      listEquals(other.rooms, rooms) &&
+      listEquals(other.privateRooms, privateRooms) &&
+      listEquals(other.myGroups, myGroups) &&
+      listEquals(other.explore, explore) &&
+      setEquals(other.memberRoomIds, memberRoomIds);
+
+  @override
+  int get hashCode => Object.hash(
+        country,
+        error,
+        hasLoaded,
+        myGroupsLoading,
+        exploreCategory,
+        exploreLoading,
+        Object.hashAll(rooms),
+        Object.hashAll(privateRooms),
+        Object.hashAll(myGroups),
+        Object.hashAll(explore),
+        Object.hashAllUnordered(memberRoomIds),
+      );
+
   List<RoomModel> get exploreRooms {
     final list = exploreCategory == 'rame'
         ? explore.where((r) => r.onlineCount > 0).toList()

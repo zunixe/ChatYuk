@@ -96,7 +96,7 @@ abstract class AdminBase extends ChangeNotifier {
   // jank tak stabil saat buka tab berat (Perangkat/Terhapus/Chat).
   //
   // Tiap domain menaikkan counter-nya sendiri SEBELUM notifyListeners().
-  // Tab memakai `context.select<AdminProvider, int>((p) => p.revXxx)` sehingga
+  // Tab memakai `ref.watch(adminProvider.select((p) => p.revXxx))` sehingga
   // HANYA rebuild saat domain-nya berubah — bukan saat domain lain berubah.
   int _revStats = 0;
   int _revDevices = 0;

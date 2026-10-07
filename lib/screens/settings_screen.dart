@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../core/admin_gate.dart';
@@ -10,8 +9,8 @@ import '../core/cache/post_photo_cache.dart';
 import '../core/media/image_cache_hygiene.dart';
 import '../core/photo_quality_pref.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import 'account_screen.dart';
 import 'notification_settings_screen.dart';
 import 'privacy_settings_screen.dart';
@@ -26,7 +25,7 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // PERF (§26b): dulu `watch` penuh → SELURUH halaman
     // Settings rebuild tiap notify (avatar/location/heartbeat).
     final authSnap = ref.watch(
@@ -39,7 +38,7 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ),
     );
-    final locale = context.watch<LocaleProvider>();
+    final locale = ref.watch(localeProvider);
     final isAnon = authSnap.isAnon;
     final dummyActive = authSnap.dummyActive;
 
@@ -119,8 +118,7 @@ class SettingsScreen extends ConsumerWidget {
                   desc: locale.isId ? '🇮🇩 Indonesia' : '🇬🇧 English',
                   trailing: Switch(
                     value: locale.isId,
-                    onChanged: (v) => context
-                        .read<LocaleProvider>()
+                    onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(localeProvider.notifier)
                         .setLang(v ? 'id' : 'en'),
                     activeThumbColor: AppTheme.primary,
                   ),
@@ -133,9 +131,9 @@ class SettingsScreen extends ConsumerWidget {
                   title: s.labelTheme,
                   desc: s.descTheme,
                   trailing: Switch(
-                    value: context.watch<ThemeProvider>().isDark,
+                    value: ref.watch(themeProvider.select((t) => t.isDark)),
                     onChanged: (v) =>
-                        context.read<ThemeProvider>().setDark(v),
+                        ref.read(themeProvider.notifier).setDark(v),
                     activeThumbColor: AppTheme.primary,
                   ),
                 ),
@@ -163,14 +161,14 @@ class SettingsScreen extends ConsumerWidget {
 
 /// Tile default kualitas foto kiriman (Standard/HD).
 /// Mempengaruhi nilai awal toggle HD di preview composer.
-class _PhotoQualityTile extends StatefulWidget {
+class _PhotoQualityTile extends ConsumerStatefulWidget {
   const _PhotoQualityTile();
 
   @override
-  State<_PhotoQualityTile> createState() => _PhotoQualityTileState();
+  ConsumerState<_PhotoQualityTile> createState() => _PhotoQualityTileState();
 }
 
-class _PhotoQualityTileState extends State<_PhotoQualityTile> {
+class _PhotoQualityTileState extends ConsumerState<_PhotoQualityTile> {
   bool _hd = false;
   bool _loaded = false;
 
@@ -189,7 +187,7 @@ class _PhotoQualityTileState extends State<_PhotoQualityTile> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return SettingsMenuTile(
       icon: Icons.hd_outlined,
       iconColor: AppTheme.accent,
@@ -215,19 +213,19 @@ class _PhotoQualityTileState extends State<_PhotoQualityTile> {
 /// Ini pelengkap dari auto-trim reaktif (memory pressure & background):
 /// user bisa memaksa app ringan kapan saja, mis. saat terasa mulai ngelag.
 /// Konfirmasi dulu karena ada efek "foto dimuat ulang" sesaat.
-class _ClearCacheTile extends StatefulWidget {
+class _ClearCacheTile extends ConsumerStatefulWidget {
   const _ClearCacheTile();
 
   @override
-  State<_ClearCacheTile> createState() => _ClearCacheTileState();
+  ConsumerState<_ClearCacheTile> createState() => _ClearCacheTileState();
 }
 
-class _ClearCacheTileState extends State<_ClearCacheTile> {
+class _ClearCacheTileState extends ConsumerState<_ClearCacheTile> {
   bool _busy = false;
 
   Future<void> _confirmAndClear() async {
     if (_busy) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -279,7 +277,7 @@ class _ClearCacheTileState extends State<_ClearCacheTile> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return SettingsMenuTile(
       icon: Icons.cleaning_services_outlined,
       iconColor: AppTheme.accent,

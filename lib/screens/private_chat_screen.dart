@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import '../providers/riverpod/message_reaction_provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/message_model.dart';
@@ -15,12 +13,14 @@ import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/location_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import 'story_camera_capture_screen.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../core/cache/message_cache.dart';
+import '../core/cache/photo_cache.dart';
+import '../core/cache/post_photo_cache.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/chat/read_receipt.dart';
 import '../core/chat/pending_confirm.dart';
@@ -36,7 +36,7 @@ import '../widgets/chat_ui_shared.dart';
 import '../main.dart';
 import 'call_screen.dart';
 import 'user_info_screen.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../core/call/call_permissions.dart';
@@ -50,6 +50,7 @@ import '../widgets/chat_info_snack.dart';
 import '../widgets/location_picker_sheet.dart';
 import '../mixins/chat_outbox_mixin.dart';
 import '../core/perf/perf_probe.dart';
+import '../providers/riverpod/message_reaction_provider.dart';
 
 /// Warna latar Scaffold private chat — WAJIB opaque (bukan transparent).
 ///
@@ -401,7 +402,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       );
     } catch (_) {
       if (!mounted) return;
-      showChatSnack(context, context.read<LocaleProvider>().s.errSendFailed);
+      showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errSendFailed);
       return;
     }
     if (mounted) {
@@ -455,7 +456,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   MessageModel? get photoReplyingTo => sendReplyingTo;
   @override
   void photoClearComposerText() {
-    sendMsgCtrl.clear();
+    sendClearComposer();
     if (mounted) setState(() => sendReplyingTo = null);
   }
 
@@ -584,7 +585,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   Future<bool> sendPreCheck() async {
     if (ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid)) {
       if (mounted) {
-        final s = context.read<LocaleProvider>().s;
+        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
         showChatSnack(context, s.msgBlocked);
       }
       return false;
@@ -829,10 +830,26 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     // Stream realtime + fallback async menimpa sesudahnya.
     _primeStarredFromCache();
     // (listener call via ref.listen di build — lihat bawah).
-    // Buka keyboard → tutup baris menu attach (mirip WhatsApp)
+    // Buka keyboard → tutup baris menu attach (mirip WhatsApp).
+    // + PENTING (HP memori ketat): saat user mulai mengetik, buang bitmap
+    //   foto/video full-res dari RAM cache (bukan yang tampil di list) supaya
+    //   working-set ngetik kecil → halaman tak ter-swap → tak ada "freeze lalu
+    //   kedelte semua" saat page ter-swap di-fault balik. Pesan/list tetap
+    //   (MessageCache tak disentuh) → buka chat tetap instan.
     _inputFocus.addListener(() {
-      if (_inputFocus.hasFocus && _showAttachRow) {
-        setState(() => _showAttachRow = false);
+      if (_inputFocus.hasFocus) {
+        if (_showAttachRow) setState(() => _showAttachRow = false);
+        try {
+          PhotoCache.instance.trimMemCache();
+        } catch (_) {}
+        try {
+          PostPhotoCache.instance.trimMemCache();
+        } catch (_) {}
+        // Buang bytes foto (bukan thumb yang tampil) dari RAM saat mulai
+        // mengetik → working-set kecil → halaman tak ter-swap → anti freeze.
+        try {
+          decodedImageCache.clear();
+        } catch (_) {}
       }
     });
     // Anti-screenshot dikontrol setting admin global (ScreenSecureService).
@@ -1671,7 +1688,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
         );
         return;
       }
-      if (mounted) showChatSnack(context, context.read<LocaleProvider>().s.errVoiceUploadFailed);
+      if (mounted) showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errVoiceUploadFailed);
       return;
     }
     // Optimistic: tampilkan bubble voice langsung
@@ -1704,7 +1721,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
         );
       } else if (mounted) {
         setState(() => _pending.remove(optimistic));
-        showChatSnack(context, context.read<LocaleProvider>().s.errSendFailed);
+        showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errSendFailed);
       }
     }
   }
@@ -1723,7 +1740,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   }
 
   Future<void> _showSendCoinDialog() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
 
@@ -1748,7 +1765,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
 
   Future<void> _sendCoins(int amount) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
@@ -1773,7 +1790,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   }
 
   Future<void> _sendGift(String giftId, String name, int coins) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
@@ -1798,7 +1815,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   }
 
   Future<void> _showGiftPicker() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
 
@@ -1829,7 +1846,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   /// AppBar mode search (ala WhatsApp): tombol kembali + field cari +
   /// penghitung hasil + panah atas/bawah.
   AppBar _buildSearchAppBar() {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final total = _matchIds.length;
     final label = total == 0 ? '0/0' : '${_matchIndex + 1}/$total';
     return AppBar(
@@ -1885,7 +1902,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('PrivateChat');
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     // Koneksi pulih → flush outbox. `ref.listen` WAJIB di build (bukan
     // initState) — Riverpod mengelolanya (aman saat dispose).
     ref.listen<bool>(connectivityProvider, (prev, next) {
@@ -1914,7 +1931,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     final isBlocked = ref.watch(
       chatRiverpod.chatProvider.select((c) => c.isBlocked(widget.otherUid)),
     );
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     dlog('[CHAT-BUILD] callAllEnabled=$callAllEnabled '
         'meRegistered=$meRegistered '
         'otherRegistered=$_otherRegistered/${widget.otherRegistered}');
@@ -2243,13 +2260,15 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
               }
             },
             itemBuilder: (_) {
-              ref.watch(socialProvider);
-              final social = ref.read(socialProvider.notifier);
-              final following = social.isFollowing(widget.otherUid);
+              final (:following, :friendLocked) = ref.watch(
+                socialProvider.select((s) => (
+                  following: s.isFollowing(widget.otherUid),
+                  friendLocked: s.isFriend(widget.otherUid) ||
+                      s.isPendingFriendRequest(widget.otherUid),
+                )),
+              );
               // Sudah teman / permintaan terkirim → sembunyikan "Tambah Teman"
               // (putus teman / batalkan dilakukan di profil, daftar chat, dll).
-              final friendLocked = social.isFriend(widget.otherUid) ||
-                  social.isPendingFriendRequest(widget.otherUid);
               return <PopupMenuEntry<String>>[
                 PopupMenuItem(
                   value: 'search',
@@ -2465,6 +2484,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                           final day0 = DateTime(now0.year, now0.month, now0.day);
                           final (items, deletedIds) =
                               _deriveItems(s, msgs, all, day: day0);
+                          PerfProbe.buildCount('ChatList');
                           // Search chat: cocokkan sekali per emission juga
                           // (bukan per bubble). Urutan terbaru-dulu untuk
                           // navigasi ala WhatsApp.
@@ -2875,7 +2895,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     String callType,
     CallMode mode,
   ) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).inCall) {
       showChatSnack(ctx, s.msgCallInProgress);
       return;
@@ -2889,7 +2909,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     final registeredCaller =
         (profile?.isRegistered ?? false) && !auth.dummySessionActive;
     if (!registeredCaller && !auth.callAnonEnabled) {
-      final ls = context.read<LocaleProvider>().s;
+      final ls = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       showAnonPromptDialog(
         context,
         title: ls.promptCompleteEmailCallTitle,

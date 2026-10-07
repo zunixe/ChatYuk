@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -29,6 +30,24 @@ class SocialState {
     this.pendingFriendRequests = const {},
     this.friendRequestCount = 0,
   });
+
+  @override
+  bool operator ==(Object other) =>
+      other is SocialState &&
+      other.friendRequestCount == friendRequestCount &&
+      setEquals(other.following, following) &&
+      setEquals(other.friends, friends) &&
+      setEquals(other.subscribed, subscribed) &&
+      setEquals(other.pendingFriendRequests, pendingFriendRequests);
+
+  @override
+  int get hashCode => Object.hash(
+        friendRequestCount,
+        Object.hashAllUnordered(following),
+        Object.hashAllUnordered(friends),
+        Object.hashAllUnordered(subscribed),
+        Object.hashAllUnordered(pendingFriendRequests),
+      );
 }
 
 /// Provider sosial (Riverpod) — following/friends/subscribed/pending + aksi.
@@ -233,6 +252,9 @@ class SocialNotifier extends Notifier<SocialState> {
   bool isSubscribed(String other) => _subscribed.contains(other);
   Set<String> get friends => Set.unmodifiable(_friends);
   Set<String> get following => Set.unmodifiable(_following);
+  Set<String> get subscribed => Set.unmodifiable(_subscribed);
+  Set<String> get pendingFriendRequests =>
+      Set.unmodifiable(_pendingFriendRequests);
   int get friendRequestCount => _friendRequestCount;
   Future<Map<String, dynamic>> mySocialStatus(String otherUid,
           {bool force = false}) =>

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
 import '../../../providers/riverpod/auth_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../widgets/toggle_tile.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Kartu pembungkus standar untuk baris pengaturan admin.
 class SettingCard extends ConsumerWidget {
@@ -40,7 +39,7 @@ class InfoCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -72,14 +71,14 @@ class ScreenshotToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = ref.watch(authProvider);
+    final s = ref.watch(localeProvider).s;
+    final value = ref.watch(authProvider.select((a) => a.screenshotEnabled));
     return ToggleTile(
       icon: Icons.screenshot_monitor,
       color: AppTheme.online,
       title: s.labelScreenshotAllow,
       desc: s.descScreenshotAdmin,
-      value: auth.screenshotEnabled,
+      value: value,
       onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setScreenshotEnabled(v),
     );
   }
@@ -90,14 +89,14 @@ class WatermarkToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = ref.watch(authProvider);
+    final s = ref.watch(localeProvider).s;
+    final value = ref.watch(authProvider.select((a) => a.watermarkEnabled));
     return ToggleTile(
       icon: Icons.fingerprint,
       color: AppTheme.primary,
       title: s.labelWatermarkAdmin,
       desc: s.descWatermarkAdmin,
-      value: auth.watermarkEnabled,
+      value: value,
       onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setWatermarkEnabled(v),
     );
   }
@@ -108,14 +107,14 @@ class InvisibleToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = ref.watch(authProvider);
+    final s = ref.watch(localeProvider).s;
+    final value = ref.watch(authProvider.select((a) => a.invisibleEnabled));
     return ToggleTile(
       icon: Icons.visibility_off_outlined,
       color: AppTheme.accent,
       title: s.labelInvisibleAdmin,
       desc: s.descInvisibleAdmin,
-      value: auth.invisibleEnabled,
+      value: value,
       onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setInvisibleEnabled(v),
     );
   }
@@ -126,14 +125,16 @@ class CallToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = ref.watch(authProvider);
+    final s = ref.watch(localeProvider).s;
+    final enabled = ref.watch(
+      authProvider.select((a) => a.callAllEnabled && a.callAnonEnabled),
+    );
     return ToggleTile(
       icon: Icons.phone_in_talk_rounded,
       color: Colors.green,
       title: s.adminCallTitle,
       desc: s.adminCallDesc,
-      value: auth.callAllEnabled && auth.callAnonEnabled,
+      value: enabled,
       onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setCallEnabled(v),
     );
   }
@@ -144,14 +145,14 @@ class RequireRegistrationToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = ref.watch(authProvider);
+    final s = ref.watch(localeProvider).s;
+    final value = ref.watch(authProvider.select((a) => a.requireRegistration));
     return ToggleTile(
       icon: Icons.how_to_reg_outlined,
       color: Colors.deepPurple,
       title: s.labelRequireRegistration,
       desc: s.descRequireRegistration,
-      value: auth.requireRegistration,
+      value: value,
       onChanged: (v) =>
           ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setRequireRegistration(v),
     );
@@ -166,14 +167,14 @@ class ReengageToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = ref.watch(authProvider);
+    final s = ref.watch(localeProvider).s;
+    final value = ref.watch(authProvider.select((a) => a.reengageEnabled));
     return ToggleTile(
       icon: Icons.notifications_active_outlined,
       color: Colors.deepOrange,
       title: s.labelReengageNotif,
       desc: s.descReengageNotif,
-      value: auth.reengageEnabled,
+      value: value,
       onChanged: (v) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).setReengageEnabled(v),
     );
   }
@@ -187,7 +188,7 @@ class ClearAdminCacheTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return SettingCard(
       child: ListTile(
         contentPadding: EdgeInsets.symmetric(horizontal: 4),
@@ -211,7 +212,7 @@ class ClearAdminCacheTile extends ConsumerWidget {
         ),
         onTap: () async {
           final messenger = ScaffoldMessenger.of(context);
-          final admin = context.read<AdminProvider>();
+          final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
           final ok = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(

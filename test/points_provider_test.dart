@@ -1,11 +1,12 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:chatyuk/providers/points_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/services/points_service.dart';
 
 import 'test_helper.dart';
@@ -14,7 +15,8 @@ class MockPointsService extends Mock implements PointsService {}
 
 void main() {
   late MockPointsService service;
-  late PointsProvider provider;
+  late ProviderContainer container;
+  late PointsNotifier provider;
 
   setUpAll(() async {
     await initSupabaseForTest();
@@ -33,11 +35,13 @@ void main() {
         .thenAnswer((_) async => <String, dynamic>{});
     when(() => service.featureFlags())
         .thenAnswer((_) async => <String, dynamic>{});
-    provider = PointsProvider(service: service);
-  });
-
-  tearDown(() {
-    provider.dispose();
+    container = ProviderContainer(
+      overrides: [
+        pointsProvider.overrideWith(() => PointsNotifier(service: service)),
+      ],
+    );
+    addTearDown(container.dispose);
+    provider = container.read(pointsProvider.notifier);
   });
 
   group('milestone online', () {
@@ -115,7 +119,7 @@ void main() {
 
     test('refreshWallet notify listener', () async {
       var notified = 0;
-      provider.addListener(() => notified++);
+      container.listen(pointsProvider, (_, __) => notified++);
       await provider.refreshWallet();
       expect(notified, 1);
     });
@@ -128,12 +132,15 @@ void main() {
     test('event stream poin memperbarui saldo + notify', () async {
       final ctrl = StreamController<int>.broadcast();
       when(() => service.watchOwnPoints()).thenAnswer((_) => ctrl.stream);
-      final p = PointsProvider(service: service);
-      addTearDown(p.dispose);
+      final c = ProviderContainer(overrides: [
+        pointsProvider.overrideWith(() => PointsNotifier(service: service)),
+      ]);
+      final p = c.read(pointsProvider.notifier);
+      addTearDown(c.dispose);
       await Future<void>.delayed(const Duration(milliseconds: 150));
 
       var notified = 0;
-      p.addListener(() => notified++);
+      c.listen(pointsProvider, (_, __) => notified++);
       ctrl.add(120);
       await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(p.points, 120);
@@ -151,7 +158,10 @@ void main() {
       when(() => service.watchOwnPoints()).thenAnswer((_) => ctrl.stream);
 
       fakeAsync((async) {
-        final p = PointsProvider(service: service);
+        final c = ProviderContainer(overrides: [
+          pointsProvider.overrideWith(() => PointsNotifier(service: service)),
+        ]);
+        final p = c.read(pointsProvider.notifier);
         async.flushMicrotasks();
         async.elapse(const Duration(seconds: 1));
         final base = walletCalls;
@@ -175,7 +185,7 @@ void main() {
         expect(p.bonusBalance, 1);
         expect(p.earnedBalance, 2);
         expect(p.points, 100, reason: 'total ikut rincian wallet terbaru');
-        p.dispose();
+        c.dispose();
       });
       ctrl.close();
     });
@@ -190,7 +200,10 @@ void main() {
       when(() => service.watchOwnPoints()).thenAnswer((_) => ctrl.stream);
 
       fakeAsync((async) {
-        final p = PointsProvider(service: service);
+        final c = ProviderContainer(overrides: [
+          pointsProvider.overrideWith(() => PointsNotifier(service: service)),
+        ]);
+        final p = c.read(pointsProvider.notifier);
         async.flushMicrotasks();
         async.elapse(const Duration(seconds: 1));
         final base = walletCalls;
@@ -204,7 +217,7 @@ void main() {
           base,
           reason: 'nilai sama → tak perlu tarik bucket',
         );
-        p.dispose();
+        c.dispose();
       });
       ctrl.close();
     });
@@ -213,7 +226,7 @@ void main() {
   group('syncFromProfile', () {
     test('nilai beda → notify; sama → no-op', () {
       var notified = 0;
-      provider.addListener(() => notified++);
+      container.listen(pointsProvider, (_, __) => notified++);
 
       provider.syncFromProfile(75);
       expect(provider.points, 75);
@@ -380,7 +393,7 @@ void main() {
     test('deduct berhasil mengembalikan saldo baru dan notify', () async {
       when(() => service.deductChatPoint('text')).thenAnswer((_) async => 49);
       var notified = 0;
-      provider.addListener(() => notified++);
+      container.listen(pointsProvider, (_, __) => notified++);
 
       final result = await provider.deductBeforeSend('text');
 
@@ -451,8 +464,11 @@ void main() {
       // Kontrak a5f2e19/deduct: `_enabled` mentah default true supaya tidak
       // ada jendela gratis sebelum fetchEnabled selesai. Server mengembalikan
       // saldo tanpa potong saat OFF, jadi aman.
-      final fresh = PointsProvider(service: service);
-      addTearDown(fresh.dispose);
+      final freshC = ProviderContainer(overrides: [
+        pointsProvider.overrideWith(() => PointsNotifier(service: service)),
+      ]);
+      final fresh = freshC.read(pointsProvider.notifier);
+      addTearDown(freshC.dispose);
       when(() => service.deductChatPoint('text')).thenAnswer((_) async => 49);
 
       expect(await fresh.deductBeforeSend('text'), 49);
@@ -470,7 +486,7 @@ void main() {
             'multiplier': 5,
           });
       var notified = 0;
-      provider.addListener(() => notified++);
+      container.listen(pointsProvider, (_, __) => notified++);
 
       await provider.refreshRoomPricing();
 

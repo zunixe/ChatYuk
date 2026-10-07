@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../core/nav_guard.dart';
 import '../main.dart';
 import '../providers/riverpod/call_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../screens/private_chat_screen.dart';
 import '../screens/call_screen.dart';
 import '../services/call_service.dart';
@@ -120,7 +119,7 @@ class _CallBannerState extends ConsumerState<CallBanner> {
   @override
   Widget build(BuildContext context) {
     final prov = ref.watch(callProvider);
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final sess = prov.activeSession;
     final mode = prov.activeMode;
     final chatId = prov.activeChatId;

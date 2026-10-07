@@ -1,7 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:chatyuk/providers/chat_provider.dart';
+import 'package:chatyuk/providers/riverpod/chat_provider.dart';
 import 'package:chatyuk/services/chat_service.dart'
     show ChatService, PrivateChatInfo;
 import 'package:chatyuk/utils/mention.dart';
@@ -23,11 +24,18 @@ PrivateChatInfo _chat(
 
 void main() {
   late MockChatService service;
-  late ChatProvider provider;
+  late ProviderContainer container;
+  late ChatNotifier provider;
 
   setUp(() {
     service = MockChatService();
-    provider = ChatProvider(service: service);
+    container = ProviderContainer(
+      overrides: [
+        chatProvider.overrideWith(() => ChatNotifier(service: service)),
+      ],
+    );
+    addTearDown(container.dispose);
+    provider = container.read(chatProvider.notifier);
   });
 
   group('delegasi pin/mute/archive', () {

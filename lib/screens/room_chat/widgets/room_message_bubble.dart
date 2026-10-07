@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../../../config/gifts.dart';
 import '../../../utils.dart';
 import '../../../config/theme.dart';
 import '../../../models/message_model.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../core/media/link_preview_service.dart';
 import '../../../core/chat/chat_location.dart';
 import '../../../widgets/location_bubble.dart';
@@ -224,7 +224,7 @@ class RoomMessageBubble extends StatelessWidget {
                     Text(
                       gift == null
                           ? msg.text
-                          : (context.read<LocaleProvider>().s.isId
+                          : (ProviderScope.containerOf(context, listen: false).read(localeProvider).s.isId
                               ? gift.nameId
                               : gift.nameEn),
                       style: AppText.chatName.copyWith(color: _textColor),
@@ -276,7 +276,7 @@ class RoomMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (msg.isDeleted) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),

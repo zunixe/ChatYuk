@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/strings.dart';
-import 'package:chatyuk/providers/chat_provider.dart';
+import 'package:chatyuk/providers/riverpod/chat_provider.dart';
 import 'package:chatyuk/services/chat_service.dart' show ChatService;
 
 // Alur kritis 1: daftar chat → aksi pin → service terpanggil 1×.
@@ -22,20 +22,24 @@ void main() {
     when(
       () => service.pinPrivateChat(any(), any(), myUidParam: any(named: 'myUidParam')),
     ).thenAnswer((_) async {});
-    final provider = ChatProvider(service: service);
+
+    final container = ProviderContainer(
+      overrides: [
+        chatProvider.overrideWith(() => ChatNotifier(service: service)),
+      ],
+    );
+    addTearDown(container.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: ChangeNotifierProvider<ChatProvider>.value(
-          value: provider,
-          child: Scaffold(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
             body: Builder(
               builder: (context) => FilledButton(
-                onPressed: () => context.read<ChatProvider>().pinChat(
-                  'c1',
-                  true,
-                  myUid: 'u1',
-                ),
+                onPressed: () => ProviderScope.containerOf(context, listen: false)
+                    .read(chatProvider.notifier)
+                    .pinChat('c1', true, myUid: 'u1'),
                 child: Text(s.btnSave),
               ),
             ),
@@ -49,6 +53,5 @@ void main() {
     verify(
       () => service.pinPrivateChat('c1', true, myUidParam: 'u1'),
     ).called(1);
-    provider.dispose();
   });
 }

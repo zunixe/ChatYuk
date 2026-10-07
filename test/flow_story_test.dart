@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:provider/provider.dart';
 
 import 'package:chatyuk/config/strings.dart';
-import 'package:chatyuk/providers/story_provider.dart';
+import 'package:chatyuk/providers/riverpod/story_provider.dart';
 import 'package:chatyuk/services/story_service.dart';
 
 import 'test_helper.dart';
@@ -21,7 +21,7 @@ void main() {
 
   setUpAll(() async {
     await initSupabaseForTest();
-    // Prewarm cache media: `StoryProvider.refresh()` membaca cache disk dulu
+    // Prewarm cache media: `StoryNotifier.refresh()` membaca cache disk dulu
     // (MessageCache/MediaDiskCache) sebelum `fetchTrayRaw()` — tanpa prewarm,
     // `waitReady()` menjadwalkan timer pending & refresh tidak pernah selesai.
     await prewarmMediaForTest();
@@ -45,20 +45,25 @@ void main() {
         },
       ],
     );
-    final provider = StoryProvider(service: service);
+    final container = ProviderContainer(
+      overrides: [
+        storyProvider.overrideWith(() => StoryNotifier(service: service)),
+      ],
+    );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: ChangeNotifierProvider<StoryProvider>.value(
-          value: provider,
-          child: Scaffold(
-            body: Builder(
-              builder: (context) {
-                final tray = context.watch<StoryProvider>().tray;
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) {
+                final tray = ref.watch(storyProvider).tray;
                 return Column(
                   children: [
                     FilledButton(
-                      onPressed: () => context.read<StoryProvider>().refresh(),
+                      onPressed: () =>
+                          ref.read(storyProvider.notifier).refresh(),
                       child: Text(s.btnSave),
                     ),
                     Text('count:${tray.length}'),
@@ -79,7 +84,7 @@ void main() {
     });
     await tester.pump();
     expect(find.text('count:1'), findsOneWidget);
-    provider.dispose();
+    container.dispose();
     await stories.close();
     await views.close();
   });

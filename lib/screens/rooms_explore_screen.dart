@@ -1,20 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
-import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/room_model.dart';
 import '../core/nav_guard.dart';
 import '../core/perf/perf_probe.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/room_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import 'room_chat_screen.dart';
 import 'rooms_explore/widgets/category_chips.dart';
 import 'rooms_explore/widgets/create_room_sheet.dart';
 import 'rooms_explore/widgets/room_explore_card.dart';
+import '../config/strings.dart';
 
 /// Explore room ala gambar: chip kategori (Rame = agregat online > 0) +
 /// satu list global + grup + FAB Buat Room (gratis).
@@ -69,8 +68,8 @@ class _RoomsExploreScreenState extends ConsumerState<RoomsExploreScreen> {
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('RoomsExplore');
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     // PERF: `exploreRooms` mengembalikan list BARU tiap akses (`.where()
     // .toList()` + sort) → TIDAK boleh di-select langsung (identity selalu
     // beda = rebuild tiap notify). `select` signature `exploreSig` (murni,

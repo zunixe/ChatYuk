@@ -1,16 +1,16 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../core/admin_gate.dart';
 import '../../../config/supabase_config.dart';
 import '../../../utils.dart';
 import 'section_card.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
 /// Sesi HP harus akun admin asli (bukan sesi dummy hasil swap "masuk dummy")
 /// — kalau tidak, semua RPC admin melempar 'Unauthorized' (P0001).
@@ -131,15 +131,15 @@ Future<void> showDummyAiSheet(
 /// Sheet Mode AI dummy: switch aktif + persona opsional (kepribadian,
 /// gaya bicara, prompt tambahan). Nama/umur/kota/hobi otomatis dari
 /// profil dummy — tidak diisi manual.
-class DummyAiSheet extends StatefulWidget {
+class DummyAiSheet extends ConsumerStatefulWidget {
   final Map<String, dynamic> item;
   const DummyAiSheet({super.key, required this.item});
 
   @override
-  State<DummyAiSheet> createState() => _DummyAiSheetState();
+  ConsumerState<DummyAiSheet> createState() => _DummyAiSheetState();
 }
 
-class _DummyAiSheetState extends State<DummyAiSheet> {
+class _DummyAiSheetState extends ConsumerState<DummyAiSheet> {
   late bool _enabled;
   int _guardSel = 0; // 0 = ikuti global, 1 = ON, 2 = OFF
   bool _noRate = false;
@@ -191,7 +191,7 @@ class _DummyAiSheetState extends State<DummyAiSheet> {
   /// menampilkan angka default yang berlaku saat kolom dikosongkan.
   Future<void> _loadGlobalRate() async {
     try {
-      final res = await context.read<AdminProvider>().getAiSettings();
+      final res = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getAiSettings();
       if (!mounted) return;
       setState(() {
         _globalMax = (res['ai_max_replies_per_hour'] as num?)?.toInt();
@@ -207,7 +207,7 @@ class _DummyAiSheetState extends State<DummyAiSheet> {
   String _rateHint() {
     final m = _globalMax;
     final j = _globalMin;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (m != null && j != null) return s.dummyRateGlobalHintVals(m, j);
     return s.dummyRateGlobalHint;
   }
@@ -256,7 +256,7 @@ class _DummyAiSheetState extends State<DummyAiSheet> {
   /// Persona selalu dikirim dari kolom teks supaya tidak ter-wipe oleh RPC
   /// (server menimpa ai_persona dengan p_persona apa pun isinya).
   Future<void> _applyAi({bool showResult = false}) async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (!_isAdminSession()) {
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
@@ -270,7 +270,7 @@ class _DummyAiSheetState extends State<DummyAiSheet> {
     _applying = true;
     if (showResult) setState(() => _busy = true);
     try {
-      final svc = context.read<AdminProvider>();
+      final svc = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       final guardValue = _guardSel == 0 ? null : _guardSel == 1;
       await svc.setDummyAi(
         widget.item['uid'] as String,
@@ -319,7 +319,7 @@ class _DummyAiSheetState extends State<DummyAiSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     final nickname = widget.item['nickname'] as String? ?? '';
     // + padding.bottom = navbar Android (gesture/3-button) supaya tombol
     // Simpan tidak tertutup menu sistem.
@@ -733,7 +733,7 @@ class _DummyAiSheetState extends State<DummyAiSheet> {
   }
 
   Future<void> _autoSchedule() async {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (!_isAdminSession()) {
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
@@ -742,7 +742,7 @@ class _DummyAiSheetState extends State<DummyAiSheet> {
     }
     setState(() => _schedBusy = true);
     try {
-      final svc = context.read<AdminProvider>();
+      final svc = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       final hours = await svc.autoScheduleAi(widget.item['uid'] as String);
       if (!mounted) return;
       setState(() {

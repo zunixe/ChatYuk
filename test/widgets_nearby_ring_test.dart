@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
-import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/screens/nearby/widgets/nearby_card.dart';
 
 import 'test_helper.dart';
@@ -42,15 +41,9 @@ void main() {
 
   Future<void> pumpCard(WidgetTester tester, Map<String, dynamic> d) async {
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LocaleProvider>(
-              create: (_) => LocaleProvider()),
-        ],
-        child: MaterialApp(
+       ProviderScope(child: MaterialApp(
           home: Scaffold(body: NearbyCard(data: d, onTap: () {})),
-        ),
-      ),
+        )),
     );
     await tester.pump();
   }

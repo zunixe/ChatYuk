@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart'
     hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:provider/provider.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
@@ -13,20 +11,21 @@ import '../models/room_model.dart';
 import '../core/nav_guard.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/room_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import 'room_chat_screen.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 /// Daftar private room milik/diikuti + buat room baru (QR join).
 /// Fitur fase 1 — hanya admin build (gate di titik navigasi).
-class PrivateRoomsScreen extends StatefulWidget {
+class PrivateRoomsScreen extends ConsumerStatefulWidget {
   const PrivateRoomsScreen({super.key});
 
   @override
-  State<PrivateRoomsScreen> createState() => _PrivateRoomsScreenState();
+  ConsumerState<PrivateRoomsScreen> createState() => _PrivateRoomsScreenState();
 }
 
-class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
+class _PrivateRoomsScreenState extends ConsumerState<PrivateRoomsScreen> {
   RoomNotifier get _prv => ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
   List<Map<String, dynamic>> _myRooms = [];
   bool _loading = true;
@@ -79,8 +78,8 @@ class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -249,15 +248,15 @@ class _RoomTile extends StatelessWidget {
 
 // ── Create room + QR share ──
 
-class CreatePrivateRoomScreen extends StatefulWidget {
+class CreatePrivateRoomScreen extends ConsumerStatefulWidget {
   const CreatePrivateRoomScreen({super.key});
 
   @override
-  State<CreatePrivateRoomScreen> createState() =>
+  ConsumerState<CreatePrivateRoomScreen> createState() =>
       _CreatePrivateRoomScreenState();
 }
 
-class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
+class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScreen> {
   final _nameCtrl = TextEditingController();
   String _icon = '🔒';
   bool _creating = false;
@@ -288,7 +287,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric)),
+          SnackBar(content: Text(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errGeneric)),
         );
       }
     } finally {
@@ -310,7 +309,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -449,14 +448,14 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
 
 // ── QR Scanner → request join → antrean approval ──
 
-class QrScanScreen extends StatefulWidget {
+class QrScanScreen extends ConsumerStatefulWidget {
   const QrScanScreen({super.key});
 
   @override
-  State<QrScanScreen> createState() => _QrScanScreenState();
+  ConsumerState<QrScanScreen> createState() => _QrScanScreenState();
 }
 
-class _QrScanScreenState extends State<QrScanScreen> {
+class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   MobileScannerController? _ctrl;
   bool _handled = false;
   String? _error;
@@ -497,7 +496,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
           await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).joinPrivateRoom(roomId);
       final pending = res['pending'] == true;
       if (!mounted) return;
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -532,7 +531,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
   @override
   Widget build(BuildContext context) {
     _ctrl ??= MobileScannerController();
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(

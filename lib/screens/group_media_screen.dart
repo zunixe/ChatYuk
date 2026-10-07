@@ -3,26 +3,25 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../widgets/post_photo_viewer.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Galeri media grup ala WA: grid foto dari pesan room + viewer.
 /// Dibuka dari menu ⋮ grup atau layar info grup.
-class GroupMediaScreen extends StatefulWidget {
+class GroupMediaScreen extends ConsumerStatefulWidget {
   final RoomModel room;
   const GroupMediaScreen({super.key, required this.room});
 
   @override
-  State<GroupMediaScreen> createState() => _GroupMediaScreenState();
+  ConsumerState<GroupMediaScreen> createState() => _GroupMediaScreenState();
 }
 
-class _GroupMediaScreenState extends State<GroupMediaScreen> {
+class _GroupMediaScreenState extends ConsumerState<GroupMediaScreen> {
   List<String> _paths = [];
   final Map<String, Uint8List?> _thumbs = {};
   bool _loading = true;
@@ -102,7 +101,7 @@ class _GroupMediaScreenState extends State<GroupMediaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(

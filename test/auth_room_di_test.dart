@@ -1,8 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:chatyuk/providers/auth_provider.dart';
-import 'package:chatyuk/providers/room_provider.dart';
+import 'package:chatyuk/providers/riverpod/auth_provider.dart';
+import 'package:chatyuk/providers/riverpod/room_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/room_service.dart';
 import 'package:chatyuk/services/chat_service.dart';
@@ -20,33 +21,45 @@ void main() {
     await initSupabaseForTest();
   });
 
-  group('AuthProvider DI', () {
+  group('AuthNotifier DI', () {
     test('injeksi service + skip autoInit aman', () async {
-      final auth = AuthProvider(
-        authService: MockAuthService(),
-        autoInit: false,
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith(
+            () => AuthNotifier(authService: MockAuthService(), autoInit: false),
+          ),
+        ],
       );
+      addTearDown(container.dispose);
+      final auth = container.read(authProvider.notifier);
       expect(auth.profile, isNull);
       expect(auth.loading, isTrue);
       expect(auth.isDeviceExcluded(null), isFalse);
       expect(auth.isDeviceExcluded(''), isFalse);
       expect(auth.isDeviceExcluded('unknown-id'), isFalse);
       await auth.setPendingReferrer('');
-      auth.dispose();
     });
 
     test('konstruktor default tetap ada (produksi)', () {
-      expect(AuthProvider.new, isNotNull);
+      expect(AuthNotifier.new, isNotNull);
     });
   });
 
-  group('RoomProvider DI', () {
+  group('RoomNotifier DI', () {
     test('injeksi service + skip autoInit aman', () async {
-      final rooms = RoomProvider(
-        service: MockRoomService(),
-        chatService: MockChatService(),
-        autoInit: false,
+      final container = ProviderContainer(
+        overrides: [
+          roomProvider.overrideWith(
+            () => RoomNotifier(
+              service: MockRoomService(),
+              chatService: MockChatService(),
+              autoInit: false,
+            ),
+          ),
+        ],
       );
+      addTearDown(container.dispose);
+      final rooms = container.read(roomProvider.notifier);
       expect(rooms.rooms, isEmpty);
       expect(rooms.privateRooms, isEmpty);
       expect(rooms.myGroups, isEmpty);
@@ -54,11 +67,10 @@ void main() {
       expect(rooms.hasLoaded, isFalse);
       // Tanpa user login -> uid null -> return dini, tanpa network.
       await rooms.loadMyGroups();
-      rooms.dispose();
     });
 
     test('konstruktor default tetap ada (produksi)', () {
-      expect(RoomProvider.new, isNotNull);
+      expect(RoomNotifier.new, isNotNull);
     });
   });
 }

@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
-import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../config/theme.dart';
@@ -16,7 +15,7 @@ import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/gender_avatar.dart';
 import '../providers/riverpod/storage_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/cache/message_cache.dart';
 import '../utils.dart';
@@ -24,9 +23,10 @@ import '../widgets/admin_call_watch_overlay.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
 import 'admin_chat/widgets/audio_listen_chip.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../config/strings_admin.dart';
 import 'user_info_screen.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Sisi kiri (lawan bicara) monitor chat — fungsi MURNI agar prioritas
 /// terkunci test (`test/admin_chat_leftuid_test.dart`). Harus STABIL
@@ -93,7 +93,7 @@ bool tryClaimChatPush(String chatId, {DateTime? now}) =>
 /// Lepas klaim [tryClaimChatPush] — dipanggil saat route chat di-pop.
 void releaseChatPush(String chatId) => releaseNav(navKeyChat(chatId));
 
-class AdminChatViewScreen extends StatefulWidget {
+class AdminChatViewScreen extends ConsumerStatefulWidget {
   final String chatId;
   final String chatLabel;
 
@@ -116,10 +116,10 @@ class AdminChatViewScreen extends StatefulWidget {
   });
 
   @override
-  State<AdminChatViewScreen> createState() => _AdminChatViewScreenState();
+  ConsumerState<AdminChatViewScreen> createState() => _AdminChatViewScreenState();
 }
 
-class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
+class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
   List<MessageModel> _msgs = [];
   // True setelah SQLite/server pertama selesai — supaya empty-state TIDAK
   // berkedip muncul sesaat sebelum pesan terisi.
@@ -176,7 +176,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   /// Samakan sesi pantau dengan call aktif dari provider.
   Future<void> _syncCallWatch() async {
     if (!mounted || _startingWatch) return;
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     if (_watch != null && _watch!.stopped) {
       final done = _watch!;
       _watch = null;
@@ -195,7 +195,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     _watch = null;
     old?.removeListener(_onWatchChanged);
     await old?.stop();
-    final ws = context.read<AdminProvider>().createWatchSession(call);
+    final ws = ProviderScope.containerOf(context, listen: false).read(adminProvider).createWatchSession(call);
     ws.addListener(_onWatchChanged);
     try {
       await ws.start();
@@ -245,7 +245,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       if (prevDateKey != dateKey) {
         items.add(
           ChatItem.date(
-            dateChipLabel(m.timestamp, context.read<LocaleProvider>().s),
+            dateChipLabel(m.timestamp, ProviderScope.containerOf(context, listen: false).read(localeProvider).s),
           ),
         );
       }
@@ -273,7 +273,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     // Call aktif: mulai pantau SEGERA bila daftar sudah memuat call ini
     // (jangan tunggu RPC fetchActiveCalls — menghapus jeda s.d. ±5 dtk).
     // Fetch tetap jalan paralel sebagai penyegar + penanganan call baru.
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     unawaited(_syncCallWatch());
     Future.microtask(() async {
       await admin.fetchActiveCalls();
@@ -281,7 +281,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     });
     _callTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       if (!mounted) return;
-      final admin = context.read<AdminProvider>();
+      final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       await admin.fetchActiveCalls();
       if (mounted) await _syncCallWatch();
     });
@@ -312,7 +312,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   }
 
   void _onScroll() {
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     if (!_scrollCtrl.hasClients) return;
     // ListView( reverse:true → "atas" (pesan lebih lama) = maxScrollExtent.
     if (_scrollCtrl.position.pixels <
@@ -358,7 +358,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   /// ikut tampil di layar ini ("pesan kecampur", semua bubble ke kanan).
   bool _applyMessages() {
     if (!mounted) return false;
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     return _applyRawMessages(admin.chatMessagesFor(widget.chatId));
   }
 
@@ -471,8 +471,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   /// Dipanggil tiap fetch + poll 5 detik supaya live mengikuti.
   Future<void> _refreshRead() async {
     try {
-      final raw = await context
-          .read<AdminProvider>()
+      final raw = await ProviderScope.containerOf(context, listen: false)
+          .read(adminProvider)
           .fetchChatLastRead(widget.chatId);
       if (!mounted) return;
       final map = <String, DateTime>{};
@@ -501,7 +501,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   /// layar TIDAK menembak server — pesan lama dari lokal, yang baru lewat
   /// poll/realtime. Inilah yang bikin buka ulang chat terasa instan.
   Future<void> _fetch({bool force = false}) async {
-    final admin = context.read<AdminProvider>();
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     // 0) SINKRON dari cache pesan monitor (hasil prefetch tap) — paling
     //    cepat, tanpa await: frame pertama langsung terisi seperti private
     //    chat. Dulu jalur ini tak ada (hanya cache stream `private_<id>`
@@ -582,7 +582,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     if (_polling) return;
     _polling = true;
     try {
-      final admin = context.read<AdminProvider>();
+      final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       // Poll hanya butuh pesan BARU (15 cukup) — bukan 1 halaman penuh.
       await admin.refreshChatMessages(widget.chatId, limit: 15);
       if (!mounted) return;
@@ -716,7 +716,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       if (data.isEmpty) {
         final msgId = int.tryParse(msg.id);
         if (msgId != null && mounted) {
-          final admin = context.read<AdminProvider>();
+          final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
           var raw = await admin
               .fetchMessageImage(msgId)
               .timeout(const Duration(seconds: 15));
@@ -792,7 +792,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     // Gagal tampil JANGAN diam: beri tahu sebabnya. Sesi dummy = RPC
     // ditolak server; kalau tidak, berarti koneksi/kuota.
     if (!ok && mounted) {
-      final s = context.read<LocaleProvider>().s;
+      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
@@ -810,7 +810,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   void _subscribeRealtime() {
     // Lewat provider (bukan Supabase.instance langsung) supaya test bisa
     // menyuntik client mock — perilaku produksi identik.
-    final sb = context.read<AdminProvider>().realtimeClient;
+    final sb = ProviderScope.containerOf(context, listen: false).read(adminProvider).realtimeClient;
     _channelClient = sb;
     _channel = sb.channel('admin-${widget.chatId.hashCode}');
     // FILTER chat_id — tanpa ini SETIAP pesan di seluruh app memicu _poll
@@ -961,7 +961,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     if (msg.text.isEmpty || !mounted) return;
     await Clipboard.setData(ClipboardData(text: msg.text));
     if (!mounted) return;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(s.msgMessageCopied)));
@@ -969,8 +969,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(themeProvider);
+    final s = ref.watch(localeProvider).s;
     // JANGAN watch AdminProvider — notifyListeners (poll/tab lain) bikin
     // seluruh layar rebuild = kedip. Data pesan diambil via _applyMessages
     // (read), hasMore disimpan di state lokal.

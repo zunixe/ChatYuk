@@ -1,22 +1,22 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart';
 import '../../../widgets/sheet_drag_handle.dart';
+import '../../../providers/riverpod/admin_provider.dart';
 
-class AdminRegistrationsSheet extends StatefulWidget {
+class AdminRegistrationsSheet extends ConsumerStatefulWidget {
   const AdminRegistrationsSheet();
   @override
-  State<AdminRegistrationsSheet> createState() => AdminRegistrationsSheetState();
+  ConsumerState<AdminRegistrationsSheet> createState() => AdminRegistrationsSheetState();
 }
 
-class AdminRegistrationsSheetState extends State<AdminRegistrationsSheet> {
+class AdminRegistrationsSheetState extends ConsumerState<AdminRegistrationsSheet> {
   // true = baru daftar dulu (default, sama seperti server); false = lama daftar.
   bool _newestFirst = true;
 
@@ -24,16 +24,16 @@ class AdminRegistrationsSheetState extends State<AdminRegistrationsSheet> {
   void initState() {
     super.initState();
     Future.microtask(
-      () => context.read<AdminProvider>().fetchRegistrations(),
+      () => ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchRegistrations(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
+    final s = ref.watch(localeProvider).s;
     // GRANULAR: data registrasi bagian dari domain STATS.
-    context.select<AdminProvider, int>((p) => p.revStats);
-    final admin = context.read<AdminProvider>();
+    ref.watch(adminProvider.select((p) => p.revStats));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     // Urutkan di klien (≤200 baris, instan) — server selalu newest-first.
     final list = [...admin.registrations];
     list.sort((a, b) {

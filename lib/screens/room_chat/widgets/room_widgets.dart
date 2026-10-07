@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../../../config/theme.dart';
 import '../../../models/user_model.dart';
-import '../../../providers/locale_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 import '../../../widgets/person_avatar.dart';
 
 class RoomUserChip extends StatelessWidget {
@@ -16,7 +16,7 @@ class RoomUserChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMe = user.uid == myUid;
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return Padding(
       padding: EdgeInsets.only(right: 8),
       child: Column(
@@ -65,7 +65,7 @@ class RoomHeaderToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<LocaleProvider>().s;
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     return Tooltip(
       message: showUsers ? s.roomShowChat : s.roomShowMembers,
       child: InkWell(

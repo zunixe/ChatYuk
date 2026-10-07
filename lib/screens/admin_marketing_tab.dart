@@ -1,34 +1,35 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../providers/admin_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/theme_provider.dart';
 import '../widgets/admin_error_view.dart';
 import 'admin_marketing_composer_screen.dart';
 import 'admin_marketing_detail_screen.dart';
+import '../providers/riverpod/admin_provider.dart';
 
 /// Admin: tab Marketing — daftar email campaign + metrik.
-class AdminMarketingTab extends StatefulWidget {
+class AdminMarketingTab extends ConsumerStatefulWidget {
   const AdminMarketingTab({super.key});
 
   @override
-  State<AdminMarketingTab> createState() => _AdminMarketingTabState();
+  ConsumerState<AdminMarketingTab> createState() => _AdminMarketingTabState();
 }
 
-class _AdminMarketingTabState extends State<AdminMarketingTab> {
+class _AdminMarketingTabState extends ConsumerState<AdminMarketingTab> {
   @override
   void initState() {
     super.initState();
-    final a = context.read<AdminProvider>();
+    final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(a.fetchMarketing);
   }
 
   Future<void> _openComposer({Map<String, dynamic>? existing}) async {
-    final a = context.read<AdminProvider>();
+    final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => AdminMarketingComposerScreen(campaign: existing),
@@ -38,7 +39,7 @@ class _AdminMarketingTabState extends State<AdminMarketingTab> {
   }
 
   Future<void> _openDetail(int id) async {
-    final a = context.read<AdminProvider>();
+    final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => AdminMarketingDetailScreen(id: id)),
     );
@@ -47,11 +48,11 @@ class _AdminMarketingTabState extends State<AdminMarketingTab> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
+    ref.watch(themeProvider);
     // Rebuild hanya saat domain MARKETING berubah.
-    context.select<AdminProvider, int>((p) => p.revMarketing);
-    final admin = context.read<AdminProvider>();
-    final s = context.watch<LocaleProvider>().s;
+    ref.watch(adminProvider.select((p) => p.revMarketing));
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ref.watch(localeProvider).s;
     final stats = admin.marketingStats;
 
     return Column(

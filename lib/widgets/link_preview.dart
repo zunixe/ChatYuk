@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/locale_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../core/media/link_preview_service.dart';
+import '../providers/riverpod/locale_provider.dart';
 
-class LinkPreview extends StatefulWidget {
+class LinkPreview extends ConsumerStatefulWidget {
   final String text;
   const LinkPreview({super.key, required this.text});
 
   @override
-  State<LinkPreview> createState() => _LinkPreviewState();
+  ConsumerState<LinkPreview> createState() => _LinkPreviewState();
 }
 
-class _LinkPreviewState extends State<LinkPreview> {
+class _LinkPreviewState extends ConsumerState<LinkPreview> {
   LinkPreviewData? _data;
   bool _loading = true;
 
@@ -35,7 +35,7 @@ class _LinkPreviewState extends State<LinkPreview> {
 
   @override
   Widget build(BuildContext context) {
-    final lpv = context.watch<LocaleProvider>().s;
+    final lpv = ref.watch(localeProvider).s;
     if (_loading) {
       return Container(
         margin: const EdgeInsets.only(bottom: 6),
