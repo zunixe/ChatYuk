@@ -240,6 +240,74 @@ String? dartProcessJpegB64((Uint8List, int, int) args) {
   return base64Encode(img.encodeJpg(resized, quality: quality));
 }
 
+/// Fallback DART thumbnail dari base64: resize lebar ke [maxW] + JPEG q[quality].
+/// Paritas `decodeThumbB64` (width 256, quality 80). Top-level untuk compute().
+String? dartThumbB64((String, int, int) args) {
+  final (b64, maxW, quality) = args;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(base64Decode(b64));
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final w = decoded.width > maxW ? maxW : decoded.width;
+  final h = (decoded.height * (w / decoded.width)).round();
+  final thumb = img.copyResize(decoded, width: w, height: h,
+      interpolation: img.Interpolation.linear);
+  return base64Encode(img.encodeJpg(thumb, quality: quality));
+}
+
+/// Fallback DART raw RGBA → JPEG bytes. Paritas `encodeRawRgbaToJpg`.
+/// Top-level untuk compute().
+Uint8List? dartRawRgbaToJpg((Uint8List, int, int, int) args) {
+  final (rgba, w, h, quality) = args;
+  if (w <= 0 || h <= 0) return null;
+  if (rgba.length < w * h * 4) return null;
+  final image = img.Image.fromBytes(
+    width: w,
+    height: h,
+    bytes: rgba.buffer,
+    numChannels: 4,
+    order: img.ChannelOrder.rgba,
+  );
+  return Uint8List.fromList(img.encodeJpg(image, quality: quality));
+}
+
+/// Fallback DART downscale base64 ke lebar [targetWidth] + JPEG q[quality].
+/// Paritas `_jpegDownscaled` (photo/post cache). Top-level untuk compute().
+String? dartDownscaleB64((String, int, int) args) {
+  final (b64, targetWidth, quality) = args;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(base64Decode(b64));
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final resized = (targetWidth > 0 && decoded.width > targetWidth)
+      ? img.copyResize(decoded, width: targetWidth)
+      : decoded;
+  return base64Encode(img.encodeJpg(resized, quality: quality));
+}
+
+/// Fallback DART downscale bytes gambar ke lebar [targetWidth] + JPEG q[quality].
+/// Paritas `_jpegDownscaled`. Top-level untuk compute().
+Uint8List? dartDownscaleBytes((Uint8List, int, int) args) {
+  final (bytes, targetWidth, quality) = args;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final resized = (targetWidth > 0 && decoded.width > targetWidth)
+      ? img.copyResize(decoded, width: targetWidth)
+      : decoded;
+  return Uint8List.fromList(img.encodeJpg(resized, quality: quality));
+}
+
 /// Fallback DART rasio (w/h) BANYAK gambar sekaligus dari HEADER (PNG/JPEG).
 /// Paritas `_aspectRatiosOfBytes` (satu list, bukan satu per foto).
 List<double?> dartAspectRatios(List<Uint8List> list) {

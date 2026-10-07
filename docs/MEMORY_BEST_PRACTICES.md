@@ -244,3 +244,32 @@ adb shell dumpsys SurfaceFlinger --latency '<nama-layer>'
 
 **Pola berulang:** `Image.memory` tanpa cap di permukaan persisten. Kalau
 menemukan lagi, langsung cap sesuai ukuran tampil.
+
+---
+
+## 4. Arena allocator (bukan bitmap) — diagnosis "RSS besar padahal cache bounded"
+
+Kalau user lapor "masih ngelag / RSS besar", **jangan langsung tuduh bitmap**.
+Ukur dulu (`dumpsys meminfo` + `/proc/PID/status`). Ciri **arena bloat
+allocator** (jemalloc/scudo), bukan leak:
+
+| Sinyal | Arti |
+|---|---|
+| `Native Heap` **Free >> Alloc** (mis. Size 531MB / Alloc 49MB / Free 477MB) | arena direservasi besar, isinya kosong |
+| `Bitmap (malloced)` kecil (mis. 5MB) | bitmap Android BUKAN biang |
+| `RssAnon` tinggi tapi Native Heap tracked kecil | anonymous malloc arena (di luar heap dilacak) |
+| `am send-trim-memory COMPLETE` → RSS **tidak turun** | arena tidak responsif thd evict/GC Dart |
+| RSS naik saat scroll list gambar, turun saat idle | arena fragmentasi akibat alokasi-decak byte besar |
+
+**Penyebab:** alokasi `ByteArray`/base64 besar berulang yang menyeberang
+MethodChannel (decode/encode gambar). jemalloc Android menahan arena dan
+**hanya** mengembalikannya ke OS via `malloc_trim()`/`mallctl(purge)` (JNI).
+
+**Yang TIDAK menolong:** `imageCache.evict`, `clearLiveImages`, `System.gc()`,
+`am send-trim-memory`. Sudah diuji — RSS tidak berubah.
+
+**Yang menolong:** kurangi volume alokasi besar di channel (kirim thumb, bukan
+gambar penuh), atau panggil `malloc_trim(0)` native di `onTrimMemory`.
+
+**Aturan ukur:** `RssAnon` ≈ `RssFile` + heap? Kalau `RssAnon >> Native Heap
+tracked` → arena allocator, bukan objek app.

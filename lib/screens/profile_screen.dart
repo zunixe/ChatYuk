@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Consumer;
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 import '../core/media/native_image.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
@@ -36,33 +35,12 @@ import '../core/perf/perf_probe.dart';
 import 'package:share_plus/share_plus.dart';
 import '../providers/riverpod/locale_provider.dart';
 
-// Top-level function untuk compute() isolate — decode + resize + encode di background.
-// Publik + `@visibleForTesting` supaya kontrak resize/kualitas avatar diuji.
+// Avatar profil (resize 640×640 + JPEG q85) kini di NATIVE via
+// `NativeImage.processSquare` (fallback Dart di chat_photo_helper.dart).
+// `processAvatar` dipertahankan sebagai kontrak test (delegasi ke native).
 @visibleForTesting
-Future<String?> processAvatar(Uint8List bytes) async {
-  // SELALU JPEG. Dulu dicoba WebP via FlutterImageCompress dulu, tapi encoder
-  // WebP native itu menghasilkan file dengan ICC profile/krominansi yang tidak
-  // konsisten antar-device → avatar tampil "biro-biro" (warna aneh) saat
-  // dilihat dari HP LAIN lewat CDN. JPEG polos tidak punya masalah ini dan
-  // di-decode universal — sama seperti foto chat. Cropper interaktif sudah
-  // menentukan area 1:1, jadi cukup resize + encode.
-  final img.Image? decoded;
-  try {
-    decoded = img.decodeImage(bytes);
-  } catch (_) {
-    return null;
-  }
-  if (decoded == null) return null;
-  // 640px (dulu 1024) + q85 (dulu 90): avatar tampil maksimal ~108px fisik,
-  // 640 sudah >5× resolusi tampil (tajam) tapi file ~50% lebih kecil.
-  final resized = img.copyResize(
-    decoded,
-    width: 640,
-    height: 640,
-    interpolation: img.Interpolation.cubic,
-  );
-  return base64Encode(img.encodeJpg(resized, quality: 85));
-}
+Future<String?> processAvatar(Uint8List bytes) =>
+    NativeImage.processSquare(bytes, size: 640, quality: 85);
 
 // Galeri foto + preview blur kini diproses di NATIVE via
 // `NativeImage.processGalleryPhoto` (fallback ke `dartProcessGalleryPhoto`

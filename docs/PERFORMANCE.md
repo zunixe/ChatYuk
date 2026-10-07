@@ -3237,3 +3237,162 @@ Cache RAM yang menyimpan blob besar (base64 foto) WAJIB: (a) di-cap, (b) punya
 `trimMemCache()` publik, (c) dipanggil dari `didHaveMemoryPressure` &
 background-idle. JANGAN simpan base64 penuh di mem-cache lintas-chat — simpan
 path/thumb, baca full dari disk saat dibutuhkan.
+
+---
+
+## 27. Spike RSS ~380MB saat render Timeline = arena jemalloc, BUKAN leak kode (2026-10-07)
+
+**Keluhan user:** "chatyuk masih ada ngelag padahal udah native semua".
+
+**Ukur live (Xiaomi 24129PN74G, `ro.malloc.impl=jemalloc`, Android 16, build
+profile apkpureProd + PERF_PROBE, `adb` wireless):**
+
+| Kondisi | VmRSS | RssAnon | Native Heap (alloc) |
+|---|---|---|---|
+| Cold start murni (idle) | 447 MB | 213 MB | **46 MB** |
+| Buka + scroll Timeline | 827 MB | **607 MB** | **48 MB** |
+| Kembali idle beberapa detik | ~455 MB | ~223 MB | ~44 MB |
+
+**Temuan kunci: Native Heap tracked tetap ~46-48MB di SEMUA kondisi.** Yang
+naik ~380MB adalah **`RssAnon` (213→607MB)** — anonymous memory **di LUAR**
+heap yang dilacak `dumpsys meminfo`:
+
+- `Native Heap Size 531MB / Alloc 49MB / **Free 477MB**` → arena direservasi
+  besar, isinya KOSONG.
+- `Bitmap (malloced)` Android cuma **5 MB**, `Other (malloced)` **41 KB** →
+  objek yang bisa dilacak nyaris nol.
+- Dart heap 6-9MB, Java 8-15MB → bukan Dart/Java.
+
+**Bukti arena TIDAK dikembalikan ke OS (bukan leak, bukan bitmap):**
+`am send-trim-memory RUNNING_CRITICAL` **dan** `COMPLETE` → RSS **tidak
+berubah sama sekali** (826368 kB → 826368 kB). `System.gc()` yang dipanggil
+di `ImageBridge.trim()` juga tidak menyusutkan arena (GC Dart ≠ GC native).
+
+**Kesimpulan:** ~380MB = **arena jemalloc yang memfragmentasi** akibat
+alokasi-decak `ByteArray` besar berulang (base64 & bytes gambar menyeberang
+MethodChannel di `decodeBytes`/`decodeWithDims`, 10+ call site di list/timeline).
+jemalloc Android **agresif menahan arena** dan hanya mengembalikannya ke OS via
+`malloc_trim()`/`mallctl(purge)` (butuh JNI). Ini **bukan** bitmap yang bisa
+di-evict (semua `Image.memory` sudah pakai `cacheWidth`; ImageCache 60/24MB;
+`decodedImageCache` 12 entri — semua bounded). **Bukan regresi kode widget.**
+
+**Sudah ditambahkan (mitigasi, additif — tidak mengubah perilaku decode):**
+- `ImageBridge.trim()` (native): `cache.evictAll()` + `System.gc()`;
+  diekspos lewat channel `com.chatyuk.chatyuk/image` method `"trim"`.
+- `NativeImage.trim()` (Dart) — `lib/core/media/native_image.dart`.
+- Dipanggil di `app.dart` saat `AppLifecycleState.paused` (fire-and-forget).
+- `MainActivity.onTrimMemory()` (semua level ≥ BACKGROUND/RUNNING_LOW) +
+  `onLowMemory()` → `imageBridge?.trim()` — sinyal LANGSUNG dari OS.
+- **Hasil terukur: RSS tidak turun** (arena jemalloc tidak responsif thd
+  evict/GC). Mitigasi ini tetap dipertahankan (murah, no-op aman) tetapi
+  **bukan solusi** untuk arena bloat.
+
+**Rekomendasi bila mau dikejar (belum dikerjakan — risiko build NDK):**
+1. **JNI `malloc_trim(0)` / jemalloc `mallctl("arena...purge")`** dipanggil di
+   `onTrimMemory` — satu-satunya cara mengembalikan arena ke OS. Perlu
+   `externalNativeBuild`/CMake di `build.gradle.kts` (NDK 27/28 tersedia).
+2. **Uji re-enable Impeller (Vulkan)** — sekarang `EnableImpeller=false`
+   (Skia GL); Vulkan mungkin mengelola buffer GPU lebih baik. Trade-off:
+   doc `AndroidManifest` §frame-abu Adreno Xiaomi.
+3. **Kurangi volume alokasi besar**: audit `decodeBytes`/`decodeWithDims`
+   (10 call site) — apakah byte PENUH perlu menyeberang, atau cukup thumb.
+
+**Aturan turunan:** jangan salah diagnosis — `Native Heap Free >> Alloc`
+dengan `RssAnon` tinggi = **arena bloat allocator**, bukan leak objek.
+Evict/GC Dart TIDAK menolong; hanya trim native yang bisa.
+
+**Test:** `flutter analyze` 0 error (6 info pra-ada). Build profile apkpureProd
+sukses (gerbang nyata §14 lolos).
+
+---
+
+## 28. Perbandingan LANGSUNG dengan WhatsApp + akar arena (2026-10-07)
+
+User minta "kaya WhatsApp". Diukur **head-to-head** di device sama (Xiaomi
+24129PN74G, `adb` wireless), kondisi setara (cold start → interaksi → idle):
+
+| Metrik | **chatyuk** | **WhatsApp** | Rasio |
+|---|---|---|---|
+| RSS idle (cold) | ~445 MB | **~400 MB** | ~1.1× |
+| RSS setelah scroll chat | **654-857 MB** | **~437 MB** | **1.5-2×** |
+| Δ spike saat scroll | **+170 s/d +400 MB** | **+35 MB** | **~5-11×** |
+| Native Heap Size | **536 MB** | **83 MB** | **6.5×** |
+| Native Heap Alloc | 54 MB | 69 MB | ~0.8× |
+| Native Heap **Free** | **477 MB** | **9 MB** | **53×** |
+
+**Insight kunci:**
+1. **Idle chatyuk ≈ WhatsApp** (445 vs 400 MB). Masalahnya BUKAN idle.
+2. **Spike saat scroll** = beda fundamental: chatyuk +170-400 MB, WA cuma +35 MB.
+3. **Native Heap Size 536 MB vs 83 MB** — chatyuk reservasi arena 6.5× lebih
+   besar, padahal **Alloc-nya LEBIH KECIL** (54 vs 69 MB). Jadi 477 MB itu
+   **FREE di dalam arena** (fragmentasi), bukan objek hidup.
+4. **WhatsApp pakai ~9 MB free** → buffer **di-reuse** (pool), tidak
+   alokasi-decak. chatyuk alokasi-decak `ByteArray` baru tiap decode gambar
+   beruntun → jemalloc arena dipenuhi lubang free.
+
+**Reproduksi spike:** scroll Timeline **cepat 12× beruntun** (burst) →
+RSS 437 → **610 MB** (+173) dalam ~2s. Settle 5s **tetap 610** (arena tidak
+menyusut). HOME + trim → tetap (app paused). **Kembali ke app → turun 417 MB.**
+Jadi spike = burst decode; memori akhirnya dibebaskan tapi arena "pegangan".
+
+**Dampak fix#1 (`malloc_trim` JNI §27):** terbukti **-105 MB** saat trim
+dipanggil di `onTrimMemory`/background (857→752 MB). Sebagian arena
+dikembalikan; reserved (`Size`) tetap besar karena jemalloc batching.
+
+**Rekomendasi tersisa (paling berdampak, belum dikerjakan):**
+1. **Reuse buffer / pool** di `ImageBridge` untuk decode/encode (`ByteArray`
+   yang dipakai ulang) — meniru WhatsApp. Ini menyerang AKAR (arena
+   fragmentasi), bukan gejala. Perlu hati-hati: buffer per-thread executor.
+2. **Batasi decode paralel** saat scroll (gate 2-3 bersamaan) — kurangi
+   puncak alokasi-decak. `ImageBridge` sekarang `newFixedThreadPool(2)` (sudah
+   ada); pastikan tidak ada jalur decode di luar pool.
+3. **Hindari menyeberangkan byte PENUH** di `decodeBytes`/`decodeWithDims`
+   (10 call site) — kirim thumb bila pemakai hanya butuh kecil.
+
+**Aturan ukur:** bandingkan `Native Heap Free` vs `Alloc`. `Free >> Alloc` =
+arena fragmentasi (bukan leak). Target: Free mendekati WhatsApp (~9 MB), bukan
+477 MB.
+
+---
+
+## 29. FIX AKAR: buffer pool `ByteArrayOutputStream` — RSS = WhatsApp (2026-10-07)
+
+**Lanjutan §27/§28.** Akar arena fragmentasi = alokasi-decak
+`ByteArrayOutputStream()` baru tiap encode JPEG (default 32KB lalu tumbuh
+64→128→…→2MB; tiap tumbuh alokasi buffer baru + copy). Scroll cepat = puluhan
+encode = ratusan alokasi-decak → jemalloc arena penuh lubang free & tak menyusut.
+
+**Fix (`ImageBridge.kt`):**
+- `ReusableBaos : ByteArrayOutputStream` (pool **thread-local**, executor IO
+  hanya 2 thread) — `reset()` memakai ulang buffer besar; satu BAOS per-thread
+  menahan kapasitas setinggi gambar terbesar yang pernah di-encode.
+- Helper `encodeJpeg()` (→ ByteArray) & `encodeJpegB64()` (→ base64 langsung
+  dari buffer internal, TANPA `toByteArray()` copy perantara).
+- **8 call-site** `ByteArrayOutputStream()` diganti helper pool (`thumb`,
+  `processStory`, `processSquare`, `processGalleryPhoto`/`encodeB64`,
+  `processAdminThumb`, `processRawRgba`, `downscaleBytes`, `processPost`).
+
+**Hasil terukur (Xiaomi 24129PN74G, burst scroll Timeline 12-40×):**
+
+| Metrik | SEBELUM | SESUDAH | WhatsApp |
+|---|---|---|---|
+| Native Heap **Free** | **477 MB** | **9 MB** | 9 MB |
+| Native Heap Size | 536 MB | **42 MB** | 83 MB |
+| RSS puncak scroll | **610-857 MB** | **~440 MB** | ~437 MB |
+| RSS idle | ~445 MB | ~425 MB | ~400 MB |
+
+**Kesimpulan: RSS chatyuk kini SETARA WhatsApp** (puncak ~440 vs ~437 MB;
+Native Heap Free 9 MB sama). Spike scroll 400 MB → ~0. Buffer pool = pola
+yang dipakai WhatsApp (reuse buffer), menyerang AKAR fragmentasi.
+
+**Catatan:** `ByteArrayOutputStream.toByteArray()` tetap meng-copy untuk jalur
+yang mengembalikan bytes (tak terhindarkan — hasil menyeberang ke Dart); jalur
+base64 memakai `encodeJpegB64` (tanpa copy perantara).
+`malloc_trim` JNI (§27) tetap dipertahankan sebagai jaring pengaman ekstra.
+
+**Aturan (JANGAN dibalik):** JANGAN kembali memakai `ByteArrayOutputStream()`
+baru per encode di `ImageBridge` — selalu lewat `encodeJpeg`/`encodeJpegB64`
+(pool). Ini sumber regresi arena 477MB.
+
+**Test:** 25 test `native_image` hijau; `flutter analyze lib` 0 error; build
+profile apkpureProd sukses (gerbang nyata §14).

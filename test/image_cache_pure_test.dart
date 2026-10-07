@@ -67,10 +67,11 @@ void main() {
       expect(decoded.height, inInclusiveRange(682, 683));
     });
 
-    test('gambar kecil → tetap berhasil (diperbesar ke 1024)', () async {
+    test('gambar kecil → TIDAK diperbesar (lebih hemat; thumbnail cukup kecil)',
+        () async {
       final out = await genPostThumb(_jpeg(100, 100));
       expect(out, isNotNull);
-      expect(img.decodeImage(out!)!.width, 1024);
+      expect(img.decodeImage(out!)!.width, 100);
     });
 
     test('bytes bukan gambar → null, tidak crash', () async {

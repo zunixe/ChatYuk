@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import '../config/strings.dart';
 import '../providers/riverpod/auth_provider.dart';
@@ -18,40 +17,8 @@ import '../providers/riverpod/theme_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../config/theme.dart';
 
-/// Hasil proses satu foto: bytes JPEG + lebar/tinggi (rasio asli).
-/// Publik + `@visibleForTesting` supaya kontrak resize/kualitas bisa dikunci
-/// lewat unit test tanpa membangun seluruh composer.
-@visibleForTesting
-class ProcessedPhoto {
-  final Uint8List bytes;
-  final int width;
-  final int height;
-  const ProcessedPhoto(this.bytes, this.width, this.height);
-}
-
-/// Proses foto (resize + JPEG) di isolate sebelum upload — sekaligus
-/// kembalikan dimensi supaya composer bisa kirim `image_dims` ke server
-/// (rasio feed asli ala Threads, tanpa layout shift).
-///
-/// 1080px (dulu 1200) = lebar layar HP tipikal (~1080 fisik) → tidak ada
-/// detail yang hilang di feed, tapi file ~30% lebih kecil. q78 (dulu 82)
-/// juga sedikit lebih ringan tanpa beda terlihat. Hemat storage, bandwidth
-/// upload/download, dan disk cache di HP penerima.
-@visibleForTesting
-ProcessedPhoto? processPostImageDim(List<int> bytes) {
-  try {
-    final decoded = img.decodeImage(Uint8List.fromList(bytes));
-    if (decoded == null) return null;
-    final resized = img.copyResize(decoded, width: 1080);
-    return ProcessedPhoto(
-      Uint8List.fromList(img.encodeJpg(resized, quality: 78)),
-      resized.width,
-      resized.height,
-    );
-  } catch (_) {
-    return null;
-  }
-}
+// Foto post (resize lebar 1080 + JPEG q78 + dimensi) kini diproses di NATIVE
+// via `NativeImage.processPost` (fallback Dart di chat_photo_helper.dart).
 
 /// Composer post timeline — header profil, visibilitas, text form + hashtag
 /// chip badge, multi-foto (galeri multi-pick & kamera), tombol Post pin bawah.

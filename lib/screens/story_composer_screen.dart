@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import '../utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'dart:ui' as ui;
 
@@ -19,61 +18,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:video_player/video_player.dart';
 
-/// Hasil proses gambar — dipindah balik dari isolate dalam satu pesan.
 /// Baca file story di isolate (bytes mentah tak menyeberang ke main thread).
-/// Kompresi dilakukan di native (`NativeImage.processStory`) atau fallback Dart.
+/// Kompresi di NATIVE (`NativeImage.processStory` / `processRawRgba`) +
+/// fallback Dart (lib/core/media/chat_photo_helper.dart).
 Uint8List _readStoryFile(String path) => File(path).readAsBytesSync();
-
-/// Kompres foto story di isolate (pola post composer): resize sisi terpanjang
-/// 1080px, JPEG q82 — cukup tajam untuk fullscreen tanpa boros kuota.
-/// Publik + `@visibleForTesting` supaya kontrak resize/kualitas bisa dikunci
-/// lewat test (tanpa perlu membangun seluruh screen).
-@visibleForTesting
-String processStoryImage(Uint8List bytes) {
-  // image 4.x MELEMPAR untuk bytes korup/pendek (mis. PSD decoder membaca
-  // header melewati akhir buffer) — jangan biarkan crash; kembalikan ''.
-  final img.Image? decoded;
-  try {
-    decoded = img.decodeImage(bytes);
-  } catch (_) {
-    return '';
-  }
-  if (decoded == null) return '';
-  // 1080 (dulu 1440→1280) q82 (dulu 85) — layar HP tipikal ~1080px, jadi 1080
-  // sudah pas satu layar saat ditampilkan fit di viewer. File ~40% lebih kecil
-  // dari 1440 semula: hemat storage, bandwidth upload/download, dan disk cache.
-  final isPortrait = decoded.height >= decoded.width;
-  final resized = isPortrait
-      ? img.copyResize(decoded, height: 1080)
-      : img.copyResize(decoded, width: 1080);
-  final jpg = img.encodeJpg(resized, quality: 82);
-  return base64Encode(jpg);
-}
-
-/// Payload rectangle untuk encode JPEG di isolate (top-level agar compute-safe).
-@visibleForTesting
-class RawJpg {
-  final Uint8List rgba;
-  final int width;
-  final int height;
-  const RawJpg(this.rgba, this.width, this.height);
-}
-
-/// rawRgba (dari ui.Image.toByteData) → JPEG bytes. Top-level supaya bisa
-/// dijalankan via compute() di isolate terpisah (tidak blocking UI thread).
-@visibleForTesting
-Uint8List encodeRawRgbaToJpg(RawJpg p) {
-  // numChannels 4 + order rgba: cocok dgn output
-  // ui.ImageByteFormat.rawRgba (R,G,B,A per pixel).
-  final image = img.Image.fromBytes(
-    width: p.width,
-    height: p.height,
-    bytes: p.rgba.buffer,
-    numChannels: 4,
-    order: img.ChannelOrder.rgba,
-  );
-  return img.encodeJpg(image, quality: 90);
-}
 
 /// Halaman buat story: preview foto 9:16 + teks overlay (drag bebas,
 /// warna/ukuran/latar) + pilih visibility. Anon tidak sampai ke sini
@@ -519,8 +467,8 @@ class _StoryComposerScreenState extends ConsumerState<StoryComposerScreen> {
     image.dispose();
     rendered.dispose();
     final raw = data!.buffer.asUint8List();
-    // Encode JPEG di isolate (rawRgba → img.Image → encodeJpg q90).
-    return compute(encodeRawRgbaToJpg, RawJpg(raw, w, h));
+    // Encode JPEG di NATIVE (rawRgba → JPEG q90; fallback Dart di isolate).
+    return (await NativeImage.processRawRgba(raw, w, h, quality: 90))!;
   }
 
   @override

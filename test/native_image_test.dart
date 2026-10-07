@@ -237,4 +237,45 @@ void main() {
   test('aspectRatios list kosong → kosong', () async {
     expect(await NativeImage.aspectRatios([]), isEmpty);
   });
+
+  test('processThumbB64 fallback → lebar maks maxW', () async {
+    final out = await NativeImage.processThumbB64(base64Encode(_jpeg(1000, 1000)));
+    final d = img.decodeImage(base64Decode(out!))!;
+    expect(d.width, 256);
+    expect(d.height, 256);
+  });
+
+  test('processRawRgba fallback → JPEG valid + dimensi', () async {
+    final rgba = Uint8List(16 * 16 * 4);
+    for (var i = 0; i < rgba.length; i += 4) {
+      rgba[i] = 255; rgba[i + 3] = 255; // merah
+    }
+    final out = await NativeImage.processRawRgba(rgba, 16, 16);
+    expect(out, isNotNull);
+    final d = img.decodeImage(out!)!;
+    expect(d.width, 16);
+    expect(d.height, 16);
+  });
+
+  test('downscaleB64 fallback → lebar targetWidth', () async {
+    final out = await NativeImage.downscaleB64(base64Encode(_jpeg(2000, 1000)),
+        targetWidth: 512, quality: 75);
+    final d = img.decodeImage(base64Decode(out!))!;
+    expect(d.width, 512);
+    expect(d.height, 256);
+  });
+
+  test('downscaleBytes fallback → lebar targetWidth + bytes', () async {
+    final out = await NativeImage.downscaleBytes(_jpeg(3000, 1500), targetWidth: 1024, quality: 82);
+    expect(out, isNotNull);
+    final d = img.decodeImage(out!)!;
+    expect(d.width, 1024);
+    expect(d.height, 512);
+  });
+
+  test('downscale kecil → tidak diperbesar', () async {
+    final out = await NativeImage.downscaleB64(base64Encode(_jpeg(200, 100)), targetWidth: 512);
+    final d = img.decodeImage(base64Decode(out!))!;
+    expect(d.width, 200);
+  });
 }

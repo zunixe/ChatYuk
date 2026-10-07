@@ -35,6 +35,10 @@ import kotlin.math.roundToInt
  *  - `processGalleryPhoto(bytes,...)`      → {full,preview} base64 (galeri+blur) / null
  *  - `processAdminThumb(bytes,maxW,quality)` → String base64 (thumb lebar) / null
  *  - `aspectRatios(list)`                  → List<double?> (w/h header-only)
+ *  - `processThumbB64(base64,maxW,quality)` → String base64 (thumb lebar) / null
+ *  - `processRawRgba(bytes,w,h,quality)`   → ByteArray JPEG / null
+ *  - `downscaleB64(base64,targetWidth,quality)` → String base64 / null
+ *  - `downscaleBytes(bytes,targetWidth,quality)` → ByteArray JPEG / null
  *
  * Dart WAJIB punya fallback (channel tak ada di unit test/PC) — lihat
  * `lib/core/media/native_image.dart`.
@@ -53,11 +57,49 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
         channel.setMethodCallHandler { call, result -> handle(call, result) }
     }
 
+    /**
+     * Lepaskan byte gambar native + minta allocator mengembalikan arena ke OS.
+     *
+     * Kenapa perlu: alokasi `ByteArray` (base64/decoded) besar dan berulang
+     * bikin arena native (jemalloc/scudo) membengkak — terukur reserved
+     * ~542MB padahal used cuma ~57MB, Free ~481MB. Android TIDAK otomatis
+     * mengembalikan arena ke OS, sehingga RSS proses tetap tinggi walau isi
+     * heap sudah nyaris kosong (§23/§24 PERFORMANCE.md). Dipanggil saat
+     * app di-background (`onTrimMemory`/`onLowMemory`) sehingga gambar yang
+     * tak terlihat tak menahan RAM; saat resume gambar di-decode ulang dari
+     * disk (murah).
+     */
+    fun trim() {
+        io.execute {
+            try {
+                cache.evictAll()
+            } catch (_: Throwable) {
+            }
+            // Kembalikan arena allocator native (jemalloc) ke OS. Ini SATU-
+            // SATUNYA cara arena menyusut (terukur: System.gc()/evict tak
+            // menolong — docs/PERFORMANCE.md §27). Best-effort: bila lib tak
+            // termuat (mis. build tanpa NDK), ditelan.
+            if (nativeLibLoaded) {
+                runCatching { nativeTrim() }
+            }
+            // GC Dart tetap dipanggil: membebaskan objek Dart (base64 string,
+            // ByteArray dari channel) SEBELUM arena ditrim lagi di sisa siklus.
+            runCatching { System.gc() }
+        }
+    }
+
+
     private fun handle(call: MethodCall, result: MethodChannel.Result) {
         val method = call.method
         io.execute {
             try {
                 when (method) {
+                    "trim" -> {
+                        // Dart meminta buang cache native + kembalikan arena
+                        // (dipanggil saat app di-background). Already async.
+                        trim()
+                        main.post { result.success(true) }
+                    }
                     "aspectRatio" -> {
                         val b64 = call.argument<String>("base64") ?: ""
                         val dims = aspectRatio(decodeBase64(b64))
@@ -170,6 +212,35 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                         }
                         main.post { result.success(out) }
                     }
+                    "processThumbB64" -> {
+                        val b64 = call.argument<String>("base64") ?: ""
+                        val maxW = call.argument<Int>("maxW") ?: 256
+                        val quality = call.argument<Int>("quality") ?: 80
+                        val out = processThumbB64(b64, maxW, quality)
+                        main.post { result.success(out) }
+                    }
+                    "processRawRgba" -> {
+                        val raw = call.argument<ByteArray>("bytes")
+                        val w = call.argument<Int>("w") ?: 0
+                        val h = call.argument<Int>("h") ?: 0
+                        val quality = call.argument<Int>("quality") ?: 90
+                        val out = processRawRgba(raw, w, h, quality)
+                        main.post { result.success(out) }
+                    }
+                    "downscaleB64" -> {
+                        val b64 = call.argument<String>("base64") ?: ""
+                        val targetWidth = call.argument<Int>("targetWidth") ?: 0
+                        val quality = call.argument<Int>("quality") ?: 75
+                        val out = downscaleB64(b64, targetWidth, quality)
+                        main.post { result.success(out) }
+                    }
+                    "downscaleBytes" -> {
+                        val raw = call.argument<ByteArray>("bytes")
+                        val targetWidth = call.argument<Int>("targetWidth") ?: 0
+                        val quality = call.argument<Int>("quality") ?: 82
+                        val out = downscaleBytes(raw, targetWidth, quality)
+                        main.post { result.success(out) }
+                    }
                     else -> main.post { result.notImplemented() }
                 }
             } catch (t: Throwable) {
@@ -183,6 +254,87 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
     override fun toString(): String = "ImageBridge"
 
     companion object {
+        /**
+         * Native (JNI): `malloc_trim(0)` + jemalloc `mallctl(purge)`.
+         * Lihat `src/main/cpp/native_trim.c`. Return true bila ada purge.
+         */
+        @JvmStatic
+        external fun nativeTrim(): Boolean
+
+        /** True bila libchatyuknative termuat (build dgn NDK). */
+        var nativeLibLoaded = false
+            private set
+
+        init {
+            nativeLibLoaded = try {
+                System.loadLibrary("chatyuknative")
+                true
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        /**
+         * BAOS yang dipakai-ulang per-thread untuk encode JPEG.
+         *
+         * Motivasi (ukur 2026-10-07, docs/PERFORMANCE.md §28): chatyuk
+         * reservasi arena native 536MB (Free 477MB) vs WhatsApp 83MB — akibat
+         * `ByteArrayOutputStream()` baru tiap encode (default 32KB lalu
+         * tumbuh 64→128→…→2MB, tiap tumbuh alokasi-decak + copy) saat scroll
+         * cepat. `reset()` mengembalikan panjang tanpa melepas buffer →
+         * buffer besar (mis. 2MB) dipakai lagi untuk gambar berikutnya,
+         * memangkas alokasi-decak (pola pool ala WhatsApp).
+         *
+         * Executor IO hanya 2 thread → maksimal 2 BAOS hidup, tiap satu
+         * mempertahankan kapasitas setinggi gambar terbesar yang pernah
+         * di-encode di thread itu.
+         */
+        private val baosPool = ThreadLocal.withInitial { ReusableBaos(64 * 1024) }
+
+        /** ByteArrayOutputStream yang mengekspos buffer internal (`buf`,
+         *  `count`) agar base64 bisa di-encode TANPA `toByteArray()` copy. */
+        private class ReusableBaos(size: Int) : ByteArrayOutputStream(size) {
+            fun buffer(): ByteArray = buf
+            fun length(): Int = count
+        }
+
+        /**
+         * Encode bitmap → JPEG bytes memakai BAOS pool (thread-local).
+         *
+         * `toByteArray()` tetap meng-copy (buffer internal dibiarkan agar bisa
+         * dipakai lagi) — copy itu tak terhindarkan karena hasilnya menyeberang
+         * ke Dart. Yang dihemat: buffer internal BAOS tidak dialokasi-decak
+         * berulang. Return null bila compress gagal.
+         */
+        private fun encodeJpeg(bmp: Bitmap, quality: Int): ByteArray? {
+            val out = baosPool.get()!!
+            out.reset()
+            val ok = bmp.compress(
+                Bitmap.CompressFormat.JPEG,
+                quality.coerceIn(1, 100),
+                out,
+            )
+            if (!ok) return null
+            return out.toByteArray()
+        }
+
+        /**
+         * Encode bitmap → base64 JPEG (mutasi BAOS pool, TANPA ByteArray
+         * perantara). Encode base64 langsung dari buffer internal → satu
+         * alokasi lebih sedikit tiap foto. Return null bila compress gagal.
+         */
+        private fun encodeJpegB64(bmp: Bitmap, quality: Int): String? {
+            val out = baosPool.get()!!
+            out.reset()
+            val ok = bmp.compress(
+                Bitmap.CompressFormat.JPEG,
+                quality.coerceIn(1, 100),
+                out,
+            )
+            if (!ok) return null
+            return Base64.encodeToString(out.buffer(), 0, out.length(), Base64.NO_WRAP)
+        }
+
         private fun decodeBase64(b64: String): ByteArray? = try {
             if (b64.isEmpty()) null else Base64.decode(b64, Base64.DEFAULT)
         } catch (_: Throwable) {
@@ -208,11 +360,10 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
             if (bytes == null) return null
             val decoded = decodeSampled(bytes, maxPx) ?: return null
             val scaled = scaleDown(decoded, maxPx)
-            val out = ByteArrayOutputStream()
-            val ok = scaled.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
+            val out = encodeJpeg(scaled, quality)
             if (scaled !== decoded) scaled.recycle()
             decoded.recycle()
-            return if (ok) out.toByteArray() else null
+            return out
         }
 
         /**
@@ -243,11 +394,10 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                 }
                 val resized = if (w == nw && h == nh) decoded
                     else Bitmap.createScaledBitmap(decoded, nw, nh, true)
-                val out = ByteArrayOutputStream()
-                val ok = resized.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
+                val out = encodeJpegB64(resized, quality)
                 if (resized !== decoded) resized.recycle()
                 decoded.recycle()
-                if (ok) Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP) else null
+                out
             } catch (t: Throwable) {
                 runCatching { decoded.recycle() }
                 null
@@ -269,11 +419,10 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
             return try {
                 val resized = if (decoded.width == size && decoded.height == size) decoded
                     else Bitmap.createScaledBitmap(decoded, size, size, true)
-                val out = ByteArrayOutputStream()
-                val ok = resized.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
+                val out = encodeJpegB64(resized, quality)
                 if (resized !== decoded) resized.recycle()
                 decoded.recycle()
-                if (ok) Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP) else null
+                out
             } catch (t: Throwable) {
                 runCatching { decoded.recycle() }
                 null
@@ -319,9 +468,7 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
         }
 
         private fun encodeB64(bmp: Bitmap, quality: Int): String? {
-            val out = ByteArrayOutputStream()
-            val ok = bmp.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
-            return if (ok) Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP) else null
+            return encodeJpegB64(bmp, quality)
         }
 
         /** Resize ke lebar [w] (rasio dipertahankan) — paritas `copyResize(width:)`. */
@@ -449,12 +596,91 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                     val nh = (h.toDouble() * maxW / w).roundToInt().coerceAtLeast(1)
                     Bitmap.createScaledBitmap(decoded, maxW, nh, true)
                 } else decoded
-                val out = ByteArrayOutputStream()
-                val ok = resized.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
+                val out = encodeJpegB64(resized, quality)
                 if (resized !== decoded) resized.recycle()
                 decoded.recycle()
-                if (ok) Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP) else null
+                out
             } catch (t: Throwable) {
+                runCatching { decoded.recycle() }
+                null
+            }
+        }
+
+        /**
+         * Thumbnail dari base64: decode + resize LEBAR ke [maxW] (rasio
+         * dipertahankan) + JPEG [quality] → base64. Paritas `decodeThumbB64`
+         * Dart (width 256, quality 80).
+         */
+        private fun processThumbB64(b64: String, maxW: Int, quality: Int): String? {
+            return processAdminThumb(decodeBase64(b64), maxW, quality)
+        }
+
+        /**
+         * raw RGBA (dari `ui.Image.toByteData`) → JPEG [quality] → bytes.
+         * Paritas `encodeRawRgbaToJpg` Dart.
+         */
+        private fun processRawRgba(rgba: ByteArray?, w: Int, h: Int, quality: Int): ByteArray? {
+            if (rgba == null || w <= 0 || h <= 0) return null
+            if (rgba.size < w * h * 4) return null
+            return try {
+                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                val px = IntArray(w * h)
+                var i = 0
+                var p = 0
+                while (p < w * h) {
+                    val r = rgba[i].toInt() and 0xFF
+                    val g = rgba[i + 1].toInt() and 0xFF
+                    val b = rgba[i + 2].toInt() and 0xFF
+                    val a = rgba[i + 3].toInt() and 0xFF
+                    px[p] = (a shl 24) or (r shl 16) or (g shl 8) or b
+                    i += 4
+                    p++
+                }
+                bmp.setPixels(px, 0, w, 0, 0, w, h)
+                val out = encodeJpeg(bmp, quality)
+                bmp.recycle()
+                out
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        /**
+         * Downscale base64 ke LEBAR [targetWidth] (bila lebih besar) + JPEG
+         * [quality] → base64. Ganti jalur Skia `instantiateImageCodec` +
+         * `img.encodeJpg` di `photo_cache`/`post_photo_cache`.
+         * [targetWidth] <= 0 → tanpa resize (hanya re-encode).
+         */
+        private fun downscaleB64(b64: String, targetWidth: Int, quality: Int): String? {
+            if (b64.isEmpty()) return null
+            val srcBytes = decodeBase64(b64) ?: return null
+            val out = downscaleBytes(srcBytes, targetWidth, quality) ?: return null
+            return Base64.encodeToString(out, Base64.NO_WRAP)
+        }
+
+        /**
+         * Downscale bytes gambar ke LEBAR [targetWidth] (bila lebih besar) +
+         * JPEG [quality] → bytes. Paritas `_jpegDownscaled` (post thumb 1024).
+         * [targetWidth] <= 0 → tanpa resize.
+         */
+        private fun downscaleBytes(bytes: ByteArray?, targetWidth: Int, quality: Int): ByteArray? {
+            if (bytes == null || bytes.isEmpty()) return null
+            val decoded = try {
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (_: Throwable) {
+                null
+            } ?: return null
+            return try {
+                val resized = if (targetWidth > 0 && decoded.width > targetWidth) {
+                    val nh = Math.round(decoded.height.toDouble() * targetWidth / decoded.width)
+                        .toInt().coerceAtLeast(1)
+                    Bitmap.createScaledBitmap(decoded, targetWidth, nh, true)
+                } else decoded
+                val out = encodeJpeg(resized, quality)
+                if (resized !== decoded) resized.recycle()
+                decoded.recycle()
+                out
+            } catch (_: Throwable) {
                 runCatching { decoded.recycle() }
                 null
             }
@@ -484,14 +710,15 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                 if (w <= 0 || h <= 0) return null
                 val nh = Math.round(h.toDouble() * maxW / w).toInt().coerceAtLeast(1)
                 val resized = if (w == maxW) decoded else Bitmap.createScaledBitmap(decoded, maxW, nh, true)
-                val out = ByteArrayOutputStream()
-                val ok = resized.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
+                val out = encodeJpeg(resized, quality)
+                val rw = resized.width
+                val rh = resized.height
                 if (resized !== decoded) resized.recycle()
                 decoded.recycle()
-                if (!ok) null else mapOf(
-                    "bytes" to out.toByteArray(),
-                    "w" to resized.width,
-                    "h" to resized.height,
+                if (out == null) null else mapOf(
+                    "bytes" to out,
+                    "w" to rw,
+                    "h" to rh,
                 )
             } catch (t: Throwable) {
                 runCatching { decoded.recycle() }

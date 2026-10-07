@@ -60,6 +60,16 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
+    // JNI native: ImageBridge.nativeTrim() → malloc_trim/mallctl untuk
+    // mengembalikan arena jemalloc ke OS (docs/PERFORMANCE.md §27). ABIs
+    // disamakan dgn Flutter (arm64-v8a, armeabi-v7a, x86_64).
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.chatyuk.chatyuk"
