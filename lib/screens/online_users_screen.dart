@@ -56,6 +56,7 @@ import '../widgets/social_actions.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import '../core/media/native_image.dart';
 import '../providers/riverpod/location_provider.dart';
 
 // Cache render avatar (bytes + ImageProvider stabil per-uid) kini MODULAR di
@@ -106,9 +107,8 @@ String? processAvatarImage(Uint8List bytes) {
 // encoder WebP native FlutterImageCompress, tapi hasilnya membawa ICC
 // profile/krominansi yang tidak konsisten antar-device → avatar tampil
 // "biro-biro" saat dilihat dari HP lain lewat CDN. JPEG polos universal.
-Future<String?> _processAvatarJpeg(Uint8List bytes) async {
-  return processAvatarImage(bytes);
-}
+// Kompresi kini di NATIVE via `NativeImage.processSquare` (fallback ke
+// `processAvatarImage` Dart) — lihat lib/core/media/native_image.dart.
 
 class OnlineUsersScreen extends ConsumerStatefulWidget {
   const OnlineUsersScreen({super.key});
@@ -374,7 +374,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         return;
       }
 
-      final processed = await compute(_processAvatarJpeg, bytes);
+      final processed = await NativeImage.processSquare(bytes);
       if (processed == null || !mounted) {
         setState(() => _uploadingAvatar = false);
         if (mounted) {

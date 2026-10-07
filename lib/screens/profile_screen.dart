@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import '../core/media/native_image.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
 import 'package:image_picker/image_picker.dart';
@@ -63,23 +64,9 @@ Future<String?> processAvatar(Uint8List bytes) async {
   return base64Encode(img.encodeJpg(resized, quality: 85));
 }
 
-// Galeri foto + preview blur. Return {full, preview}.
-// preview: resolusi kecil (120px) + gaussian blur kuat → aman dikirim ke
-// user lain sebagai teaser (tidak bisa "dijernihkan"), tapi tetap bikin
-// penasaran. Foto asli hanya dikirim server saat sudah unlock.
-Map<String, String>? _processPhotoWithPreview(Uint8List bytes) {
-  var decoded = img.decodeImage(bytes);
-  if (decoded == null) return null;
-  // Orientasi EXIF — foto kamera jangan sampai miring.
-  decoded = img.bakeOrientation(decoded);
-  final resized = img.copyResize(decoded, width: 600);
-  final full = base64Encode(img.encodeJpg(resized, quality: 82));
-  // Preview: kecil + blur berat, kualitas rendah.
-  var preview = img.copyResize(decoded, width: 120);
-  preview = img.gaussianBlur(preview, radius: 8);
-  final previewB64 = base64Encode(img.encodeJpg(preview, quality: 50));
-  return {'full': full, 'preview': previewB64};
-}
+// Galeri foto + preview blur kini diproses di NATIVE via
+// `NativeImage.processGalleryPhoto` (fallback ke `dartProcessGalleryPhoto`
+// Dart di lib/core/media/chat_photo_helper.dart).
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -294,7 +281,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
     if (!mounted) return;
-    final processed = await compute(_processPhotoWithPreview, bytes);
+    final processed = await NativeImage.processGalleryPhoto(bytes);
     if (!mounted) return;
     if (processed == null) {
       ScaffoldMessenger.of(
@@ -306,8 +293,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() => _uploading = true);
     try {
       await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uploadPhoto(
-        processed['full']!,
-        preview: processed['preview'],
+        processed.full,
+        preview: processed.preview,
       );
       await _loadPhotos();
       // Reward koin upload DIHAPUS (overhaul coin: tidak ada poin gratis).

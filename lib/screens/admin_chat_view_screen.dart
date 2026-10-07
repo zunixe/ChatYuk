@@ -1,14 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../config/theme.dart';
 import '../core/admin_gate.dart';
+import '../core/media/native_image.dart';
 import '../core/nav_guard.dart';
 import '../models/active_call_model.dart';
 import '../models/message_model.dart';
@@ -747,7 +746,7 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
         } catch (_) {}
         if (thumb.isEmpty) {
           try {
-            thumb = await compute(genThumbB64, data);
+            thumb = await NativeImage.processAdminThumb(data) ?? '';
           } catch (_) {}
         }
         if (thumb.isEmpty) thumb = '';
@@ -1133,17 +1132,5 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
 }
 
 
-// ── Top-level untuk compute() — generate thumbnail dari base64 ──────────────
-String genThumbB64(String base64) {
-  try {
-    final bytes = base64Decode(base64);
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return '';
-    final w = decoded.width > 512 ? 512 : decoded.width;
-    final h = (decoded.height * (w / decoded.width)).round();
-    final thumb = img.copyResize(decoded, width: w, height: h);
-    return base64Encode(img.encodeJpg(thumb, quality: 70));
-  } catch (_) {
-    return base64;
-  }
-}
+// Thumbnail admin kini diproses di NATIVE via `NativeImage.processAdminThumb`
+// (fallback ke `dartAdminThumbB64` Dart di lib/core/media/chat_photo_helper.dart).

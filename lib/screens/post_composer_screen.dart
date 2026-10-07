@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import '../providers/riverpod/nav_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
+import '../core/media/native_image.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
 import '../providers/riverpod/theme_provider.dart';
@@ -100,7 +101,7 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       final results = await Future.wait(
         picked.map((p) async {
           final bytes = await p.readAsBytes();
-          return compute(processPostImageDim, bytes);
+          return NativeImage.processPost(bytes);
         }),
       );
       if (!mounted) return;
@@ -129,7 +130,7 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       );
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
-      final processed = await compute(processPostImageDim, bytes);
+      final processed = await NativeImage.processPost(bytes);
       if (!mounted) return;
       setState(() {
         if (processed != null && _images.length < _maxImages) {
