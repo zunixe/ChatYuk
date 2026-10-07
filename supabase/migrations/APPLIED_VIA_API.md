@@ -6,8 +6,8 @@
 
 - **Status:** SUDAH TERAPPLIED via Management API —
   `20261006170000_email_marketing.sql` (tabel + RPC + cron),
-  `20261006180000_email_marketing_fix.sql` (fix review),
-  `20261006190000_email_marketing_status_check_fix.sql` (CHECK 'sending').
+  `20261006181000_email_marketing_fix.sql` (fix review),
+  `20261006191000_email_marketing_status_check_fix.sql` (CHECK 'sending').
 - **Fix review (WAJIB, sudah terapply):**
   - **Duplikat kirim** → claim atomik `pending→sending` + `for update skip locked`
     + `p_lock_seconds` (lepas 'sending' macet) → `email_worker_claim(3-arg)`.
