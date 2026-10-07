@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -314,7 +313,7 @@ class _PostCardState extends ConsumerState<PostCard> {
       }
     }
     if (jobs.isEmpty) return false;
-    final computed = await compute(_aspectRatiosOfBytes, jobs);
+    final computed = await NativeImage.aspectRatios(jobs);
     var filled = false;
     for (var k = 0; k < idx.length && k < computed.length; k++) {
       final a = computed[k];
@@ -2156,26 +2155,8 @@ class _CommentAvatarState extends State<_CommentAvatar> {
   }
 }
 
-/// Rasio asli (w/h) BANYAK gambar sekaligus — top-level untuk compute().
-/// Satu isolate untuk semua foto (bukan satu isolate per foto).
-Future<List<double?>> _aspectRatiosOfBytes(List<Uint8List> list) async {
-  final out = <double?>[];
-  for (final bytes in list) {
-    ui.Codec? codec;
-    try {
-      codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      final w = frame.image.width;
-      final h = frame.image.height;
-      frame.image.dispose();
-      out.add(w > 0 && h > 0 ? w / h : null);
-    } catch (_) {
-      out.add(null);
-    } finally {
-      codec?.dispose();
-    }
-  }
-  return out;
-}
+// Rasio asli (w/h) banyak gambar diproses di NATIVE via
+// `NativeImage.aspectRatios` (header-only, tanpa decode penuh; fallback ke
+// `dartAspectRatios` Dart di lib/core/media/chat_photo_helper.dart).
 
 

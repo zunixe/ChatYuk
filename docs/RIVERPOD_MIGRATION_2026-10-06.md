@@ -90,7 +90,7 @@ unit lama. Hapus di akhir migrasi (sesudah Locale/Theme/Admin).
 
 ---
 
-# Optimasi Memori — "sama kaya WhatsApp" (2026-10-07, Windows)
+# Optimasi Memori ï¿½ "sama kaya WhatsApp" (2026-10-07, Windows)
 
 Keluhan: private chat "ngetik ngelag / freeze lalu kedelte semua" di HP.
 
@@ -98,7 +98,7 @@ Keluhan: private chat "ngetik ngelag / freeze lalu kedelte semua" di HP.
 
 - **Render SEHAT**: `frames=686 build[p50=1.7 p90=4.5 max=20.1ms] janky=2`. Bukan
   rebuild UI/Riverpod (list/composer TIDAK rebuild per-ketikan).
-- **Swap = biang**: ChatYuk `SwapPss 58–134MB`, Native heap reserved **~541MB**
+- **Swap = biang**: ChatYuk `SwapPss 58ï¿½134MB`, Native heap reserved **~541MB**
   (used cuma ~55MB). vs WhatsApp: `SwapPss 5.7MB`, native heap **96MB**.
   ? engine Flutter/Dart menahan arena besar (base64+bytes hidup di heap Dart,
   disalin lintas isolate); proses di-swap; saat ngetik, page ter-swap di-fault
@@ -106,7 +106,7 @@ Keluhan: private chat "ngetik ngelag / freeze lalu kedelte semua" di HP.
 - Kontaminasi: build **profile** menyalakan semua `dlog` (`kDebugMode||kProfileMode`)
   ? overhead. RILIS membuang `dlog`.
 
-## Fase A — Tuning Dart (tanpa native)
+## Fase A ï¿½ Tuning Dart (tanpa native)
 
 - **A1** Hapus `dlog` hot-path: `[ONLINE-EMIT]` (presence), `[TYPING]`, `[PHOTO-DBG]`,
   `[AVATAR]` verbose, `[prefetch]`. (Sisakan log error.)
@@ -116,11 +116,11 @@ Keluhan: private chat "ngetik ngelag / freeze lalu kedelte semua" di HP.
 - **A3** Retensi: `ChatStreamSession._maxMessages` 300?150?**100**;
   `_decodedCacheMax` 16?**12**; `imageCache` 80/48MB?**60/24MB**.
 
-## Fase B — Native image pipeline (Kotlin, MethodChannel)
+## Fase B ï¿½ Native image pipeline (Kotlin, MethodChannel)
 
-- **B0–B2** `android/.../image/ImageBridge.kt`, channel
+- **B0ï¿½B2** `android/.../image/ImageBridge.kt`, channel
   `com.chatyuk.chatyuk/image`, dijalankan di **executor background** +
-  **`LruCache` native 24MB** (bytes gambar tak hidup di Dart heap — kunci
+  **`LruCache` native 24MB** (bytes gambar tak hidup di Dart heap ï¿½ kunci
   kenapa WA stabil). Metode: `aspectRatio`, `decodeThumb`, `decodeAvatar`,
   `decodeBytes`, `decodeWithDims`, `processJpeg`.
 - **Fallback transparan**: `lib/core/media/native_image.dart` (`NativeImage`)
@@ -135,7 +135,7 @@ Keluhan: private chat "ngetik ngelag / freeze lalu kedelte semua" di HP.
 
 | Metrik | Sebelum | Sesudah A+B |
 |---|---|---|
-| SwapPss (user) | 58–134 MB | **175 KB** |
+| SwapPss (user) | 58ï¿½134 MB | **175 KB** |
 | Native heap reserved | ~541 MB | **62 MB** |
 | analyze (lib+test) | 0/0 | **0/0** |
 | flutter test | 1800 hijau | **1808 hijau** |
@@ -144,12 +144,12 @@ Gate terpenuhi: SwapPss < 20MB, Native heap < 150MB. Build release user+admin
 terpasang & jalan (tanpa crash / MissingPlugin pada channel image).
 
 Catatan: pengukuran "sesudah" di device berbeda (192.168.18.72) yang tidak
-sedang tertekan swap — angka "sebelum" dari device lama (192.168.137.215).
+sedang tertekan swap ï¿½ angka "sebelum" dari device lama (192.168.137.215).
 
 
 ---
 
-# SISA / TODO (untuk dilanjutkan AI lain) — per 2026-10-07
+# SISA / TODO (untuk dilanjutkan AI lain) ï¿½ per 2026-10-07
 
 Riverpod 100% selesai & push (`c2207f4`). Optimasi memori A+B (Dart tuning +
 native image pipeline) selesai; SwapPss 58-134MB -> 175KB, Native heap 541MB
@@ -173,33 +173,75 @@ sudah DIHAPUS dari pubspec.
 
 Prioritas berdasar nilai & frekuensi:
 
-1. **View-once watermark** (prioritas #1) — SATU-SATUNYA celah di jalur kirim
-   foto. Lokasi: `lib/mixins/chat_photo_send_mixin.dart:206`
-   (`compute(processViewOnceImage, (bytes, photoSeed))`) -> `ForensicWatermark.embedToBase64`
-   di `lib/core/media/forensic_watermark.dart`.
-   Kerjakan: port algoritma embed (LSB watermark) ke Kotlin, tambah metode
-   `processViewOnce(bytes, seed)` di ImageBridge, ganti call-site dengan
-   `NativeImage.processViewOnce(...)` + fallback. **Uji kompatibilitas decode**
-   (forensik extract harus tetap bisa baca watermark hasil native).
-2. **Post image** — `lib/screens/post_composer_screen.dart:103/132`
-   (`compute(processPostImageDim, bytes)`).
-3. **Story image** — `lib/screens/story_composer_screen.dart:483/532/564`
-   (`_readAndProcessStory`, `encodeRawRgbaToJpg`, `processStoryImage`).
-4. **Avatar upload** — `lib/screens/online_users_screen.dart:377`
-   (`compute(_processAvatarJpeg, bytes)`, 640x640 SQUARE -> perlu method
-   `processSquare` native; Dart `copyResize` dgn width+height = crop-stretch).
-5. **Foto profil** — `lib/screens/profile_screen.dart:297` (`_processPhotoWithPreview`).
-6. **Admin thumb** — `lib/screens/admin_chat_view_screen.dart:750` (`genThumbB64`).
-7. **Post aspect batch** — `lib/widgets/post_card.dart:317` (`_aspectRatiosOfBytes`).
-8. **Post photo viewer** — `lib/widgets/post_photo_viewer.dart:228` (`b64ToBytes`).
+1. ~~**View-once watermark** (prioritas #1)~~ **SELESAI (2026-10-07)** â€” port
+   embed ke native `android/.../image/ForensicWatermark.kt`, method
+   `processViewOnce(bytes,seed)` di `ImageBridge.kt`, wrapper
+   `NativeImage.processViewOnce(bytes,seed)` (+fallback Dart `compute`).
+   Call-site `chat_photo_send_mixin.dart:206` dialihkan. `flutter analyze`
+   0/0, `flutter test` **1810 hijau** (+2 test baru). Build profile APK OK.
+   **TERUJI DI HP (2026-10-07):** kirim foto view-once â†’ watermark TERBACA
+   oleh alat forensik (parity Kotlin<->Dart bit-exact end-to-end).
+   - **GOTCHA KRITIS parity Kotlin<->Dart:** `fnv1a(seed)` di Kotlin `Int`
+     BERTANDA; Dart memakai nilai UNSIGNED 32-bit. WAJIB
+     `fnv1a(seed).toLong() and 0xFFFFFFFFL` sebelum `DartRandom(seed)`, kalau
+     tidak sign-extension mengubah Thomas Wang mix -> kode +/-1 BEDA ->
+     detect GAGAL. Sudah diverifikasi via simulasi (kode +/-1 identik utk
+     semua seed, incl. seed kosong). Replikasi Dart Random (MWC A=0xffffda61)
+     juga WAJIB pakai `ushr` di tempat Dart memakai `>>>`.
+   - Deteksi tetap lewat Dart `ForensicWatermark.detect` (TIDAK di-port;
+     jarang dipakai, hanya alat forensik admin).
+2. ~~**Post image**~~ **SELESAI (2026-10-07)** â€” method native
+   `processPost(bytes,maxW=1080,quality=78)` di `ImageBridge.kt` (resize lebar
+   tetap + kembalikan {bytes,w,h}), wrapper `NativeImage.processPost` (+fallback
+   `dartProcessPostDim` di `chat_photo_helper.dart`). Call-site
+   `post_composer_screen.dart` (galeri + kamera) dialihkan. `flutter test`
+   **1813 hijau** (+3). Diuji: fallback dims benar (1080x720 / 1080x2160),
+   AOT memuat `processPost`, app jalan tanpa MissingPlugin.
+3. ~~**Story image**~~ **SELESAI (2026-10-07)** â€” method native
+   `processStory(bytes,maxPx=1080,quality=82)` (resize satu-sumbu, potretâ†’tinggi
+   lanskapâ†’lebar) di `ImageBridge.kt`, wrapper `NativeImage.processStory`
+   (+fallback `dartProcessStoryB64`). Call-site `story_composer_screen.dart`:
+   `_loadImage` (baca file di isolate + kompres native) & `_publish`. CATATAN:
+   `encodeRawRgbaToJpg` (raw RGBAâ†’JPEG dari `ui.Image.toByteData`) SENGAJA
+   tetap Dart â€” inputnya bytes yang SUDAH di memori Dart; memindah ke native
+   justru menambah salinan besar. `flutter test` **1816 hijau** (+3).
+4. ~~**Avatar upload**~~ **SELESAI (2026-10-07)** â€” method native
+   `processSquare(bytes,size=640,quality=85)` (crop-stretch persegi, sumber
+   sudah di-crop UI) di `ImageBridge.kt`, wrapper `NativeImage.processSquare`
+   (+fallback `dartProcessSquareB64`). Call-site `online_users_screen.dart`
+   dialihkan; `_processAvatarJpeg` (unused) dihapus. `flutter test`
+   **1818 hijau** (+2).
+5. ~~**Foto profil (galeri)**~~ **SELESAI (2026-10-07)** â€” method native
+   `processGalleryPhoto(bytes,...)` â†’ {full,preview} (full lebar 600 q82 +
+   preview 120 blur radius 8 q50) di `ImageBridge.kt`, termasuk **bake EXIF**
+   (`android.media.ExifInterface`) + **stack-blur** Kotlin. Wrapper
+   `NativeImage.processGalleryPhoto` (+fallback `dartProcessGalleryPhoto`).
+   Call-site `profile_screen.dart:297` dialihkan; `_processPhotoWithPreview`
+   dihapus. `flutter test` **1820 hijau** (+2). GOTCHA: Kotlin array pakai
+   `.size` (bukan `.length`).
+6. ~~**Admin thumb**~~ **SELESAI** â€” native `processAdminThumb(bytes,maxW=512,
+   quality=70)` (lebar; tak memperbesar bila â‰¤ maxW) + `NativeImage.
+   processAdminThumb`. Call-site `admin_chat_view_screen.dart:750` dialihkan;
+   `genThumbB64` dihapus. (Catatan: hanya ada di build ADMIN â€” di build user
+   `admin_chat_view_screen` di-tree-shake.)
+7. ~~**Post aspect batch**~~ **SELESAI** â€” native `aspectRatios(list)`
+   (header-only `BitmapFactory.inJustDecodeBounds`, tanpa decode penuh â€” hemat
+   besar) + `NativeImage.aspectRatios`. Call-site `post_card.dart:317`
+   dialihkan; `_aspectRatiosOfBytes` (ui.instantiateImageCodec) dihapus.
+8. ~~**Post photo viewer**~~ **SELESAI** â€” pakai `NativeImage.decodeBytes`
+   (sudah ada) di `post_photo_viewer.dart:228`; hapus dead code `decodeImageB64`
+   & `b64ToBytes` di `private_chat_message.dart`.
 
-Catatan: item 6-8 dampak kecil (admin/jarang) — kerjakan hanya bila sempat.
+**SEMUA 8 ITEM SELESAI (2026-10-07).** `flutter test` **1825 hijau**,
+`flutter analyze` 0/0. Build user + admin OK; device: app jalan tanpa error.
+GOTCHA Kotlin: array pakai `.size` (bukan `.length`); import `kotlin.math.
+roundToInt` bila pakai `roundToInt()`.
 
 ## BERSIH-BERSIH (opsional, non-blocker)
 
-- `lib/widgets/private_chat_message.dart`: top-level `decodeImageB64` (line ~138)
-  dan `b64ToBytes` (line ~158) sudah TIDAK terpakai (dulu jalur bubble) — boleh
-  dihapus. Aman: tidak ada test yang memakainya (sudah dicek).
+- ~~`lib/widgets/private_chat_message.dart`: top-level `decodeImageB64` &
+  `b64ToBytes`~~ **SUDAH DIHAPUS (2026-10-07)** â€” dead code (kelas `DecodedImage`
+  tetap dipakai).
 - 2 artefak debug di root: `_dbg_s0.png`, `timeline_xiaomi.png` (untuk
   didaftarkan `.gitignore` atau dihapus; sengaja tidak di-commit).
 
@@ -218,5 +260,5 @@ Catatan: item 6-8 dampak kecil (admin/jarang) — kerjakan hanya bila sempat.
   TERASA ngelag saat mengetik. Untuk uji performa, PAKAI BUILD **RILIS**, bukan
   profile. (Ini menyesatkan sekali; lihat bagian Diagnosa di atas.)
 - `isShrinkResources=true` + `android/app/src/main/res/raw/keep.xml` (`tools:keep=@"@*"`)
-  WAJIB ada di build rilis (kalau tidak, chat rilis ngelag saat mengetik —
-  dokumentasi §33 PERFORMANCE.md).
+  WAJIB ada di build rilis (kalau tidak, chat rilis ngelag saat mengetik ï¿½
+  dokumentasi ï¿½33 PERFORMANCE.md).

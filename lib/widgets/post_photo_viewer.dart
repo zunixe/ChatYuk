@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../core/cache/post_photo_cache.dart';
-import 'private_chat_message.dart';
+import '../core/media/native_image.dart';
 import '../config/theme.dart';
 
 /// Viewer foto post — popup smooth (fade + scale), bukan halaman baru.
@@ -225,7 +225,7 @@ class _ViewerPageState extends State<_ViewerPage> {
     try {
       final b64 = await PostPhotoCache.instance.full(widget.path);
       if (b64 == null || b64.isEmpty || !mounted) return;
-      final bytes = await compute(b64ToBytes, b64);
+      final bytes = await NativeImage.decodeBytes(b64);
       if (bytes == null || !mounted) return;
       setState(() => _fullBytes = bytes);
     } catch (_) {}

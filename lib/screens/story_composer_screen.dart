@@ -9,6 +9,7 @@ import 'dart:ui' as ui;
 
 import '../config/strings.dart';
 import '../config/theme.dart';
+import '../core/media/native_image.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/story_provider.dart';
@@ -19,19 +20,9 @@ import 'dart:io';
 import 'package:video_player/video_player.dart';
 
 /// Hasil proses gambar — dipindah balik dari isolate dalam satu pesan.
-class _ProcessedStory {
-  final Uint8List bytes;
-  final String b64;
-  const _ProcessedStory(this.bytes, this.b64);
-}
-
-/// Baca file + kompres di SATU isolate (dulu read di main thread, lalu
-/// compute terpisah = 2 hop). File dibaca di isolate supaya bytes mentah
-/// tidak menyeberang ke main isolate lebih dari sekali.
-_ProcessedStory _readAndProcessStory(String path) {
-  final bytes = File(path).readAsBytesSync();
-  return _ProcessedStory(bytes, processStoryImage(bytes));
-}
+/// Baca file story di isolate (bytes mentah tak menyeberang ke main thread).
+/// Kompresi dilakukan di native (`NativeImage.processStory`) atau fallback Dart.
+Uint8List _readStoryFile(String path) => File(path).readAsBytesSync();
 
 /// Kompres foto story di isolate (pola post composer): resize sisi terpanjang
 /// 1080px, JPEG q82 — cukup tajam untuk fullscreen tanpa boros kuota.
@@ -476,15 +467,15 @@ class _StoryComposerScreenState extends ConsumerState<StoryComposerScreen> {
   }
 
   Future<void> _loadImage() async {
-    // readAsBytes + decode/encode di isolate dijalankan dalam SATU
-    // compute: dulu read di main thread lalu compute terpisah — dua hop
-    // dan bytes mentah (bisa 5-10 MB) sempat disalin ke main isolate.
+    // Baca file di isolate (bytes mentah 5-10MB tak menyeberang ke main),
+    // lalu kompres di NATIVE via NativeImage.processStory (fallback Dart).
     try {
-      final res = await compute(_readAndProcessStory, widget.picked.path);
+      final bytes = await compute(_readStoryFile, widget.picked.path);
+      final b64 = await NativeImage.processStory(bytes);
       if (!mounted) return;
       setState(() {
-        _bytes = res.bytes;
-        _b64 = res.b64;
+        _bytes = bytes;
+        _b64 = b64 ?? '';
       });
     } catch (e) {
       dlog('[StoryComposer] process error: $e');
@@ -561,7 +552,8 @@ class _StoryComposerScreenState extends ConsumerState<StoryComposerScreen> {
               _imgOffset != Offset.zero
           ? await _renderTransformed(_bytes!)
           : _bytes!;
-      final b64 = await compute(processStoryImage, transformed);
+      final b64 = await NativeImage.processStory(transformed);
+      if (b64 == null || b64.isEmpty) throw Exception('compress_failed');
       final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider)
           .uploadStoryImage(uid: uid, base64: b64);
       if (path == null || path.isEmpty) throw Exception('upload_failed');

@@ -128,39 +128,12 @@ List<TextSpan> applySearchHighlight(List<TextSpan> spans, String query) {
   return out;
 }
 
-// Top-level function untuk compute() isolate — base64 → bytes + dimensi.
-//
-// PERF: dulu `img.decodeImage(bytes)` men-decode foto FULL-RES (12MP ≈ 48MB
-// RGBA) hanya untuk dapat width/height → spike memori ~470MB saat scroll chat
-// berisi banyak foto (terukur). Sekarang dimensi dibaca dari HEADER JPEG/PNG
-// (parseImageDimensions — tanpa decode penuh). Bytes tetap utuh untuk render
-// (Image.memory sudah `cacheWidth`). Sama pola dgn fix `genPostThumb` (§26).
-DecodedImage? decodeImageB64(String base64) {
-  try {
-    final bytes = base64Decode(base64);
-    final dims = parseImageDimensions(bytes);
-    if (dims == null) return DecodedImage(bytes, 0, 0);
-    return DecodedImage(bytes, dims.width, dims.height);
-  } catch (_) {
-    return null;
-  }
-}
-
 // Hasil decode: bytes + dimensi asli agar tampilan proporsional.
 class DecodedImage {
   final Uint8List bytes;
   final int width;
   final int height;
   const DecodedImage(this.bytes, this.width, this.height);
-}
-
-// Top-level untuk compute() — base64 → bytes (fullscreen viewer).
-Uint8List? b64ToBytes(String b64) {
-  try {
-    return base64Decode(b64);
-  } catch (_) {
-    return null;
-  }
 }
 
 // Cache decode agar scroll-back tidak resize (glitch). Key = hash imageData,

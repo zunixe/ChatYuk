@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,7 +12,6 @@ import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../utils.dart';
-import '../core/media/chat_photo_helper.dart';
 import '../core/media/native_image.dart';
 import '../core/photo_quality_pref.dart';
 import '../core/cache/offline_outbox.dart';
@@ -203,7 +201,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   Future<String?> processViewOnceBytes(Uint8List bytes) async {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     return auth.watermarkEnabled
-        ? compute(processViewOnceImage, (bytes, photoSeed))
+        ? NativeImage.processViewOnce(bytes, photoSeed)
         : NativeImage.processJpeg(bytes, maxPx: 1200, quality: 82);
   }
 

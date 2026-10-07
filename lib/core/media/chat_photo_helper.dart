@@ -239,3 +239,108 @@ String? dartProcessJpegB64((Uint8List, int, int) args) {
         );
   return base64Encode(img.encodeJpg(resized, quality: quality));
 }
+
+/// Fallback DART rasio (w/h) BANYAK gambar sekaligus dari HEADER (PNG/JPEG).
+/// Paritas `_aspectRatiosOfBytes` (satu list, bukan satu per foto).
+List<double?> dartAspectRatios(List<Uint8List> list) {
+  final out = <double?>[];
+  for (final bytes in list) {
+    final d = parseImageDimensions(bytes);
+    out.add(d != null && d.width > 0 && d.height > 0 ? d.width / d.height : null);
+  }
+  return out;
+}
+
+/// Fallback DART thumbnail admin (dari bytes gambar): bila lebar > [maxW]
+/// resize ke [maxW] (rasio dipertahankan) + JPEG [quality] → base64.
+/// Paritas `genThumbB64`. Top-level untuk `compute()`.
+String? dartAdminThumbB64((Uint8List, int, int) args) {
+  final (bytes, maxW, quality) = args;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final w = decoded.width > maxW ? maxW : decoded.width;
+  final h = (decoded.height * (w / decoded.width)).round();
+  final thumb = img.copyResize(decoded, width: w, height: h);
+  return base64Encode(img.encodeJpg(thumb, quality: quality));
+}
+
+/// Fallback DART foto galeri profil: full (lebar [fullW], q[fullQ]) + preview
+/// kecil terblur. Paritas `_processPhotoWithPreview` di profile_screen.
+/// Return `(fullB64, previewB64)` atau null. Top-level untuk `compute()`.
+(String, String)? dartProcessGalleryPhoto((Uint8List, int, int, int, int, int) args) {
+  final (bytes, fullW, fullQ, previewW, blur, previewQ) = args;
+  var decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  // Orientasi EXIF — foto kamera jangan miring.
+  decoded = img.bakeOrientation(decoded);
+  final resized = img.copyResize(decoded, width: fullW);
+  final full = base64Encode(img.encodeJpg(resized, quality: fullQ));
+  var preview = img.copyResize(decoded, width: previewW);
+  preview = img.gaussianBlur(preview, radius: blur);
+  final previewB64 = base64Encode(img.encodeJpg(preview, quality: previewQ));
+  return (full, previewB64);
+}
+
+/// Fallback DART avatar: resize ke [size]x[size] (crop-stretch, non-proporsional)
+/// + JPEG q85 → base64. Top-level untuk `compute()`.
+String? dartProcessSquareB64((Uint8List, int, int) args) {
+  final (bytes, size, quality) = args;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final resized = img.copyResize(
+    decoded,
+    width: size,
+    height: size,
+    interpolation: img.Interpolation.cubic,
+  );
+  return base64Encode(img.encodeJpg(resized, quality: quality));
+}
+
+/// Fallback DART foto story: resize satu-sumbu ke [maxPx] (potret → tinggi,
+/// lanskap → lebar) + JPEG q82 → base64. Top-level untuk `compute()`.
+String? dartProcessStoryB64((Uint8List, int, int) args) {
+  final (bytes, maxPx, quality) = args;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final isPortrait = decoded.height >= decoded.width;
+  final resized = isPortrait
+      ? img.copyResize(decoded, height: maxPx)
+      : img.copyResize(decoded, width: maxPx);
+  return base64Encode(img.encodeJpg(resized, quality: quality));
+}
+
+/// Fallback DART foto POST timeline: resize ke LEBAR tetap [maxW] (rasio
+/// dipertahankan, paritas dgn `img.copyResize(width: 1080)`) + JPEG, sekaligus
+/// kembalikan dimensi hasil. Top-level untuk `compute()`.
+/// Return `(bytes, w, h)?`.
+(Uint8List, int, int)? dartProcessPostDim((Uint8List, int, int) args) {
+  final (bytes, maxW, quality) = args;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final resized = img.copyResize(decoded, width: maxW);
+  return (
+    Uint8List.fromList(img.encodeJpg(resized, quality: quality)),
+    resized.width,
+    resized.height,
+  );
+}
