@@ -871,7 +871,7 @@ class _MainNavState extends ConsumerState<_MainNav>
       ImageCacheHygiene.clearAll();
     } catch (_) {}
     // Sinyal memori menipis dari OS → kembalikan juga arena native (jemalloc)
-    // ke OS via JNI malloc_trim (docs/PERFORMANCE.md §27). No-op bila lib
+    // ke OS via JNI malloc_trim (docs/PERFORMANCE.md §39). No-op bila lib
     // native tak ada.
     unawaited(NativeImage.trim());
   }

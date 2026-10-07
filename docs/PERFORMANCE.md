@@ -3240,7 +3240,7 @@ path/thumb, baca full dari disk saat dibutuhkan.
 
 ---
 
-## 27. Spike RSS ~380MB saat render Timeline = arena jemalloc, BUKAN leak kode (2026-10-07)
+## 39. Spike RSS ~380MB saat render Timeline = arena jemalloc, BUKAN leak kode (2026-10-07)
 
 **Keluhan user:** "chatyuk masih ada ngelag padahal udah native semua".
 
@@ -3306,7 +3306,7 @@ sukses (gerbang nyata §14 lolos).
 
 ---
 
-## 28. Perbandingan LANGSUNG dengan WhatsApp + akar arena (2026-10-07)
+## 40. Perbandingan LANGSUNG dengan WhatsApp + akar arena (2026-10-07)
 
 User minta "kaya WhatsApp". Diukur **head-to-head** di device sama (Xiaomi
 24129PN74G, `adb` wireless), kondisi setara (cold start → interaksi → idle):
@@ -3335,7 +3335,7 @@ RSS 437 → **610 MB** (+173) dalam ~2s. Settle 5s **tetap 610** (arena tidak
 menyusut). HOME + trim → tetap (app paused). **Kembali ke app → turun 417 MB.**
 Jadi spike = burst decode; memori akhirnya dibebaskan tapi arena "pegangan".
 
-**Dampak fix#1 (`malloc_trim` JNI §27):** terbukti **-105 MB** saat trim
+**Dampak fix#1 (`malloc_trim` JNI §39):** terbukti **-105 MB** saat trim
 dipanggil di `onTrimMemory`/background (857→752 MB). Sebagian arena
 dikembalikan; reserved (`Size`) tetap besar karena jemalloc batching.
 
@@ -3355,9 +3355,9 @@ arena fragmentasi (bukan leak). Target: Free mendekati WhatsApp (~9 MB), bukan
 
 ---
 
-## 29. FIX AKAR: buffer pool `ByteArrayOutputStream` — RSS = WhatsApp (2026-10-07)
+## 41. FIX AKAR: buffer pool `ByteArrayOutputStream` — RSS = WhatsApp (2026-10-07)
 
-**Lanjutan §27/§28.** Akar arena fragmentasi = alokasi-decak
+**Lanjutan §39/§40.** Akar arena fragmentasi = alokasi-decak
 `ByteArrayOutputStream()` baru tiap encode JPEG (default 32KB lalu tumbuh
 64→128→…→2MB; tiap tumbuh alokasi buffer baru + copy). Scroll cepat = puluhan
 encode = ratusan alokasi-decak → jemalloc arena penuh lubang free & tak menyusut.
@@ -3388,7 +3388,7 @@ yang dipakai WhatsApp (reuse buffer), menyerang AKAR fragmentasi.
 **Catatan:** `ByteArrayOutputStream.toByteArray()` tetap meng-copy untuk jalur
 yang mengembalikan bytes (tak terhindarkan — hasil menyeberang ke Dart); jalur
 base64 memakai `encodeJpegB64` (tanpa copy perantara).
-`malloc_trim` JNI (§27) tetap dipertahankan sebagai jaring pengaman ekstra.
+`malloc_trim` JNI (§39) tetap dipertahankan sebagai jaring pengaman ekstra.
 
 **Aturan (JANGAN dibalik):** JANGAN kembali memakai `ByteArrayOutputStream()`
 baru per encode di `ImageBridge` — selalu lewat `encodeJpeg`/`encodeJpegB64`
