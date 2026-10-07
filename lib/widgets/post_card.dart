@@ -1977,7 +1977,7 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
         isPath ? await AvatarB64Service.instance.getByPath(avatar) : avatar;
     if (b64.isEmpty || !mounted) return;
     if (_resolvedFor != avatar) return;
-    final bytes = await NativeImage.decodeBytes(b64);
+    final bytes = await NativeImage.decodeAvatar(b64, maxPx: 256);
     if (bytes == null || !mounted || _resolvedFor != avatar) return;
     rememberAvatarBytes(_uid, bytes);
     setState(() => _bytes = bytes);
@@ -2120,7 +2120,7 @@ class _CommentAvatarState extends State<_CommentAvatar> {
     final b64 =
         isPath ? await AvatarB64Service.instance.getByPath(avatar) : avatar;
     if (b64.isEmpty || !mounted || _resolvedFor != avatar) return;
-    final bytes = await NativeImage.decodeBytes(b64);
+    final bytes = await NativeImage.decodeAvatar(b64, maxPx: 256);
     if (bytes == null || !mounted || _resolvedFor != avatar) return;
     rememberAvatarBytes(widget.uid, bytes);
     setState(() => _bytes = bytes);

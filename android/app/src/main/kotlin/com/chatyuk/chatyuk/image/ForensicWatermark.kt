@@ -186,26 +186,49 @@ object ForensicWatermark {
     }
 
     /**
-     * Embed watermark ke bytes gambar → JPEG base64 (NO_WRAP), atau null bila
-     * bytes tak bisa didecode. `seed` = uid penerima.
+     * Embed watermark → Bitmap hasil (sudah di-resize & di-embed). Caller yang
+     * encode (via pool di ImageBridge). Return null bila decode gagal.
      */
-    fun embedToBase64(bytes: ByteArray?, seed: String): ByteArray? {
+    fun embed(bytes: ByteArray?, seed: String): Bitmap? {
         if (bytes == null || bytes.isEmpty()) return null
         val decoded = decodeSafe(bytes) ?: return null
         val resized = resizeMaxSide(decoded, SIZE)
         return try {
             embedInto(resized, seed)
-            val out = ByteArrayOutputStream()
-            val ok = resized.compress(Bitmap.CompressFormat.JPEG, 82, out)
-            if (resized !== decoded) resized.recycle()
-            decoded.recycle()
-            if (ok) out.toByteArray() else null
+            if (resized !== decoded) decoded.recycle()
+            resized
         } catch (t: Throwable) {
             if (resized !== decoded) runCatching { resized.recycle() }
             runCatching { decoded.recycle() }
             null
         }
     }
+
+    /**
+     * Embed watermark ke bytes gambar → JPEG bytes, atau null bila bytes tak
+     * bisa didecode. `seed` = uid penerima.
+     *
+     * PENTING: memakai BAOS thread-local (pool) — JANGAN `ByteArrayOutputStream()`
+     * baru per call (sumber regresi arena jemalloc 477MB, lihat docs §41).
+     */
+    fun embedToBase64(bytes: ByteArray?, seed: String): ByteArray? {
+        val bmp = embed(bytes, seed) ?: return null
+        return try {
+            val out = baosPool.get()!!
+            out.reset()
+            val ok = bmp.compress(Bitmap.CompressFormat.JPEG, 82, out)
+            val result = if (ok) out.toByteArray() else null
+            bmp.recycle()
+            result
+        } catch (t: Throwable) {
+            runCatching { bmp.recycle() }
+            null
+        }
+    }
+
+    /** BAOS pool thread-local (executor IO ImageBridge hanya 2 thread). */
+    private val baosPool = ThreadLocal.withInitial { ByteArrayOutputStream(64 * 1024) }
+
 
     private fun decodeSafe(bytes: ByteArray): Bitmap? = try {
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)

@@ -4,4 +4,11 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- heapprofd (Perfetto native heap profiler) hanya bisa attach ke app
+         `profileable` (Android 10+). Hanya build PROFILE (bukan rilis) yang
+         mendapat ini — aman: profileable TIDAK menyalakan debuggable. -->
+    <application>
+        <profileable android:shell="true"/>
+    </application>
 </manifest>

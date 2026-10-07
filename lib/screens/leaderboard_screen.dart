@@ -280,7 +280,7 @@ class _AvatarState extends State<_Avatar> {
       if (mounted) setState(() => _bytes = cached);
       return;
     }
-    final b = await NativeImage.decodeBytes(b64);
+    final b = await NativeImage.decodeAvatar(b64, maxPx: 256);
     if (b == null) return;
     rememberAvatarBytes(widget.uid, b);
     if (mounted) setState(() => _bytes = b);

@@ -215,7 +215,7 @@ class _UserAvatarState extends State<UserAvatar> {
         // B64 besar dari network batch → decode di isolate agar scroll
         // tidak jank; poll initState menampilkan hasilnya saat siap.
         _asyncResolvingFor = src;
-        NativeImage.decodeBytes(src).then((decoded) {
+        NativeImage.decodeAvatar(src, maxPx: 256).then((decoded) {
           _asyncResolvingFor = null;
           if (decoded == null || decoded.isEmpty) {
             dlog(

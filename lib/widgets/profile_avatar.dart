@@ -111,7 +111,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
           setState(() => _bytes = cached);
           return;
         }
-        final bytes = await NativeImage.decodeBytes(b64);
+        final bytes = await NativeImage.decodeAvatar(b64, maxPx: 256);
         if (!mounted || widget.uid != uid || bytes == null) return;
         rememberAvatarBytes(uid, bytes);
         setState(() => _bytes = bytes);

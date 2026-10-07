@@ -1,66 +1,70 @@
 // JNI helper: kembalikan arena allocator NATIVE ke OS.
 //
-// Kenapa perlu: jemalloc Android (ro.malloc.impl=jemalloc) agresif MENAHAN
-// arena — terukur `Native Heap Size 531MB / Alloc 49MB / Free 477MB` (arena
-// direservasi besar tapi isinya kosong; ~380MB RssAnon). Ini bikin RSS proses
-// ~830MB saat render gambar, walau objek hidup nyaris nol. Android TIDAK
-// mengembalikan arena ke OS sendiri, dan `System.gc()`/`imageCache.evict()`
-// TIDAK menolong (terbukti: `am send-trim-memory COMPLETE` → RSS tetap).
+// Kenapa perlu: allocator Android (jemalloc/scudo) agresif MENAHAN arena —
+// terukur `Native Heap Size 538MB / Alloc 52MB / Free 482MB` (arena
+// direservasi besar tapi isinya kosong) → SwapPss naik. Ini bikin memori app
+// bengkak walau objek hidup nyaris nol. Android TIDAK mengembalikan arena ke
+// OS sendiri, dan `System.gc()`/`imageCache.evict()` TIDAK menolong.
 //
-// Satu-satunya cara: `malloc_trim(0)` (glibc/bionic) atau jemalloc
-// `mallctl("arena...purge")`. Keduanya butuh kode native → file ini.
+// CARA BENAR (docs Android malloc.h): `mallopt(M_PURGE, 0)` — public &
+// diekspor sejak API 28. Nilai -101 = M_PURGE (purge memori tak terpakai),
+// -104 = M_PURGE_ALL (API 34+, lebih menyeluruh).
 //
-// Semua best-effort: bila simbol tidak ada / gagal, return false (tidak crash).
+// CATATAN PENTING: `malloc_trim()` dan `mallctl()` TIDAK diekspor oleh libc
+// Android (diverifikasi via readelf) — dulu file ini memakai keduanya lewat
+// dlsym → SELALU gagal (trim = no-op). itu sebab arena tak pernah menyusut.
+//
+// Semua best-effort: bila simbol tidak ada / gagal, tidak crash.
 
 #include <jni.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <dlfcn.h>
 
-// bionic menyediakan malloc_trim() sejak API 26 (minSdk proyek = 24). Kita
-// resolusi lewat dlsym supaya tidak crash di API < 26 (simbol tak ada).
-typedef int (*malloc_trim_fn)(size_t pad);
+// mallopt(const char* name, int value) → int. Public API bionic (API 27+).
+typedef int (*mallopt_fn)(int param, int value);
 
-// jemalloc mallctl (hanya bila build memakai jemalloc). Signature asli:
-//   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp,
-//               size_t newlen);
-typedef int (*mallctl_fn)(const char *, void *, size_t *, void *, size_t);
+// Nilai dari <malloc.h> bionic (hardcode agar tak bergantung header NDK saat
+// build; nilainya stabil & terdokumentasi).
+#define M_PURGE_VAL (-101)
+#define M_PURGE_ALL_VAL (-104)
+#define M_DECAY_TIME_VAL (-100)
 
-// JNI dipanggil dari ImageBridge.trim() — sekali per sinyal OS (background /
-// memory pressure). Tidak boleh melempar; semua error ditelan.
+// JNI dipanggil dari ImageBridge.trim() — saat background LAMA / memory
+// pressure (bukan tiap pause; lihat lib/app.dart). Tidak boleh melempar.
 JNIEXPORT jboolean JNICALL
 Java_com_chatyuk_chatyuk_image_ImageBridge_nativeTrim(JNIEnv *env, jobject thiz) {
     (void)env;
     (void)thiz;
     bool didSomething = false;
 
-    // 1) malloc_trim(0) — mengembalikan free chunk di top-of-heap + memicu
-    //    purge arena (bionic dengan jemalloc/Debug malloc). Resolusi via
-    //    dlsym supaya API < 26 (tanpa simbol) tidak crash.
-    void *trimSym = dlsym(RTLD_DEFAULT, "malloc_trim");
-    if (trimSym != NULL) {
-        if (((malloc_trim_fn)trimSym)(0)) {
-            didSomething = true;
+    void *sym = dlsym(RTLD_DEFAULT, "mallopt");
+    if (sym == NULL) {
+        // Fallback jarang: coba malloc_trim (glibc; umum tak ada di Android).
+        typedef int (*malloc_trim_fn)(size_t);
+        void *trimSym = dlsym(RTLD_DEFAULT, "malloc_trim");
+        if (trimSym != NULL) {
+            if (((malloc_trim_fn)trimSym)(0)) didSomething = true;
         }
+        return didSomething ? JNI_TRUE : JNI_FALSE;
     }
 
-    // 2) jemalloc purge eksplisit (belt-and-suspenders). `mallctl` ada bila
-    //    allocator = jemalloc; kalau tidak, dlsym gagal → skip.
-    //    Nama berversi → coba beberapa.
-    void *sym = dlsym(RTLD_DEFAULT, "mallctl");
-    if (sym != NULL) {
-        mallctl_fn mallctl = (mallctl_fn)sym;
-        static const char *names[] = {
-            "arena.purge",
-            "arena.0.purge",
-            "arenas.purge",
-        };
-        for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i) {
-            if (mallctl(names[i], NULL, NULL, NULL, 0) == 0) {
-                didSomething = true;
-            }
-        }
+    mallopt_fn mallopt = (mallopt_fn)sym;
+
+    // Decay time 0 = lepas halaman tak terpakai SEGERA (hindari retensi jangka
+    // panjang). Set SEBELUM purge supaya halaman berikutnya juga cepat lepas.
+    mallopt(M_DECAY_TIME_VAL, 0);
+
+    // 1) PURGE_ALL (API 34+, paling menyeluruh).
+    if (mallopt(M_PURGE_ALL_VAL, 0) != 0) {
+        didSomething = true;
     }
+    // 2) PURGE (API 28+). Cukup untuk membebaskan arena ke OS.
+    if (mallopt(M_PURGE_VAL, 0) != 0) {
+        didSomething = true;
+    }
+    // 3) Ulang purge — jemalloc sering butuh >1 pass untuk arena besar.
+    mallopt(M_PURGE_VAL, 0);
 
     return didSomething ? JNI_TRUE : JNI_FALSE;
 }
