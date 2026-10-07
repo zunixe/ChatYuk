@@ -1,73 +1,18 @@
 ﻿import 'dart:convert';
-import 'dart:io';
 import 'package:cryptography/cryptography.dart';
-import 'package:flutter/foundation.dart';
 import '../../utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/message_model.dart';
 import '../../services/storage_photo_service.dart';
+import 'crypto_native.dart';
 import 'message_store.dart';
 
-
-// Top-level function untuk compute() â€” decrypt string tunggal (foto) di background
-Future<String?> _decStr(Map<String, dynamic> args) async {
-  try {
-    final encoded = args['encoded'] as String;
-    final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
-    final key = SecretKey(List<int>.from(keyBytes));
-    final aes = AesGcm.with256bits();
-    final payload =
-        jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
-    final box = SecretBox(
-      base64Decode(payload['c'] as String),
-      nonce: base64Decode(payload['n'] as String),
-      mac: Mac(base64Decode(payload['m'] as String)),
-    );
-    final clear = await aes.decrypt(box, secretKey: key);
-    return utf8.decode(clear);
-  } catch (_) {
-    return null;
-  }
-}
-
-// Top-level function untuk compute() â€” decrypt BANYAK foto sekaligus dalam
-// SATU isolate. Baca file + decrypt di background; hasil Map<messageId, b64>.
-// Jauh lebih cepat daripada decrypt satu-satu (tiap call spawn isolate baru).
-Future<Map<String, String>?> _decBatch(Map<String, dynamic> args) async {
-  try {
-    final paths = (args['paths'] as Map).cast<String, String>();
-    final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
-    final key = SecretKey(List<int>.from(keyBytes));
-    final aes = AesGcm.with256bits();
-    final result = <String, String>{};
-    await Future.wait(
-      paths.entries.map((e) async {
-        try {
-          final f = File(e.value);
-          if (!await f.exists()) return;
-          final encoded = await f.readAsString();
-          final payload =
-              jsonDecode(utf8.decode(base64Decode(encoded)))
-                  as Map<String, dynamic>;
-          final box = SecretBox(
-            base64Decode(payload['c'] as String),
-            nonce: base64Decode(payload['n'] as String),
-            mac: Mac(base64Decode(payload['m'] as String)),
-          );
-          final clear = await aes.decrypt(box, secretKey: key);
-          result[e.key] = utf8.decode(clear);
-        } catch (_) {}
-      }),
-    );
-    return result;
-  } catch (_) {
-    return null;
-  }
-}
+// Enkripsi/dekripsi string (AES-GCM) kini di NATIVE (`CryptoNative`, kunci di
+// Android Keystore) dengan fallback Dart. Lihat lib/core/cache/crypto_native.dart.
 
 /// Cache pesan lokal ter-enkripsi (AES-GCM).
-/// Kunci AES disimpan aman di Android Keystore via flutter_secure_storage.
+/// Kunci AES di Android Keystore (via CryptoNative); fallback Dart untuk test.
 /// Data pesan disimpan di shared_preferences dalam bentuk base64 ciphertext.
 class MessageCache {
   MessageCache._();
@@ -125,68 +70,26 @@ class MessageCache {
     return _key!;
   }
 
-  Future<String> _encrypt(String plain, SecretKey key) async {
-    final iv = _aes.newNonce();
-    final secretBox = await _aes.encrypt(
-      utf8.encode(plain),
-      secretKey: key,
-      nonce: iv,
-    );
-    final payload = {
-      'n': base64Encode(secretBox.nonce),
-      'c': base64Encode(secretBox.cipherText),
-      'm': base64Encode(secretBox.mac.bytes),
-    };
-    return base64Encode(utf8.encode(jsonEncode(payload)));
-  }
-
-  Future<String> _decrypt(String encoded, SecretKey key) async {
-    final payload =
-        jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
-    final box = SecretBox(
-      base64Decode(payload['c'] as String),
-      nonce: base64Decode(payload['n'] as String),
-      mac: Mac(base64Decode(payload['m'] as String)),
-    );
-    final clear = await _aes.decrypt(box, secretKey: key);
-    return utf8.decode(clear);
-  }
-
   /// Enkripsi string apa pun (dipakai juga oleh PhotoCache untuk file foto).
+  /// Di NATIVE (CryptoNative, kunci Keystore); fallback Dart.
   Future<String> encryptString(String plain) async {
-    final key = await _getKey();
-    return _encrypt(plain, key);
+    return CryptoNative.encryptString(plain);
   }
 
   /// Dekripsi string hasil encryptString.
   Future<String> decryptString(String encoded) async {
-    final key = await _getKey();
-    return _decrypt(encoded, key);
+    return (await CryptoNative.decryptString(encoded)) ?? '';
   }
 
-  /// Dekripsi di background isolate â€” untuk PhotoCache supaya buka chat
-  /// tidak freeze saat decrypt banyak foto sekaligus.
+  /// Dekripsi di background (untuk PhotoCache) — native, tanpa isolate.
   Future<String?> decryptStringAsync(String encoded) async {
-    try {
-      final key = await _getKey();
-      final keyBytes = await key.extractBytes();
-      return await compute(_decStr, {'encoded': encoded, 'keyBytes': keyBytes});
-    } catch (_) {
-      return null;
-    }
+    return CryptoNative.decryptString(encoded);
   }
 
-  /// Dekripsi BANYAK foto dalam SATU isolate (baca file + decrypt).
-  /// paths = Map<messageId, pathFileEnkripsi> â†’ hasil Map<messageId, b64>.
+  /// Dekripsi BANYAK foto sekaligus (baca file + decrypt) → Map<messageId, b64>.
+  /// paths = Map<messageId, pathFileEnkripsi>. Native: bytes tak masuk Dart.
   Future<Map<String, String>?> decryptMany(Map<String, String> paths) async {
-    try {
-      if (paths.isEmpty) return {};
-      final key = await _getKey();
-      final keyBytes = await key.extractBytes();
-      return await compute(_decBatch, {'paths': paths, 'keyBytes': keyBytes});
-    } catch (_) {
-      return null;
-    }
+    return CryptoNative.decryptFiles(paths);
   }
 
   /// Simpan daftar pesan untuk sebuah chat (key = chatId/roomId).
