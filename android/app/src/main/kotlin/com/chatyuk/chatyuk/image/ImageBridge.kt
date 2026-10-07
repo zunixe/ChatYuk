@@ -77,7 +77,7 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
             }
             // Kembalikan arena allocator native (jemalloc) ke OS. Ini SATU-
             // SATUNYA cara arena menyusut (terukur: System.gc()/evict tak
-            // menolong — docs/PERFORMANCE.md §27). Best-effort: bila lib tak
+            // menolong — docs/PERFORMANCE.md §39). Best-effort: bila lib tak
             // termuat (mis. build tanpa NDK), ditelan.
             if (nativeLibLoaded) {
                 runCatching { nativeTrim() }
@@ -277,7 +277,7 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
         /**
          * BAOS yang dipakai-ulang per-thread untuk encode JPEG.
          *
-         * Motivasi (ukur 2026-10-07, docs/PERFORMANCE.md §28): chatyuk
+         * Motivasi (ukur 2026-10-07, docs/PERFORMANCE.md §40): chatyuk
          * reservasi arena native 536MB (Free 477MB) vs WhatsApp 83MB — akibat
          * `ByteArrayOutputStream()` baru tiap encode (default 32KB lalu
          * tumbuh 64→128→…→2MB, tiap tumbuh alokasi-decak + copy) saat scroll

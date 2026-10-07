@@ -1,6 +1,6 @@
 # JNI helper untuk mengembalikan arena allocator native (jemalloc) ke OS.
 # Dipakai ImageBridge.nativeTrim() → malloc_trim/mallctl. Lihat
-# docs/PERFORMANCE.md §27.
+# docs/PERFORMANCE.md §39.
 cmake_minimum_required(VERSION 3.18.1)
 
 project(chatyuknative C)
