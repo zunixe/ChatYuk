@@ -145,3 +145,78 @@ terpasang & jalan (tanpa crash / MissingPlugin pada channel image).
 
 Catatan: pengukuran "sesudah" di device berbeda (192.168.18.72) yang tidak
 sedang tertekan swap — angka "sebelum" dari device lama (192.168.137.215).
+
+
+---
+
+# SISA / TODO (untuk dilanjutkan AI lain) — per 2026-10-07
+
+Riverpod 100% selesai & push (`c2207f4`). Optimasi memori A+B (Dart tuning +
+native image pipeline) selesai; SwapPss 58-134MB -> 175KB, Native heap 541MB
+-> 62MB. `flutter analyze` 0/0, `flutter test` 1808 hijau. `provider` package
+sudah DIHAPUS dari pubspec.
+
+## Arsitektur native image (WAJIB dibaca sebelum lanjut)
+
+- Bridge: `android/app/src/main/kotlin/com/chatyuk/chatyuk/image/ImageBridge.kt`,
+  channel `com.chatyuk.chatyuk/image`. Metode: `aspectRatio`, `decodeThumb`,
+  `decodeAvatar`, `decodeBytes`, `decodeWithDims`, `processJpeg`.
+  Dijalankan di **executor background** + **`LruCache` native 24MB**.
+- Wrapper Dart: `lib/core/media/native_image.dart` (`NativeImage`). Setiap method
+  PUNYA **fallback** ke `compute()` + `package:image` bila channel tak ada
+  (unit test/PC). JANGAN hapus fallback.
+- Kalau tambah metode native: (1) tambah case di `ImageBridge.handle`, (2) tambah
+  method di `NativeImage` + fallback Dart top-level di `chat_photo_helper.dart`,
+  (3) tulis test fallback di `test/native_image_test.dart`.
+
+## YANG BELUM DIPINDAH KE NATIVE (masih Dart `compute()`)
+
+Prioritas berdasar nilai & frekuensi:
+
+1. **View-once watermark** (prioritas #1) — SATU-SATUNYA celah di jalur kirim
+   foto. Lokasi: `lib/mixins/chat_photo_send_mixin.dart:206`
+   (`compute(processViewOnceImage, (bytes, photoSeed))`) -> `ForensicWatermark.embedToBase64`
+   di `lib/core/media/forensic_watermark.dart`.
+   Kerjakan: port algoritma embed (LSB watermark) ke Kotlin, tambah metode
+   `processViewOnce(bytes, seed)` di ImageBridge, ganti call-site dengan
+   `NativeImage.processViewOnce(...)` + fallback. **Uji kompatibilitas decode**
+   (forensik extract harus tetap bisa baca watermark hasil native).
+2. **Post image** — `lib/screens/post_composer_screen.dart:103/132`
+   (`compute(processPostImageDim, bytes)`).
+3. **Story image** — `lib/screens/story_composer_screen.dart:483/532/564`
+   (`_readAndProcessStory`, `encodeRawRgbaToJpg`, `processStoryImage`).
+4. **Avatar upload** — `lib/screens/online_users_screen.dart:377`
+   (`compute(_processAvatarJpeg, bytes)`, 640x640 SQUARE -> perlu method
+   `processSquare` native; Dart `copyResize` dgn width+height = crop-stretch).
+5. **Foto profil** — `lib/screens/profile_screen.dart:297` (`_processPhotoWithPreview`).
+6. **Admin thumb** — `lib/screens/admin_chat_view_screen.dart:750` (`genThumbB64`).
+7. **Post aspect batch** — `lib/widgets/post_card.dart:317` (`_aspectRatiosOfBytes`).
+8. **Post photo viewer** — `lib/widgets/post_photo_viewer.dart:228` (`b64ToBytes`).
+
+Catatan: item 6-8 dampak kecil (admin/jarang) — kerjakan hanya bila sempat.
+
+## BERSIH-BERSIH (opsional, non-blocker)
+
+- `lib/widgets/private_chat_message.dart`: top-level `decodeImageB64` (line ~138)
+  dan `b64ToBytes` (line ~158) sudah TIDAK terpakai (dulu jalur bubble) — boleh
+  dihapus. Aman: tidak ada test yang memakainya (sudah dicek).
+- 2 artefak debug di root: `_dbg_s0.png`, `timeline_xiaomi.png` (untuk
+  didaftarkan `.gitignore` atau dihapus; sengaja tidak di-commit).
+
+## GATE WAJIB tiap perubahan (AGENTS.md)
+
+- `flutter analyze` -> 0 error / 0 warning (lib + test).
+- `flutter test` -> hijau semua (sekarang 1808).
+- Build **release** user (`-t lib/main.dart`, flavor apkpureProd) + admin
+  (`-t lib/main_admin.dart`, flavor adminProd) dengan keystore rilis; uji di HP.
+- Ukur ulang `dumpsys meminfo <pkg>` (target: SwapPss < 20MB, Native heap < 150MB)
+  bila mengubah jalur memori. `PerfProbe` aktif via `--dart-define=PERF_PROBE=true`
+
+## CATATAN PENTING (jangan diulang)
+
+- Build **profile** menyalakan SEMUA `dlog` (`kDebugMode||kProfileMode`) -> app
+  TERASA ngelag saat mengetik. Untuk uji performa, PAKAI BUILD **RILIS**, bukan
+  profile. (Ini menyesatkan sekali; lihat bagian Diagnosa di atas.)
+- `isShrinkResources=true` + `android/app/src/main/res/raw/keep.xml` (`tools:keep=@"@*"`)
+  WAJIB ada di build rilis (kalau tidak, chat rilis ngelag saat mengetik —
+  dokumentasi §33 PERFORMANCE.md).
