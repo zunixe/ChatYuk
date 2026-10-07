@@ -13,6 +13,7 @@ import io.flutter.plugin.common.MethodChannel
 import com.chatyuk.chatyuk.call.CallConnection
 import com.chatyuk.chatyuk.call.CallUiBridge
 import com.chatyuk.chatyuk.image.ImageBridge
+import com.chatyuk.chatyuk.crypto.CryptoBridge
 import android.content.Intent
 
 class MainActivity : FlutterActivity() {
@@ -20,6 +21,7 @@ class MainActivity : FlutterActivity() {
     private val callUiChannel = "com.chatyuk.chatyuk/call_ui"
     private val updateChannel = "com.chatyuk.chatyuk/update"
     private val imageChannel = "com.chatyuk.chatyuk/image"
+    private val cryptoChannel = "com.chatyuk.chatyuk/crypto"
     private val tiktokChannel = TikTokBridge.CHANNEL
     private var bootOverlay: FrameLayout? = null
     private var wasSecureAtPause = false
@@ -218,6 +220,11 @@ class MainActivity : FlutterActivity() {
         imageBridge = ImageBridge(
             this,
             MethodChannel(flutterEngine.dartExecutor.binaryMessenger, imageChannel),
+        ).also { it.attach() }
+
+        // Kripto AES-GCM native (javax.crypto) + kunci di Android Keystore.
+        CryptoBridge(
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, cryptoChannel),
         ).also { it.attach() }
 
         handleCallIntent(intent)
