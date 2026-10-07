@@ -60,8 +60,56 @@ transparan** bila channel tak ada.
   SDK = rewrite besar (5 widget, API beda, API key, biaya) tanpa manfaat
   terukur. Tetap `flutter_map`.
 
-## Gotcha Kotlin (jangan diulang)
+## ANALISIS MEMORI (heapprofd) — lonjakan "Native Heap" saat resume
 
+**Gejala:** buka app → HOME (background) → kembali (resume); `dumpsys meminfo
+com.chatyuk.chatyuk` menunjukkan `Native Heap PSS` melonjak ~500MB lalu turun.
+
+**Metode debug (yang BENAR):** Perfetto **heapprofd** (native heap profiler) —
+`android:profileable` di build profile, config `android.heapprofd`, lalu baca
+stack dengan `trace_processor_shell`. Ini melacak **setiap alokasi + stack**,
+bukan menebak.
+
+**Hasil (stack alokasi teratas saat resume):**
+```
+vkCreateFramebuffer ← GrVkFramebuffer::Make ← GrDirectContext::flush
+  ← android::uirenderer::renderthread::CanvasContext::draw
+  ← DrawFrameTask::run ← VulkanManager::finishFrame
+  ← SkiaVulkanPipeline::draw  (calloc)
+```
+→ Sumber = **Android HWUI** (`android::uirenderer`) memakai **Skia Vulkan**
+untuk meng-composite SurfaceView Flutter. **BUKAN** `libchatyuknative` / kode
+image kita. (Bukti pendukung: akumulasi per-mapping didominasi
+`libhwui.so`/`libflutter.so`/`libGLESv2_adreno.so`/`vulkan.adreno.so`.)
+
+**Perbandingan (kontrol):** app **Admin** (UI beda, TANPA SurfaceView path)
+**tidak** spike — mengonfirmasi penyebabnya = komposisi SurfaceView, bukan
+pipeline gambar.
+
+**Konfirmasi bukan-leak:** steady-state (idle & scroll) **datar 36-40MB**;
+soak 8 siklus resume → settle **32-40MB** tiap kali (tidak naik). `Debug
+.getNativeHeapAllocatedSize()` hanya ~50MB (objek hidup kecil); 500MB = halaman
+**committed** arena yang harus di-purge.
+
+**FIX (terbukti):** `mallopt(M_PURGE, 0)` / `M_PURGE_ALL` — SATU-SATUNYA cara
+melepas arena (bukan `malloc_trim`/`mallctl`; **keduanya TIDAK diekspor libc
+Android** — dulu `native_trim.c` pakai dlsym keduanya → SELALU no-op). Setelah
+fix: `NativeImage.trim()` menurunkan **~500MB → ~37MB** tiap resume.
+
+- `native_trim.c`: pakai `mallopt` (API 27+) via `dlsym("mallopt")`, purge
+  3 pass.
+- `lib/app.dart`: trim di resume pada `[0, 2s, 4s, 7s, 10s]` (puncak render
+  bergeser → multi-titik) + `onTrimMemory`/`onLowMemory` (native).
+- **JANGAN** pindahkan `imageCache.clear()` ke `onPause` (dulu begitu → HOME
+  singkat memicu re-decode massal). Sekarang hanya saat background LAMA (≥60s).
+
+**JANGAN diulang / misdiagnosis:**
+- Lonjakan resume **BUKAN** kebocoran kode kita & **BUKAN** pipeline gambar.
+- `malloc_trim`/`mallctl` **tidak ada** di libc Android → jangan dipakai.
+- Mengaktifkan Impeller / mematikan toggle FLAG_SECURE **tidak** menghilangkan
+  spike (sudah diuji — falsified).
+
+## Gotcha Kotlin (jangan diulang)
 - Array Kotlin: `.size` (BUKAN `.length`).
 - `roundToInt()` / `cos` / `sqrt`: import `kotlin.math.*`.
 - `dart:math Random` = MWC (A=0xffffda61) — replikasi WAJIB pakai `ushr`

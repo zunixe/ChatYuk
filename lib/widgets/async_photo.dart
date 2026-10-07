@@ -220,7 +220,10 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar>
 
   Future<void> _decode() async {
     final src = widget.base64;
-    final bytes = await NativeImage.decodeBytes(src);
+    // base64 kosong = permanen (tak ada foto) → jangan decode & JANGAN jadwalkan
+    // retry (dulu bikin timer pending → leak di test + kerja sia-sia).
+    if (src.isEmpty) return;
+    final bytes = await NativeImage.decodeAvatar(src, maxPx: 256);
     if (!mounted) return;
     if (bytes != null) {
       if (_cache.length < 200) _cache[src] = bytes;
@@ -239,7 +242,7 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar>
     if (tried >= 2) return;
     await Future<void>.delayed(const Duration(milliseconds: 300));
     if (!mounted || widget.base64 != src) return;
-    final retry = await NativeImage.decodeBytes(src);
+    final retry = await NativeImage.decodeAvatar(src, maxPx: 256);
     if (!mounted || widget.base64 != src) return;
     if (retry != null) {
       if (_cache.length < 200) _cache[src] = retry;

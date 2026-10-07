@@ -76,19 +76,26 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                 cache.evictAll()
             } catch (_: Throwable) {
             }
-            // Kembalikan arena allocator native (jemalloc) ke OS. Ini SATU-
-            // SATUNYA cara arena menyusut (terukur: System.gc()/evict tak
-            // menolong — docs/PERFORMANCE.md §39). Best-effort: bila lib tak
-            // termuat (mis. build tanpa NDK), ditelan.
+            // Kembalikan arena allocator native ke OS. TERVERIFIKASI heapprofd:
+            // lonjakan "Native Heap" saat resume = buffer render Android (HWUI
+            // Skia-Vulkan `vkCreateFramebuffer` via android::uirenderer) yang
+            // dicommit ke arena, BUKAN kode image kita (lihat
+            // docs/NATIVE_UI_ONLY.md). `mallopt(M_PURGE)` melepas halaman
+            // free-committed → PSS turun ~500MB → ~37MB (terukur, stabil tiap
+            // siklus resume). Purge beberapa kali: jemalloc butuh >1 pass.
             if (nativeLibLoaded) {
-                runCatching { nativeTrim() }
+                for (pass in 0 until 3) {
+                    runCatching { nativeTrim() }
+                }
             }
-            // GC Dart tetap dipanggil: membebaskan objek Dart (base64 string,
-            // ByteArray dari channel) SEBELUM arena ditrim lagi di sisa siklus.
             runCatching { System.gc() }
         }
     }
 
+    /** Ukuran arena native (Debug.getNativeHeapSize) — untuk verifikasi trim. */
+    @Suppress("unused")
+    private fun debugNativeHeapSize(): Long =
+        try { android.os.Debug.getNativeHeapSize() } catch (_: Throwable) { -1L }
 
     private fun handle(call: MethodCall, result: MethodChannel.Result) {
         val method = call.method
@@ -158,8 +165,12 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                     "processViewOnce" -> {
                         val raw = call.argument<ByteArray>("bytes")
                         val seed = call.argument<String>("seed") ?: ""
-                        val jpeg = ForensicWatermark.embedToBase64(raw, seed)
-                        val out = jpeg?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
+                        val bmp = ForensicWatermark.embed(raw, seed)
+                        val out = bmp?.let {
+                            val s = encodeJpegB64(it, 82)
+                            it.recycle()
+                            s
+                        }
                         main.post { result.success(out) }
                     }
                     "detectWatermark" -> {

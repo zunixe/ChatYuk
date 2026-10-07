@@ -750,21 +750,12 @@ class _MainNavState extends ConsumerState<_MainNav>
       // App di-background → set idle, bukan offline.
       // User tetap tampil di menu online sebagai idle.
       auth.goIdle();
-      // Lepaskan cache bitmap (native heap) saat background: OS gencar
-      // menuntut RAM dari app background, dan bitmap besar di-hold percuma
-      // (layar tidak terlihat). Saat resume, gambar yang tampil di-decode
-      // ulang dari disk cache (murah). Ini yang membuat RSS turun drastis
-      // & mencegah app dibunuh OS saat user buka app lain.
-      try {
-        PaintingBinding.instance.imageCache
-          ..clear()
-          ..clearLiveImages();
-      } catch (_) {}
-      // Arena native (jemalloc) membengkak karena alokasi byte gambar besar
-      // berulang dan TIDAK menyusut sendiri (terukur reserved ~542MB / used
-      // ~57MB). Minta native membuang cache + kembalikan arena ke OS; saat
-      // resume gambar di-decode ulang dari disk (murah). Fire-and-forget.
-      unawaited(NativeImage.trim());
+      // PENTING: pelepasan cache bitmap + trim arena native DITUNDA ke resume
+      // (lihat cabang resumed) supaya hanya dilakukan saat background LAMA.
+      // Dulu dipanggil di sini (setiap pause) → HOME 3 dtk memaksa re-decode
+      // SEMUA gambar saat resume = burst alokasi besar → jemalloc arena
+      // membengkak (PSS 506MB dirty, RSS 823MB; FREE 481MB). Itu regresi
+      // memori nyata (bukan sekadar reserved). Lihat docs/NATIVE_UI_ONLY.md.
     } else if (state == AppLifecycleState.detached) {
       // App di-kill/force-close → set idle (offline otomatis setelah threshold).
       auth.goIdle();
@@ -777,8 +768,26 @@ class _MainNavState extends ConsumerState<_MainNav>
           ? null
           : DateTime.now().difference(_pausedAt!);
       _pausedAt = null;
+      // PENTING (memori): saat resume, renderer Android (HWUI Skia-Vulkan) +
+      // engine Flutter meng-commit buffer render ke arena allocator → "Native
+      // Heap" PSS melonjak ~500MB. TERVERIFIKASI heapprofd: sumber =
+      // vkCreateFramebuffer via android::uirenderer (HWUI) — BUKAN kode image
+      // kita. Halaman itu di-purge oleh NativeImage.trim() (mallopt M_PURGE):
+      // terukur settle ~500MB → ~37MB tiap siklus. Purge di beberapa titik
+      // (puncak render bergeser) tanpa membebani — 5 channel call per resume.
+      for (final ms in const [0, 2000, 4000, 7000, 10000]) {
+        if (ms == 0) {
+          unawaited(NativeImage.trim());
+        } else {
+          Future<void>.delayed(Duration(milliseconds: ms), () {
+            unawaited(NativeImage.trim());
+          });
+        }
+      }
       if (pausedFor != null && pausedFor.inSeconds >= 60) {
-        // Background lama → buang SEMUA cache RAM (pesan + foto) + bitmap.
+        // Background lama → buang SEMUA cache RAM (pesan + foto) + bitmap,
+        // lalu minta arena native kembali ke OS. Dilakukan di RESUME (bukan
+        // pause) supaya background singkat tidak memicu re-decode massal.
         try {
           MessageCache.instance.trimMemCache();
         } catch (_) {}
@@ -789,8 +798,10 @@ class _MainNavState extends ConsumerState<_MainNav>
           PostPhotoCache.instance.trimMemCache();
         } catch (_) {}
         try {
+          // clearAll() sudah membuang Flutter imageCache + cache app terdaftar.
           ImageCacheHygiene.clearAll();
         } catch (_) {}
+        unawaited(NativeImage.trim());
       } else if (pausedFor != null && pausedFor.inSeconds >= 15) {
         // Background sedang (15-60 dtk) → trim RAM foto saja (paling besar,
         // paling murah dimuat ulang). Pesan tetap di RAM supaya chat instan.
