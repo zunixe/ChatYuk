@@ -288,4 +288,134 @@ object ForensicWatermark {
 
     /** Untuk test: kode ±1 seed (paritas dgn Dart `_code`). */
     internal fun codeForTest(seed: String): IntArray = code(seed).map { it.toInt() }.toIntArray()
+
+    // ── EXTRACT / DETECT ────────────────────────────────────────
+    /** Hasil deteksi satu seed: rho (korelasi) + z (antar-seed) + matched. */
+    data class Detect(
+        val seed: String,
+        val rho: Double,
+        val z: Double,
+        val matched: Boolean,
+    )
+
+    private val SCALES = intArrayOf(SIZE, 1600, 1024, 768, 512, 448, 384, 320, 256, 224, 192)
+    private val SHIFTS = intArrayOf(0, -8, 8, -16, 16)
+
+    /**
+     * Deteksi watermark pada bytes gambar (mis. foto bocor yang sudah di-crop).
+     * Kembalikan skor tiap kandidat seed, urut menurun rho. Paritas
+     * `ForensicWatermark.detect` Dart.
+     */
+    fun detect(bytes: ByteArray?, candidates: List<String>, threshold: Double = 2.0): List<Detect> {
+        if (bytes == null || bytes.isEmpty() || candidates.isEmpty()) return emptyList()
+        val decoded = decodeSafe(bytes) ?: return emptyList()
+        val means = ArrayList<DoubleArray>()
+        for (target in SCALES) {
+            val resized = resizeMaxSide(decoded, target)
+            val n = Math.round(target.toDouble() * BLOCK_SIZE / SIZE).toInt().coerceAtLeast(8)
+            val y = luminance(resized)
+            val w = resized.width
+            val h = resized.height
+            for (dx in SHIFTS) {
+                for (dy in SHIFTS) {
+                    means.add(extractMean(y, w, h, n, dx, dy))
+                }
+            }
+            if (resized !== decoded) resized.recycle()
+        }
+        decoded.recycle()
+
+        val rhos = DoubleArray(candidates.size)
+        for (i in candidates.indices) {
+            val c = code(candidates[i])
+            var maxRho = Double.NEGATIVE_INFINITY
+            for (mean in means) {
+                val r = correlate(mean, c)
+                if (r > maxRho) maxRho = r
+            }
+            rhos[i] = maxRho
+        }
+
+        val nn = rhos.size
+        var mu = 0.0
+        for (r in rhos) mu += r
+        mu /= nn
+        var variance = 0.0
+        for (r in rhos) { val d = r - mu; variance += d * d }
+        variance /= (nn - 1).coerceAtLeast(1)
+        val sigma = sqrt(variance) + 1e-6
+
+        val out = ArrayList<Detect>(candidates.size)
+        for (i in candidates.indices) {
+            val z = (rhos[i] - mu) / sigma
+            out.add(Detect(candidates[i], rhos[i], z, z > threshold))
+        }
+        out.sortByDescending { it.rho }
+        return out
+    }
+
+    private fun luminance(im: Bitmap): DoubleArray {
+        val w = im.width
+        val h = im.height
+        val px = IntArray(w * h)
+        im.getPixels(px, 0, w, 0, 0, w, h)
+        val y = DoubleArray(w * h)
+        for (idx in px.indices) {
+            val p = px[idx]
+            y[idx] = luma((p shr 16) and 0xFF, (p shr 8) and 0xFF, p and 0xFF)
+        }
+        return y
+    }
+
+    private fun extractMean(
+        y: DoubleArray, w: Int, h: Int, n: Int, dx: Int, dy: Int,
+    ): DoubleArray {
+        val gridX = w / n
+        val gridY = h / n
+        val acc = DoubleArray(COEFFS)
+        val cnt = DoubleArray(COEFFS)
+        val block = DoubleArray(n * n)
+        for (by in 0 until gridY) {
+            for (bx in 0 until gridX) {
+                val ox = bx * n + dx
+                val oy = by * n + dy
+                if (ox < 0 || oy < 0 || ox + n > w || oy + n > h) continue
+                for (i in 0 until n) {
+                    val src = (oy + i) * w + ox
+                    for (j in 0 until n) block[i * n + j] = y[src + j]
+                }
+                val dct = transform2d(block, ::dct1d)
+                var meanP = 0.0
+                for (p in 0 until COEFFS) meanP += dct[POSITIONS[p * 2] * n + POSITIONS[p * 2 + 1]]
+                meanP /= COEFFS
+                var ss = 0.0
+                val vals = DoubleArray(COEFFS)
+                for (p in 0 until COEFFS) {
+                    val v = dct[POSITIONS[p * 2] * n + POSITIONS[p * 2 + 1]] - meanP
+                    vals[p] = v
+                    ss += v * v
+                }
+                val std = sqrt(ss / COEFFS) + 1e-6
+                for (p in 0 until COEFFS) {
+                    acc[p] += vals[p] / std
+                    cnt[p] += 1.0
+                }
+            }
+        }
+        val mean = DoubleArray(COEFFS)
+        for (p in 0 until COEFFS) if (cnt[p] > 0) mean[p] = acc[p] / cnt[p]
+        return mean
+    }
+
+    private fun correlate(c: DoubleArray, code: DoubleArray): Double {
+        var num = 0.0
+        var denC = 0.0
+        var denCode = 0.0
+        for (p in code.indices) {
+            num += c[p] * code[p]
+            denC += c[p] * c[p]
+            denCode += code[p] * code[p]
+        }
+        return num / (sqrt(denC) * sqrt(denCode) + 1e-9)
+    }
 }
