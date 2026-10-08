@@ -253,6 +253,7 @@ class _QuickSideMenuState extends ConsumerState<QuickSideMenu>
                                 _item(
                                   icon: Icons.dynamic_feed_rounded,
                                   active: timelineActive,
+                                  color: AppTheme.quickTimeline,
                                   tooltip: s.navTimeline,
                                   semanticLabel: s.quickMenuTimeline,
                                   reduceMotion: reduceMotion,
@@ -264,6 +265,7 @@ class _QuickSideMenuState extends ConsumerState<QuickSideMenu>
                                 _item(
                                   icon: Icons.forum_rounded,
                                   active: widget.roomActive,
+                                  color: AppTheme.quickRoom,
                                   tooltip: s.titleRooms,
                                   semanticLabel: s.quickMenuGlobalRoom,
                                   reduceMotion: reduceMotion,
@@ -289,19 +291,22 @@ class _QuickSideMenuState extends ConsumerState<QuickSideMenu>
   Widget _item({
     required IconData icon,
     required bool active,
+    required Color color,
     required String tooltip,
     required String semanticLabel,
     required bool reduceMotion,
     required VoidCallback onTap,
     Animation<double>? pulse,
   }) {
-    final tint = active ? AppTheme.primary : AppTheme.textSecondary;
+    // Warna khas ikon (mencolok) — CUKUP ikonnya saja yang berwarna, seperti
+    // sebelumnya. Saat aktif → latar lembut warna sama; idle → tanpa latar.
+    final tint = color;
     Widget body = Container(
       width: _btn,
       height: _btn,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: active ? AppTheme.primary.withValues(alpha: 0.12) : null,
+        color: active ? color.withValues(alpha: 0.12) : null,
         borderRadius: const BorderRadius.horizontal(
           left: Radius.circular(22),
         ),
