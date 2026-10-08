@@ -748,6 +748,14 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) activeChatId.value = widget.room.id;
     });
+    // Tandai room sudah dibaca di MANA PUN dibuka dari sini — jaring terakhir
+    // supaya badge unread hilang walau pemanggil (explore/grup/notif) lupa.
+    // Aman dipanggil berulang (RPC idempoten, provider pakai _readRoomIds).
+    unawaited(
+      ProviderScope.containerOf(context, listen: false)
+          .read(roomProvider.notifier)
+          .markRoomRead(widget.room.id),
+    );
     final msgsHandle = _chat.getRoomMessages(widget.room.id);
     _msgsHandle = msgsHandle;
     _msgsStream = msgsHandle.stream;

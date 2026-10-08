@@ -120,6 +120,11 @@ class RoomNotifier extends Notifier<RoomState> {
   List<RoomModel> _privateRooms = [];
   Set<String> _memberRoomIds = {};
   Map<String, int> _counts = {};
+  /// Room yang sudah dibuka user (badge unread dipaksa 0). Bertahan lintas
+  /// `fetchExplore` supaya badge TIDAK muncul lagi akibat race: RPC
+  /// `mark_room_read` bisa belum selesai saat fetchExplore menimpa `_explore`
+  /// dengan data server yang masih unread>0.
+  final Set<String> _readRoomIds = {};
   String _country = 'Indonesia';
   bool _seeded = false;
   StreamSubscription? _countsSub;
@@ -229,6 +234,15 @@ class RoomNotifier extends Notifier<RoomState> {
       _explore = rows
           .map((e) => RoomModel.fromMap('${e['id'] ?? ''}', snakeToCamel(e)))
           .toList();
+      // Paksa unread=0 untuk room yang sudah dibuka user — jaga badge tetap
+      // hilang walau RPC mark_room_read belum sempat tersimpan di server.
+      if (_readRoomIds.isNotEmpty) {
+        _explore = _explore
+            .map((r) => _readRoomIds.contains(r.id) && r.unread != 0
+                ? r.copyWith(unread: 0)
+                : r)
+            .toList();
+      }
       _explore = _explore.map((r) {
         final c = _counts[r.id];
         return c != null ? r.copyWith(onlineCount: c) : r;
@@ -261,6 +275,7 @@ class RoomNotifier extends Notifier<RoomState> {
   }
 
   Future<void> markRoomRead(String roomId) async {
+    _readRoomIds.add(roomId);
     _explore = _explore
         .map((r) => r.id == roomId ? r.copyWith(unread: 0) : r)
         .toList();
