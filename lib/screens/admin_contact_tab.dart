@@ -6,6 +6,7 @@ import '../providers/riverpod/theme_provider.dart';
 import '../utils.dart';
 import '../config/strings_admin.dart';
 import '../providers/riverpod/admin_provider.dart';
+import '../widgets/profile_avatar.dart';
 
 /// Admin: daftar pesan Hubungi Kami dari pengguna.
 class AdminContactTab extends ConsumerStatefulWidget {
@@ -176,9 +177,14 @@ class _AdminContactTabState extends ConsumerState<AdminContactTab> {
   Widget _messageCard(BuildContext context, Map<String, dynamic> msg) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final read = msg['is_read'] == true;
-    final name = (msg['name'] as String?)?.trim().isNotEmpty == true
-        ? msg['name'] as String
-        : null;
+    // Identitas pengirim: nickname profil (bila login) → fallback `name` dari
+    // form → 'Anon'. Avatar dari profil by user_id (resolve via ProfileAvatar).
+    final uid = (msg['user_id'] as String?) ?? '';
+    final nickname = (msg['nickname'] as String?)?.trim() ?? '';
+    final formName = (msg['name'] as String?)?.trim() ?? '';
+    final displayName = nickname.isNotEmpty
+        ? nickname
+        : (formName.isNotEmpty ? formName : 'Anon');
     final createdAt = msg['created_at'] != null
         ? DateTime.tryParse('${msg['created_at']}')
         : null;
@@ -192,10 +198,18 @@ class _AdminContactTabState extends ConsumerState<AdminContactTab> {
         border: Border.all(color: AppTheme.divider, width: 1),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+        padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Avatar pengirim (dari profil bila login). uid kosong → inisial.
+            ProfileAvatar(
+              uid: uid,
+              name: displayName,
+              size: 36,
+              borderRadius: 18,
+            ),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,7 +218,7 @@ class _AdminContactTabState extends ConsumerState<AdminContactTab> {
                     children: [
                       Expanded(
                         child: Text(
-                          name ?? '—',
+                          displayName,
                           style: AppText.bodyStrong.copyWith(
                             color: read ? AppTheme.textSecondary : null,
                           ),
