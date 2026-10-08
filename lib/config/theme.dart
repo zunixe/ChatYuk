@@ -496,6 +496,12 @@ class AppTheme {
   static const Color primaryDark = Color(0xFF1976D2);
   static const Color accent = Color(0xFF00BCD4);
 
+  /// Warna khas pintasan menu cepat (menu tepi kanan halaman Online) — biar
+  /// MENCOLOK & menarik diklik. Timeline = ungu (feed sosial), Room = oranye
+  /// (obrolan). Konstan di light & dark (kontras di kedua mode).
+  static const Color quickTimeline = Color(0xFF8B5CF6); // violet
+  static const Color quickRoom = Color(0xFFFF7043); // deep orange
+
   // ── Palet light ──
   static const _bgScreenLight = Color(0xFFF0F4F8);
   static const _bgDarkLight = Color(0xFFF5F5F5);
