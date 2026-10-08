@@ -11,8 +11,8 @@ import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/nav_provider.dart';
 
 /// Menu cepat melayang di tepi KANAN halaman Online — pil vertikal berisi
-/// dua pintasan: **Timeline** (pindah tab) dan **Global Room** (buka room
-/// kategori General, perilaku sama dengan kapsul lama).
+/// tiga pintasan: **Timeline** (pindah tab), **Global Room** (buka room
+/// kategori General), dan **Buat Grup** (dialog buat grup baru).
 ///
 /// Karakter visual:
 ///  - Nempel di tepi kanan, hanya SISI KIRI yang membulat (sisi kanan rata
@@ -31,6 +31,9 @@ class QuickSideMenu extends ConsumerStatefulWidget {
   /// menunggu sampai halaman yang dibuka DITUTUP, lalu siap diketuk ulang.
   final Future<void> Function() onOpenRoom;
 
+  /// Aksi saat pintasan Buat Grup diketuk (buka dialog buat grup).
+  final VoidCallback? onCreateGroup;
+
   /// Offset vertikal (px) dari posisi default; + = ke atas. Dipakai untuk
   /// menghitung Highlight Global Room yang aktif (opsional).
   final bool roomActive;
@@ -41,6 +44,7 @@ class QuickSideMenu extends ConsumerStatefulWidget {
   const QuickSideMenu({
     super.key,
     required this.onOpenRoom,
+    this.onCreateGroup,
     this.roomActive = false,
     this.ownerUid,
   });
@@ -272,6 +276,20 @@ class _QuickSideMenuState extends ConsumerState<QuickSideMenu>
                                   pulse: _pulse,
                                   onTap: () => _tap(widget.onOpenRoom),
                                 ),
+                                if (widget.onCreateGroup != null) ...[
+                                  SizedBox(height: _gap),
+                                  _item(
+                                    icon: Icons.group_add_rounded,
+                                    active: false,
+                                    color: AppTheme.quickGroup,
+                                    tooltip: s.quickMenuCreateGroup,
+                                    semanticLabel: s.quickMenuCreateGroup,
+                                    reduceMotion: reduceMotion,
+                                    onTap: () => _tap(() async {
+                                      widget.onCreateGroup?.call();
+                                    }),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

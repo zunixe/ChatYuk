@@ -2043,6 +2043,7 @@ class S {
   // ── Menu cepat samping (halaman Online) ──
   String get quickMenuTimeline => isId ? 'Buka Timeline' : 'Open Timeline';
   String get quickMenuGlobalRoom => isId ? 'Buka Global Room' : 'Open Global Room';
+  String get quickMenuCreateGroup => isId ? 'Buat Grup' : 'Create Group';
 
   // ── Timeline ──
   String get navTimeline => isId ? 'Timeline' : 'Timeline';

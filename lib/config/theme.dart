@@ -501,6 +501,7 @@ class AppTheme {
   /// (obrolan). Konstan di light & dark (kontras di kedua mode).
   static const Color quickTimeline = Color(0xFF8B5CF6); // violet
   static const Color quickRoom = Color(0xFFFF7043); // deep orange
+  static const Color quickGroup = Color(0xFF10B981); // emerald (buat grup)
 
   // ── Palet light ──
   static const _bgScreenLight = Color(0xFFF0F4F8);
