@@ -696,6 +696,14 @@ class S {
   String get privacyLeaderboardDesc => isId
       ? 'Apakah kamu muncul di peringkat Top Aktif.'
       : 'Whether you appear in the Top Active ranking.';
+  String get privacyCalls => isId ? 'Panggilan' : 'Calls';
+  String get privacyCallsDesc => isId
+      ? 'Siapa yang boleh menelepon kamu (audio & video).'
+      : 'Who can call you (audio & video).';
+  // Pesan saat call ditolak oleh privasi penerima.
+  String get callNotAllowed => isId
+      ? 'Pengguna ini tidak menerima panggilan.'
+      : 'This user does not accept calls.';
   String get privacyReadReceipts => isId ? 'Laporan dibaca' : 'Read receipts';
   String get privacyReadReceiptsDesc => isId
       ? 'Pesan tetap terkirim, tetapi pengirim tidak melihat centang biru.'

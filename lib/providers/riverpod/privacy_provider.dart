@@ -93,6 +93,7 @@ class PrivacyNotifier extends Notifier<PrivacyState> {
     PrivacyVisibility? about,
     PrivacyVisibility? story,
     PrivacyVisibility? leaderboard,
+    PrivacyVisibility? call,
     bool? readReceipts,
   }) async {
     state = state.copyWith(
@@ -103,6 +104,7 @@ class PrivacyNotifier extends Notifier<PrivacyState> {
         about: about,
         story: story,
         leaderboard: leaderboard,
+        call: call,
         readReceipts: readReceipts,
       ),
     );
@@ -114,6 +116,7 @@ class PrivacyNotifier extends Notifier<PrivacyState> {
         about: about,
         story: story,
         leaderboard: leaderboard,
+        call: call,
         readReceipts: readReceipts,
       );
       state = state.copyWith(settings: s);
@@ -139,3 +142,6 @@ class PrivacyNotifier extends Notifier<PrivacyState> {
 
 final privacyProvider =
     NotifierProvider<PrivacyNotifier, PrivacyState>(PrivacyNotifier.new);
+
+/// Akses PrivacyService murni (query non-reaktif, mis. cek izin panggilan).
+final privacyServiceProvider = Provider<PrivacyService>((_) => PrivacyService());

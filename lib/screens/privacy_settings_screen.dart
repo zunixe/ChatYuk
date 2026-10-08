@@ -79,6 +79,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
       'about' => p.about,
       'story' => p.story,
       'leaderboard' => p.leaderboard,
+      'call' => p.call,
       _ => PrivacyVisibility.everyone,
     };
   }
@@ -91,6 +92,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
       'about' => s.privacyAbout,
       'story' => s.privacyStory,
       'leaderboard' => s.privacyLeaderboard,
+      'call' => s.privacyCalls,
       _ => s.privacyTitle,
     };
   }
@@ -127,6 +129,8 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
         await provider.update(story: value);
       case 'leaderboard':
         await provider.update(leaderboard: value);
+      case 'call':
+        await provider.update(call: value);
     }
   }
 
@@ -317,6 +321,12 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
                 title: s.privacyLeaderboard,
                 value: _valueLabel(s, 'leaderboard', p),
                 onTap: () => _choose('leaderboard', p),
+              ),
+              _PrivacyTile(
+                icon: Icons.call_outlined,
+                title: s.privacyCalls,
+                value: _valueLabel(s, 'call', p),
+                onTap: () => _choose('call', p),
               ),
             ],
           ),
