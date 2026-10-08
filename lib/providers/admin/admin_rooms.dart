@@ -256,4 +256,14 @@ mixin AdminRoomsMx on AdminBase {
   /// Ambil image_data satu pesan (lazy foto grup).
   Future<String> fetchRoomMessageImage(int messageId) =>
       _service.fetchRoomMessageImage(messageId);
+
+  /// Hapus room (admin — bisa hapus room APA PUN termasuk tanpa owner).
+  /// Buang dari list lokal + bersihkan cache pesan/anggota room tsb.
+  Future<void> deleteRoom(String roomId) async {
+    await _service.adminDeleteRoom(roomId);
+    _rooms = _rooms.where((r) => '${r['id']}' != roomId).toList();
+    _roomMsgMem.remove(roomId);
+    _roomMsgHasMore.remove(roomId);
+    _notifyRooms();
+  }
 }

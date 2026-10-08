@@ -854,6 +854,12 @@ class AdminService {
     return (res as String?) ?? '';
   }
 
+  /// Hapus room apa pun (admin only). FK cascade membersihkan pesan/anggota.
+  Future<void> adminDeleteRoom(String roomId) async {
+    await _rpc('admin_delete_room', params: {'p_room_id': roomId})
+        .timeout(_openTimeout);
+  }
+
   // ── Popup update aplikasi (app_settings) ──
   /// Baca konfigurasi update. Return null bila gagal.
   Future<Map<String, dynamic>?> getUpdateConfig() async {

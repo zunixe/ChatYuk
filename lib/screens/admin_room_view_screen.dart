@@ -144,6 +144,46 @@ class _AdminRoomViewScreenState extends ConsumerState<AdminRoomViewScreen> {
     }
   }
 
+  Future<void> _confirmDeleteRoom(S s) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.adminRoomDeleteTitle),
+        content: Text(s.adminRoomDeleteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              s.adminRoomDelete,
+              style: const TextStyle(color: AppTheme.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context);
+    try {
+      await ProviderScope.containerOf(context, listen: false)
+          .read(adminProvider)
+          .deleteRoom(widget.roomId);
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(s.adminRoomDeleted)));
+      nav.pop();
+    } catch (e) {
+      dlog('[ADMIN] deleteRoom error: $e');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(s.adminRoomDeleteFailed)),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(localeProvider).s;
@@ -175,6 +215,13 @@ class _AdminRoomViewScreenState extends ConsumerState<AdminRoomViewScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(name.isEmpty ? s.adminRoomMonitor : name),
+        actions: [
+          IconButton(
+            tooltip: s.adminRoomDelete,
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _confirmDeleteRoom(s),
+          ),
+        ],
       ),
       body: Column(
         children: [
