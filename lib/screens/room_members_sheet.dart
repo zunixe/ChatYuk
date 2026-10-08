@@ -475,7 +475,7 @@ Future<void> showGroupInvitePicker({
   required String roomId,
   required Set<String> excludeUids,
   required VoidCallback onInvited,
-  void Function(String uid, String name)? onInvitedOne,
+  void Function(String uid, String name, String gender)? onInvitedOne,
 }) async {
   await showModalBottomSheet(
     context: context,
@@ -497,7 +497,7 @@ class _GroupInvitePickerSheet extends ConsumerStatefulWidget {
   final String roomId;
   final Set<String> excludeUids;
   final VoidCallback onInvited;
-  final void Function(String uid, String name)? onInvitedOne;
+  final void Function(String uid, String name, String gender)? onInvitedOne;
   const _GroupInvitePickerSheet({
     required this.roomId,
     required this.excludeUids,
@@ -514,7 +514,10 @@ class _GroupInvitePickerSheetState
     extends ConsumerState<_GroupInvitePickerSheet> {
   final _searchCtrl = TextEditingController();
   final Set<String> _invited = {};
+  final Map<String, String> _genderByUid = {};
   String _query = '';
+
+  String _genderOf(String uid) => _genderByUid[uid] ?? '';
 
   @override
   void dispose() {
@@ -531,7 +534,7 @@ class _GroupInvitePickerSheetState
       if (!mounted) return;
       setState(() => _invited.add(uid));
       widget.onInvited();
-      widget.onInvitedOne?.call(uid, name);
+      widget.onInvitedOne?.call(uid, name, _genderOf(uid));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$name — ${s.roomInvitedOk}')),
       );
@@ -622,7 +625,9 @@ class _GroupInvitePickerSheetState
                       all.add({
                         'uid': p,
                         'name': c.participantNames[p] ?? '?',
+                        'gender': c.participantGenders[p] ?? '',
                       });
+                      _genderByUid[p] = c.participantGenders[p] ?? '';
                     }
                   }
                   // Filter search.
@@ -685,7 +690,7 @@ class _GroupInvitePickerSheetState
     final done = _invited.contains(uid);
     return ListTile(
       dense: true,
-      leading: PersonAvatar(uid: uid, name: name, gender: '', size: 32),
+      leading: PersonAvatar(uid: uid, name: name, gender: e['gender'] ?? '', size: 32),
       title: Text(name, style: AppText.bodySmall),
       trailing: done
           ? Row(

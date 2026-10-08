@@ -264,8 +264,8 @@ class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScree
   bool _creating = false;
   String? _createdId;
   String? _joinToken;
-  // Orang yang sudah diundang saat pembuatan grup (chip "Terundang (n)").
-  final Map<String, String> _invitedNames = {};
+  // Orang yang sudah diundang saat pembuatan grup: uid → (nama, gender).
+  final Map<String, (String, String)> _invitedNames = {};
 
   @override
   void dispose() {
@@ -437,8 +437,8 @@ class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScree
                 roomId: _createdId!,
                 excludeUids: _invitedNames.keys.toSet(),
                 onInvited: () {},
-                onInvitedOne: (uid, name) {
-                  if (mounted) setState(() => _invitedNames[uid] = name);
+                onInvitedOne: (uid, name, gender) {
+                  if (mounted) setState(() => _invitedNames[uid] = (name, gender));
                 },
               );
             },
@@ -459,8 +459,8 @@ class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScree
                 for (final e in _invitedNames.entries)
                   Chip(
                     avatar: PersonAvatar(
-                        uid: e.key, name: e.value, size: 22),
-                    label: Text(e.value, style: AppText.micro),
+                        uid: e.key, name: e.value.$1, gender: e.value.$2, size: 22),
+                    label: Text(e.value.$1, style: AppText.micro),
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),

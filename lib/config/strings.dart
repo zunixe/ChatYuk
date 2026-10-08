@@ -1724,6 +1724,8 @@ class S {
       isId ? 'Undang Anggota' : 'Invite members';
   String privateRoomsInvitedCount(int n) =>
       isId ? 'Terundang ($n)' : 'Invited ($n)';
+  String get btnSkip => isId ? 'Lewati' : 'Skip';
+  String get btnDone => isId ? 'Selesai' : 'Done';
   String get mFirstPhoto => isId ? 'Kirim foto pertama' : 'Send first photo';
   String get mFirstRoomChat => isId ? 'Chat room pertama' : 'First room chat';
   String get btnRetry => isId ? 'Coba Lagi' : 'Retry';
