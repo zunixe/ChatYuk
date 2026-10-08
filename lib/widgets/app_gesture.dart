@@ -27,6 +27,11 @@ class AppGestureDetector extends StatelessWidget {
   final HitTestBehavior behavior;
   final bool excludeFromSemantics;
 
+  /// Override durasi tahan. Default [AppTiming.longPress] (450ms). Dipakai
+  /// bubble chat yang butuh LEBIH lama ([AppTiming.longPressBubble]) karena
+  /// area besar & sering kena jari saat scroll (konflik `SwipeToReply`).
+  final Duration? longPressDuration;
+
   const AppGestureDetector({
     super.key,
     required this.child,
@@ -39,6 +44,7 @@ class AppGestureDetector extends StatelessWidget {
     this.onLongPressEnd,
     this.behavior = HitTestBehavior.deferToChild,
     this.excludeFromSemantics = false,
+    this.longPressDuration,
   });
 
   @override
@@ -64,7 +70,9 @@ class AppGestureDetector extends StatelessWidget {
     if (onLongPressStart != null || onLongPress != null) {
       gestures[LongPressGestureRecognizer] =
           GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-        () => LongPressGestureRecognizer(duration: AppTiming.longPress),
+        () => LongPressGestureRecognizer(
+          duration: longPressDuration ?? AppTiming.longPress,
+        ),
         (r) {
           r.onLongPressStart = onLongPressStart;
           r.onLongPress = onLongPress;

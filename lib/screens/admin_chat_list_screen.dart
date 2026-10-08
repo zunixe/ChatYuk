@@ -1095,7 +1095,7 @@ class _AdminChatCard extends StatelessWidget {
       ),
       child: AppGestureDetector(
         // Tap & long-press via AppGestureDetector (RawGesture, long-press
-        // 320ms, tanpa double-tap) — pola sama dgn list chat user & menu
+        // 450ms, tanpa double-tap) — pola sama dgn list chat user & menu
         // Online yang responsif. Dulu `InkWell` di dalam Material: tap
         // menunggu gesture arena Material/ink → terasa lambat saat
         // bulak-balik buka chat monitor.

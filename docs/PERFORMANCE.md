@@ -553,7 +553,7 @@ via `_lastActivityAt` (idle→online tetap selalu diproses).
 Permintaan user: klik/tap harus sangat sensitif, dan tahan pesan jangan lama.
 
 - **`lib/config/theme.dart` → `AppTiming`**: satu sumber nilai gesture.
-  - `longPress = 320ms` (Flutter default **500ms**).
+  - `longPress = 450ms` (Flutter default **500ms**; dulu 320ms → dinaikkan 2026-10-08 karena sering tak sengaja terpicu di list — lihat §43).
   - `splash = 90ms`.
 - **`lib/widgets/app_gesture.dart` → `AppGestureDetector`**: pengganti
   `GestureDetector` yang meneruskan `duration` ke `LongPressGestureRecognizer`.
@@ -965,8 +965,8 @@ adb logcat | grep '\[PERF\]'
 
 | Nilai | Lama | Baru | Dipakai di |
 |---|---|---|---|
-| Long-press | 500ms (Flutter) | **320ms** (`AppTiming.longPress`) | tahan pesan/chat/online |
-| Tooltip wait | ~500ms (Flutter) | **320ms** (`tooltipTheme`) | semua tooltip ikon |
+| Long-press | 500ms (Flutter) | **450ms** (`AppTiming.longPress`) | tahan pesan/chat/online |
+| Tooltip wait | ~500ms (Flutter) | **450ms** (`tooltipTheme`) | semua tooltip ikon |
 | Pil nav | 500ms | **260ms** | `_navPill` (`app.dart`) |
 | Logout timeout | ∞ (bisa hang) | 5s/3s/8s | `_confirmLogout`, `goOffline`, `clearAnonSocial` |
 
@@ -1075,7 +1075,8 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 2. Ukur **sebelum & sesudah**; kalau tidak ada perbaikan angka, revert.
 3. Catat di dokumen ini (bagian 2 untuk yang selesai, bagian 6 untuk sisa).
 4. **Jangan membalik** optimasi yang sudah ada: `TickerMode`, `select` (bukan
-   `watch`), `RepaintBoundary`, `AppGestureDetector` (long-press 320ms),
+   `watch`), `RepaintBoundary`, `AppGestureDetector` (long-press 450ms list /
+   600ms bubble — §43),
    prewarm idle, timeout di jalur logout.
 
 ## 7. Ringkasan perubahan per tanggal
@@ -3471,3 +3472,75 @@ pra-ada). Ukur ulang di HP: pindah tab 10× → tunggu >15 dtk idle → `Native 
 Free` harus turun (dari ~477MB kembali mendekati ~5MB) TANPA background. _Angka
 sebelum/sesudah di HP diisi setelah pengukuran._
 
+
+---
+
+## 43. Long-press: 320→450ms (list) & bubble 600ms — fix "tak sengaja kepencet" (2026-10-08)
+
+**Keluhan:** di list Pesan kadang pencet-tahan kepencet tak sengaja ("apakah
+durasinya terlalu pendek?"), lanjut di private chat (tahan bubble → toolbar).
+
+**Ukur OS (Xiaomi 24129PN74G, HyperOS):** `settings secure long_press_timeout =
+**300ms**` (AOSP default 400ms; Flutter 500ms). Jadi nilai app dulu (320ms)
+HAMPIR SAMA dengan long-press OS HP → wajar sering kepencet (bukan karena app
+lebih pendek dari sistem).
+
+**Fix (2 tingkat, `lib/config/theme.dart` → `AppTiming`):**
+1. **`longPress = 450ms`** (dulu 320) — list chat/kartu/online/admin/tooltip.
+   Titik tengah: di atas OS (300-400ms), di bawah Flutter/WhatsApp (500ms).
+   Klik tetap cepat, tahan tak gampang kepencet.
+2. **`longPressBubble = 600ms`** (baru) — BUBBLE pesan (private + room) →
+   toolbar reaksi/seleksi. Lebih lama karena: (a) bubble area besar & padat,
+   saat SCROLL cepat jari sering melintas/berhenti sejenak di bubble; (b)
+   bentrok `SwipeToReply` (drag) di gesture arena. 600ms = perlu niat (ala
+   WhatsApp). Tap tetap instan.
+
+**Mekanisme:** `AppGestureDetector` dapat param `longPressDuration` (default
+`AppTiming.longPress`); bubble mengirim `AppTiming.longPressBubble`.
+
+**Titik yang diubah:** `app_gesture.dart` (param baru), `theme.dart` (2 nilai),
+`private_chat_message.dart` (bubble private), `room_chat_screen.dart` (bubble
+room). Komentar "320ms" di 6 file diperbarui → 450ms.
+
+**Aturan:** list/umum pakai `AppTiming.longPress`; bubble pesan WAJIB
+`AppTiming.longPressBubble` (jangan disamakan — penyebab toolbar muncul saat
+scroll). Ubah durasi = satu tempat (`theme.dart`), jangan hardcode.
+
+**Verifikasi:** `flutter analyze` 0 error (info pra-ada tetap).
+
+---
+
+## 44. Bar seleksi list chat — OVERLAY, kartu tak bergeser (2026-10-09)
+
+**Keluhan:** tahan kartu di list Pesan → kartu "loncat ke bawah" (tidak tetap
+di bawah jari). Lalu: overlay versi pertama "nutupin kayak melayang" (jelek),
+versi animasi-tinggi masih "bergeser". Final: bar seleksi **overlay** dengan
+list TIDAK reflow sama sekali.
+
+**Iterasi:**
+1. ~~Disisip di Column (atas list)~~ → list turun 228px → kartu loncat.
+2. ~~Floating overlay~~ → user: "jelek, nutupin kayak melayang".
+3. ~~AnimatedAlign heightFactor~~ → masih bergeser (list tetap reflow).
+4. **FINAL: Stack + Positioned overlay** — bar mengambang di atas area filter
+   bar; list tinggi KONSTAN (filter bar tetap dirender sebagai spacer) → kartu
+   TIDAK reflow. Tampil/hilang dgn `AnimatedOpacity`+`AnimatedSlide` 160ms
+   (fade+slide halus, tanpa blink). `top: 2` (2px dari tepi atas area body).
+
+**Bukti terukur (uiautomator, Xiaomi 24129PN74G):**
+
+| | sebelum tahan | sesudah tahan |
+|---|---|---|
+| Kartu pertama | [33,624][1168,904] | **[33,624][1168,904]** ✅ |
+| Filter bar | [33,504][298,585] | [33,504][298,585] ✅ (konstan) |
+| Bar seleksi | — | [36,488][192,644] (menutupi filter 504-585) |
+
+Kartu **persis sama** sebelum/sesudah → tetap di bawah jari. Semua chip filter
+(Semua/Belum dibaca/Teman/Anon) tertutup penuh oleh bar seleksi (background
+solid `bgCard`).
+
+**Aturan (JANGAN dibalik):** bar seleksi list chat = **overlay Stack**, JANGAN
+disisip ke Column (bikin kartu loncat). Filter bar WAJIB tetap di-render saat
+seleksi (sebagai spacer tinggi) supaya list tidak reflow. Animasi
+`AnimatedOpacity`+`AnimatedSlide` (bukan `AnimatedSize`/`jumpTo`).
+
+**File:** `lib/screens/private_chats_screen.dart` (`body` → Stack; `_selectionBar({overlay})`).
