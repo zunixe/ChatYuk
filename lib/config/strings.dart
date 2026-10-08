@@ -288,11 +288,11 @@ class S {
       isId ? 'Belum ada teman yang online' : 'No friends online yet';
   // Keterangan channel daftar Online (muncul saat ganti channel).
   String get channelAllDesc => isId
-      ? 'Menampilkan semua pengguna online. Status kamu ikut pengaturan di Kelola Privasi.'
-      : 'Showing all online users. Your status follows your Privacy settings.';
+      ? 'Menampilkan semua pengguna online. Status online kamu ikut pengaturan di Kelola Privasi.'
+      : 'Showing all online users. Your online status follows your Privacy settings.';
   String get channelFriendsDesc => isId
-      ? 'Hanya menampilkan teman yang online. Status kamu hanya terlihat oleh teman.'
-      : 'Only friends online are shown. Your status is visible to friends only.';
+      ? 'Hanya menampilkan teman yang online. Status online kamu hanya terlihat oleh teman.'
+      : 'Only friends online are shown. Your online status is visible to friends only.';
   // ── Orang Sekitar (nearby) ──
   String get nearbyTitle => isId ? 'Orang Sekitar' : 'People Nearby';
   String get nearbyRadius => isId ? 'Radius' : 'Radius';
