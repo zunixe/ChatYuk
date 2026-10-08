@@ -76,8 +76,10 @@ abstract class AdminBase extends ChangeNotifier {
   static const kAdminDeletedKey = 'admin_deleted';
   static const kAdminContactKey = 'admin_contact';
   static const kAdminAttributionKey = 'admin_attribution';
+  static const kAdminRoomsKey = 'admin_rooms';
   static String adminDummyKey(String myUid) => 'admin_dummy_$myUid';
   static String adminChatMsgKey(String chatId) => 'admin_chatmsg_$chatId';
+  static String adminRoomMsgKey(String roomId) => 'admin_roommsg_$roomId';
 
   /// Kunci cache yang dibersihkan tombol "Bersihkan cache admin".
   static const List<String> adminCacheKeys = [
@@ -87,6 +89,7 @@ abstract class AdminBase extends ChangeNotifier {
     kAdminDeletedKey,
     kAdminContactKey,
     kAdminAttributionKey,
+    kAdminRoomsKey,
   ];
 
   // ── Revision counter per-domain (granular rebuild) ──
@@ -108,6 +111,7 @@ abstract class AdminBase extends ChangeNotifier {
   int _revCalls = 0;
   int _revStories = 0;
   int _revMarketing = 0;
+  int _revRooms = 0;
 
   int get revStats => _revStats;
   int get revDevices => _revDevices;
@@ -119,6 +123,7 @@ abstract class AdminBase extends ChangeNotifier {
   int get revCalls => _revCalls;
   int get revStories => _revStories;
   int get revMarketing => _revMarketing;
+  int get revRooms => _revRooms;
 
   /// Bump counter domain + notify. `domain` dipilih dari helper di bawah.
   void _bumpAndNotify(void Function() bump) {
@@ -137,4 +142,5 @@ abstract class AdminBase extends ChangeNotifier {
   void _notifyCalls() => _bumpAndNotify(() => _revCalls++);
   void _notifyStories() => _bumpAndNotify(() => _revStories++);
   void _notifyMarketing() => _bumpAndNotify(() => _revMarketing++);
+  void _notifyRooms() => _bumpAndNotify(() => _revRooms++);
 }
