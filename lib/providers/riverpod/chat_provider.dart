@@ -351,7 +351,8 @@ class ChatNotifier extends Notifier<ChatState> {
       _service.updateLocationMessage(id, payload);
   Future<bool> editRoomMessage(String id, String text) =>
       _service.editRoomMessage(id, text);
-  void prefetchPrivateChat(String chatId) => _service.prefetchPrivateChat(chatId);
+  Future<void> prefetchPrivateChat(String chatId) =>
+      _service.prefetchPrivateChat(chatId);
   String privateChatId(String a, String b) => _service.privateChatId(a, b);
   static String effectiveStatusOf(String? raw, String? lastSeen) =>
       ChatService.effectiveStatusOf(raw, lastSeen);

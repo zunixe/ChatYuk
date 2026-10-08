@@ -720,6 +720,10 @@ class AppTheme {
             : const Color(0xFF37474F),
         contentTextStyle: AppText.body.copyWith(color: Colors.white),
         behavior: SnackBarBehavior.floating,
+        // Jarak default: tidak menempel tepi bawah → tak menutupi bottom nav/
+        // FAB/menu. Layar chat meng-override via `showChatSnack` (di atas
+        // composer). insetPadding menjaga snackbar tidak full-width.
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       dividerTheme: DividerThemeData(color: divider),

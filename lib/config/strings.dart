@@ -284,6 +284,15 @@ class S {
   String get filterFemale => isId ? 'Perempuan' : 'Female';
   String get noOnlineUsers =>
       isId ? 'Tidak ada pengguna online' : 'No users online';
+  String get noOnlineFriends =>
+      isId ? 'Belum ada teman yang online' : 'No friends online yet';
+  // Keterangan channel daftar Online (muncul saat ganti channel).
+  String get channelAllDesc => isId
+      ? 'Menampilkan semua pengguna online. Status kamu ikut pengaturan di Kelola Privasi.'
+      : 'Showing all online users. Your status follows your Privacy settings.';
+  String get channelFriendsDesc => isId
+      ? 'Hanya menampilkan teman yang online. Status kamu hanya terlihat oleh teman.'
+      : 'Only friends online are shown. Your status is visible to friends only.';
   // ── Orang Sekitar (nearby) ──
   String get nearbyTitle => isId ? 'Orang Sekitar' : 'People Nearby';
   String get nearbyRadius => isId ? 'Radius' : 'Radius';
@@ -1830,6 +1839,15 @@ class S {
   String get socialSubscribers => isId ? 'Subscriber' : 'Subscribers';
   String get btnFollow => isId ? 'Ikuti' : 'Follow';
   String get btnUnfollow => isId ? 'Berhenti Ikuti' : 'Unfollow';
+  // Snackbar konfirmasi follow (jelas + nama, bukan cuma kata tombol).
+  String snackNowFollowing(String name) =>
+      isId ? 'Mengikuti $name' : 'Following $name';
+  String snackUnfollowed(String name) =>
+      isId ? 'Berhenti mengikuti $name' : 'Unfollowed $name';
+  String snackBlocked(String name) =>
+      isId ? '$name diblokir' : '$name blocked';
+  String snackNowFriends(String name) =>
+      isId ? 'Sekarang berteman dengan $name' : 'Now friends with $name';
   String get btnChatNow => isId ? 'Chat' : 'Chat';
   String get msgRegisterToFollow =>
       isId ? 'Daftar dulu untuk mengikuti' : 'Register to follow';
@@ -1893,6 +1911,8 @@ class S {
       ? 'Berlangganan ke $name selama $periods bulan seharga ${c * periods} YukCoin?'
       : 'Subscribe to $name for $periods months at ${c * periods} YukCoin?';
   String get subscribeSuccess => isId ? 'Berhasil berlangganan' : 'Subscribed';
+  String get unsubscribeSuccess =>
+      isId ? 'Berhenti berlangganan' : 'Unsubscribed';
   String get subscribeNeedPaid => isId
       ? 'YukCoin tidak cukup. Top up dulu.'
       : 'Not enough YukCoin. Top up first.';

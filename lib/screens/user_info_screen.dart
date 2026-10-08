@@ -217,8 +217,9 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
     // Pesan akurat: 'friends' (sudah teman), 'pending' (terkirim),
     // selain itu gagal — jangan selalu bilang "terkirim".
     if (status == 'friends') {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.btnFriends)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.snackNowFriends(_profile?.nickname ?? ''))),
+      );
     } else if (status == 'pending') {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(s.friendRequestSentMutual)));

@@ -94,7 +94,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
 
   /// Buka private chat dari kartu list. Dipanggil AppGestureDetector (lapis
   /// luar) supaya tak bergantung InkWell di dalam Dismissible (tap lambat).
-  void _openChat(PrivateChatInfo chat) {
+  Future<void> _openChat(PrivateChatInfo chat) async {
     final myUid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
     final otherUid = chat.participants.firstWhere(
       (p) => p != myUid,
@@ -104,8 +104,18 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
     // Guard double-push (§18): tap 2× cepat menumpuk 2 route identik.
     final navKey = navKeyChat(chat.chatId);
     if (!tryClaimNav(navKey)) return;
-    // Prefetch pesan ke memori sebelum push → buka chat instant.
-    ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).prefetchPrivateChat(chat.chatId);
+    // Prefetch pesan ke memori SEBELUM push — di-AWAIT (bukan fire-and-forget)
+    // supaya `MessageCache.peekMessages` pasti HIT saat screen mount → frame
+    // pertama chat LANGSUNG terisi (ala WhatsApp), bukan layar kosong dulu.
+    // SQLite (SQLCipher) terukur 1-3ms & RAM instan → delay tak terasa; ini
+    // menghapus jendela race "preload belum kelar, route sudah push".
+    await ProviderScope.containerOf(context, listen: false)
+        .read(chatProvider.notifier)
+        .prefetchPrivateChat(chat.chatId);
+    if (!mounted) {
+      releaseNav(navKey);
+      return;
+    }
     Navigator.push(
       context,
       PageRouteBuilder(
