@@ -9,8 +9,14 @@ import '../utils.dart';
 /// `verified_uids` (badge user lain). Screen DILARANG memanggil langsung —
 /// selalu lewat provider (patuh boundary AGENTS.md).
 class PhoneVerifyService {
-  final SupabaseClient _sb;
-  PhoneVerifyService([SupabaseClient? sb]) : _sb = sb ?? Supabase.instance.client;
+  // LAZY: JANGAN resolve Supabase.instance di constructor — Provider
+  // meng-instansiasi service ini saat `build()` (mis. badge verified di
+  // AccountScreen). Di unit test tanpa init Supabase, akses eager akan
+  // melempar assertion '_instance._isInitialized' saat widget build.
+  final SupabaseClient? _injected;
+  PhoneVerifyService([SupabaseClient? sb]) : _injected = sb;
+
+  SupabaseClient get _sb => _injected ?? Supabase.instance.client;
 
   /// Mulai sesi verifikasi. Return `{ok, token, url, expires_at}` atau
   /// `{ok:false, reason}` (mis. `rate_limited` / `phone_empty`).
