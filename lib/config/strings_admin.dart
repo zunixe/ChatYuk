@@ -41,6 +41,27 @@ extension SAdminX on S {
       isId ? 'Dihapus oleh pengirim' : 'Deleted by sender';
   String get adminContactTab => isId ? 'Kontak' : 'Contact';
 
+  // ── Monitor Grup (private rooms user) ──
+  String get adminRoomMonitor => isId ? 'Monitor Grup' : 'Group Monitor';
+  String get adminRoomSearch =>
+      isId ? 'Cari grup / pemilik...' : 'Search group / owner...';
+  String get adminRoomCountryAll => isId ? 'Semua negara' : 'All countries';
+  String get adminRoomNoData =>
+      isId ? 'Belum ada grup dibuat user' : 'No user-created groups yet';
+  String get adminRoomNoResult =>
+      isId ? 'Tidak ada grup cocok' : 'No matching groups';
+  String get adminRoomMembers => isId ? 'Anggota' : 'Members';
+  String get adminRoomMessages => isId ? 'Pesan' : 'Messages';
+  String get adminRoomOwner => isId ? 'Pemilik' : 'Owner';
+  String get adminRoomLocked => isId ? 'Pakai sandi' : 'Password';
+  String get adminRoomExpired => isId ? 'Kadaluarsa' : 'Expired';
+  String get adminRoomActive => isId ? 'Aktif' : 'Active';
+  String get adminRoomEmptyChat =>
+      isId ? 'Belum ada pesan di grup ini' : 'No messages in this group yet';
+  String get adminRoomMemberOwner => isId ? 'Pemilik' : 'Owner';
+  String get adminRoomLoadingMembers =>
+      isId ? 'Memuat anggota...' : 'Loading members...';
+
   String get adminDeviceTab => isId ? 'Perangkat' : 'Devices';
   String get adminDeviceTitle => isId ? 'Perangkat' : 'Devices';
   String get adminDeviceSearch =>

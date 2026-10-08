@@ -802,6 +802,58 @@ class AdminService {
     await _rpc('admin_contact_delete', params: {'p_id': id});
   }
 
+  // ── Monitor Grup (private rooms user) ──
+  /// Daftar grup privat (paging + search + filter negara).
+  /// Return {'total': int, 'items': [...]}.
+  Future<Map<String, dynamic>> listPrivateRoomsPage({
+    int limit = 50,
+    int offset = 0,
+    String search = '',
+    String country = '',
+  }) async {
+    final res = await _rpc(
+      'admin_list_private_rooms_page',
+      params: {
+        'p_limit': limit,
+        'p_offset': offset,
+        'p_search': search,
+        'p_country': country,
+      },
+    ).timeout(_openTimeout);
+    return (res as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Daftar anggota satu grup (JOIN profiles → nickname/gender/avatar).
+  Future<List<Map<String, dynamic>>> getRoomMembers(String roomId) async {
+    final res = await _rpc(
+      'admin_room_members',
+      params: {'p_room_id': roomId},
+    ).timeout(_openTimeout);
+    return res is List ? List<Map<String, dynamic>>.from(res) : const [];
+  }
+
+  /// Pesan satu grup (paging, terbaru dulu). Return {'total': int, 'items': [...]}.
+  Future<Map<String, dynamic>> getRoomMessagesPage(
+    String roomId, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final res = await _rpc(
+      'admin_room_messages_page',
+      params: {'p_room_id': roomId, 'p_limit': limit, 'p_offset': offset},
+    ).timeout(_openTimeout);
+    return (res as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Ambil image_data satu pesan grup (lazy-load foto; RPC kosongkan di list).
+  Future<String> fetchRoomMessageImage(int messageId) async {
+    final res = await _rpc(
+      'admin_room_message_image',
+      params: {'p_message_id': messageId},
+    ).timeout(_openTimeout);
+    return (res as String?) ?? '';
+  }
+
   // ── Popup update aplikasi (app_settings) ──
   /// Baca konfigurasi update. Return null bila gagal.
   Future<Map<String, dynamic>?> getUpdateConfig() async {

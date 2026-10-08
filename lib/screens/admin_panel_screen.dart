@@ -16,6 +16,7 @@ import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../utils.dart';
 import 'admin_chat_list_screen.dart';
+import 'admin_room_list_screen.dart';
 import 'admin_contact_tab.dart';
 import 'admin_devices_tab.dart';
 import 'admin_deleted_tab.dart';
@@ -117,7 +118,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _tabCtrl = TabController(length: 12, vsync: this);
+    _tabCtrl = TabController(length: 13, vsync: this);
     _tabCtrl.addListener(_onTabChanged);
     final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(() => admin.fetchStats());
@@ -361,6 +362,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
             Tab(text: s.adminOverview),
             Tab(text: s.adminPointTab),
             Tab(text: s.adminChatMonitor),
+            Tab(text: s.adminRoomMonitor),
             Tab(text: s.adminDummyTab),
             Tab(text: s.adminContactTab),
             Tab(text: s.adminDeviceTab),
@@ -404,34 +406,38 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(4))
-            const AdminDummyTab()
+            const AdminRoomListScreen()
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(5))
-            const AdminContactTab()
+            const AdminDummyTab()
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(6))
-            const AdminDevicesTab()
+            const AdminContactTab()
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(7))
-            const AdminDeletedTab()
+            const AdminDevicesTab()
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(8))
-            const AdminAttributionTab()
+            const AdminDeletedTab()
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(9))
-            const AdminStoryTab()
+            const AdminAttributionTab()
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(10))
-            const AdminDocsTab()
+            const AdminStoryTab()
           else
             const SizedBox.shrink(),
           if (_visitedTabs.contains(11))
+            const AdminDocsTab()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(12))
             const AdminMarketingTab()
           else
             const SizedBox.shrink(),
