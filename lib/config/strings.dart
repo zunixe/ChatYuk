@@ -1990,6 +1990,10 @@ class S {
       ? 'Fans membayar harga ini setiap bulan untuk berlangganan. Kamu terima 70%, platform 30%.'
       : 'Fans pay this price monthly to subscribe. You receive 70%, the platform takes 30%.';
 
+  // ── Menu cepat samping (halaman Online) ──
+  String get quickMenuTimeline => isId ? 'Buka Timeline' : 'Open Timeline';
+  String get quickMenuGlobalRoom => isId ? 'Buka Global Room' : 'Open Global Room';
+
   // ── Timeline ──
   String get navTimeline => isId ? 'Timeline' : 'Timeline';
   String get tabAll => isId ? 'Semua' : 'All';
