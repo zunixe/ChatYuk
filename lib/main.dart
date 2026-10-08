@@ -102,14 +102,14 @@ const String _pendingNotifActionsKey = 'pending_notif_actions';
       canMarkRead: true,
     );
   }
-  if (type == 'room' || type == 'mention') {
+  if (type == 'room' || type == 'mention' || type == 'room_invite') {
     final roomId = '${data['roomId'] ?? ''}';
     if (roomId.isEmpty) return null;
     return (
       key: roomId,
       title: '${data['roomName'] ?? 'Room'}',
       grouped: true,
-      canReply: true,
+      canReply: type != 'room_invite', // invite bukan chat → tanpa balas
       canMarkRead: false,
     );
   }
@@ -1261,7 +1261,8 @@ void _openFromData(Map<String, dynamic> data) {
       builder: (_) =>
           data['type'] == 'room' ||
                   data['type'] == 'broadcast' ||
-                  data['type'] == 'mention'
+                  data['type'] == 'mention' ||
+                  data['type'] == 'room_invite'
               ? RoomChatScreen(
               room: RoomModel(
                 id: data['roomId'] ?? '',
