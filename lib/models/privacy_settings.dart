@@ -59,6 +59,7 @@ class PrivacySettings {
   final PrivacyVisibility about;
   final PrivacyVisibility story;
   final PrivacyVisibility leaderboard;
+  final PrivacyVisibility call;
   final bool readReceipts;
   final Map<String, Set<String>> exclusions;
 
@@ -69,6 +70,7 @@ class PrivacySettings {
     this.about = PrivacyVisibility.everyone,
     this.story = PrivacyVisibility.everyone,
     this.leaderboard = PrivacyVisibility.everyone,
+    this.call = PrivacyVisibility.everyone,
     this.readReceipts = true,
     this.exclusions = const {},
   });
@@ -82,6 +84,7 @@ class PrivacySettings {
       about: PrivacyVisibility.fromWire(map['about']),
       story: PrivacyVisibility.fromWire(map['story']),
       leaderboard: PrivacyVisibility.fromWire(map['leaderboard']),
+      call: PrivacyVisibility.fromWire(map['call']),
       readReceipts: map['read_receipts'] != false,
       exclusions: {
         for (final entry in raw.entries)
@@ -99,6 +102,7 @@ class PrivacySettings {
     PrivacyVisibility? about,
     PrivacyVisibility? story,
     PrivacyVisibility? leaderboard,
+    PrivacyVisibility? call,
     bool? readReceipts,
     Map<String, Set<String>>? exclusions,
   }) {
@@ -109,6 +113,7 @@ class PrivacySettings {
       about: about ?? this.about,
       story: story ?? this.story,
       leaderboard: leaderboard ?? this.leaderboard,
+      call: call ?? this.call,
       readReceipts: readReceipts ?? this.readReceipts,
       exclusions: exclusions ?? this.exclusions,
     );
@@ -123,6 +128,7 @@ class PrivacySettings {
       other.about == about &&
       other.story == story &&
       other.leaderboard == leaderboard &&
+      other.call == call &&
       other.readReceipts == readReceipts &&
       _exclusionsEqual(other.exclusions, exclusions);
 
@@ -134,6 +140,7 @@ class PrivacySettings {
         about,
         story,
         leaderboard,
+        call,
         readReceipts,
         Object.hashAllUnordered(exclusions.entries
             .map((e) => Object.hash(e.key, Object.hashAllUnordered(e.value)))),

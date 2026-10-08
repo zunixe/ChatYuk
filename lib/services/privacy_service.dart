@@ -19,6 +19,7 @@ class PrivacyService {
     PrivacyVisibility? about,
     PrivacyVisibility? story,
     PrivacyVisibility? leaderboard,
+    PrivacyVisibility? call,
     bool? readReceipts,
   }) async {
     final res = await _sb.rpc(
@@ -30,6 +31,7 @@ class PrivacyService {
         'p_about': about?.wireKey,
         'p_story': story?.wireKey,
         'p_leaderboard': leaderboard?.wireKey,
+        'p_call': call?.wireKey,
         'p_read_receipts': readReceipts,
       },
     );
@@ -49,6 +51,23 @@ class PrivacyService {
     return PrivacySettings.fromMap(
       res is Map ? Map<String, dynamic>.from(res) : const {},
     );
+  }
+
+  /// Cek apakah [viewerUid] boleh menurut privasi [ownerUid] pada [field].
+  /// Dipakai mis. sebelum menelepon (field 'call'). Default true bila ragu
+  /// (server RLS tetap penjaga akhir).
+  Future<bool> canView(String ownerUid, String field, {String? viewerUid}) async {
+    if (ownerUid.isEmpty) return true;
+    try {
+      final res = await _sb.rpc('privacy_can_view', params: {
+        'p_owner': ownerUid,
+        'p_field': field,
+        if (viewerUid != null) 'p_viewer': viewerUid,
+      });
+      return res == true;
+    } catch (_) {
+      return true;
+    }
   }
 
   /// Daftar yang bisa dikecualikan untuk opsi "kecuali...": TEMAN (mutual
