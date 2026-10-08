@@ -12,6 +12,8 @@ import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/room_icon.dart';
 import 'room_chat_screen.dart';
+import 'room_members_sheet.dart';
+import '../widgets/person_avatar.dart';
 import '../config/theme.dart';
 
 /// Tab "Grup": list grup private milikku + FAB buat grup.
@@ -465,6 +467,16 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
                         if (context.mounted) {
                           // List milikku berubah (grup baru) — muat ulang.
                           _GroupListState.reloadCurrent(context);
+                          // Langkah 2: tawarkan UNDANG anggota (atau lewati)
+                          // sebelum masuk grup. Tidak memblokir (bisa ditutup).
+                          final newId = '${res['id'] ?? ''}';
+                          if (newId.isNotEmpty) {
+                            await showGroupInviteStep(
+                              context,
+                              roomId: newId,
+                              roomName: name,
+                            );
+                          }
                         }
                       } catch (e) {
                         final msg = e.toString();
@@ -519,6 +531,128 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
           ),
         );
       },
+    ),
+  );
+}
+
+/// Langkah 2 setelah buat grup: tawarkan UNDANG anggota (opsional) atau
+/// selesai. Owner bisa undang beberapa (picker tetap terbuka), lihat chip
+/// "Terundang (n)", lalu tutup. Bila tak ada yang diundang = lewati.
+Future<void> showGroupInviteStep(
+  BuildContext context, {
+  required String roomId,
+  required String roomName,
+}) async {
+  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+  final invited = <String, (String, String)>{}; // uid → (nama, gender)
+  await showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setInner) => Dialog(
+        backgroundColor: AppTheme.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.group_add_rounded,
+                        color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(s.privateRoomsInviteMembers,
+                            style: AppText.title),
+                        const SizedBox(height: 2),
+                        Text(
+                          roomName,
+                          style: AppText.bodySmall
+                              .copyWith(color: AppTheme.textSecondary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                s.roomInviteHint,
+                style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                label: Text(s.privateRoomsInviteMembers),
+                onPressed: () async {
+                  await showGroupInvitePicker(
+                    context: ctx,
+                    roomId: roomId,
+                    excludeUids: invited.keys.toSet(),
+                    onInvited: () {},
+                    onInvitedOne: (uid, name, gender) {
+                      if (ctx.mounted) {
+                        setInner(() => invited[uid] = (name, gender));
+                      }
+                    },
+                  );
+                },
+              ),
+              if (invited.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  s.privateRoomsInvitedCount(invited.length),
+                  style: AppText.bodySmall
+                      .copyWith(color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    for (final e in invited.entries)
+                      Chip(
+                        avatar: PersonAvatar(
+                            uid: e.key, name: e.value.$1, gender: e.value.$2, size: 22),
+                        label: Text(e.value.$1, style: AppText.micro),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 48,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(invited.isEmpty ? s.btnSkip : s.btnDone),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     ),
   );
 }
