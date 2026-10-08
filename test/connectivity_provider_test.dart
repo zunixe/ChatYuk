@@ -38,11 +38,15 @@ void main() {
       const MethodChannel('dev.fluttercommunity.plus/connectivity'),
       (call) async => <String>['wifi'],
     );
+    // Default probe (dipakai saat OS bilang `none`) → false (benar-benar
+    // offline) supaya test tidak menembak jaringan nyata.
+    ConnectivityNotifier.reachableOverrideForTest = () async => false;
     fake = FakeConnectivityPlatform();
     ConnectivityPlatform.instance = fake;
   });
 
   tearDown(() async {
+    ConnectivityNotifier.reachableOverrideForTest = null;
     await fake.close();
   });
 
@@ -57,29 +61,43 @@ void main() {
     expect(c.read(connectivityProvider), isTrue);
   });
 
-  test('checkConnectivity = none → offline', () async {
+  test('checkConnectivity = none + probe gagal → offline', () async {
+    ConnectivityNotifier.reachableOverrideForTest = () async => false;
     fake.initial = [ConnectivityResult.none];
     final c = ProviderContainer();
     addTearDown(c.dispose);
     c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isFalse);
   });
 
-  test('event none → offline, lalu wifi → online', () async {
+  test('OS bilang none TAPI probe OK → tetap ONLINE (fix banner nyangkut)',
+      () async {
+    // Regresi nyata: connectivity_plus keliru `none` walau internet lancar.
+    ConnectivityNotifier.reachableOverrideForTest = () async => true;
+    fake.initial = [ConnectivityResult.none];
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(c.read(connectivityProvider), isTrue);
+  });
+
+  test('event none → offline (probe gagal), lalu wifi → online', () async {
+    ConnectivityNotifier.reachableOverrideForTest = () async => false;
     fake.initial = [ConnectivityResult.wifi];
     final c = ProviderContainer();
     addTearDown(c.dispose);
     c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isTrue);
 
     fake.emit([ConnectivityResult.none]);
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isFalse);
 
     fake.emit([ConnectivityResult.mobile]);
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isTrue);
   });
 
@@ -109,19 +127,20 @@ void main() {
   });
 
   test('stuck offline sembuh via revalidate (tanpa event)', () async {
+    ConnectivityNotifier.reachableOverrideForTest = () async => false;
     // Regresi: cek awal menangkap `none` sesaat lalu tak ada event lagi →
     // banner offline nyangkut selamanya. revalidate() harus menyembuhkan.
     fake.initial = [ConnectivityResult.none];
     final c = ProviderContainer();
     addTearDown(c.dispose);
     c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isFalse);
 
     // Jaringan pulih tapi TIDAK ada event perubahan — hanya revalidate.
     fake.initial = [ConnectivityResult.wifi];
     c.read(connectivityProvider.notifier).revalidate();
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isTrue);
   });
 
