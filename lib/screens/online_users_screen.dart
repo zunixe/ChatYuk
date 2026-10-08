@@ -1115,12 +1115,16 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
             curve: Curves.easeOutCubic,
             reverseCurve: Curves.easeInCubic,
           );
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(curved),
-            child: child,
+          // Slide + Fade (halus, tutupi celah raster saat slide full-screen).
+          return FadeTransition(
+            opacity: curved,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(1, 0),
+                end: Offset.zero,
+              ).animate(curved),
+              child: child,
+            ),
           );
         },
       ),

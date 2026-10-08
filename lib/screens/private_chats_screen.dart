@@ -141,12 +141,18 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
             curve: Curves.easeOutCubic,
             reverseCurve: Curves.easeInCubic,
           );
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(curved),
-            child: child,
+          // Slide + Fade: fade menutupi celah raster saat slide full-screen
+          // (di Skia-GL/Adreno transisi slide murni kadang terasa "berat").
+          // Kombinasi ini lebih halus dipersepsikan pada durasi sama.
+          return FadeTransition(
+            opacity: curved,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(1, 0),
+                end: Offset.zero,
+              ).animate(curved),
+              child: child,
+            ),
           );
         },
       ),
