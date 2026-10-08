@@ -2,6 +2,19 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-09 — Clamp last_seen (fix "online terus")
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261009120000_clamp_last_seen.sql`.
+- **Bug:** user "online terus" (mis. `sitirahmawAti`, `purwanto`) karena jam HP
+  mereka MAJU → client menulis `last_seen = DateTime.now()` (jam HP) ke MASA DEPAN.
+  `get_online_users`/`presence_for` filter `last_seen >= now()-30min` → timestamp
+  masa depan SELALU lolos → selamanya online.
+- **Fix (server-side, netralkan SEMUA client):** trigger `trg_clamp_last_seen`
+  (BEFORE INSERT/UPDATE OF last_seen di `profiles`) → `last_seen := least(last_seen, now())`.
+  + bersihkan baris lama yang di masa depan.
+- **Terbukti:** `update profiles set last_seen = now()+interval '5 hours'` →
+  otomatis ter-clamp ke `now()`.
+
 ## 2026-10-06 — Email Marketing (admin tab Marketing)
 
 - **Status:** SUDAH TERAPPLIED via Management API —
