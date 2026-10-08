@@ -65,7 +65,7 @@ class ChatIconButton extends StatelessWidget {
       child: SizedBox(
         width: 32,
         height: 44,
-        // Bila ada aksi tahan: pakai AppGestureDetector (long-press 320ms,
+        // Bila ada aksi tahan: pakai AppGestureDetector (long-press 450ms,
         // lebih cepat & andal daripada InkWell default 500ms yang sering
         // terasa "tidak merekam"). Tanpa aksi tahan: InkWell biasa.
         child: onLongPress == null

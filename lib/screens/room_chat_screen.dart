@@ -2490,10 +2490,13 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                           : Colors.transparent,
                       child: CompositedTransformTarget(
                       link: linkFor(m.id),
-                      // AppGestureDetector: tahan 320ms (bukan 500ms).
+                      // AppGestureDetector: tahan 600ms (longPressBubble) —
+                      // sama seperti bubble private chat: hindari toolbar
+                      // muncul tak sengaja saat scroll.
                       child: AppGestureDetector(
                         onLongPressStart: (d) => onMessageLongPress(d, m, linkFor(m.id)),
                         onTap: inSelection ? () => toggleSelect(m) : null,
+                        longPressDuration: AppTiming.longPressBubble,
                         child: SwipeToReply(
                           // Geser kanan = balas (grup & room). Pesan sendiri
                           // dikecualikan agar tidak bentrok swipe-back sistem.

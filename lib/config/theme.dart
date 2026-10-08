@@ -393,8 +393,23 @@ class ChatTextScale {
 class AppTiming {
   AppTiming._();
 
-  /// Tahan pesan/chat → toolbar seleksi. Default Flutter 500ms → 320ms.
-  static const Duration longPress = Duration(milliseconds: 320);
+  /// Tahan pesan/chat → toolbar seleksi / mode pilih.
+  ///
+  /// 320ms → **450ms** (2026-10-08): 320ms hampir sama dengan long-press OS HP
+  /// (HyperOS `long_press_timeout` = 300ms) sehingga tap list yang agak lama
+  /// sering TAK SENGAJA masuk mode seleksi. 450ms = titik tengah aman: di atas
+  /// default OS (300-400ms) tapi di bawah Flutter/WhatsApp (500ms) — klik tetap
+  /// terasa cepat, tahan tak gampang kepencet.
+  static const Duration longPress = Duration(milliseconds: 450);
+
+  /// Tahan BUBBLE pesan (private/room) → toolbar reaksi/seleksi.
+  ///
+  /// Lebih lama dari [longPress] karena bubble = area besar & padat; saat
+  /// SCROLL cepat, jari sering melintas/berhenti sejenak di bubble → 450ms
+  /// terlalu mudah terpicu (toolbar muncul tak sengaja). Juga bentrok dgn
+  /// `SwipeToReply` (drag) di gesture arena. 600ms = perlu niat (seperti
+  /// WhatsApp), tap tetap instan. List chat/kartu tetap [longPress] (450ms).
+  static const Duration longPressBubble = Duration(milliseconds: 600);
 
   /// Batas atas tunggu double-tap (tap di dalam list tidak usah menunggu
   /// 300ms untuk tahu ini bukan double-tap). 0 → tap langsung tembak.

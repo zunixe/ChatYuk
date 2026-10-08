@@ -90,7 +90,9 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
     });
   }
 
-  void _clearSelection() => setState(() => _selected.clear());
+  void _clearSelection() {
+    setState(() => _selected.clear());
+  }
 
   /// Buka private chat dari kartu list. Dipanggil AppGestureDetector (lapis
   /// luar) supaya tak bergantung InkWell di dalam Dismissible (tap lambat).
@@ -286,9 +288,12 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
   }
 
   /// Bar seleksi dalam body (mode embedded — tab Chat tidak punya AppBar sendiri).
-  Widget _selectionBar(String uid, S s) {
+  /// [overlay] = dipakai sbg overlay di atas filter bar: margin atas 0 supaya
+  /// mulai lebih ke atas & MENUTUPI penuh baris filter di belakangnya
+  /// (Semua/Belum dibaca/Teman/...) — tidak ada yang nyembul.
+  Widget _selectionBar(String uid, S s, {bool overlay = false}) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      margin: EdgeInsets.fromLTRB(10, overlay ? 0 : 10, 10, 10),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(12),
@@ -736,21 +741,23 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
                 actions: _selectionActions(auth.uid!, s),
               )
             : AppBar(title: Text(s.titlePrivateChat)),
-        body: Column(
+        body: Stack(
           children: [
-            // Mode embedded (tab Chat): bar seleksi gaya WA di dalam body.
-            if (_selectionMode && widget.embedded) _selectionBar(auth.uid!, s),
-            // Baris arsip hanya rebuild saat jumlah arsip berubah.
-            ValueListenableBuilder<int>(
-              valueListenable: _archivedNotifier,
-              builder: (_, count, __) => count > 0
-                  ? _archivedToggle(s, count)
-                  : const SizedBox.shrink(),
-            ),
-            // Filter daftar chat (Semua / Belum dibaca / Anon / Terdaftar) —
-            // hanya saat tab Pesan aktif & baris arsip tidak sedang dibuka.
-            if (!_showArchived) _chatFilterBar(s),
-            Expanded(
+            Column(
+              children: [
+                // Baris arsip hanya rebuild saat jumlah arsip berubah.
+                ValueListenableBuilder<int>(
+                  valueListenable: _archivedNotifier,
+                  builder: (_, count, __) => count > 0
+                      ? _archivedToggle(s, count)
+                      : const SizedBox.shrink(),
+                ),
+                // Filter daftar chat (Semua / Belum dibaca / Anon / Terdaftar).
+                // SELALU tampil (termasuk saat seleksi) agar tinggi header
+                // KONSTAN → list tidak reflow, kartu yang ditahan tak bergeser.
+                // Saat seleksi (embedded), bar seleksi overlay menutupinya.
+                if (!_showArchived) _chatFilterBar(s),
+                Expanded(
               child: StreamBuilder<List<PrivateChatInfo>>(
                 stream: _stream,
                 initialData: _initial,
@@ -867,7 +874,7 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
                       // RepaintBoundary per kartu — satu kartu berubah
                       // (badge/centang) tidak repaint seluruh list.
                       return RepaintBoundary(
-                        // AppGestureDetector: tahan 320ms langsung masuk mode
+                        // AppGestureDetector: tahan 450ms langsung masuk mode
                         // seleksi (bukan 500ms default Flutter).
                         child: AppGestureDetector(
                           // Tap di lapis LUAR (pola _UserCard menu Online yang
@@ -1444,6 +1451,35 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
                 },
               ),
             ),
+          ],
+        ),
+            // Bar seleksi OVERLAY (embedded): mengambang di atas, list TIDAK
+            // bergeser → kartu yang ditahan tetap persis di bawah jari (tidak
+            // "loncat ke bawah"). Muncul/hilang dgn fade+slide halus (tanpa
+            // blink). AnimatedOpacity+SlideTransition murah & tak bikin list
+            // re-layout. Filter bar disembunyikan (di atas) supaya tak dobel.
+            if (widget.embedded)
+              Positioned(
+                top: 2,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  ignoring: !_selectionMode,
+                  child: AnimatedOpacity(
+                    opacity: _selectionMode ? 1 : 0,
+                    duration: const Duration(milliseconds: 160),
+                    curve: Curves.easeOut,
+                    child: AnimatedSlide(
+                      offset: _selectionMode
+                          ? Offset.zero
+                          : const Offset(0, -0.35),
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOutCubic,
+                      child: _selectionBar(auth.uid!, s, overlay: true),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

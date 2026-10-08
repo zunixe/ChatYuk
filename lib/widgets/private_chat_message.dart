@@ -1019,12 +1019,14 @@ class MessageBubble extends StatelessWidget {
     }
     return CompositedTransformTarget(
       link: link,
-      // AppGestureDetector: tahan 320ms (bukan 500ms) → toolbar seleksi/
-      // reaksi muncul lebih cepat; tap tetap instan.
+      // AppGestureDetector: tahan 600ms (longPressBubble) → toolbar seleksi/
+      // reaksi. Lebih lama dari list (450ms) karena bubble sering kena jari
+      // saat scroll → hindari toolbar muncul tak sengaja; tap tetap instan.
       child: AppGestureDetector(
         onLongPressStart: (d) => onLongPressMenu?.call(d, msg, link),
         onTap: onTapSelect,
         behavior: HitTestBehavior.opaque,
+        longPressDuration: AppTiming.longPressBubble,
         child: SwipeToReply(
           enabled: onSwipeReply != null && onTapSelect == null,
           onReply: onSwipeReply,
