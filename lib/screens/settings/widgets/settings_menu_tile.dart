@@ -11,6 +11,9 @@ class SettingsMenuTile extends StatelessWidget {
   final String title;
   final String? desc;
   final Widget? trailing;
+
+  /// Widget kecil di samping KANAN judul (mis. badge terverifikasi).
+  final Widget? titleTrailing;
   final VoidCallback? onTap;
   final Color? titleColor;
 
@@ -21,6 +24,7 @@ class SettingsMenuTile extends StatelessWidget {
     this.iconColor = AppTheme.primary,
     this.desc,
     this.trailing,
+    this.titleTrailing,
     this.onTap,
     this.titleColor,
   });
@@ -38,7 +42,21 @@ class SettingsMenuTile extends StatelessWidget {
         ),
         child: Icon(icon, color: iconColor, size: 18),
       ),
-      title: Text(title, style: AppText.bodyStrong.copyWith(color: titleColor)),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              title,
+              style: AppText.bodyStrong.copyWith(color: titleColor),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (titleTrailing != null) ...[
+            const SizedBox(width: 5),
+            titleTrailing!,
+          ],
+        ],
+      ),
       subtitle: desc == null
           ? null
           : Text(

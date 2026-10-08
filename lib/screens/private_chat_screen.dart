@@ -31,6 +31,7 @@ import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
 import '../utils/mention.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/verified_badge.dart';
 import '../widgets/chat_call_overlay.dart';
 import '../widgets/chat_ui_shared.dart';
 import '../main.dart';
@@ -2101,10 +2102,13 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                             ),
                             if (effRegistered) ...[
                               SizedBox(width: 4),
-                              Icon(
-                                Icons.verified,
+                              VerifiedBadgeForUid(
+                                uid: widget.otherUid,
                                 size: 15,
-                                color: Color(0xFF8AB4F8),
+                                tooltip: ref
+                                    .read(localeProvider)
+                                    .s
+                                    .phoneVerifiedBadge,
                               ),
                             ],
                           ],

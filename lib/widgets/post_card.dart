@@ -26,6 +26,7 @@ import '../utils.dart';
 import 'post_photo_viewer.dart';
 import 'post_share_sheet.dart';
 import 'gender_avatar.dart';
+import 'verified_badge.dart';
 import 'person_avatar.dart';
 import 'user_avatar.dart'
     show cachedUserAvatarBytes, rememberAvatarBytes;
@@ -1710,6 +1711,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        VerifiedBadgeForUid(uid: authorId, size: 13),
                         if (createdAt != null) ...[
                           SizedBox(width: 6),
                           Text(

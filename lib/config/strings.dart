@@ -1053,6 +1053,36 @@ class S {
       isId ? 'Nomor HP tanpa 0 depan' : 'Number without leading 0';
   String get labelPhoneFull =>
       isId ? 'Nomor lengkap' : 'Full number';
+  // ── Verifikasi nomor HP via Telegram ──
+  String get phoneVerifyTitle =>
+      isId ? 'Verifikasi via Telegram' : 'Verify via Telegram';
+  String get phoneVerifyDesc => isId
+      ? 'Buka bot Telegram kami untuk memverifikasi nomor HP. Setelah terverifikasi, akunmu dapat badge emas.'
+      : 'Open our Telegram bot to verify your phone number. Once verified, your account gets a gold badge.';
+  String get phoneVerifyBtn =>
+      isId ? 'Verifikasi Sekarang' : 'Verify Now';
+  String get phoneVerifyLater => isId ? 'Nanti saja' : 'Later';
+  String get phoneVerifyWaiting => isId
+      ? 'Menunggu verifikasi… buka Telegram & tekan tombol Bagikan nomor.'
+      : 'Waiting for verification… open Telegram & tap Share number.';
+  String get phoneVerifyOpened => isId
+      ? 'Telegram terbuka. Tekan "Bagikan nomor saya" di bot.'
+      : 'Telegram opened. Tap "Share my number" in the bot.';
+  String get phoneVerifySuccess =>
+      isId ? 'Nomor HP terverifikasi!' : 'Phone number verified!';
+  String get phoneVerifyFailed =>
+      isId ? 'Verifikasi gagal. Coba lagi.' : 'Verification failed. Try again.';
+  String get phoneVerifyRateLimited => isId
+      ? 'Terlalu banyak percobaan. Coba lagi nanti.'
+      : 'Too many attempts. Try again later.';
+  String get phoneVerifyPhoneEmpty =>
+      isId ? 'Isi nomor HP dulu.' : 'Enter your phone number first.';
+  String get phoneVerifyRetry => isId ? 'Coba lagi' : 'Try again';
+  String get phoneVerifiedBadge =>
+      isId ? 'Terverifikasi' : 'Verified';
+  String get phoneVerifiedAt =>
+      isId ? 'Terverifikasi' : 'Verified';
+
   String get errBirthDateFuture =>
       isId ? 'Tanggal lahir tidak boleh di masa depan' : 'Date of birth cannot be in the future';
   String get descSetPassword => isId
