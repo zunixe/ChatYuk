@@ -61,6 +61,16 @@ extension SAdminX on S {
   String get adminRoomMemberOwner => isId ? 'Pemilik' : 'Owner';
   String get adminRoomLoadingMembers =>
       isId ? 'Memuat anggota...' : 'Loading members...';
+  String get adminRoomDelete => isId ? 'Hapus grup' : 'Delete group';
+  String get adminRoomDeleteTitle =>
+      isId ? 'Hapus grup ini?' : 'Delete this group?';
+  String get adminRoomDeleteBody => isId
+      ? 'Semua pesan & anggota grup ini ikut terhapus permanen. Tindakan ini tidak bisa dibatalkan.'
+      : 'All messages & members of this group are permanently deleted. This cannot be undone.';
+  String get adminRoomDeleted =>
+      isId ? 'Grup dihapus' : 'Group deleted';
+  String get adminRoomDeleteFailed =>
+      isId ? 'Gagal menghapus grup' : 'Failed to delete group';
 
   String get adminDeviceTab => isId ? 'Perangkat' : 'Devices';
   String get adminDeviceTitle => isId ? 'Perangkat' : 'Devices';
