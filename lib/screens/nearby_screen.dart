@@ -31,7 +31,12 @@ class NearbyScreen extends ConsumerStatefulWidget {
 
 class _NearbyScreenState extends ConsumerState<NearbyScreen> {
   LocationService get _loc => ProviderScope.containerOf(context, listen: false).read(locationProvider).location;
-  double _radiusKm = 50;
+  /// Radius maksimum yang boleh dipilih user (km) — dibatasi 50.
+  static const double _maxRadiusKm = 50;
+  /// Radius default saat belum ada pilihan tersimpan (km).
+  static const double _defaultRadiusKm = 25;
+  static const String _prefKeyRadius = 'nearby_radius_km';
+  double _radiusKm = _defaultRadiusKm;
   bool _loading = true;
   bool _shareOn = false;
   String? _error;
@@ -49,6 +54,16 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
   Future<void> _init() async {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     _shareOn = auth.profile?.shareLocation ?? false;
+    // Muat radius tersimpan (per akun-milik device). Nilai lama dari versi
+    // yang mengizinkan sampai 500km ikut di-clamp ke [_maxRadiusKm] supaya
+    // tetap dalam batas baru.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getDouble(_prefKeyRadius);
+      if (saved != null && mounted) {
+        setState(() => _radiusKm = saved.clamp(1.0, _maxRadiusKm).toDouble());
+      }
+    } catch (_) {}
     // Anti-lag buka layar: JANGAN tunggu GPS chain (bisa belasan detik).
     // Pakai lastKnown (instan) kalau ada → langsung query. GPS akurat &
     // fallback IP jalan di BELAKANG, lalu refresh sekali bila sumber berubah.
@@ -136,6 +151,14 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
     } finally {
       _refreshing = false;
     }
+  }
+
+  /// Simpan pilihan radius supaya tetap terpakai saat layar dibuka lagi.
+  Future<void> _saveRadius(double v) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_prefKeyRadius, v);
+    } catch (_) {}
   }
 
   Future<void> _toggleShare(bool v) async {
@@ -282,9 +305,11 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
           // setState di sini = list ikut rebuild tiap frame drag → patah-patah).
           _RadiusSlider(
             initial: _radiusKm,
+            maxRadius: _maxRadiusKm,
             onChanged: (v) => _radiusKm = v,
             onChangeEnd: (v) {
               _radiusKm = v;
+              _saveRadius(v);
               _refresh();
             },
           ),
@@ -414,10 +439,14 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
 /// frame → patah-patah). [onChanged] = nilai live; [onChangeEnd] = trigger query.
 class _RadiusSlider extends ConsumerStatefulWidget {
   final double initial;
+  /// Batas atas radius (km) — dikirim parent supaya konsisten dengan clamp
+  /// nilai tersimpan.
+  final double maxRadius;
   final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
   const _RadiusSlider({
     required this.initial,
+    required this.maxRadius,
     required this.onChanged,
     required this.onChangeEnd,
   });
@@ -454,9 +483,10 @@ class _RadiusSliderState extends ConsumerState<_RadiusSlider> {
         Slider(
           value: _v,
           min: 1,
-          // Maks = batas server (nearby_users clamp 500km).
-          max: 500,
-          divisions: 499,
+          // Batas maksimal 50 km (kebijakan produk). Slider lama sampai
+          // 500km; nilai tersimpan yang lebih besar sudah di-clamp parent.
+          max: widget.maxRadius,
+          divisions: (widget.maxRadius - 1).round(),
           activeColor: AppTheme.primary,
           label: '${_v.round()} km',
           onChanged: (v) {
