@@ -38,6 +38,7 @@ import '../widgets/user_avatar.dart' as ua;
 import '../widgets/person_avatar.dart';
 import 'room_chat_screen.dart';
 import 'lobby_screen.dart';
+import 'group_screen.dart';
 import 'story_composer_screen.dart';
 import 'story_camera_capture_screen.dart';
 import 'story_camera_picker_screen.dart';
@@ -2300,6 +2301,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
           Positioned.fill(
             child: QuickSideMenu(
               onOpenRoom: () => _openGeneralRoom(context),
+              onCreateGroup: () => showCreateGroupDialog(context),
               ownerUid: authUid,
             ),
           ),
