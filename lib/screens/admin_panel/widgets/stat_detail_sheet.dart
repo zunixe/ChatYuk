@@ -10,10 +10,26 @@ import '../../../providers/riverpod/admin_provider.dart';
 
 /// Bottom sheet rincian satu kartu statistik: daftar user/room/pesan.
 /// [item] = record (judul, subtitle, ikon, warna, key detail).
+/// Guard anti-dobel: ada jeda `await` (muat data) SEBELUM
+/// `showModalBottomSheet` dipanggil, jadi tap kedua cepat dapat memulai
+/// instance kedua → DUA sheet bertumpuk. Flag ini memblok tap berikutnya
+/// selama sheet (atau persiapan muatnya) belum selesai; direset saat sheet
+/// ditutup. Statis karena kartu Ringkasan/Poin memakai fungsi ini dari
+/// context mana pun.
+bool _statSheetOpen = false;
+
+@visibleForTesting
+void resetStatDetailSheetGuardForTest() => _statSheetOpen = false;
+
 Future<void> showStatDetailSheet(
   BuildContext context,
   (String, String, IconData, Color, String) item,
 ) async {
+  // Blok tap dobel: kalau sheet (atau persiapan muatnya) sedang berjalan,
+  // abaikan pemanggilan berikutnya.
+  if (_statSheetOpen) return;
+  _statSheetOpen = true;
+
   final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
   final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
 
@@ -40,12 +56,18 @@ Future<void> showStatDetailSheet(
   // non-user (rooms/messages) yang memang butuh agregat dari sana.
   if (userKind != null) {
     final first = await admin.listStatsUsers(userKind, limit: pageSize);
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      _statSheetOpen = false;
+      return;
+    }
     list = (first['items'] as List<dynamic>?) ?? const [];
     total = (first['total'] as num?)?.toInt() ?? list.length;
   } else {
     final detail = await admin.fetchStatsDetail();
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      _statSheetOpen = false;
+      return;
+    }
     list = (detail[key] as List<dynamic>?) ?? const [];
     total = list.length;
   }
@@ -568,5 +590,8 @@ Future<void> showStatDetailSheet(
         ),
       );
     },
-  );
+  ).whenComplete(() {
+    // Sheet ditutup → izinkan membuka lagi.
+    _statSheetOpen = false;
+  });
 }
