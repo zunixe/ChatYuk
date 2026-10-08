@@ -1,19 +1,20 @@
 # Catatan Migrasi via API (Playwright fallback) — untuk AI lain
 
 > WAJIB dibaca sebelum `supabase db push`
-
 ## 2026-10-09 — Clamp last_seen (fix "online terus")
 
-- **Status:** SUDAH TERAPPLIED via Management API — `20261009120000_clamp_last_seen.sql`.
+- **Status:** SUDAH TERAPPLIED via Management API — `20261009120000_clamp_last_seen.sql` + `20261009130000_presence_stale_offline.sql`.
 - **Bug:** user "online terus" (mis. `sitirahmawAti`, `purwanto`) karena jam HP
   mereka MAJU → client menulis `last_seen = DateTime.now()` (jam HP) ke MASA DEPAN.
   `get_online_users`/`presence_for` filter `last_seen >= now()-30min` → timestamp
   masa depan SELALU lolos → selamanya online.
-- **Fix (server-side, netralkan SEMUA client):** trigger `trg_clamp_last_seen`
-  (BEFORE INSERT/UPDATE OF last_seen di `profiles`) → `last_seen := least(last_seen, now())`.
-  + bersihkan baris lama yang di masa depan.
-- **Terbukti:** `update profiles set last_seen = now()+interval '5 hours'` →
-  otomatis ter-clamp ke `now()`.
+- **Fix (server-side, netralkan SEMUA client):** 
+  1. `20261009120000`: trigger `trg_clamp_last_seen` → `last_seen := least(last_seen, now())`.
+  2. `20261009130000` (lanjutan): `last_seen` masa depan **sekalian** `status='offline'`
+     (jam HP maju = status tak dapat dipercaya). Tambah `presence_stale_offline(30)`
+     yang set `offline` untuk status `online/idle` dgn `last_seen` basi >30 mnt
+     (dulu menumpuk 568 baris), dipanggil tiap menit dari `housekeeping_tick`.
+- **Terbukti:** `update last_seen = now()+5h` → ter-clamp + status offline. SQL test 4/4 lolos.
 
 ## 2026-10-06 — Email Marketing (admin tab Marketing)
 
