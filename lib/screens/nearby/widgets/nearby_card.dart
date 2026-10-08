@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import '../../../config/theme.dart';
 import '../../../providers/riverpod/locale_provider.dart';
 import '../../../widgets/user_avatar.dart';
+import '../../../widgets/verified_badge.dart';
 
 class NearbyCard extends ConsumerWidget {
   final Map<String, dynamic> data;
@@ -119,10 +120,10 @@ class NearbyCard extends ConsumerWidget {
                           ),
                           if (isRegistered) ...[
                             SizedBox(width: 4),
-                            Icon(
-                              Icons.verified,
+                            VerifiedBadgeForUid(
+                              uid: '${data['uid'] ?? ''}',
                               size: 15,
-                              color: Color(0xFF4A90E2),
+                              tooltip: s.phoneVerifiedBadge,
                             ),
                           ],
                         ],

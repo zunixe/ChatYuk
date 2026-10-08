@@ -56,6 +56,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import '../core/media/native_image.dart';
 import '../providers/riverpod/location_provider.dart';
+import '../providers/riverpod/phone_verify_provider.dart';
+import '../widgets/verified_badge.dart';
 
 // Cache render avatar (bytes + ImageProvider stabil per-uid) kini MODULAR di
 // `widgets/user_avatar.dart` (dipakai lintas halaman user-facing). Layar ini
@@ -583,6 +585,24 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         gender: auth.profile?.gender ?? '',
         status: auth.profile?.status ?? 'offline',
         invisible: auth.invisibleEnabled,
+        // Tap avatar header → zoom besar (dialog foto). Pakai bytes cache
+        // avatar sendiri bila ada, else b64 dari profil.
+        onAvatarTap: () {
+          final nick = auth.profile?.nickname ?? '-';
+          final init = (nick.isEmpty ? '?' : nick)[0].toUpperCase();
+          Uint8List? bytes = ua.cachedUserAvatarBytes(auth.uid ?? '');
+          final src = auth.profile?.avatar ?? '';
+          if (bytes == null && src.isNotEmpty && !src.startsWith('avatars/')) {
+            try {
+              bytes = base64Decode(src);
+            } catch (_) {}
+          }
+          _showAvatarZoom(
+            bytes != null ? base64Encode(bytes) : '',
+            AppTheme.primary,
+            init,
+          );
+        },
       ),
     );
   }
@@ -753,6 +773,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     bool myRegistered,
     String myStatus,
     bool invisible,
+    S s,
   ) {
     // Tile avatar sendiri TETAP di tengah tray (vertikal) — Center
     // mengembalikan posisi tengah seperti semula.
@@ -894,10 +915,12 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                     ),
                     if (myRegistered) ...[
                       const SizedBox(width: 2),
-                      const Icon(
-                        Icons.verified,
+                      VerifiedBadge(
+                        verified: ref.watch(
+                          phoneVerifyProvider.select((p) => p.verified),
+                        ),
                         size: 13,
-                        color: Color(0xFF4A90E2),
+                        tooltip: s.phoneVerifiedBadge,
                       ),
                     ],
                   ],
@@ -935,6 +958,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
           myRegistered,
           myStatus,
           invisible,
+          ProviderScope.containerOf(ctx, listen: false).read(localeProvider).s,
         );
       },
     );
@@ -948,6 +972,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     bool myRegistered,
     String myStatus,
     bool invisible,
+    S s,
   ) {
     // Hanya item berisi slide (slideCount>0) yang tampil & bisa dibuka.
     final items = sp.tray.where((t) => t.slideCount > 0).toList();
@@ -972,6 +997,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
               myRegistered,
               myStatus,
               invisible,
+              s,
             );
           }
           final j = i - 1;
@@ -2860,13 +2886,10 @@ class _UserCard extends ConsumerWidget {
                         ],
                         if (user.isRegistered) ...[
                           SizedBox(width: 4),
-                          Tooltip(
-                            message: s.labelVerified,
-                            child: Icon(
-                              Icons.verified,
-                              size: 15,
-                              color: Color(0xFF4A90E2),
-                            ),
+                          VerifiedBadgeForUid(
+                            uid: user.uid,
+                            size: 15,
+                            tooltip: s.phoneVerifiedBadge,
                           ),
                         ],
                       ],
@@ -3088,6 +3111,9 @@ class MyStatusSheet extends ConsumerWidget {
   final String gender;
   final String status;
   final bool invisible;
+
+  /// Tap avatar di header → zoom foto. null = avatar tidak bisa diketuk.
+  final VoidCallback? onAvatarTap;
   const MyStatusSheet({
     super.key,
     required this.s,
@@ -3097,6 +3123,7 @@ class MyStatusSheet extends ConsumerWidget {
     required this.gender,
     required this.status,
     required this.invisible,
+    this.onAvatarTap,
   });
 
   String _statusLabel() {
@@ -3131,12 +3158,16 @@ class MyStatusSheet extends ConsumerWidget {
               children: [
                 // PersonAvatar — SAMA seperti kartu Online & header chat
                 // (tint + ring WARNA GENDER, foto bila ada, inisial bila tidak).
-                PersonAvatar(
-                  uid: uid,
-                  name: nickname,
-                  gender: gender,
-                  avatarB64: avatar,
-                  size: 44,
+                // Tap → zoom besar (dialog foto).
+                GestureDetector(
+                  onTap: onAvatarTap,
+                  child: PersonAvatar(
+                    uid: uid,
+                    name: nickname,
+                    gender: gender,
+                    avatarB64: avatar,
+                    size: 44,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(

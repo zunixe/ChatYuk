@@ -7,6 +7,10 @@ import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
 import '../widgets/phone_edit_dialog.dart';
+import '../widgets/phone_verify_dialog.dart';
+import '../widgets/verified_badge.dart';
+import '../providers/riverpod/phone_verify_provider.dart';
+import '../providers/riverpod/verified_provider.dart';
 import 'link_email_screen.dart';
 import 'settings/widgets/settings_menu_tile.dart';
 import '../providers/riverpod/locale_provider.dart';
@@ -46,6 +50,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(localeProvider).s;
+    // Badge terverifikasi nomor HP (realtime dari provider).
+    final verified = ref.watch(phoneVerifyProvider.select((p) => p.verified));
     // PERF (§26b): dulu `watch<AuthNotifier>()` → SELURUH halaman rebuild
     // tiap `notifyListeners` AuthNotifier (heartbeat presence berkala) →
     // lag saat masuk menu Akun. Sekarang: `read` untuk memanggil method
@@ -249,10 +255,17 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     onTap: () => _pickBirthDate(context),
                   ),
                   const Divider(height: 1, indent: 52),
-                  // Nomor HP.
+                  // Nomor HP + badge terverifikasi.
                   SettingsMenuTile(
                     icon: Icons.phone_iphone_rounded,
                     title: s.labelPhone,
+                    titleTrailing: verified
+                        ? VerifiedBadge(
+                            verified: true,
+                            size: 15,
+                            tooltip: s.phoneVerifiedBadge,
+                          )
+                        : null,
                     desc: (profile?.phone ?? '').isNotEmpty
                         ? profile!.phone
                         : s.hintPhoneNotSet,
@@ -501,6 +514,24 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.msgPhoneSaved)),
       );
+      // Tawarkan verifikasi (badge emas) via Telegram. Nomor baru = status
+      // verified di-reset server-side, jadi selalu tawarkan.
+      final ok = await showPhoneVerifyDialog(context, s);
+      if (ok == true && mounted) {
+        // Tandai verified di provider agar badge langsung tampil.
+        final uid = ProviderScope.containerOf(context, listen: false)
+                .read(authProvider.notifier)
+                .uid ??
+            '';
+        if (uid.isNotEmpty) {
+          ProviderScope.containerOf(context, listen: false)
+              .read(phoneVerifyProvider.notifier)
+              .refresh();
+          ProviderScope.containerOf(context, listen: false)
+              .read(verifiedProvider.notifier)
+              .markVerified(uid);
+        }
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

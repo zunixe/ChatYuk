@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import '../core/media/native_image.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
+import '../widgets/verified_badge.dart';
+import '../providers/riverpod/phone_verify_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../config/theme.dart';
 import 'profile/widgets/profile_widgets.dart';
@@ -1049,10 +1051,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ),
                           if (profile?.isRegistered == true) ...[
                             SizedBox(width: 4),
-                            Icon(
-                              Icons.verified,
+                            VerifiedBadge(
+                              verified: ref.watch(
+                                phoneVerifyProvider.select((p) => p.verified),
+                              ),
                               size: 18,
-                              color: Color(0xFF8AB4F8),
+                              tooltip: ref
+                                  .read(localeProvider)
+                                  .s
+                                  .phoneVerifiedBadge,
                             ),
                           ],
                         ],

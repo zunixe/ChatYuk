@@ -17,6 +17,7 @@ import '../providers/riverpod/auth_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../services/avatar_service.dart';
 import '../widgets/async_photo.dart';
+import '../widgets/verified_badge.dart';
 import '../widgets/social_actions.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../core/call/call_permissions.dart';
@@ -930,10 +931,9 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
                       ),
                       if (profile?.isRegistered == true) ...[
                         SizedBox(width: 5),
-                        Icon(
-                          Icons.verified,
+                        VerifiedBadgeForUid(
+                          uid: widget.userId,
                           size: 20,
-                          color: Color(0xFF4A90E2),
                         ),
                       ],
                       // Ikon chat kecil di samping username — klik langsung chat.

@@ -11,6 +11,7 @@ import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/verified_badge.dart';
 import '../widgets/social_actions.dart';
 import 'private_chat_screen.dart';
 import '../providers/riverpod/call_provider.dart';
@@ -1127,12 +1128,10 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
                                                         if (chat.participantRegistered[otherUid] ==
                                                             true) ...[
                                                           SizedBox(width: 3),
-                                                          Icon(
-                                                            Icons.verified,
+                                                          VerifiedBadgeForUid(
+                                                            uid: otherUid,
                                                             size: 14,
-                                                            color: Color(
-                                                              0xFF4A90E2,
-                                                            ),
+                                                            tooltip: s.phoneVerifiedBadge,
                                                           ),
                                                         ],
                                                       ],

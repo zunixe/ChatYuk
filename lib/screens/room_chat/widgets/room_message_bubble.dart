@@ -14,6 +14,7 @@ import '../../../widgets/mention_spans.dart';
 import '../../../widgets/private_chat_message.dart';
 import '../../../widgets/person_avatar.dart';
 import '../../../widgets/reply_quote.dart';
+import '../../../widgets/verified_badge.dart';
 import '../../../widgets/voice_bubble.dart';
 
 class RoomMessageBubble extends StatelessWidget {
@@ -405,10 +406,9 @@ class RoomMessageBubble extends StatelessWidget {
                       ],
                       if (msg.isRegistered) ...[
                         SizedBox(width: 3),
-                        Icon(
-                          Icons.verified,
+                        VerifiedBadgeForUid(
+                          uid: msg.senderId,
                           size: 14,
-                          color: Color(0xFF4A90E2),
                         ),
                       ],
                     ],
