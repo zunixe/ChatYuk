@@ -7,6 +7,7 @@ import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../widgets/sheet_drag_handle.dart';
 import '../widgets/person_avatar.dart';
@@ -459,33 +460,108 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
     );
   }
 }
-/// Picker invite grup reusable (dipakai members sheet + menu ⋮):
-/// daftar orang yang pernah chat (teman/bukan), di luar [excludeUids].
-/// Tap → invite langsung jadi member → [onInvited].
+
+/// Picker invite grup reusable (dipakai members sheet + menu ⋮ + buat grup).
+///
+/// Fitur:
+///  - SEARCH nama (client-side, atas orang yang sudah dimuat).
+///  - Dua SECTION: "Teman" (uid ∈ [socialProvider].state.friends) lalu
+///    "Lainnya".
+///  - MULTI-INVITE: tap = invite, baris ditandai ✓ "Sudah diundang", picker
+///    TETAP TERBUKA (undang beberapa sebelum tutup).
+///  - [onInvited] dipanggil tiap sukses (pemanggil bisa lacak/menyegarkan).
 Future<void> showGroupInvitePicker({
   required BuildContext context,
   required String roomId,
   required Set<String> excludeUids,
   required VoidCallback onInvited,
+  void Function(String uid, String name)? onInvitedOne,
 }) async {
-  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-  final myUid = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).prvUid;
-  // Snapshot chat yang sudah ada di memori — tampilkan daftar orang SEKETIKA
-  // saat sheet dibuka (dulu StreamBuilder menunggu fetch server 300-760ms →
-  // "cari" terasa lama). Stream server menyusul & mengoreksi.
-  final seed = (myUid != null && myUid.isNotEmpty)
-      ? ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).lastPrivateChatsSnapshot(myUid)
-      : null;
-  if (!context.mounted) return;
   await showModalBottomSheet(
     context: context,
     backgroundColor: AppTheme.bgCard,
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (ctx) => SafeArea(
+    builder: (_) => _GroupInvitePickerSheet(
+      roomId: roomId,
+      excludeUids: excludeUids,
+      onInvited: onInvited,
+      onInvitedOne: onInvitedOne,
+    ),
+  );
+}
+
+class _GroupInvitePickerSheet extends ConsumerStatefulWidget {
+  final String roomId;
+  final Set<String> excludeUids;
+  final VoidCallback onInvited;
+  final void Function(String uid, String name)? onInvitedOne;
+  const _GroupInvitePickerSheet({
+    required this.roomId,
+    required this.excludeUids,
+    required this.onInvited,
+    this.onInvitedOne,
+  });
+
+  @override
+  ConsumerState<_GroupInvitePickerSheet> createState() =>
+      _GroupInvitePickerSheetState();
+}
+
+class _GroupInvitePickerSheetState
+    extends ConsumerState<_GroupInvitePickerSheet> {
+  final _searchCtrl = TextEditingController();
+  final Set<String> _invited = {};
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _invite(String uid, String name, S s) async {
+    if (_invited.contains(uid)) return;
+    try {
+      await ProviderScope.containerOf(context, listen: false)
+          .read(roomProvider.notifier)
+          .invite(widget.roomId, uid);
+      if (!mounted) return;
+      setState(() => _invited.add(uid));
+      widget.onInvited();
+      widget.onInvitedOne?.call(uid, name);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$name — ${s.roomInvitedOk}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().contains('Room full')
+          ? s.roomInviteFull
+          : '$e';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: AppTheme.danger),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ref.watch(localeProvider).s;
+    final myUid =
+        ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).prvUid;
+    final friends =
+        ref.watch(socialProvider.select((st) => st.friends));
+    final seed = (myUid != null && myUid.isNotEmpty)
+        ? ProviderScope.containerOf(context, listen: false)
+            .read(chatProvider.notifier)
+            .lastPrivateChatsSnapshot(myUid)
+        : null;
+
+    return SafeArea(
       child: SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.6,
+        height: MediaQuery.of(context).size.height * 0.72,
         child: Column(
           children: [
             Padding(
@@ -499,16 +575,30 @@ Future<void> showGroupInvitePicker({
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => Navigator.pop(ctx),
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
             ),
+            // Search.
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text(s.roomInviteHint,
-                  style: AppText.bodySmall
-                      .copyWith(color: AppTheme.textSecondary)),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+                style: AppText.body,
+                decoration: InputDecoration(
+                  hintText: s.roomInviteSearchHint,
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppTheme.bgInput,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
             ),
             Expanded(
               child: StreamBuilder<List<PrivateChatInfo>>(
@@ -520,21 +610,28 @@ Future<void> showGroupInvitePicker({
                 initialData: seed,
                 builder: (_, snap) {
                   final seen = <String>{};
-                  final people = <Map<String, String>>[];
+                  final all = <Map<String, String>>[];
                   for (final c in (snap.data ?? const <PrivateChatInfo>[])) {
                     for (final p in c.participants) {
                       if (p.isEmpty ||
                           p == myUid ||
                           !seen.add(p) ||
-                          excludeUids.contains(p)) {
+                          widget.excludeUids.contains(p)) {
                         continue;
                       }
-                      people.add({
+                      all.add({
                         'uid': p,
                         'name': c.participantNames[p] ?? '?',
                       });
                     }
                   }
+                  // Filter search.
+                  final people = _query.isEmpty
+                      ? all
+                      : all
+                          .where((e) =>
+                              (e['name'] ?? '').toLowerCase().contains(_query))
+                          .toList();
                   if (people.isEmpty) {
                     return Center(
                       child: Text(s.noResults,
@@ -542,49 +639,25 @@ Future<void> showGroupInvitePicker({
                               color: AppTheme.textSecondary)),
                     );
                   }
+                  // Pisah: teman dulu, lalu lainnya.
+                  final friendList =
+                      people.where((e) => friends.contains(e['uid'])).toList();
+                  final otherList =
+                      people.where((e) => !friends.contains(e['uid'])).toList();
+
+                  final rows = <Widget>[];
+                  if (friendList.isNotEmpty) {
+                    rows.add(_sectionHeader(s.roomInviteFriends));
+                    rows.addAll(friendList.map((e) => _tile(s, e)));
+                  }
+                  if (otherList.isNotEmpty) {
+                    rows.add(_sectionHeader(s.roomInviteOthers));
+                    rows.addAll(otherList.map((e) => _tile(s, e)));
+                  }
+                  // ListView.builder = lazy (batas awal viewport + scroll).
                   return ListView.builder(
-                    itemCount: people.length,
-                    itemBuilder: (_, i) => ListTile(
-                      dense: true,
-                      // PersonAvatar = standar yang sama persis dengan
-                      // Pengguna Online (foto + latar tint + ring gender).
-                      leading: PersonAvatar(
-                        uid: people[i]['uid']!,
-                        name: people[i]['name'] ?? '?',
-                        gender: people[i]['gender'] ?? '',
-                        size: 32,
-                      ),
-                      title: Text(people[i]['name'] ?? '?',
-                          style: AppText.bodySmall),
-                      trailing: const Icon(Icons.person_add_alt_rounded,
-                          size: 18, color: AppTheme.primary),
-                      onTap: () async {
-                        final targetUid = people[i]['uid']!;
-                        final targetName = people[i]['name']!;
-                        Navigator.pop(ctx);
-                        try {
-                          await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
-                              .invite(roomId, targetUid);
-                          onInvited();
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content: Text(
-                                    '$targetName — ${s.roomInvitedOk}')),
-                          );
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          final msg = e.toString().contains('Room full')
-                              ? s.roomInviteFull
-                              : '$e';
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content: Text(msg),
-                                backgroundColor: AppTheme.danger),
-                          );
-                        }
-                      },
-                    ),
+                    itemCount: rows.length,
+                    itemBuilder: (_, i) => rows[i],
                   );
                 },
               ),
@@ -592,6 +665,43 @@ Future<void> showGroupInvitePicker({
           ],
         ),
       ),
-    ),
-  );
+    );
+  }
+
+  Widget _sectionHeader(String label) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+        child: Text(
+          label,
+          style: AppText.bodySmall.copyWith(
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+
+  Widget _tile(S s, Map<String, String> e) {
+    final uid = e['uid']!;
+    final name = e['name'] ?? '?';
+    final done = _invited.contains(uid);
+    return ListTile(
+      dense: true,
+      leading: PersonAvatar(uid: uid, name: name, gender: '', size: 32),
+      title: Text(name, style: AppText.bodySmall),
+      trailing: done
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_circle,
+                    size: 18, color: AppTheme.online),
+                const SizedBox(width: 4),
+                Text(s.roomInviteAlready,
+                    style: AppText.micro
+                        .copyWith(color: AppTheme.textSecondary)),
+              ],
+            )
+          : const Icon(Icons.person_add_alt_rounded,
+              size: 18, color: AppTheme.primary),
+      onTap: done ? null : () => _invite(uid, name, s),
+    );
+  }
 }

@@ -14,6 +14,8 @@ import '../providers/riverpod/room_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/theme_provider.dart';
 import 'room_chat_screen.dart';
+import 'room_members_sheet.dart';
+import '../widgets/person_avatar.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 /// Daftar private room milik/diikuti + buat room baru (QR join).
@@ -262,6 +264,8 @@ class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScree
   bool _creating = false;
   String? _createdId;
   String? _joinToken;
+  // Orang yang sudah diundang saat pembuatan grup (chip "Terundang (n)").
+  final Map<String, String> _invitedNames = {};
 
   @override
   void dispose() {
@@ -422,6 +426,47 @@ class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScree
               }
             },
           ),
+          const SizedBox(height: 24),
+          // ── Undang anggota (opsional) sebelum masuk grup ──
+          OutlinedButton.icon(
+            icon: const Icon(Icons.group_add_outlined, size: 18),
+            label: Text(s.privateRoomsInviteMembers),
+            onPressed: () async {
+              await showGroupInvitePicker(
+                context: context,
+                roomId: _createdId!,
+                excludeUids: _invitedNames.keys.toSet(),
+                onInvited: () {},
+                onInvitedOne: (uid, name) {
+                  if (mounted) setState(() => _invitedNames[uid] = name);
+                },
+              );
+            },
+          ),
+          // Chip "Terundang (n)".
+          if (_invitedNames.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              s.privateRoomsInvitedCount(_invitedNames.length),
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                for (final e in _invitedNames.entries)
+                  Chip(
+                    avatar: PersonAvatar(
+                        uid: e.key, name: e.value, size: 22),
+                    label: Text(e.value, style: AppText.micro),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 24),
           FilledButton.icon(
             icon: const Icon(Icons.arrow_forward_rounded),
