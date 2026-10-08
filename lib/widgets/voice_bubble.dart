@@ -100,28 +100,27 @@ class _VoiceBubbleState extends State<VoiceBubble> {
       // Tap ganda saat unduh + path kosong — abaikan (anti double-download).
       if (_loading || widget.path.isEmpty) return;
       try {
-        setState(() => _loading = true);
-        // DISK FIRST: voice di-cache lokal (per path) — play pertama
-        // download sekali, play berikutnya & sesi berikutnya dari lokal.
-        final disk = await MediaDiskCache.instance.read(widget.path);
-        if (disk != null && disk.isNotEmpty) {
-          final f = await MediaDiskCache.instance.fileFor(widget.path);
-          if (f != null) {
-            _VoicePlayerManager.instance.started_(_player);
-            await _player.play(DeviceFileSource(f.path));
-            if (mounted) setState(() => _playing = true);
-            return;
-          }
+        // DISK FIRST (instan): kalau voice SUDAH ada di disk, play LANGSUNG
+        // tanpa spinner — biar terasa seperti GAMBAR (buka chat, tap, langsung
+        // bunyi), bukan "load ulang". Spinner hanya saat benar-benar perlu
+        // DOWNLOAD (cache miss).
+        final f = await MediaDiskCache.instance.fileFor(widget.path);
+        if (f != null) {
+          _VoicePlayerManager.instance.started_(_player);
+          await _player.play(DeviceFileSource(f.path));
+          if (mounted) setState(() => _playing = true);
+          return;
         }
-        // Belum ada di disk → download sekali, tulis disk, play file.
+        // Cache miss → tampilkan spinner selama unduh.
+        setState(() => _loading = true);
         final bytes = await StoragePhotoService.instance
             .downloadBytes(widget.path);
         if (bytes == null || bytes.isEmpty) return;
         await MediaDiskCache.instance.write(widget.path, bytes);
-        final f = await MediaDiskCache.instance.fileFor(widget.path);
-        if (f == null || !mounted) return;
+        final f2 = await MediaDiskCache.instance.fileFor(widget.path);
+        if (f2 == null || !mounted) return;
         _VoicePlayerManager.instance.started_(_player);
-        await _player.play(DeviceFileSource(f.path));
+        await _player.play(DeviceFileSource(f2.path));
         if (mounted) setState(() => _playing = true);
       } catch (_) {
       } finally {

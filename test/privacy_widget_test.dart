@@ -72,6 +72,15 @@ void main() {
 
   testWidgets('mount → load() sekali + tile memakai string bilingual',
       (tester) async {
+    // Viewport tinggi: layar kini punya banyak tile (presence/last_seen/
+    // profil/about/story/leaderboard/call + read receipts) → ListView lazy
+    // tak membangun tile bawah di viewport 600px. Perbesar supaya semua tile
+    // ada di tree (findsOneWidget valid untuk SEMUA, bukan cuma yang terlihat).
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
@@ -397,10 +406,22 @@ void main() {
       (_) async => const PrivacySettings(readReceipts: false),
     );
 
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(Switch));
+    // Tap switch DI DALAM tile read-receipts (bukan Switch lain) — cari
+    // switch yang se-descendant dgn judul read receipts (tile = ListTile).
+    final tile = find.ancestor(
+      of: find.text(s.privacyReadReceiptsTitle),
+      matching: find.byType(ListTile),
+    );
+    final sw = find.descendant(of: tile, matching: find.byType(Switch));
+    await tester.tap(sw.first);
     await tester.pumpAndSettle();
 
     verify(() => service.update(
