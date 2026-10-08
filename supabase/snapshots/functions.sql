@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-10-02T16:14:16Z
+-- Timestamp: 2026-10-08T21:36:36Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -750,10 +750,11 @@ begin
   if length(p_name) < 3 or length(p_name) > 30 then raise exception 'Invalid room name'; end if;
   if p_country is null or p_country = '' then raise exception 'Invalid country'; end if;
 
-  -- Kategori: allowlist 10 kategori global + 'private' (legacy grup).
+  -- Kategori: allowlist 11 kategori global + 'private' (legacy grup).
   v_cat := coalesce(nullif(btrim(coalesce(p_category, '')), ''), 'private');
   if v_cat not in ('general', 'curhat', 'pertemanan', 'teknologi', 'gaming',
-                   'musik', 'film', 'joke', 'belajar', 'flirt', 'private') then
+                   'musik', 'film', 'joke', 'belajar', 'flirt', 'jualbeli',
+                   'private') then
     raise exception 'Invalid category';
   end if;
   v_is_category := (v_cat <> 'private');
@@ -971,6 +972,7 @@ CREATE OR REPLACE FUNCTION public.one_time_bonus(action_key text, bonus integer)
 AS $function$
 declare tot int;
 begin
+  -- No-op: bonus gratis dihapus. Kembalikan saldo apa adanya.
   select points into tot from profiles where id = auth.uid();
   return coalesce(tot, 0);
 end; $function$
@@ -1357,7 +1359,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: story_slides @ 20260926110000_story_video.sql
+-- snapshot-fn: story_slides @ 20261006140000_story_owner_only_private.sql
 CREATE OR REPLACE FUNCTION public.story_slides(p_author uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1371,7 +1373,7 @@ begin
     'text_x', s.text_x, 'text_y', s.text_y, 'text_color', s.text_color,
     'text_size', s.text_size, 'text_scale', s.text_scale,
     'text_rotation', s.text_rotation, 'text_bg', s.text_bg,
-    'visibility', s.visibility,
+    'visibility', s.visibility, 'owner_only', s.owner_only,
     'media_type', s.media_type, 'video_path', s.video_path,
     'duration_ms', s.duration_ms,
     'like_count', (select count(*) from public.story_likes l where l.story_id = s.id),
@@ -1382,11 +1384,18 @@ begin
   where s.author_id = p_author and s.expires_at > now()
     and public.privacy_can_view(s.author_id, 'story', auth.uid())
     and (
-      s.author_id = auth.uid()
-      or ((s.visibility = 'everyone')
-        or (s.visibility = 'followers' and exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = s.author_id))
-        or (s.visibility = 'friends' and public._are_friends(auth.uid(), s.author_id)))
-      and not exists (select 1 from public.blocks b where (b.blocker_id = auth.uid() and b.blocked_id = s.author_id) or (b.blocker_id = s.author_id and b.blocked_id = auth.uid()))
+      -- Admin lihat SEMUA (termasuk owner_only) — untuk moderasi.
+      public.is_admin_request()
+      -- Author lihat miliknya sendiri (termasuk yang owner_only).
+      or s.author_id = auth.uid()
+      -- Lain: hormati owner_only + visibility + blokir.
+      or (
+        not s.owner_only
+        and ((s.visibility = 'everyone')
+          or (s.visibility = 'followers' and exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = s.author_id))
+          or (s.visibility = 'friends' and public._are_friends(auth.uid(), s.author_id)))
+        and not exists (select 1 from public.blocks b where (b.blocker_id = auth.uid() and b.blocked_id = s.author_id) or (b.blocker_id = s.author_id and b.blocked_id = auth.uid()))
+      )
     );
   return result;
 end;
@@ -1503,6 +1512,7 @@ declare
   my_lon double precision;
   radius_m double precision;
   v_excl uuid[];
+  v_price int;
   v_published boolean;
   v_admin boolean;
   v_today date;
@@ -1510,10 +1520,12 @@ declare
 begin
   if me is null then raise exception 'Not authenticated'; end if;
 
-  -- Gate biaya (harian) — hanya bila fitur sudah dipublish.
+  -- ── Gate biaya (harian) — hanya bila fitur sudah dipublish ──
   v_admin := coalesce(auth.email(), '') = 'zunixe@gmail.com';
-  select (feature_flags -> 'nearby_paid' ->> 'published')::boolean
-    into v_published from app_settings where id = 'global';
+  select (feature_flags -> 'nearby_paid' ->> 'published')::boolean,
+         coalesce(nearby_cost, 25)
+    into v_published, v_price
+    from app_settings where id = 'global';
 
   if coalesce(v_published, false) and not v_admin then
     v_today := (now() at time zone 'Asia/Jakarta')::date;
@@ -1521,6 +1533,8 @@ begin
       where user_id = me and feature = 'nearby'
         and ref_id = 'nearby:' || v_today::text;
     if v_paid = 0 then
+      -- Belum bayar hari ini → tagih. Raise 'YukCoin tidak cukup' bila kurang
+      -- (client menangkap & tampilkan dialog topup).
       perform public.gate_feature('nearby', 'nearby');
     end if;
   end if;

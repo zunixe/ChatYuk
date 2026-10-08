@@ -2,6 +2,8 @@
 -- STORY: hapus-slide → jadikan PRIVATE "hanya saya" (owner_only),
 -- + admin bisa lihat SEMUA (termasuk yang owner_only) dengan keterangan.
 --
+-- menyentuh: story_slides
+--
 -- LATAR:
 --   Dulu `delete_story` menghapus PERMANEN row. User ingin "hapus" =
 --   slide disembunyikan dari orang lain TAPI tetap bisa dilihat pembuat
