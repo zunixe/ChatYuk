@@ -262,7 +262,7 @@ class _QuickSideMenuState extends ConsumerState<QuickSideMenu>
                                 ),
                                 SizedBox(height: _gap),
                                 _item(
-                                  icon: Icons.public_rounded,
+                                  icon: Icons.forum_rounded,
                                   active: widget.roomActive,
                                   tooltip: s.titleRooms,
                                   semanticLabel: s.quickMenuGlobalRoom,

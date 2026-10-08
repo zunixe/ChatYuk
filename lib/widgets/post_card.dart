@@ -656,7 +656,7 @@ class _PostCardState extends ConsumerState<PostCard> {
         const Divider(height: 1, thickness: 0.5),
         Padding(
           // Profil dempet ke kiri (tanpa padding kiri).
-          padding: EdgeInsets.fromLTRB(0, 12, 8, 8),
+          padding: EdgeInsets.fromLTRB(0, 12, 8, 2),
           child: Row(
               children: [
                 // Tap avatar = zoom foto (internal); tap nama = profil.
@@ -747,7 +747,7 @@ class _PostCardState extends ConsumerState<PostCard> {
           ),
           if ((_p['text'] as String? ?? '').isNotEmpty)
             Padding(
-              padding: EdgeInsets.fromLTRB(_kContentPadH, 10, 16, 2),
+              padding: EdgeInsets.fromLTRB(_kContentPadH, 2, 16, 2),
               child: Text(_p['text'] as String, style: AppText.body),
             ),
           // Area foto dicadangkan sejak path diketahui (bukan saat thumb
@@ -756,7 +756,7 @@ class _PostCardState extends ConsumerState<PostCard> {
           if (_imagePaths().isNotEmpty && !_photosAllFailed())
             Padding(
               // Kanan 16 — sejajar dengan teks di atasnya.
-              padding: EdgeInsets.fromLTRB(_kContentPadH, 10, 16, 2),
+              padding: EdgeInsets.fromLTRB(_kContentPadH, 2, 16, 2),
               child: _photoGrid(),
             ),
           Padding(
