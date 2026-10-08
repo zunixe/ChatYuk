@@ -26,6 +26,7 @@ import 'call_screen.dart';
 import 'private_chat_screen.dart';
 import 'social_list_screen.dart';
 import '../core/perf/perf_probe.dart';
+import '../providers/riverpod/privacy_provider.dart';
 import '../config/theme.dart';
 
 class UserInfoScreen extends ConsumerStatefulWidget {
@@ -450,6 +451,18 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
         final ok = await pp.ensureEnoughForCall(context, callType, s.isId);
         if (!ok) return;
       }
+    }
+    // Privasi panggilan penerima: bila menolak, jangan tembak DB sama sekali.
+    // Server RLS tetap penjaga akhir.
+    final allowed = await ProviderScope.containerOf(context, listen: false)
+        .read(privacyServiceProvider)
+        .canView(widget.userId, 'call');
+    if (!mounted) return;
+    if (!allowed) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        SnackBar(content: Text(s.callNotAllowed)),
+      );
+      return;
     }
     // Izin kamera/mikrofon WAJIB sebelum getUserMedia — tanpa ini video call
     // pertama (izin belum ada) langsung gagal senyap (CallPhase.error).
