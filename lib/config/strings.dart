@@ -1714,6 +1714,16 @@ class S {
   String get roomInvitedOk =>
       isId ? 'Berhasil diundang ke grup' : 'Invited to group';
   String get roomInviteFull => isId ? 'Grup penuh' : 'Group is full';
+  String get roomInviteSearchHint =>
+      isId ? 'Cari nama...' : 'Search name...';
+  String get roomInviteFriends => isId ? 'Teman' : 'Friends';
+  String get roomInviteOthers => isId ? 'Lainnya' : 'Others';
+  String get roomInviteAlready =>
+      isId ? 'Sudah diundang' : 'Already invited';
+  String get privateRoomsInviteMembers =>
+      isId ? 'Undang Anggota' : 'Invite members';
+  String privateRoomsInvitedCount(int n) =>
+      isId ? 'Terundang ($n)' : 'Invited ($n)';
   String get mFirstPhoto => isId ? 'Kirim foto pertama' : 'Send first photo';
   String get mFirstRoomChat => isId ? 'Chat room pertama' : 'First room chat';
   String get btnRetry => isId ? 'Coba Lagi' : 'Retry';
