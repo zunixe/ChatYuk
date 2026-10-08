@@ -641,6 +641,21 @@ class _MainNavState extends ConsumerState<_MainNav>
   // hilang) → disk cache baru menghangat saat halaman sudah tampil →
   // blink abu skeleton beberapa ratus ms.
 
+  // PERF (2026-10-08): trim arena native saat FOREGROUND-IDLE.
+  //
+  // Akar "makin lama makin lambat" (terukur Xiaomi 24129PN74G): arena
+  // jemalloc membengkak saat aktivitas foreground (terutama pindah tab —
+  // Free 5MB→477MB) dan HANYA dibersihkan saat app di-background. User yang
+  // memakai NONSTOP tidak pernah men-trigger trim → RSS tinggi → swap/paging
+  // (VmSwap ~107MB) → lag progresif. Trim dipanggil di sini HANYA setelah app
+  // DIAM beberapa detik supaya tidak memicu re-decode massal (tidak ada yang
+  // dilihat saat idle). Timer tiap [_idleTrimInterval]; hop hanya saat
+  // interaksi terakhir >= [_idleTrimAfter].
+  static const Duration _idleTrimInterval = Duration(seconds: 15);
+  static const Duration _idleTrimAfter = Duration(seconds: 4);
+  Timer? _idleTrimTimer;
+  DateTime _lastInteractionAt = DateTime.now();
+
   // Instance halaman dibuat ulang HANYA saat mode terang/gelap berubah —
   // bukan tiap tab switch (menghindari rebuild berlebihan).
   List<Widget>? _pages;
@@ -696,6 +711,14 @@ class _MainNavState extends ConsumerState<_MainNav>
     // 800ms supaya tidak ada lonjakan frame — tab aktif sudah ter-render
     // penuh sebelum ini jalan.
     _scheduleTabPrewarm();
+    // Trim arena native saat foreground-idle (lihat field _idleTrimTimer).
+    _idleTrimTimer = Timer.periodic(_idleTrimInterval, (_) {
+      if (!mounted || _pausedAt != null) return; // sedang background → skip
+      if (DateTime.now().difference(_lastInteractionAt) < _idleTrimAfter) {
+        return; // masih ada interaksi → jangan trim (hindari re-decode massal)
+      }
+      unawaited(NativeImage.trim());
+    });
   }
 
   /// Bangun halaman tab lain di belakang layar, satu per satu saat idle.
@@ -720,7 +743,17 @@ class _MainNavState extends ConsumerState<_MainNav>
     const order = [1, 2, 3]; // Pesan/Chat, Timeline, Profil
     var step = 0;
     void next() {
-      if (!mounted || step >= order.length) return;
+      if (!mounted || step >= order.length) {
+        // Semua tab sudah dibangun → ini pemicu bloat arena terbesar (burst
+        // decode/encode build halaman penuh). Trim SEGERA (delay pendek agar
+        // tidak mengganggu frame prewarm terakhir): purge jemalloc paling
+        // efektif saat halaman baru jadi sampah. Menyerang akar lebih cepat
+        // daripada menunggu timer idle 15 dtk. Lihat docs/PERFORMANCE.md §42.
+        Future<void>.delayed(const Duration(seconds: 3), () {
+          if (mounted && _pausedAt == null) unawaited(NativeImage.trim());
+        });
+        return;
+      }
       final i = order[step++];
       if (_visitedTabs.contains(i)) {
         next();
@@ -735,6 +768,8 @@ class _MainNavState extends ConsumerState<_MainNav>
 
   @override
   void dispose() {
+    _idleTrimTimer?.cancel();
+    _idleTrimTimer = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -898,6 +933,9 @@ class _MainNavState extends ConsumerState<_MainNav>
       }
     }
     PerfProbe.tabStart(i);
+    // Pindah tab = pemicu utama bloat arena native → tandai interaksi supaya
+    // trim foreground-idle menunggu user benar-benar diam.
+    _lastInteractionAt = DateTime.now();
     ref.read(navProvider.notifier).goTo(i);
     if (PerfProbe.measuring) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -960,7 +998,14 @@ class _MainNavState extends ConsumerState<_MainNav>
       onlineUsersProvider.select((p) => p.hiddenCount),
     );
     final adminFabBottom = (tab == 0 && hiddenCount > 0) ? 64.0 : 14.0;
-    return Scaffold(
+    // Listener transparan: tandai SEMUA interaksi (tap/scroll/ketik) agar trim
+    // foreground-idle (lihat _idleTrimTimer) menunggu app benar-benar diam.
+    // Behavior.translucent = mengamati tanpa merebut gesture & tanpa mengubah
+    // layout (meneruskan pointer ke child).
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _lastInteractionAt = DateTime.now(),
+      child: Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
@@ -1125,6 +1170,7 @@ class _MainNavState extends ConsumerState<_MainNav>
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: _BottomNav(currentIndex: tab, onTap: _onNavTap),
+    ),
     );
   }
 }

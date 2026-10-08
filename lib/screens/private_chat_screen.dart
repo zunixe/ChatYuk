@@ -2232,29 +2232,27 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                 final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
                 if (social.isFollowing(widget.otherUid)) {
                   social.unfollow(widget.otherUid);
-                  showChatSnack(context, s.btnUnfollow);
+                  showChatSnack(context, s.snackUnfollowed(widget.otherName));
                 } else {
                   social.follow(widget.otherUid);
-                  showChatSnack(context, s.btnFollow);
+                  showChatSnack(context, s.snackNowFollowing(widget.otherName));
                 }
               } else if (val == 'friend') {
                 final social = ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
                 final messenger = ScaffoldMessenger.of(context);
                 social.sendFriendRequest(widget.otherUid).then((res) {
                   if (!mounted) return;
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        (res == 'pending' || res == 'friends')
-                            ? s.friendRequestSentMutual
-                            : s.errGeneric,
-                      ),
-                    ),
+                  showChatSnackVia(
+                    messenger,
+                    context,
+                    (res == 'pending' || res == 'friends')
+                        ? s.friendRequestSentMutual
+                        : s.errGeneric,
                   );
                 });
               } else if (val == 'block') {
                 chat.blockUser(myUid!, widget.otherUid);
-                showChatSnack(context, s.blockSuccess);
+                showChatSnack(context, s.snackBlocked(widget.otherName));
               } else if (val == 'report') {
                 _showReportDialog();
               }

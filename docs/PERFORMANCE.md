@@ -3396,3 +3396,78 @@ baru per encode di `ImageBridge` — selalu lewat `encodeJpeg`/`encodeJpegB64`
 
 **Test:** 25 test `native_image` hijau; `flutter analyze lib` 0 error; build
 profile apkpureProd sukses (gerbang nyata §14).
+
+---
+
+## 42. Trim arena native saat FOREGROUND-IDLE — fix "makin lama makin lambat" untuk pemakai nonstop (2026-10-08)
+
+**Keluhan user:** "pindah tab lambat, dari list chat ke private chat lama kelamaan
+lambat dan menu lain juga" — makin lama dipakai makin berat, dipakai nonstop.
+
+**Diagnosis (terukur langsung, Xiaomi 24129PN74G, v1.2.70+97, `adb` wireless):**
+
+| Kondisi | Native Heap Size | Alloc | **Free** | TOTAL PSS |
+|---|---|---|---|---|
+| Setelah resume (habis trim) | 64 MB | 55 MB | **5 MB** | 352 MB |
+| Pindah tab 10× | **540 MB** | 58 MB | **477 MB** | 370 MB |
+| Scroll 30× | 540 MB | 58 MB | 477 MB | 357 MB |
+| Scroll 60× | 540 MB | 58 MB | 478 MB | 367 MB |
+
+**Temuan kunci:**
+1. `Bitmap (malloced)` = 5.2 MB → **BUKAN bitmap** (semua `Image.memory` sudah
+   `cacheWidth`; fix §13/§14/§41 tetap valid).
+2. `Native Heap Free >> Alloc` (477 vs 58 MB) = **arena jemalloc fragmentasi**
+   (§39/§40), bukan leak objek (Alloc kecil).
+3. **PEMICU = pindah tab** (Free 5MB→477MB seketika; scroll hanya plateau).
+   Pindah tab → prewarm + build halaman penuh → burst decode/encode → arena
+   memfragmentasi.
+4. **Trim berfungsi** (terbukti: 477MB → 5MB saat background→resume), TAPI
+   `NativeImage.trim()` dulu **HANYA** dipanggil di `didChangeAppLifecycleState`
+   (resume/didHaveMemoryPressure). **User nonstop tidak pernah men-trigger →**
+   arena menumpuk selama foreground → RSS tinggi → swap/paging (VmSwap ~107MB)
+   → lag progresif. Inilah gap yang ditulis §19 ("user yang pakai nonstop tidak
+   pernah di-trim") — kini dipecahkan.
+
+**Fix (`lib/app.dart`, `_MainNavState`):** timer periodik 15 detik yang memanggil
+`NativeImage.trim()` **HANYA bila app foreground DAN tidak ada interaksi selama
+≥4 detik** (`_idleTrimAfter`). Interaksi ditandai dari `_onNavTap` + `Listener`
+transparan (`onPointerDown`) membungkus tree `_MainNav`. Idle = tak ada yang
+dilihat → trim tidak memicu re-decode massal (berbeda dari trim di pause yang
+dulu bikin burst, lihat komentar baris 753-758).
+
+**Titik trim ke-2 — setelah prewarm tab (`_scheduleTabPrewarm`):** setelah
+ketiga tab selesai dibangun (pemicu bloat terbesar = burst build halaman penuh),
+trim dipanggil **3 detik** kemudian (delay pendek agar tidak mengganggu frame
+prewarm). Purge jemalloc paling efektif saat halaman baru jadi sampah, jadi ini
+membersihkan lebih cepat daripada menunggu siklus idle 15 dtk.
+
+**Hasil terukur di HP (Xiaomi 24129PN74G, build profile, `adb` wireless):**
+
+| Kondisi | Native Heap Size | Alloc | **Free** |
+|---|---|---|---|
+| Sebelum fix (pindah tab) | 536 MB | 58 MB | **481 MB** |
+| Sesudah fix — idle (log `[IDLE-TRIM]` membuktikan trim dipanggil) | **68 MB** | 55 MB | **8 MB** ✅ |
+
+Bukti timer hidup (build profile, logcat): `[IDLE-TRIM] tick mounted=true
+paused=false sinceInter=90s` → `-> memanggil NativeImage.trim()` berulang tiap
+siklus. Free turun 481MB → 8MB.
+
+**Keterbatasan (jujur):** `mallopt(M_PURGE)` **tidak deterministik** —
+kadang Free turun ke ~8MB, kadang tetap ~476MB (tergantung apakah arena sedang
+bisa di-purge). Ini sifat jemalloc (lihat §39/§40). Trim memperbaiki **rata-rata**
+& kondisi idle, bukan jaminan 100% tiap panggilan.
+
+**Aturan turunan:**
+- Trim **saat interaksi** = regresi re-decode; trim **saat idle** = aman. Jangan
+  panggil `NativeImage.trim()` di jalur yang sering jalan saat user aktif.
+- Jangan naikkan `_idleTrimAfter` terlalu besar (> ~10 dtk) — jeda makin lama
+  sebelum arena dibersihkan. Jangan turunkan < ~3 dtk — risiko trim saat user
+  jeda sekejap lalu lanjut (re-decode).
+- Bila menambah titik interaksi (gesture baru di luar `_onNavTap`/`Listener`),
+  pastikan tetap memperbarui `_lastInteractionAt`.
+
+**Verifikasi:** `flutter analyze lib/app.dart` → 0 error / 0 warning (4 info
+pra-ada). Ukur ulang di HP: pindah tab 10× → tunggu >15 dtk idle → `Native Heap
+Free` harus turun (dari ~477MB kembali mendekati ~5MB) TANPA background. _Angka
+sebelum/sesudah di HP diisi setelah pengukuran._
+

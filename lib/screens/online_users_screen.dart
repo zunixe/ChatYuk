@@ -89,6 +89,50 @@ void clearAllAvatarCaches() => ua.clearAllAvatarCaches();
 // Kompresi kini di NATIVE via `NativeImage.processSquare` (fallback ke
 // `processAvatarImage` Dart) — lihat lib/core/media/native_image.dart.
 
+/// Channel daftar Online — "Semua" vs "Teman". Konsep seperti channel
+/// berlangganan; tinggal tambah nilai enum (mis. `business`) untuk ekspansi.
+///
+/// - [all]: tampilkan SEMUA user online (privasi presence tetap dijaga server).
+/// - [friends]: hanya teman (mutual follow) yang tampil. User yang di-hide
+///   tetap ikut aturan channel ini.
+enum OnlineChannel {
+  all,
+  friends,
+  /// BUKAN channel filter — item yang membuka halaman "Orang Sekitar".
+  /// Ikut di dropdown channel supaya AppBar lebih rapi, tapi tidak dipersist
+  /// dan tidak menyaring daftar (langsung navigasi).
+  nearby;
+
+  /// Channel yang benar-benar menyaring daftar (bukan aksi navigasi).
+  bool get isFilter => this == all || this == friends;
+
+  /// Label UI (bilingual via `S`).
+  String label(S s) => switch (this) {
+    OnlineChannel.all => s.filterAll,
+    OnlineChannel.friends => s.filterFriends,
+    OnlineChannel.nearby => s.nearbyTitle,
+  };
+
+  /// Ikon tombol — berubah sesuai channel aktif.
+  IconData get icon => switch (this) {
+    OnlineChannel.all => Icons.public_rounded,
+    OnlineChannel.friends => Icons.people_alt_rounded,
+    OnlineChannel.nearby => Icons.explore_outlined,
+  };
+
+  /// Nilai persist (prefs).
+  String get wire => name;
+
+  /// Parse aman dari prefs (fallback `all`). `nearby` bukan channel filter →
+  /// tidak pernah dipulihkan sebagai channel aktif.
+  static OnlineChannel fromWire(String? v) {
+    for (final c in OnlineChannel.values) {
+      if (c.isFilter && c.name == v) return c;
+    }
+    return OnlineChannel.all;
+  }
+}
+
 class OnlineUsersScreen extends ConsumerStatefulWidget {
   const OnlineUsersScreen({super.key});
 
@@ -102,6 +146,8 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   List<String> _negaraSel = const [];
   // Single-select gender: all | male | female. Persist via prefs.
   String _gender = 'all';
+  // Channel daftar Online: Semua (all) | Teman (friends). Persist via prefs.
+  OnlineChannel _channel = OnlineChannel.all;
   String _search = '';
   bool _isSearching = false;
   int _page = 1;
@@ -109,6 +155,15 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   static const _prefKeyNegara = 'filter_negara'; // legacy single
   static const _prefKeyNegaraList = 'filter_negara_multi';
   static const _prefKeyGender = 'filter_gender';
+  static const _prefKeyChannel = 'filter_channel';
+  // Snapshot set teman terakhir — dipakai agar filter channel "Teman" memakai
+  // data terkini tanpa rebuild storm (dibandingkan via setEquals).
+  Set<String> _friendSet = const {};
+  // Saat channel "Teman" dipilih, presence-visibility DIRI SENDIRI di-override
+  // ke `friends` (biar "Status kamu terlihat oleh" = Teman). Simpan nilai asli
+  // (dari Kelola Privasi) di sini supaya channel "Semua" bisa mengembalikannya.
+  static const _prefKeyPresenceOverrideBefore = 'channel_presence_before';
+  PrivacyVisibility? _presenceBeforeFriends;
   final ScrollController _scrollCtrl = ScrollController();
   final TextEditingController _searchCtrl = TextEditingController();
   StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
@@ -184,8 +239,29 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
       try {
         ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).fetchUserCounts();
       } catch (_) {}
+      // Rekonsiliasi efek channel ke privasi: kalau terakhir channel "Teman"
+      // (persisted) tapi override presence belum tercatat (mis. app baru
+      // dibuka), terapkan sekarang supaya konsisten.
+      _reconcileChannelPresence();
     });
     _requestGpsOnce();
+  }
+
+  /// Pastikan efek channel ke presence-visibility diri sendiri konsisten dgn
+  /// channel yang tersimpan (dipanggil sekali saat layar dibuka).
+  Future<void> _reconcileChannelPresence() async {
+    if (_channel != OnlineChannel.friends) return;
+    final notifier = ref.read(privacyProvider.notifier);
+    if (ref.read(privacyProvider).loading) {
+      await notifier.load();
+    }
+    if (!mounted) return;
+    final current = ref.read(privacyProvider).settings.presence;
+    if (current != PrivacyVisibility.friends) {
+      _presenceBeforeFriends ??= current;
+      await notifier.update(presence: PrivacyVisibility.friends);
+      await _saveFilter();
+    }
   }
 
   /// Minta izin GPS saat masuk menu pengguna online (dialog native muncul
@@ -258,6 +334,11 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
           prefs.getStringList(_prefKeyNegaraList) ??
           (legacy != null && legacy != 'all' ? [legacy] : const []);
       _gender = prefs.getString(_prefKeyGender) ?? 'all';
+      _channel = OnlineChannel.fromWire(prefs.getString(_prefKeyChannel));
+      final before = prefs.getString(_prefKeyPresenceOverrideBefore);
+      _presenceBeforeFriends = (before == null || before.isEmpty)
+          ? null
+          : PrivacyVisibility.fromWire(before);
     });
   }
 
@@ -265,6 +346,13 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_prefKeyNegaraList, _negaraSel);
     await prefs.setString(_prefKeyGender, _gender);
+    await prefs.setString(_prefKeyChannel, _channel.wire);
+    final before = _presenceBeforeFriends;
+    if (before == null) {
+      await prefs.remove(_prefKeyPresenceOverrideBefore);
+    } else {
+      await prefs.setString(_prefKeyPresenceOverrideBefore, before.wireKey);
+    }
   }
 
   bool _uploadingAvatar = false;
@@ -538,6 +626,91 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   }
 
   // ── Story: buka komposer (kamera + galeri satu halaman → composer) ──
+  /// Buka "Orang Sekitar". Registered only — anon dapat popup "lengkapi email"
+  /// (form modular sama dengan aksi lain; teks khusus konteks Orang Sekitar).
+  void _openNearby() {
+    final s = ref.read(localeProvider).s;
+    final registered = ref.read(authProvider).profile?.isRegistered ?? false;
+    if (!registered) {
+      showAnonPromptDialog(
+        context,
+        title: s.promptCompleteEmailNearbyTitle,
+        message: s.promptCompleteEmailNearbyMsg,
+        icon: Icons.explore_outlined,
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NearbyScreen()),
+    );
+  }
+
+  /// Terapkan efek channel ke setelan privasi DIRI SENDIRI:
+  /// - channel "Teman" → override presence jadi `friends` (Status kamu
+  ///   terlihat oleh = Teman). Nilai asli (Kelola Privasi) disimpan dulu.
+  /// - channel "Semua"  → kembalikan presence ke nilai asli tadi.
+  /// Restore hanya dilakukan bila memang ada override aktif (tak menimpa
+  /// perubahan manual di Kelola Privasi saat channel "Semua").
+  Future<void> _applyChannelPresence(OnlineChannel next) async {
+    final notifier = ref.read(privacyProvider.notifier);
+    // Pastikan setelan termuat sebelum menyimpan nilai asli.
+    if (!ref.read(privacyProvider).loading &&
+        ref.read(privacyProvider).settings == const PrivacySettings()) {
+      await notifier.load();
+    }
+    if (next == OnlineChannel.friends) {
+      final current = ref.read(privacyProvider).settings.presence;
+      if (current != PrivacyVisibility.friends) {
+        // Simpan nilai asli SEKALI (kalau sudah ter-override, jangan timpa).
+        _presenceBeforeFriends ??= current;
+        await notifier.update(presence: PrivacyVisibility.friends);
+        await _saveFilter();
+      }
+    } else {
+      // Channel "Semua" → pulihkan setelan default.
+      final before = _presenceBeforeFriends;
+      if (before != null) {
+        _presenceBeforeFriends = null;
+        await notifier.update(presence: before);
+        await _saveFilter();
+      }
+    }
+  }
+
+  /// Snackbar keterangan channel — menjelaskan beda "Semua" vs "Teman"
+  /// (termasuk efek ke visibilitas status diri). Gaya konsisten dgn snackbar
+  /// lain (ikon + teks, durasi pendek).
+  void _showChannelInfo(OnlineChannel c) {
+    if (!c.isFilter) return;
+    final s = ref.read(localeProvider).s;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    // Floating snackbar OTOMATIS berada di atas bottomNavigationBar — cukup
+    // jarak kecil. Jangan tambah inset lagi (dulu dobel → snackbar naik ke
+    // tengah layar).
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        content: Row(
+          children: [
+            Icon(c.icon, size: 18, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                c == OnlineChannel.friends
+                    ? s.channelFriendsDesc
+                    : s.channelAllDesc,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openStoryComposer() async {
     // Picker ala IG: preview kamera live + strip galeri di bawah —
     // jepret ATAU pilih foto galeri dalam satu halaman.
@@ -886,8 +1059,11 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     // docs/PERFORMANCE.md §18.
     final navKey = navKeyChat(chatId);
     if (!tryClaimNav(navKey)) return;
-    // Prefetch pesan ke memori sebelum push → buka chat instant.
-    ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).prefetchPrivateChat(chatId);
+    // Prefetch pesan ke memori SEBELUM push (di-await) → frame pertama chat
+    // langsung terisi (peekMessages hit), bukan layar kosong dulu.
+    await ProviderScope.containerOf(context, listen: false)
+        .read(chatProvider.notifier)
+        .prefetchPrivateChat(chatId);
     if (!context.mounted) {
       releaseNav(navKey);
       return;
@@ -1271,6 +1447,13 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     final myInvisible = ref.watch(
       authProvider.select((a) => a.invisibleEnabled),
     );
+    // Set teman (mutual follow) — sumber filter channel "Teman". Di-watch
+    // granular (hanya Set-nya) supaya perubahan lain di SocialProvider tak
+    // me-rebuild halaman. Sinkron ke `_friendSet` saat berubah saja.
+    final friends = ref.watch(socialProvider.select((sp) => sp.friends));
+    if (!setEquals(friends, _friendSet)) {
+      _friendSet = Set.of(friends);
+    }
     super.build(context);
     final s = ref.watch(localeProvider).s;
     return Scaffold(
@@ -1279,9 +1462,9 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
       appBar: AppBar(
         backgroundColor: AppTheme.bgScreen,
         surfaceTintColor: AppTheme.bgScreen,
-        // 56 (isi judul ±38 / field cari 40) — dulu 72, ruang kosong
-        // 16px antara judul dan tray story terpangkas.
-        toolbarHeight: 56,
+        // 62 (isi judul + badge channel + baris stat) — cukup untuk 3 baris
+        // tipis tanpa overflow; ruang ekstra tetap minimal.
+        toolbarHeight: 62,
         // titleSpacing 0 saat searching: field cari menempel ke tombol
         // search (leading) & mengisi lebar sampai tempat ikon Top Aktif.
         // Saat tidak searching, biarkan default agar judul tidak mepet.
@@ -1413,7 +1596,10 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                     PerfProbe.buildCount('Online.title');
                     // Hitung sama seperti list: exclude self + blocked +
                     // hidden + dedupe by uid/nickname, supaya angka = kartu.
+                    // Saat channel "Teman", angka juga ikut channel (hanya
+                    // teman) supaya konsisten dengan daftar di bawahnya.
                     final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);
+                    final onlyFriends = _channel == OnlineChannel.friends;
                     final seenU = <String>{};
                     final seenN = <String>{};
                     final n = prov.users
@@ -1423,6 +1609,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                               u.uid.isNotEmpty &&
                               !chat.isBlocked(u.uid) &&
                               !prov.isHidden(u.uid) &&
+                              (!onlyFriends || _friendSet.contains(u.uid)) &&
                               seenU.add(u.uid) &&
                               seenN.add(u.nickname.toLowerCase()),
                         )
@@ -1451,6 +1638,37 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                           s.titleOnline,
                           style: AppText.title.copyWith(
                             color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        // Label channel aktif (Semua / Teman) — warna mencolok
+                        // (primary) supaya user sadar daftar sedang terfilter.
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _channel.icon,
+                                size: 12,
+                                color: AppTheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _channel.label(s),
+                                style: AppText.caption.copyWith(
+                                  color: AppTheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 1),
@@ -1559,9 +1777,8 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         ),
         iconTheme: IconThemeData(color: AppTheme.textPrimary),
         // Tombol + story (SEMUA user — anon juga bisa, dipaksa public
-        // oleh server) & Orang Sekitar (registered only) — GestureDetector
-        // rapat (tanpa padding). IconButton tidak dipakai: minimumSize M3
-        // selalu memaksa 48px walau constraints 32 diberikan.
+        // oleh server). "Orang Sekitar" kini jadi salah satu item di dropdown
+        // channel (Semua / Teman / Orang Sekitar) supaya AppBar lebih rapi.
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -1581,33 +1798,78 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                     ),
                   ),
                 ),
-                // Orang Sekitar tampil untuk SEMUA user (termasuk anon).
-                // Anon yang menekan ikon ini dapat popup "lengkapi email" —
-                // form yang sama dengan aksi posting di timeline (modular),
-                // tapi teksnya khusus konteks Orang Sekitar.
-                Tooltip(
-                  message: s.nearbyTitle,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      if (!myRegistered) {
-                        showAnonPromptDialog(
-                          context,
-                          title: s.promptCompleteEmailNearbyTitle,
-                          message: s.promptCompleteEmailNearbyMsg,
-                          icon: Icons.explore_outlined,
-                        );
-                        return;
-                      }
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const NearbyScreen()),
-                      );
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 3),
-                      child: Icon(Icons.explore_outlined),
-                    ),
+                // Dropdown channel (Semua / Teman / Orang Sekitar) — menu kecil
+                // muncul di SAMPING tombol (PopupMenuButton). Ikon berubah
+                // sesuai channel aktif. Gaya selaras tombol admin panel:
+                // transparan, tanpa bulatan. Tinggal tambah nilai enum untuk
+                // ekspansi (mis. Bisnis).
+                PopupMenuButton<OnlineChannel>(
+                  tooltip: _channel.label(s),
+                  initialValue: _channel,
+                  padding: EdgeInsets.zero,
+                  // Tanpa bulatan/ripple di belakang ikon (gaya admin panel).
+                  splashRadius: 0,
+                  color: AppTheme.bgCard,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  onSelected: (v) {
+                    // "Orang Sekitar" = aksi navigasi (bukan filter channel).
+                    if (v == OnlineChannel.nearby) {
+                      _openNearby();
+                      return;
+                    }
+                    setState(() {
+                      _channel = v;
+                      _page = 1;
+                    });
+                    _saveFilter();
+                    // Efek ke privasi diri: Teman → override, Semua → restore.
+                    _applyChannelPresence(v);
+                    // Keterangan singkat beda tiap channel.
+                    _showChannelInfo(v);
+                  },
+                  itemBuilder: (_) => [
+                    for (final c in OnlineChannel.values)
+                      PopupMenuItem<OnlineChannel>(
+                        value: c,
+                        height: 44,
+                        child: Row(
+                          children: [
+                            Icon(
+                              c.icon,
+                              size: 18,
+                              color: c == _channel
+                                  ? AppTheme.primary
+                                  : AppTheme.textSecondary,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              c.label(s),
+                              style: AppText.body.copyWith(
+                                color: c == _channel
+                                    ? AppTheme.primary
+                                    : AppTheme.textPrimary,
+                                fontWeight: c == _channel
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                            if (c == _channel) ...[
+                              const Spacer(),
+                              Icon(
+                                Icons.check_rounded,
+                                size: 18,
+                                color: AppTheme.primary,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Icon(_channel.icon, color: AppTheme.textPrimary),
                   ),
                 ),
               ],
@@ -1642,11 +1904,20 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                   if (!seenN.add(u.nickname.toLowerCase())) return false;
                   return true;
                 }).toList();
+                // Channel "Teman": hanya teman (mutual follow) yang tampil —
+                // termasuk kotak "dibenam" (hidden). "Semua" = tanpa saringan
+                // channel (privasi presence tetap dijaga server).
+                final onlyFriends = _channel == OnlineChannel.friends;
                 hiddenUsers = base
-                    .where((u) => provider.isHidden(u.uid))
+                    .where((u) =>
+                        provider.isHidden(u.uid) &&
+                        (!onlyFriends || _friendSet.contains(u.uid)))
                     .toList();
                 users = base.where((u) {
                   if (provider.isHidden(u.uid)) return false;
+                  if (onlyFriends && !_friendSet.contains(u.uid)) {
+                    return false;
+                  }
                   if (_negaraSel.isNotEmpty &&
                       !_negaraSel.contains(u.country)) {
                     return false;
@@ -1803,7 +2074,9 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                                 Text(
                                   _search.isNotEmpty
                                       ? s.searchNoResult
-                                      : s.noOnlineUsers,
+                                      : (_channel == OnlineChannel.friends
+                                            ? s.noOnlineFriends
+                                            : s.noOnlineUsers),
                                   textAlign: TextAlign.center,
                                   style: AppText.body.copyWith(
                                     color: AppTheme.textSecondary,

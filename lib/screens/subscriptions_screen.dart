@@ -39,7 +39,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(s.btnUnsubscribe)));
+    ).showSnackBar(SnackBar(content: Text(s.unsubscribeSuccess)));
     await _load();
   }
 

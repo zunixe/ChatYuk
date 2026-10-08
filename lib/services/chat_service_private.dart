@@ -24,10 +24,11 @@ mixin ChatServicePrivateMx on ChatBase {
   /// Prefetch pesan ke memori (fire-and-forget) — dipanggil saat user TAP
   /// item chat di list, supaya saat PrivateChatScreen mount cache sudah
   /// panas → emit frame-pertama instan (tanpa "loading pesan").
-  void prefetchPrivateChat(String chatId) {
-    unawaited(
-      MessageCache.instance.preloadMessages(privateCacheKey(chatId)),
-    );
+  /// Prefetch pesan chat ke memori. Awaitable: pemanggil (list chat) bisa
+  /// menunggu selesai SEBELUM push layar → `peekMessages` pasti hit di frame
+  /// pertama. SQLite (SQLCipher) 1-3ms & RAM instan → delay tak terasa.
+  Future<void> prefetchPrivateChat(String chatId) {
+    return MessageCache.instance.preloadMessages(privateCacheKey(chatId));
   }
 
   /// Edit teks pesan sendiri di private chat. RLS menjamin hanya sender_id
