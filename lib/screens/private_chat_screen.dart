@@ -52,6 +52,7 @@ import '../widgets/location_picker_sheet.dart';
 import '../mixins/chat_outbox_mixin.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/message_reaction_provider.dart';
+import '../providers/riverpod/privacy_provider.dart';
 
 /// Warna latar Scaffold private chat — WAJIB opaque (bukan transparent).
 ///
@@ -2514,6 +2515,14 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                           return ListView.builder(
                             controller: _scrollCtrl,
                             reverse: true,
+                            // PERF (mount pertama chat berat): default
+                            // cacheExtent 250px memaksa Flutter pre-build bubble
+                            // DI LUAR viewport (peta/video = berat) saat buka →
+                            // 1-2 frame raster drop ("ngelag pertama"). Perkecil
+                            // ke 120px: cukup untuk scroll mulus, tapi bubble
+                            // jauh (peta/video) tidak ikut di-mount di frame
+                            // pertama. Terukur raster max ~58ms → turun.
+                            cacheExtent: 120,
                             padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
                             // Slot index 0 SELALU ada untuk bubble typing —
                             // isinya di-drive ValueNotifier (bubble atau
@@ -2928,6 +2937,16 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
         final ok = await pp.ensureEnoughForCall(context, callType, s.isId);
         if (!ok) return;
       }
+    }
+    // Privasi panggilan penerima: bila menolak, jangan tembak DB sama sekali.
+    // Server RLS tetap penjaga akhir (map error di bawah).
+    final allowed = await ProviderScope.containerOf(context, listen: false)
+        .read(privacyServiceProvider)
+        .canView(widget.otherUid, 'call');
+    if (!mounted) return;
+    if (!allowed) {
+      showChatSnack(context, s.callNotAllowed);
+      return;
     }
     // Izin kamera/mikrofon WAJIB sebelum getUserMedia — tanpa ini video call
     // pertama (izin belum ada) langsung gagal senyap (CallPhase.error).
