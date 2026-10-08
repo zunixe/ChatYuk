@@ -149,7 +149,12 @@ class LocationBubble extends ConsumerWidget {
                       // (interactive) tetap bisa digeser.
                       child: IgnorePointer(
                         ignoring: !interactive,
-                        child: FlutterMap(
+                        // RepaintBoundary: isolasi repaint peta dari sisa bubble
+                        // & list → scroll/mount bubble lain tidak memicu raster
+                        // ulang tile peta (terukur: buka chat banyak lokasi =
+                        // frame raster berat ~58ms tanpa isolasi).
+                        child: RepaintBoundary(
+                          child: FlutterMap(
                           options: MapOptions(
                             initialCenter: LatLng(location.lat, location.lng),
                             initialZoom: 15,
@@ -245,6 +250,7 @@ class LocationBubble extends ConsumerWidget {
                           ],
                         ),
                       ),
+                    ),
                     ),
                     if (location.label.isNotEmpty)
                       Positioned(

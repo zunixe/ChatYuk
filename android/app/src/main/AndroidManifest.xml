@@ -94,9 +94,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- Matikan Impeller (Vulkan) — di Xiaomi Adreno frame pertama sesekali
-             ke-present setengah jadi: appbar tergambar, body jadi abu polos
-             (#b6b6b6) 1-2 frame. Fallback ke Skia (OpenGL) menghilangkannya. -->
+        <!-- Impeller (Vulkan) DIAKTIFKAN (2026-10-09). Alasan: diuji head-to-head
+             di Xiaomi Adreno — transisi & raster frame pertama lebih mulus dgn
+             Impeller (raster max ~59ms) vs Skia-GL (~82ms). Glitch frame abu
+             lama TIDAK muncul lagi di uji ini. Bila glitch kambuh, set false. -->
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="true" />
