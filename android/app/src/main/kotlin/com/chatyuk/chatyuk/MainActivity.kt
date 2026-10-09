@@ -42,6 +42,22 @@ class MainActivity : FlutterActivity() {
         //  agar tidak bergantung versi runtime androidx.activity.)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        // ── Refresh rate: JANGAN dikunci di sini ──────────────────────────
+        // Awalnya dicoba set preferredDisplayModeId=3 (60 Hz) untuk mengunci
+        // refresh rate. TERBUKTI TIDAK MENOLONG: stall tetap terjadi. Akar
+        // masalah dari log MIUI SurfaceFlinger (Xiaomi 24129PN74G):
+        //   MI-SF: isTpIdleScene, mAverageFrameRate is 0
+        //   MI-SF: setTpIdleFps choose FPS:60
+        //   DisplayModeController: Idle status skip setActiveMode,
+        //                          isDdicIdleMode: 1
+        // → MIUI mendeteksi "idle scene" (tak ada frame) lalu mematikan
+        //   driver display (DDIC idle mode). Saat frame berikutnya datang,
+        //   panel butuh ~165ms untuk bangun → frame tertahan 181ms
+        //   (framestats: Vsync melompat +181ms, ui_work=0ms = UI thread
+        //   TIDAK sibuk, jadi bukan kode Dart).
+        // Ini optimasi MIUI di level sistem; mengunci mode display tidak
+        // mencegahnya. Biarkan sistem mengatur refresh rate sendiri.
+
         // Anti-blink: task snapshot HyperOS bisa STALE terang (force-stop tidak
         // refresh snapshot) dan renderer Skia-GL sempat present frame abu
         // (#b6b6b6) saat konten berat first-paint. Overlay gelap menutup
