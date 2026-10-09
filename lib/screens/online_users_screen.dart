@@ -1215,6 +1215,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     UserModel user,
     int unreadCount,
     Offset globalPos,
+    Rect cardRect,
   ) async {
     final myUid = ProviderScope.containerOf(cardCtx, listen: false).read(authProvider.notifier).uid;
     final s = ProviderScope.containerOf(cardCtx, listen: false).read(localeProvider).s;
@@ -1256,23 +1257,27 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         final bubbleHeight = (msgs.length * 48.0 + 40)
             .clamp(72, 280)
             .toDouble();
-        // Anchor = TITIK JARI saat long-press (globalPos), bukan render box
-        // kartu. Sebelumnya pakai cardCtx.findRenderObject() yang bisa
-        // menunjuk RenderObject lain (Builder bukan RenderObject) → bubble
-        // kadang jauh dari kartu. Jari selalu tepat di atas kartu.
-        final anchorX = globalPos.dx;
-        final anchorY = globalPos.dy;
-        double left = anchorX - bubbleWidth / 2;
+        // NEMPEL DI UJUNG KARTU: pakai RECT kartu yang sebenarnya (dikirim
+        // pemanggil). Bila rect tak valid (fallback) → pakai titik jari.
+        final hasCard = cardRect.height > 0;
+        final cardTop = hasCard ? cardRect.top : globalPos.dy;
+        final cardBottom = hasCard ? cardRect.bottom : globalPos.dy;
+        final cardCenterX = hasCard
+            ? cardRect.center.dx
+            : globalPos.dx;
+        double left = cardCenterX - bubbleWidth / 2;
         left = left.clamp(12.0, size.width - bubbleWidth - 12.0);
-        // Utamakan muncul di ATAS jari (dekat kartu); kalau tak cukup ruang
-        // → di bawah jari. Gap kecil 8px.
-        final spaceAbove = anchorY;
-        final isAbove = spaceAbove >= bubbleHeight + 16;
+        // Utamakan ATAS kartu (nempel tepat di tepi atas, gap 6px); kalau
+        // tak cukup ruang → BANYAK bawah kartu (nempel tepi bawah, gap 6).
+        final spaceAbove = cardTop;
+        final spaceBelow = size.height - cardBottom;
+        final isAbove =
+            spaceAbove >= bubbleHeight + 12 || spaceAbove >= spaceBelow;
         double top;
         if (isAbove) {
-          top = anchorY - bubbleHeight - 8;
+          top = cardTop - bubbleHeight - 6;
         } else {
-          top = anchorY + 8;
+          top = cardBottom + 6;
         }
         top = top.clamp(8.0, size.height - bubbleHeight - 8.0);
         return Stack(
@@ -2202,14 +2207,15 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                                       onTap: () => _startChat(context, user),
                                       onAvatarTap: (c) =>
                                           _zoomUserAvatar(user, c),
-                                      onLongPressStart:
+                                      onLongPress:
                                           unreadMap[user.uid] != null &&
                                               unreadMap[user.uid]! > 0
-                                          ? (d) => _showUnreadBubble(
+                                          ? (pos, rect) => _showUnreadBubble(
                                               cardCtx,
                                               user,
                                               unreadMap[user.uid]!,
-                                              d.globalPosition,
+                                              pos,
+                                              rect,
                                             )
                                           : null,
                                       unreadCount: unreadMap[user.uid] ?? 0,
@@ -2272,14 +2278,15 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                                   onTap: () => _startChat(context, user),
                                   onAvatarTap: (c) =>
                                       _zoomUserAvatar(user, c),
-                                  onLongPressStart:
+                                  onLongPress:
                                       unreadMap[user.uid] != null &&
                                           unreadMap[user.uid]! > 0
-                                      ? (d) => _showUnreadBubble(
+                                      ? (pos, rect) => _showUnreadBubble(
                                           cardCtx,
                                           user,
                                           unreadMap[user.uid]!,
-                                          d.globalPosition,
+                                          pos,
+                                          rect,
                                         )
                                       : null,
                                   unreadCount: unreadMap[user.uid] ?? 0,
@@ -2762,21 +2769,38 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
   }
 }
 
-class _UserCard extends ConsumerWidget {
+class _UserCard extends ConsumerStatefulWidget {
   final UserModel user;
   final VoidCallback onTap;
   final void Function(Color avatarColor) onAvatarTap;
-  final void Function(LongPressStartDetails)? onLongPressStart;
+  // Dipanggil saat long-press: kirim titik jari + RECT kartu (global) supaya
+  // bubble pesan-terakhir bisa nempel di ujung kartu (atas/bawah).
+  final void Function(Offset globalPos, Rect cardRect)? onLongPress;
   final int unreadCount;
   final VoidCallback? onUnhide;
   const _UserCard({
     required this.user,
     required this.onTap,
     required this.onAvatarTap,
-    this.onLongPressStart,
+    this.onLongPress,
     this.unreadCount = 0,
     this.onUnhide,
   });
+
+  @override
+  ConsumerState<_UserCard> createState() => _UserCardState();
+}
+
+class _UserCardState extends ConsumerState<_UserCard> {
+  // Key pada Container kartu → currentContext.findRenderObject() = RECT kartu
+  // yang SEBENARNYA (bukan ancestor RenderObject saat pakai Builder).
+  final GlobalKey _cardKey = GlobalKey();
+
+  UserModel get user => widget.user;
+  VoidCallback get onTap => widget.onTap;
+  void Function(Color) get onAvatarTap => widget.onAvatarTap;
+  int get unreadCount => widget.unreadCount;
+  VoidCallback? get onUnhide => widget.onUnhide;
 
   Color _statusColor(String status) => AppTheme.statusColor(status);
 
@@ -2793,8 +2817,23 @@ class _UserCard extends ConsumerWidget {
     return _dayMonthFmt.format(lastSeen.toLocal());
   }
 
+  void _handleLongPress(LongPressStartDetails d) {
+    final cb = widget.onLongPress;
+    if (cb == null) return;
+    final ro = _cardKey.currentContext?.findRenderObject();
+    Rect rect;
+    if (ro is RenderBox && ro.hasSize) {
+      final tl = ro.localToGlobal(Offset.zero);
+      rect = Rect.fromLTWH(tl.dx, tl.dy, ro.size.width, ro.size.height);
+    } else {
+      // Fallback: tak bisa ukur kartu → pakai titik jari saja.
+      rect = Rect.fromCenter(center: d.globalPosition, width: 0, height: 0);
+    }
+    cb(d.globalPosition, rect);
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final s = ref.watch(localeProvider).s;
     final color = user.gender == 'male'
         ? AppTheme.male
@@ -2816,15 +2855,11 @@ class _UserCard extends ConsumerWidget {
         : s.statusOffline;
 
     return AppGestureDetector(
-      // SELURUH kartu bisa di-tap → buka chat (tadi area kosong tanpa
-      // handler → "kadang bisa kadang nggak" tergantung posisi jempol).
-      // Zona dalam (avatar/nama/subtitle/follow/chat) tetap menang di
-      // area masing-masing (detector terdalam menang arena).
-      // AppGestureDetector: tahan 320ms (bukan 500ms).
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      onLongPressStart: onLongPressStart,
+      onLongPressStart: widget.onLongPress == null ? null : _handleLongPress,
       child: Container(
+        key: _cardKey,
         margin: EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
