@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
@@ -153,6 +154,20 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
   final Map<String, DateTime> _photoLastAttempt = {};
   int _photoActive = 0;
   static const int _maxPhotoLoads = 3;
+  /// Batas jumlah foto yang dipra-muat otomatis (dari pesan TERBARU). Sisa
+  /// foto dimuat saat discroll/bubble-nya muncul — buka chat dengan ratusan
+  /// pesan berisi foto tidak lagi menembak puluhan unduhan sekaligus.
+  static const int _photoAutoLoadMax = 12;
+  /// Peta id → indeks pada `_msgs` (dibangun ulang saat `_msgs` berubah) —
+  /// menggantikan `indexWhere` O(n) yang membuat path foto O(n²).
+  Map<String, int> _msgIndexById = const {};
+  void _rebuildMsgIndex() {
+    final m = <String, int>{};
+    for (var i = 0; i < _msgs.length; i++) {
+      m[_msgs[i].id] = i;
+    }
+    _msgIndexById = m;
+  }
   final _scrollCtrl = ScrollController();
   final Map<String, LayerLink> _msgLinks = {};
   LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
@@ -255,7 +270,10 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
     return items;
   }
 
-  void _invalidateItems() => _itemsCache = null;
+  void _invalidateItems() {
+    _itemsCache = null;
+    _rebuildMsgIndex();
+  }
 
   @override
   void initState() {
@@ -637,7 +655,7 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
             for (final id in ids) {
               final t = thumbs[id];
               if (t == null || t.isEmpty) continue;
-              final idx = _msgs.indexWhere((x) => x.id == id);
+              final idx = _msgIndexById[id] ?? -1;
               if (idx >= 0 && _msgs[idx].imageData.isEmpty) {
                 _msgs[idx] = _msgs[idx].copyWith(imageData: t);
                 changed = true;
@@ -652,8 +670,13 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
       }
     }
     if (!mounted) return;
+    // _msgs datang DESC (terbaru dulu) → pra-muat HANYA [_photoAutoLoadMax]
+    // foto terbaru. Sisa foto dimuat saat bubble-nya tampil (via _retryImage
+    // saat deferred) — buka chat banyak foto jadi mulus.
+    var scheduled = 0;
     final now = DateTime.now();
     for (final m in _msgs) {
+      if (scheduled >= _photoAutoLoadMax) break;
       if (!isPhoto(m) || m.imageData.isNotEmpty || m.isDeleted) continue;
       if (_photoLoading.contains(m.id) || _photoQueued.contains(m.id)) {
         continue;
@@ -665,6 +688,7 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
       _photoLastAttempt[m.id] = now;
       _photoQueue.add(m.id);
       _photoQueued.add(m.id);
+      scheduled++;
     }
     _drainPhotoQueue();
   }
@@ -676,15 +700,11 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
     while (_photoActive < _maxPhotoLoads && _photoQueue.isNotEmpty) {
       final id = _photoQueue.removeAt(0);
       _photoQueued.remove(id);
-      MessageModel? msg;
-      for (final m in _msgs) {
-        if (m.id == id) {
-          msg = m;
-          break;
-        }
-      }
-      if (msg == null || msg.imageData.isNotEmpty || msg.isDeleted) continue;
-      final target = msg;
+      final idx = _msgIndexById[id] ?? -1;
+      if (idx < 0) continue;
+      final m = _msgs[idx];
+      if (m.imageData.isNotEmpty || m.isDeleted) continue;
+      final target = m;
       _photoActive++;
       _loadOnePhoto(target).whenComplete(() {
         _photoActive--;
@@ -751,7 +771,7 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
         }
         if (thumb.isEmpty) thumb = '';
         if (!mounted) return false;
-        final idx = _msgs.indexWhere((m) => m.id == msg.id);
+        final idx = _msgIndexById[msg.id] ?? -1;
         if (idx >= 0) {
           // Gunakan thumbnail kalau ada, fallback ke full-res
           final imgData = thumb.isNotEmpty ? thumb : data;
@@ -1052,6 +1072,10 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
                         child: ListView.builder(
                           controller: _scrollCtrl,
                           reverse: true,
+                          // Bangun sedikit item di luar viewport — kartu jauh
+                          // tidak ikut decode foto (buka chat banyak pesan
+                          // tidak memuat puluhan gambar sekaligus).
+                          scrollCacheExtent: ScrollCacheExtent.pixels(200),
                           padding: EdgeInsets.fromLTRB(
                             12,
                             12,
@@ -1092,23 +1116,28 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
                                 msg.timestamp.isBefore(readAt);
                             final isImageDeferred =
                                 msg.type == 'image' && msg.imageData.isEmpty;
-                            return MessageBubble(
-                              key: ValueKey(msg.id),
-                              link: _linkFor(msg.id),
-                              msg: msg,
-                              chatKey: _chatKey,
-                              isMe: isMe,
-                              isRead: isRead,
-                              isAdminView: true,
-                              // Admin melihat percakapan 2 orang → centang
-                              // muncul di KEDUA sisi (kiri & kanan), bukan
-                              // hanya milik pengirim.
-                              showChecksBothSides: true,
-                              isImageDeferred: isImageDeferred,
-                              onRetryImage: isImageDeferred
-                                  ? _retryImage
-                                  : null,
-                              onLongPressMenu: (d, m, _) => _copyMessage(m),
+                            // RepaintBoundary per bubble: scroll tidak
+                            // merender ulang bubble lain (isolasi repaint) —
+                            // kunci utama anti-jank saat pesan banyak.
+                            return RepaintBoundary(
+                              child: MessageBubble(
+                                key: ValueKey(msg.id),
+                                link: _linkFor(msg.id),
+                                msg: msg,
+                                chatKey: _chatKey,
+                                isMe: isMe,
+                                isRead: isRead,
+                                isAdminView: true,
+                                // Admin melihat percakapan 2 orang → centang
+                                // muncul di KEDUA sisi (kiri & kanan), bukan
+                                // hanya milik pengirim.
+                                showChecksBothSides: true,
+                                isImageDeferred: isImageDeferred,
+                                onRetryImage: isImageDeferred
+                                    ? _retryImage
+                                    : null,
+                                onLongPressMenu: (d, m, _) => _copyMessage(m),
+                              ),
                             );
                           },
                         ),
