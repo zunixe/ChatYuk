@@ -14,6 +14,7 @@ void main() {
 
   setUp(() {
     calls.clear();
+    TikTokService.instance.resetForTest();
     TikTokService.channelForTest = ch;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(ch, (call) async {
@@ -87,5 +88,22 @@ void main() {
     // Pastikan tak crash & tak melempar saat SDK belum ready.
     final r = await TikTokService.instance.track(TikTokEvent.LOGIN);
     expect(r, anyOf(isTrue, isFalse)); // idempoten: tergantung state, tak throw
+  });
+
+  test('event sebelum init DI-ANTRE lalu dikirim setelah init', () async {
+    // Simulasi: track REGISTRATION sebelum init → di-antre (return false),
+    // setelah init → event otomatis terkirim ke native.
+    await TikTokService.instance.track(TikTokEvent.REGISTRATION);
+    await TikTokService.instance
+        .purchase(value: 10000, contentId: 'pkg1', contentType: 'yukcoin');
+    // Belum ada yang terkirim (belum ready).
+    expect(calls.where((c) => c.method == 'track'), isEmpty);
+
+    await TikTokService.instance.init(accessToken: 't');
+    // Setelah init → antrean dikirim.
+    expect(calls.where((c) => c.method == 'track').isNotEmpty, isTrue);
+    final tr = calls.firstWhere((c) => c.method == 'track');
+    expect((tr.arguments as Map)['event'], 'REGISTRATION');
+    expect(calls.where((c) => c.method == 'purchase').isNotEmpty, isTrue);
   });
 }
