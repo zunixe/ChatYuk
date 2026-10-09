@@ -171,7 +171,13 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
           const Duration(seconds: 60),
           (_) => _pollStats(),
         );
-        if (_notifyTimer == null) _startNotifyPolling(immediate: true);
+        // JANGAN fetch devices segera di sini (dulu immediate: true).
+        // fetchDevices memuat 100 baris device + JSON-encode ke cache disk
+        // SEKAAT resume → burst alokasi MB (terukur: GC Explicit dengan
+        // 76 LOS objects = 8 MB) → frame stall 181ms. Cukup hidupkan timer
+        // poll; data device akan menyusul pada tick berikutnya (60 dtk) atau
+        // saat tab Perangkat dibuka.
+        if (_notifyTimer == null) _startNotifyPolling();
       }
     }
   }
@@ -181,15 +187,15 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
     if (immediate) {
       final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       a.fetchDevices();
-      a.fetchActiveCalls();
     }
-    // 60 dtk cukup — realtime call sudah instan; devices hanya sumber
-    // notifikasi "device baru" (RPC ter-index, murah).
-    _notifyTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+    // 180 dtk (dulu 60): fetchDevices memuat 100 baris + JSON-encode cache —
+    // mahal (burst alokasi MB → GC storm). Notifikasi "device baru" tidak
+    // perlu cepat; call aktif sudah instan via realtime (ensureCallRealtime),
+    // jadi fetchActiveCalls cukup lewat jaring poll yang lebih jarang.
+    _notifyTimer = Timer.periodic(const Duration(seconds: 180), (_) {
       if (!mounted) return;
       final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       a.fetchDevices();
-      a.fetchActiveCalls();
     });
   }
 
