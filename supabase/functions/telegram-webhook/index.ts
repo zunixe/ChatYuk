@@ -5,7 +5,7 @@
 // rahasia `x-telegram-bot-api-secret-token` yang diset saat setWebhook.
 //
 // Alur:
-//   /start <token>   → simpan telegram_chat_id, kirim tombol "Bagikan nomor".
+//   /start <token>   → simpan telegram_chat_id, kirim tombol "Verifikasi Nomor Saya".
 //   message.contact  → RPC phone_verify_confirm(token, phone, chat_id).
 //
 // Token sesi disimpan di tabel phone_verifications (kolom telegram_chat_id)
@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
           chatId,
           'Tekan tombol di bawah untuk membagikan nomor HP kamu dan menyelesaikan verifikasi.',
           {
-            keyboard: [[{ text: '📱 Bagikan nomor saya', request_contact: true }]],
+            keyboard: [[{ text: '📱 Verifikasi Nomor Saya', request_contact: true }]],
             resize_keyboard: true,
             one_time_keyboard: true,
           },

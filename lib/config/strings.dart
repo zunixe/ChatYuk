@@ -1071,11 +1071,11 @@ class S {
       isId ? 'Verifikasi Sekarang' : 'Verify Now';
   String get phoneVerifyLater => isId ? 'Nanti saja' : 'Later';
   String get phoneVerifyWaiting => isId
-      ? 'Menunggu verifikasi… buka Telegram & tekan tombol Bagikan nomor.'
-      : 'Waiting for verification… open Telegram & tap Share number.';
+      ? 'Menunggu verifikasi… buka Telegram & tekan tombol Verifikasi Nomor Saya.'
+      : 'Waiting for verification… open Telegram & tap Verify My Number.';
   String get phoneVerifyOpened => isId
-      ? 'Telegram terbuka. Tekan "Bagikan nomor saya" di bot.'
-      : 'Telegram opened. Tap "Share my number" in the bot.';
+      ? 'Telegram terbuka. Tekan "Verifikasi Nomor Saya" di bot.'
+      : 'Telegram opened. Tap "Verify My Number" in the bot.';
   String get phoneVerifySuccess =>
       isId ? 'Nomor HP terverifikasi!' : 'Phone number verified!';
   String get phoneVerifyFailed =>
