@@ -41,7 +41,12 @@ class VoiceBubble extends StatefulWidget {
 }
 
 class _VoiceBubbleState extends State<VoiceBubble> {
-  final AudioPlayer _player = AudioPlayer();
+  /// Player dibuat MALAS (lazy) — hanya saat user tap play. Dulu tiap bubble
+  /// membuat `AudioPlayer()` di field initializer (= saat chat dibuka): 10
+  /// voice note = 10 native player + 40 stream subscription sekaligus, masing-
+  /// masing constructor memicu create platform channel → jank 150ms+ saat
+  /// buka chat (terukur di gfxinfo). Sekarang nol biaya sampai diputar.
+  AudioPlayer? _player;
   bool _playing = false;
   bool _loading = false;
   Duration _pos = Duration.zero;
@@ -51,29 +56,39 @@ class _VoiceBubbleState extends State<VoiceBubble> {
   StreamSubscription? _completeSub;
   StreamSubscription? _otherSub;
 
-  @override
-  void initState() {
-    super.initState();
-    _dur = Duration(milliseconds: widget.durationMs);
+  /// Buat player + langganan stream-nya sekali (idempoten).
+  AudioPlayer _ensurePlayer() {
+    final existing = _player;
+    if (existing != null) return existing;
+    final p = AudioPlayer();
+    _player = p;
     // onError di semua stream player: stream plugin (just_audio) bisa error
     // (mis. file rusak/offline) — tanpa ini error tak tertangkap merusak
     // frame/dispatcher (back mati). Cukup log; UI dibiarkan apa adanya.
-    _posSub = _player.onPositionChanged.listen(
-      (p) => setState(() => _pos = p),
+    _posSub = p.onPositionChanged.listen(
+      (pos) => setState(() => _pos = pos),
       onError: (e) => debugPrint('[VOICE] position stream error: $e'),
     );
-    _durSub = _player.onDurationChanged.listen(
+    _durSub = p.onDurationChanged.listen(
       (d) => setState(() => _dur = d),
       onError: (e) => debugPrint('[VOICE] duration stream error: $e'),
     );
-    _completeSub = _player.onPlayerComplete.listen(
+    _completeSub = p.onPlayerComplete.listen(
       (_) => setState(() {
         _playing = false;
         _pos = Duration.zero;
       }),
       onError: (e) => debugPrint('[VOICE] complete stream error: $e'),
     );
+    return p;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _dur = Duration(milliseconds: widget.durationMs);
     // Bubble lain mulai play → pause diri (satu suara saja di app).
+    // Aman tanpa player (belum pernah play = tidak sedang bunyi).
     _otherSub = _VoicePlayerManager.instance.started.listen(
       (p) {
         if (p != _player && _playing) setState(() => _playing = false);
@@ -88,17 +103,18 @@ class _VoiceBubbleState extends State<VoiceBubble> {
     _durSub?.cancel();
     _completeSub?.cancel();
     _otherSub?.cancel();
-    _player.dispose();
+    _player?.dispose();
     super.dispose();
   }
 
   Future<void> _toggle() async {
     if (_playing) {
-      await _player.pause();
-      setState(() => _playing = false);
+      await _player?.pause();
+      if (mounted) setState(() => _playing = false);
     } else {
       // Tap ganda saat unduh + path kosong — abaikan (anti double-download).
       if (_loading || widget.path.isEmpty) return;
+      final player = _ensurePlayer();
       try {
         // DISK FIRST (instan): kalau voice SUDAH ada di disk, play LANGSUNG
         // tanpa spinner — biar terasa seperti GAMBAR (buka chat, tap, langsung
@@ -106,8 +122,8 @@ class _VoiceBubbleState extends State<VoiceBubble> {
         // DOWNLOAD (cache miss).
         final f = await MediaDiskCache.instance.fileFor(widget.path);
         if (f != null) {
-          _VoicePlayerManager.instance.started_(_player);
-          await _player.play(DeviceFileSource(f.path));
+          _VoicePlayerManager.instance.started_(player);
+          await player.play(DeviceFileSource(f.path));
           if (mounted) setState(() => _playing = true);
           return;
         }
@@ -119,8 +135,8 @@ class _VoiceBubbleState extends State<VoiceBubble> {
         await MediaDiskCache.instance.write(widget.path, bytes);
         final f2 = await MediaDiskCache.instance.fileFor(widget.path);
         if (f2 == null || !mounted) return;
-        _VoicePlayerManager.instance.started_(_player);
-        await _player.play(DeviceFileSource(f2.path));
+        _VoicePlayerManager.instance.started_(player);
+        await player.play(DeviceFileSource(f2.path));
         if (mounted) setState(() => _playing = true);
       } catch (_) {
       } finally {
@@ -180,7 +196,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
                       data: SliderThemeData(trackHeight: 3, thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6), overlayShape: RoundSliderThumbShape(enabledThumbRadius: 10)),
                       child: Slider(value: progress.clamp(0, 1), min: 0, max: 1, onChanged: (v) async {
                         final seek = Duration(milliseconds: (_dur.inMilliseconds * v).toInt());
-                        await _player.seek(seek);
+                        await _player?.seek(seek);
                       }, activeColor: AppTheme.primary, inactiveColor: AppTheme.divider),
                     ),
                     Text(_fmt(displayDur), style: AppText.chatTime.copyWith(color: AppTheme.textSecondary)),
