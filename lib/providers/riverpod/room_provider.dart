@@ -338,10 +338,25 @@ class RoomNotifier extends Notifier<RoomState> {
   Future<Map<String, dynamic>> resetRoomPassword(String id, String? pass) =>
       _service.resetRoomPassword(id, pass);
 
+  /// Throttle `refresh: true` beruntun — banyak layar memanggil
+  /// `loadMyGroups(refresh: true)` saat init (app prewarm, tab Grup,
+  /// room chat, group info) → dulu tiap pemanggil = 1 RPC `list_my_groups`
+  /// (terukur 15x per sesi boot → server antre, ~1,2 dtk masing-masing).
+  /// Force-refresh hanya dihormati bila hasil terakhir sudah agak lama.
+  static const Duration _myGroupsForceMin = Duration(seconds: 20);
+  DateTime? _myGroupsForceAt;
+
   Future<void> loadMyGroups({bool refresh = false}) async {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) return;
     if (_myGroupsLoading) return;
+    // Paksa-refresh tapi baru saja memuat → jangan RPC lagi (dedupe
+    // lintas-layar). Data segar sudah ada / sedang diterapkan.
+    if (refresh &&
+        _myGroupsForceAt != null &&
+        DateTime.now().difference(_myGroupsForceAt!) < _myGroupsForceMin) {
+      return;
+    }
     final fresh = !refresh &&
         _myGroupsAt != null &&
         _myGroupsUid == uid &&
@@ -358,6 +373,7 @@ class RoomNotifier extends Notifier<RoomState> {
       _myGroups = groups;
       _myGroupsAt = DateTime.now();
       _myGroupsUid = uid;
+      if (refresh) _myGroupsForceAt = DateTime.now();
       _scheduleMyGroupsSave();
     } catch (e) {
       dlog('[RoomProvider] load my groups error: $e');

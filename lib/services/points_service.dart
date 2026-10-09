@@ -54,11 +54,14 @@ class PointsService {
   }
 
   Future<bool> fetchEnabled() {
-    // TTL 3s: banyak screen memanggil saat boot → cukup 1 RPC.
+    // TTL 30s (dulu 3s): banyak screen memanggil saat boot & saat pindah
+    // tab. Terukur `get_points_enabled` 10x per sesi boot (~1,2 dtk masing-
+    // masing saat server antre) — 3 dtk terlalu pendek sehingga burst
+    // berikutnya menembak RPC lagi. Nilai ini jarang berubah (toggle admin).
     return _coalesce<bool>('get_points_enabled', () async {
       final res = await measuredRpc(_sb, 'get_points_enabled');
       return res == true;
-    }, ttl: true);
+    }, ttl: true, ttlDuration: const Duration(seconds: 30));
   }
 
   /// Harga fitur berbayar (call per menit, filter, nearby) untuk UI.
