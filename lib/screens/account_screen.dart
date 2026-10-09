@@ -52,9 +52,13 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     });
     Future.microtask(() {
       if (!mounted) return;
-      ProviderScope.containerOf(context, listen: false)
-          .read(phoneVerifyProvider.notifier)
-          .refresh();
+      final container = ProviderScope.containerOf(context, listen: false);
+      // Tarik ulang profil dari server: verifikasi Telegram mengisi
+      // `profiles.phone` + `phone_verified_at` di server, tapi `auth.profile`
+      // bisa masih cache lama (nomor tampil kosong). Tanpa ini, user yang
+      // sudah verified tetap melihat "nomor belum diisi".
+      container.read(authProvider.notifier).refreshProfile();
+      container.read(phoneVerifyProvider.notifier).refresh();
     });
   }
 
@@ -570,17 +574,16 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   /// menunggu refresh berikutnya.
   void _markOwnVerified() {
     if (!mounted) return;
-    final uid = ProviderScope.containerOf(context, listen: false)
-            .read(authProvider.notifier)
-            .uid ??
-        '';
+    final container = ProviderScope.containerOf(context, listen: false);
+    final uid = container.read(authProvider.notifier).uid ?? '';
     if (uid.isEmpty) return;
-    ProviderScope.containerOf(context, listen: false)
-        .read(phoneVerifyProvider.notifier)
-        .refresh();
-    ProviderScope.containerOf(context, listen: false)
-        .read(verifiedProvider.notifier)
-        .markVerified(uid);
+    container.read(phoneVerifyProvider.notifier).refresh();
+    container.read(verifiedProvider.notifier).markVerified(uid);
+    // PENTING: verifikasi Telegram mengisi `profiles.phone` + `phone_verified_at`
+    // di SERVER, tapi `auth.profile` di app masih cache lama (nomor tampil
+    // kosong walau server sudah punya). Tarik ulang profil supaya nomor HP &
+    // badge langsung tampil tanpa perlu buka ulang app.
+    container.read(authProvider.notifier).refreshProfile();
   }
 
   /// Hapus akun (Google Play account deletion requirement).
