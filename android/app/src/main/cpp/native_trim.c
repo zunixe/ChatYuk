@@ -6,8 +6,21 @@
 // objek hidup nyaris nol. Android TIDAK mengembalikan arena ke OS sendiri, dan
 // `System.gc()`/`imageCache.evict()` TIDAK menolong.
 //
-// CARA BENAR (docs Android <malloc.h>): `mallopt(M_PURGE, 0)` (API 28) &
-// `mallopt(M_PURGE_ALL, 0)` (API 34, paling menyeluruh).
+// CARA BENAR (docs Android <malloc.h>): `mallopt(M_PURGE, 0)` (API 28).
+// HANYA M_PURGE yang dipakai — alasannya keras (bukti tombstone):
+//   * `mallopt(M_DECAY_TIME=-100, 0)` SEGFAULT di dalam libc (mallopt+204,
+//     SEGV_ACCERR) di Xiaomi Android 16 (scudo) — 10 crash identik 8–9 Okt
+//     2026 di KEDUA app (user + admin), semua dari nativeTrim+48 (= return
+//     address panggilan mallopt PERTAMA). M_DECAY_TIME dihapus total.
+//   * `mallopt(M_PURGE_ALL=-104)` tidak pernah terbukti aman di scudo
+//     (tak pernah jalan sampai sana — crash duluan di panggilan pertama),
+//     jadi ikut dibuang. Konservatif > agresif untuk fungsi yang jalan
+//     tiap 15 detik.
+//
+// Urutan: PURGE 2 pass (jemalloc/scudo kadang butuh >1 siklus untuk arena
+// besar).
+//
+// Semua best-effort: kegagalan return 0 (bukan crash) → diabaikan.
 //
 // KENAPA dlsym (bukan link langsung): `mallopt` dideklarasikan/diekspor bionic
 // HANYA sejak API 26, sedangkan proyek ini minSdk 24. `#include <malloc.h>`
@@ -37,9 +50,8 @@
 typedef int (*mallopt_fn)(int option, int value);
 
 // Nilai dari <malloc.h> bionic (hardcode: nilai stabil & terdokumentasi).
-#define M_DECAY_TIME_VAL (-100)  // 0 = release unused pages immediately
+// Hanya M_PURGE yang dipakai (lihat alasan di header atas).
 #define M_PURGE_VAL (-101)       // API 28: purge memori tak terpakai
-#define M_PURGE_ALL_VAL (-104)   // API 34: purge SETIAP memori yang mungkin
 
 // JNI dipanggil dari ImageBridge.trim() (thread IO, bukan main) — saat
 // background lama / memory pressure / idle foreground. Tidak boleh melempar.
@@ -56,26 +68,14 @@ Java_com_chatyuk_chatyuk_image_ImageBridge_nativeTrim(JNIEnv *env, jobject thiz)
     }
     mallopt_fn mallopt = (mallopt_fn)sym;
 
-    // 1) Decay time 0 = lepas halaman tak terpakai SEGERA (bukan menunggu
-    //    interval). Set sebelum purge supaya halaman berikutnya juga cepat
-    //    dilepas → mencegah arena membengkak lagi.
-    if (mallopt(M_DECAY_TIME_VAL, 0) == 1) didSomething = true;
-
-    // 2) PURGE_ALL (API 34+): "examines everything" → paling bersih, tapi bisa
-    //    >2× lebih lama dari M_PURGE. Dipanggil RUNTIME (nilai -104 hardcoded),
-    //    BUKAN via #if __ANDROID_API__ — file di-compile minSdk 24, guard
-    //    kompilasi akan menghapus baris ini selamanya (bug halus). Di device
-    //    < API 34 mallopt balikan 0 (bukan crash) → diabaikan. Aman karena
-    //    jalan di thread IO.
-    if (mallopt(M_PURGE_ALL_VAL, 0) == 1) didSomething = true;
-
-    // 3) PURGE (API 28+): jalur utama di API < 34, pelengkap di API >= 34.
+    // HANYA M_PURGE (2 pass). M_DECAY_TIME & M_PURGE_ALL dihapus (lihat
+    // header: crash SEGV di device ini). Return 0 = tak didukung → abaikan.
     if (mallopt(M_PURGE_VAL, 0) == 1) didSomething = true;
 
-    // 4) Pass kedua — jemalloc kadang butuh beberapa siklus untuk arena besar.
+    // Pass kedua — allocator kadang butuh beberapa siklus untuk arena besar.
     mallopt(M_PURGE_VAL, 0);
 
-    LOGI("nativeTrim -> did=%d (M_DECAY_TIME+M_PURGE_ALL+M_PURGE)",
+    LOGI("nativeTrim -> did=%d (M_PURGE x2)",
          didSomething ? 1 : 0);
 
     return didSomething ? JNI_TRUE : JNI_FALSE;
