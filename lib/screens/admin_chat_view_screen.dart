@@ -285,19 +285,23 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
     _leftUid = _computeLeftUid(const []);
     _fetch();
     _subscribeRealtime();
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
+    // Poll 15 dtk (dulu 5 dtk) — pesan BARU sudah instan via realtime
+    // (INSERT/UPDATE/DELETE terfilter chat_id). Poll hanya jaring fallback
+    // saat realtime mati. Interval 5 dtk membuat parse JSON + _applyMessages
+    // (map/union/sort map) tiap 5 dtk → GC Explicit tiap 5 dtk → frame stall
+    // 181ms (terukur via gfxinfo + logcat GC).
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
     _scrollCtrl.addListener(_onScroll);
-    // Call aktif: fetch pertama + polling 5 detik selama layar terbuka.
-    // Call aktif: mulai pantau SEGERA bila daftar sudah memuat call ini
-    // (jangan tunggu RPC fetchActiveCalls — menghapus jeda s.d. ±5 dtk).
-    // Fetch tetap jalan paralel sebagai penyegar + penanganan call baru.
+    // Call aktif: realtime UPDATE sudah instan; polling 15 dtk cukup sebagai
+    // fallback (dulu 5 dtk, tumpang-tindih dgn _pollTimer → dua RPC + dua
+    // rebuild tiap 5 dtk).
     final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     unawaited(_syncCallWatch());
     Future.microtask(() async {
       await admin.fetchActiveCalls();
       if (mounted) await _syncCallWatch();
     });
-    _callTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    _callTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       if (!mounted) return;
       final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       await admin.fetchActiveCalls();
