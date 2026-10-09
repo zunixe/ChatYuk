@@ -303,26 +303,35 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
                     const SizedBox(height: 6),
                     TextField(controller: _pwCtrl, obscureText: true, decoration: InputDecoration(hintText: s.resetPasswordHint, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8))),
                     const SizedBox(height: 6),
-                    Row(children: [
-                      Expanded(
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppTheme.primary,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: _pwSaving ? null : () => _resetPw(false),
-                          child: Text(s.btnResetPassword),
+                    // Vertikal (bukan Row): di layar sempit / saat keyboard
+                    // muncul, Row + TextButton bisa terpotong → tombol "Hapus
+                    // Password" tampak hilang. Bertumpuk full-width = selalu
+                    // terlihat utuh.
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
                         ),
+                        onPressed: _pwSaving ? null : () => _resetPw(false),
+                        child: Text(s.btnResetPassword),
                       ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        style: TextButton.styleFrom(
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.primary,
+                          side: BorderSide(
+                            color: AppTheme.primary.withValues(alpha: 0.6),
+                          ),
                         ),
                         onPressed: _pwSaving ? null : () => _resetPw(true),
                         child: Text(s.btnRemovePassword),
                       ),
-                    ]),
+                    ),
                     const Divider(height: 24),
                   ],
                         ],
