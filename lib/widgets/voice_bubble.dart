@@ -3,7 +3,54 @@ import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
+import '../models/message_model.dart';
 import '../services/storage_photo_service.dart';
+
+/// Prefetch file voice TERBARU di background sekali per buka chat — supaya
+/// tap play terasa instan seperti foto (yang auto-load dari disk).
+///
+/// Latar: bubble voice tidak menampilkan apa pun sebelum di-tap, jadi user
+/// mengira "load lagi" tiap cold start bila file belum ter-cache. Prefetch
+/// ini menghangatkan cache (atau memastikan sudah hangat) tanpa blok UI:
+/// - hanya N terbaru (diurut timestamp desc, urutan list apa pun),
+/// - hanya path storage (`voice/...`), lewati base64/path lokal,
+/// - lewati yang sudah ada di disk (tanpa unduh ulang),
+/// - sequential + fire-and-forget (hemat bandwidth & baterai).
+/// Dipanggil dari layar chat (user + admin) saat daftar pesan siap.
+class VoicePrefetch {
+  VoicePrefetch._();
+
+  /// Maksimal voice yang dihangatkan per chat per sesi aplikasi.
+  static const int maxPerChat = 8;
+
+  static final Set<String> _warmed = {};
+
+  static Future<void> warmChat(String chatKey, List<MessageModel> msgs) async {
+    if (chatKey.isEmpty || msgs.isEmpty) return;
+    if (_warmed.contains(chatKey)) return;
+    if (_warmed.length > 50) _warmed.clear();
+    _warmed.add(chatKey);
+    try {
+      final voices = msgs
+          .where(
+            (m) => m.type == 'voice' && m.imageData.startsWith('voice/'),
+          )
+          .toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      for (final m in voices.take(maxPerChat)) {
+        try {
+          final f = await MediaDiskCache.instance.fileFor(m.imageData);
+          if (f != null) continue;
+          final bytes = await StoragePhotoService.instance.downloadBytes(
+            m.imageData,
+          );
+          if (bytes == null || bytes.isEmpty) continue;
+          await MediaDiskCache.instance.write(m.imageData, bytes);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+}
 
 /// Manager player GLOBAL — hanya SATU voice yang playing di seluruh app.
 /// Dulu: tiap bubble punya player sendiri → dua voice bisa play paralel

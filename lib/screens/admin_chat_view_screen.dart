@@ -22,6 +22,7 @@ import '../utils.dart';
 import '../widgets/admin_call_watch_overlay.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
+import '../widgets/voice_bubble.dart';
 import 'admin_chat/widgets/audio_listen_chip.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../config/strings_admin.dart';
@@ -463,6 +464,9 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
       _error = false;
     });
     _loadPhotos();
+    // Hangatkan cache file voice terbaru (sekali per buka chat) supaya tap
+    // play instan seperti foto.
+    unawaited(VoicePrefetch.warmChat(widget.chatId, list));
     return true;
   }
 
