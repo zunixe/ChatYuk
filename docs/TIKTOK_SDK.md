@@ -4,7 +4,11 @@
 > registrasi, purchase untuk optimasi iklan TikTok). SDK **native Android
 > (Java/Kotlin)** — Flutter menjembatani lewat MethodChannel.
 >
-> Terakhir diverifikasi: **2026-10-01** — live `isInitialized=true` di HP.
+> Terakhir diverifikasi: **2026-10-09** — Events Manager: dataset **ChatYuk**
+> (`com.chatyuk.chatyuk`) **Verified**, Attribution = TikTok SDK. Event
+> terkirim (7 hari): Install 418, Registration 275, Launch App 2,082,
+> Login 116. Live `token=true isInitialized=true` di HP (build dgn
+> `--dart-define=TIKTOK_ACCESS_TOKEN`).
 
 ---
 
@@ -29,8 +33,12 @@
 > 2. Salin **Access Token** resmi (bukan App Secret).
 > 3. **Regenerate** App Secret bila dianggap bocor.
 >
-> SDK sebenarnya butuh **Access Token** (dari Events Manager), bukan App
-> Secret. Nilai yang dipasang sekarang = App Secret (dipakai sementara).
+> ✅ **Dikonfirmasi 2026-10-09 (Events Manager → Settings → Show App Secret):**
+> nilai App Secret di atas **= yang ditampilkan Events Manager** (tidak berubah).
+> Untuk **App Events SDK**, "App Access Token" = **App Secret** ini → token
+> di build sudah BENAR. Yang penting: build rilis/profil WAJIB sertakan
+> `--dart-define=TIKTOK_ACCESS_TOKEN=TT2RbU3f6OkDcOPKBuE000wbBGtKL2Rb`
+> (kalau tidak → `token=false`, pelacakan terbatas).
 
 ---
 

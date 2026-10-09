@@ -385,14 +385,20 @@ pastikan uid ter-exclude tidak muncul.
      ```bash
      KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
        flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
+       --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
        --obfuscate --split-debug-info=build/app/symbols
      ```
    - Flavor **play** (Google Play; appId `com.chatyuk.chatyuk` — sama dengan apkpure; `google-services.json` khusus di `android/app/src/play/`):
      ```bash
      KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
        flutter build apk --release --flavor playProd --dart-define=APP_FLAVOR=play \
+       --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
        --obfuscate --split-debug-info=build/app/symbols
      ```
+   - **WAJIB sertakan `--dart-define=TIKTOK_ACCESS_TOKEN`** (nilai dari `.env`
+     → `TIKTOK_ACCESS_TOKEN=...`) di SETIAP build rilis. Tanpa ini SDK TikTok
+     tetap init tapi `token=false` → pelacakan iklan terbatas. Cek di logcat:
+     `adb logcat | grep ChatYukTikTok` harus `token=true`. Detail: `docs/TIKTOK_SDK.md`.
    - **Kedua flavor memiliki PERILAKU SAMA** — app chat + koin sebagai digital
      goods murni (bonus/quest/gift → fitur premium). Fitur finansial (top-up
      iPaymu/Midtrans, KYC, withdraw/cash-out) **telah dihapus total** — dari
@@ -404,6 +410,7 @@ pastikan uid ter-exclude tidak muncul.
   ```bash
   KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
     flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
+    --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
     --obfuscate --split-debug-info=build/app/symbols
   ```
 - Debug symbols disimpan di `build/app/symbols` (jangan dihapus) — dipakai `flutter symbolize` untuk baca stack trace saat crash.
