@@ -11,6 +11,7 @@ import '../providers/riverpod/social_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../widgets/sheet_drag_handle.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/social_counts_line.dart';
 import '../config/theme.dart';
 
 /// Bottom sheet anggota private room: role, kick, jadikan admin,
@@ -360,7 +361,11 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                       subtitle: Row(
+                       subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
                         children: [
                           Text(
                             switch (m['role']) {
@@ -407,9 +412,12 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
                                             : AppTheme.primary,
                                         fontWeight: FontWeight.w700),
                                   ),
-                                ],
-                              ),
-                            ),
+                                 ],
+                               ),
+                             ),
+                        ],
+                      ),
+                          SocialCountsLine(uid: '${m['user_id'] ?? ''}'),
                         ],
                       ),
                       trailing: _memberActions(m),

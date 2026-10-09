@@ -60,6 +60,7 @@ import '../core/media/native_image.dart';
 import '../providers/riverpod/location_provider.dart';
 import '../providers/riverpod/phone_verify_provider.dart';
 import '../widgets/verified_badge.dart';
+import '../widgets/social_counts_line.dart';
 
 // Cache render avatar (bytes + ImageProvider stabil per-uid) kini MODULAR di
 // `widgets/user_avatar.dart` (dipakai lintas halaman user-facing). Layar ini
@@ -2926,6 +2927,10 @@ class _UserCard extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    // Jumlah follower & teman (gaya IG) — hanya bila ada.
+                    // Ambil dari provider (sumber tunggal) agar konsisten
+                    // dgn halaman lain; hindari kedip dari jalur presence.
+                    SocialCountsLine(uid: user.uid),
                     // Isi Tentang (dari RPC online, hormati about_visibility
                     // di server). Kosong = tidak tampil agar kartu ringkas.
                     // TANPA maxLines/ellipsis: teks "Tentang" tampil UTUH

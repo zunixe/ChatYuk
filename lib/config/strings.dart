@@ -1887,6 +1887,10 @@ class S {
   String get socialFollowing => isId ? 'Mengikuti' : 'Following';
   String get socialFriends => isId ? 'Teman' : 'Friends';
   String get socialSubscribers => isId ? 'Subscriber' : 'Subscribers';
+  /// Baris statistik ringkas di kartu (gaya IG), mis. "1.2K Followers · 34 Friends".
+  /// Angka sudah diringkas (compactCount) sebelum dipanggil.
+  String socialCountsShort(String followers, String friends) =>
+      isId ? '$followers Pengikut · $friends Teman' : '$followers Followers · $friends Friends';
   String get btnFollow => isId ? 'Ikuti' : 'Follow';
   String get btnUnfollow => isId ? 'Berhenti Ikuti' : 'Unfollow';
   // Snackbar konfirmasi follow (jelas + nama, bukan cuma kata tombol).

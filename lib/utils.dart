@@ -326,3 +326,24 @@ String normalizePhone(String raw) {
   if (digits.isEmpty) return '';
   return hasPlus ? '+$digits' : digits;
 }
+
+/// Angka ringkas gaya Instagram: 1.2K, 34, 1.2M.
+/// < 1000 → mentah; < 1 juta → "1.2K"; ≥ 1 juta → "1.2M".
+/// Angka bulat (1200 → "1.2K" tetap, tapi 2000 → "2K") tanpa desimal ".0".
+String compactCount(int n) {
+  if (n < 0) n = 0;
+  if (n < 1000) return '$n';
+  final String unit;
+  final double v;
+  if (n < 1000000) {
+    unit = 'K';
+    v = n / 1000.0;
+  } else {
+    unit = 'M';
+    v = n / 1000000.0;
+  }
+  // Satu desimal, buang ".0" (mis. 2.0K → 2K).
+  var s = v.toStringAsFixed(1);
+  if (s.endsWith('.0')) s = s.substring(0, s.length - 2);
+  return '$s$unit';
+}
