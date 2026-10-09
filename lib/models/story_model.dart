@@ -147,6 +147,10 @@ class StoryTrayItem {
   final bool hasVideo;
   // Ada slide private (owner_only) di tray author ini — penanda admin.
   final bool hasOwnerOnly;
+  // Batas kedaluwarsa slide terakhir (max expires_at per author). Dipakai
+  // untuk membuang item cache yang sudah lewat agar tray tidak NGEBLINK saat
+  // cold start (tampil sekejap dari cache lalu hilang setelah server refresh).
+  final DateTime? expiresAt;
 
   const StoryTrayItem({
     required this.authorId,
@@ -160,7 +164,11 @@ class StoryTrayItem {
     this.muted = false,
     this.hasVideo = false,
     this.hasOwnerOnly = false,
+    this.expiresAt,
   });
+
+  bool get isExpired =>
+      expiresAt != null && !expiresAt!.isAfter(DateTime.now());
 
   factory StoryTrayItem.fromMap(Map<String, dynamic> m) {
     return StoryTrayItem(
@@ -175,6 +183,7 @@ class StoryTrayItem {
       muted: m['muted'] == true,
       hasVideo: m['has_video'] == true,
       hasOwnerOnly: m['has_owner_only'] == true,
+      expiresAt: DateTime.tryParse('${m['expires_at'] ?? ''}')?.toLocal(),
     );
   }
 
@@ -191,24 +200,26 @@ class StoryTrayItem {
       muted: muted ?? this.muted,
       hasVideo: hasVideo ?? this.hasVideo,
       hasOwnerOnly: hasOwnerOnly,
+      expiresAt: expiresAt,
     );
   }
 
   /// Serialisasi untuk cache disk (offline tetap tampil) — kunci SAMA dengan
   /// `fromMap` server supaya bisa dibaca bolak-balik tanpa konversi.
   Map<String, dynamic> toMap() => {
-    'author_id': authorId,
-    'author_name': authorName,
-    'avatar': avatar,
-    'is_registered': isRegistered,
-    'slide_count': slideCount,
-    'thumb_path': thumbPath,
-    'has_unseen': hasUnseen,
-    'own': own,
-    'muted': muted,
-    'has_video': hasVideo,
-    'has_owner_only': hasOwnerOnly,
-  };
+        'author_id': authorId,
+        'author_name': authorName,
+        'avatar': avatar,
+        'is_registered': isRegistered,
+        'slide_count': slideCount,
+        'thumb_path': thumbPath,
+        'has_unseen': hasUnseen,
+        'own': own,
+        'muted': muted,
+        'has_video': hasVideo,
+        'has_owner_only': hasOwnerOnly,
+        'expires_at': expiresAt?.toUtc().toIso8601String(),
+      };
 }
 
 /// Baris daftar penonton satu slide.

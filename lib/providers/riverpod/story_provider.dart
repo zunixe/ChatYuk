@@ -133,16 +133,27 @@ class StoryNotifier extends Notifier<StoryState> {
       try {
         final cached = await MessageCache.instance.loadRawList(_kTrayKey);
         if (cached.isNotEmpty && _tray.isEmpty) {
-          _tray = cached.map(StoryTrayItem.fromMap).toList();
-          warmTrayThumbs();
-          _emit();
+          // Buang item cache yang SUDAH KEDALUWARSA sebelum ditampilkan —
+          // kalau tidak, story lama tampil sekejap lalu hilang setelah server
+          // refresh (gejala "ngeblink" saat cold start).
+          _tray = cached
+              .map(StoryTrayItem.fromMap)
+              .where((t) => !t.isExpired)
+              .toList();
+          if (_tray.isNotEmpty) {
+            warmTrayThumbs();
+            _emit();
+          }
         }
       } catch (_) {}
     }
     try {
       final fresh = await _service.fetchTrayRaw();
       if (fresh != null) {
-        _tray = fresh.map(StoryTrayItem.fromMap).toList();
+        _tray = fresh
+            .map(StoryTrayItem.fromMap)
+            .where((t) => !t.isExpired)
+            .toList();
         _error = null;
         _lastTrayRefreshAt = DateTime.now();
         MessageCache.instance.saveRawList(

@@ -74,6 +74,35 @@ void main() {
       expect(provider.tray.map((t) => t.authorId).toList(), ['u1']);
     });
 
+    test('item expired dibuang dari tray (anti-ngeblink cold start)', () async {
+      final expired = StoryTrayItem(
+        authorId: 'old',
+        authorName: 'Old',
+        slideCount: 1,
+        expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
+      );
+      final active = StoryTrayItem(
+        authorId: 'live',
+        authorName: 'Live',
+        slideCount: 1,
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      );
+      when(() => service.fetchTrayRaw()).thenAnswer(
+        (_) async => [expired.toMap(), active.toMap()],
+      );
+      await provider.refresh();
+      expect(
+        provider.tray.map((t) => t.authorId).toList(),
+        ['live'],
+        reason: 'author yang sudah kedaluwarsa harus dibuang sebelum tampil',
+      );
+    });
+
+    test('expires_at kosong (data lama) TIDAK dianggap expired', () {
+      final noExpiry = StoryTrayItem(authorId: 'x', authorName: 'X');
+      expect(noExpiry.isExpired, isFalse);
+    });
+
     test('hasOwnStory + ownItem', () async {
       when(() => service.fetchTrayRaw()).thenAnswer(
         (_) async => [
