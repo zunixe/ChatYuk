@@ -47,6 +47,38 @@ class SocialService {
     return fut;
   }
 
+  /// Jumlah teman & follower (bulk) untuk daftar uid — dipakai badge
+  /// "1.2K Followers · 34 Friends" di kartu (gaya IG). Return map
+  /// uid → {friends, followers}. Kosong bila gagal / uid kosong.
+  Future<Map<String, ({int friends, int followers})>> countsForUids(
+    List<String> uids,
+  ) async {
+    if (uids.isEmpty) return const {};
+    try {
+      final res = await measuredRpc(
+        _sb,
+        'social_counts_uids',
+        params: {'p_uids': uids},
+      );
+      if (res is Map) {
+        final out = <String, ({int friends, int followers})>{};
+        for (final e in res.entries) {
+          final v = e.value;
+          if (v is Map) {
+            out['${e.key}'] = (
+              friends: (v['friends'] as num?)?.toInt() ?? 0,
+              followers: (v['followers'] as num?)?.toInt() ?? 0,
+            );
+          }
+        }
+        return out;
+      }
+    } catch (e) {
+      dlog('[SocialService] countsForUids error: $e');
+    }
+    return const {};
+  }
+
   Future<Map<String, dynamic>> followUser(String targetUid) async {
     final res = await measuredRpc(_sb, 'follow_user', params: {'p_followee': targetUid});
     return _map(res);

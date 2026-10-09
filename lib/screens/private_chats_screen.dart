@@ -12,6 +12,7 @@ import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/verified_badge.dart';
+import '../widgets/social_counts_line.dart';
 import '../widgets/social_actions.dart';
 import 'private_chat_screen.dart';
 import '../providers/riverpod/call_provider.dart';
@@ -1176,6 +1177,9 @@ class _PrivateChatsScreenState extends ConsumerState<PrivateChatsScreen> {
                                                     ),
                                                 ],
                                               ),
+                                              // Jumlah follower & teman
+                                              // (gaya IG) — hanya bila ada.
+                                              SocialCountsLine(uid: otherUid),
                                               SizedBox(height: 4),
                                               // #5: baris preview (centang + unread) punya layer repaint sendiri -
                                               // badge/centang berubah sering, tanpa ini seluruh kartu ikut repaint.

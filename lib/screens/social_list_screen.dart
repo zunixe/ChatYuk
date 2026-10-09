@@ -8,6 +8,7 @@ import 'user_info_screen.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 import '../providers/riverpod/social_provider.dart';
+import '../widgets/social_counts_line.dart';
 
 /// Daftar sosial (followers / following / friends / subscribers).
 /// `kind` menentukan tipe; `userId` menentukan user yang diambil (diri sendiri
@@ -146,23 +147,29 @@ class _SocialTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Flexible(
-                        child: Text(
-                          name,
-                          style: AppText.bodyStrong,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              style: AppText.bodyStrong,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (registered) ...[
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.verified,
+                              size: 14,
+                              color: Color(0xFF4A90E2),
+                            ),
+                          ],
+                        ],
                       ),
-                      if (registered) ...[
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.verified,
-                          size: 14,
-                          color: Color(0xFF4A90E2),
-                        ),
-                      ],
+                      SocialCountsLine(uid: uid),
                     ],
                   ),
                 ),

@@ -11,6 +11,7 @@ import '../../models/user_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/rt_resilient.dart';
 import '../../utils.dart';
+import 'social_counts_provider.dart';
 
 bool _usersEqual(List<UserModel> a, List<UserModel> b) {
   if (a.length != b.length) return false;
@@ -429,6 +430,13 @@ class OnlineUsersNotifier extends Notifier<OnlineUsersState> {
       _error = null;
       _emit();
       if (next.isNotEmpty) {
+        // Pre-load jumlah follower/teman untuk badge kartu (satu RPC bulk,
+        // di-cache di socialCountsProvider) supaya badge tampil tanpa jeda.
+        try {
+          ref
+              .read(socialCountsProvider.notifier)
+              .ensureLoaded(next.map((u) => u.uid));
+        } catch (_) {}
         final rows =
             next.map((u) => {'uid': u.uid, ...u.toMap(), 'avatar': ''}).toList();
         MessageCache.instance.saveRawList('online_users', rows);
