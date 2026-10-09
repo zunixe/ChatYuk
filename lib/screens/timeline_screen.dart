@@ -303,11 +303,14 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     final scope =
         scopeIndex == 0 ? 'all' : (scopeIndex == 1 ? 'following' : 'mine');
     // Hanya scope AKTIF yang menampilkan data provider (data provider = scope
-    // aktif). Scope lain tampil skeleton/kosong sampai jadi aktif — mencegah
-    // menampilkan feed scope lain di halaman yang salah.
+    // aktif). Scope lain ditandai "loading" → tampil SKELETON, bukan empty
+    // state "ketuk +". Ini penting saat swipe: TabBarView membangun halaman
+    // tujuan SEBELUM _current ter-update, jadi tanpa ini halaman baru
+    // sekejap menampilkan CTA "ketuk untuk membuat postingan" walau ada isinya.
     final isActive = scopeIndex == _current;
     final posts = isActive ? _computeFiltered(postsRaw) : const [];
     final effectiveSearch = isActive ? _appliedSearch : '';
+    final effectiveLoading = isActive ? loading : true;
     final ctrl = _scrolls[scopeIndex];
 
     return RefreshIndicator(
@@ -345,7 +348,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                             ),
                           ],
                         )
-                      : posts.isEmpty && !loading && fetchFailed
+                      : posts.isEmpty && !effectiveLoading && fetchFailed
             // Fetch gagal (network/RPC) — BUKAN feed kosong. Tampilkan
             // pesan error + tombol coba lagi, jangan empty state palsu.
             ? ListView(
@@ -379,7 +382,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                   ),
                 ],
               )
-            : posts.isEmpty && !loading
+            : posts.isEmpty && !effectiveLoading
             ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
@@ -426,7 +429,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                   ),
                 ],
               )
-            : posts.isEmpty && loading
+            : posts.isEmpty && effectiveLoading
             // Skeleton bentuk post — terasa instan & konsisten
             // dengan layar online (user lebih suka skeleton daripada
             // spinner/muter-muter).
@@ -441,10 +444,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                 // Kombinasi dgn _loadImages post-frame di PostCard.
                 scrollCacheExtent: ScrollCacheExtent.pixels(100),
                 itemCount: posts.length +
-                      (loading && hasMore ? 1 : 0) +
+                      (effectiveLoading && hasMore ? 1 : 0) +
                       (!hasMore ? 1 : 0),
                 itemBuilder: (_, i) {
-                  if (i >= posts.length && loading && hasMore) {
+                  if (i >= posts.length && effectiveLoading && hasMore) {
                     return const Padding(
                       padding: EdgeInsets.all(16),
                       child: Center(
