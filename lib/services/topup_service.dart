@@ -4,6 +4,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 
 import '../config/app_flavor.dart';
 import 'points_service.dart';
+import 'tiktok_service.dart';
 import '../utils.dart';
 
 /// Topup YukCoin via Google Play Billing.
@@ -107,7 +108,24 @@ class TopupService {
             productId: p.productID,
             purchaseToken: token,
           );
-          if (coins > 0) onCredited?.call(coins);
+          if (coins > 0) {
+            onCredited?.call(coins);
+            // TikTok App Events: PURCHASE (pendapatan) — untuk optimasi iklan
+            // (nilai/value ikut memengaruhi ROAS). Harga (IDR) dari paket;
+            // fallback 0 bila tak ketemu (tetap kirim event + coins).
+            final pkg = _packages.firstWhere(
+              (e) => e['play_product_id'] == p.productID,
+              orElse: () => const {},
+            );
+            final priceIdr = (pkg['price_idr'] as num?)?.toDouble() ?? 0.0;
+            unawaited(TikTokService.instance.purchase(
+              value: priceIdr,
+              currency: 'IDR',
+              contentId: p.productID,
+              contentType: 'yukcoin',
+              description: 'YukCoin $coins',
+            ));
+          }
         } catch (e) {
           dlog('[TOPUP] verify error: $e');
         }
