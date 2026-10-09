@@ -229,7 +229,30 @@ Map<String, dynamic> snakeToCamel(Map<String, dynamic> map) {
 /// LAMA juga (server hanya merapikan balasan baru). Idempoten: baris yang
 /// sudah rapi tidak berubah (aturan ≥2 butir PER BARIS + butir di awal
 /// baris dihitung tapi tidak dipecah ulang). Isi blok kode ``` dilewati.
+///
+/// MEMOIZE: fungsi murni (output hanya tergantung input) tapi dipanggil di
+/// SETIAP build bubble — 7x kompilasi RegExp per pesan per rebuild. Buka
+/// chat 40 pesan + rebuild beruntun (foto masuk/poll) = ratusan kompilasi
+/// sia-sia di UI thread → jank. Cache LRU kecil (300 entri) memangkasnya
+/// jadi map lookup. Aman: tanpa state luar, tanpa recognizer.
+// ignore: prefer_collection_literals
+final Map<String, String> _chatListsCache = <String, String>{};
+const int _chatListsCacheMax = 300;
+
 String formatChatLists(String src) {
+  final hit = _chatListsCache[src];
+  if (hit != null) return hit;
+  final out = _formatChatListsImpl(src);
+  // Evict FIFO bila penuh (LinkedHashMap = urutan insert).
+  if (_chatListsCache.length >= _chatListsCacheMax) {
+    _chatListsCache.remove(_chatListsCache.keys.first);
+  }
+  _chatListsCache[src] = out;
+  return out;
+}
+
+/// Isi asli formatChatLists (dipisah agar bisa di-memoize di atas).
+String _formatChatListsImpl(String src) {
   final out = <String>[];
   var inCode = false;
   final numCount = RegExp(r'(?:^|[^\S\n])\d{1,2}[.)]\s+(?=[A-Za-z])');
