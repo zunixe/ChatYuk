@@ -26,10 +26,13 @@ class TimelineScreen extends ConsumerStatefulWidget {
 class _TimelineScreenState extends ConsumerState<TimelineScreen>
     with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 3, vsync: this);
-  final ScrollController _scroll = ScrollController();
+  // Satu ScrollController PER scope (Semua/Mengikuti/Postinganku) — dibutuhkan
+  // karena body kini TabBarView: tiap halaman punya scroll terpisah sehingga
+  // swipe antar-tab tidak mengganggu posisi scroll scope lain.
+  final List<ScrollController> _scrolls =
+      List.generate(3, (_) => ScrollController());
+  ScrollController get _scroll => _scrolls[_current];
   int _current = 0;
-  // Posisi scroll per tab — dipulihkan saat balik ke tab tsb.
-  final Map<int, double> _scrollOffsets = {};
   final TextEditingController _searchCtrl = TextEditingController();
   String _search = '';
   // Hasil debounce _search — filter list pakai ini, bukan _search mentah.
@@ -69,7 +72,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
   void initState() {
     super.initState();
     _tab.addListener(_onTabChanged);
-    _scroll.addListener(_onScroll);
+    for (final c in _scrolls) {
+      c.addListener(_onScroll);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _load(refresh: true));
   }
 
@@ -79,8 +84,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     _scrollDebounce?.cancel();
     _tab.removeListener(_onTabChanged);
     _tab.dispose();
-    _scroll.removeListener(_onScroll);
-    _scroll.dispose();
+    for (final c in _scrolls) {
+      c.removeListener(_onScroll);
+      c.dispose();
+    }
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -88,10 +95,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
   void _onTabChanged() {
     if (_tab.indexIsChanging) return;
     if (_tab.index != _current) {
-      // Simpan posisi scroll scope lama supaya balik ke tab ini tetap
-      // di posisi yang sama (klik terasa instan, tidak lompat ke atas).
-      if (_scroll.hasClients) _scrollOffsets[_current] = _scroll.offset;
-      _current = _tab.index;
+      // Tiap scope punya ScrollController sendiri → posisi scroll sudah
+      // otomatis terjaga, tak perlu simpan/pulihkan manual.
+      setState(() => _current = _tab.index);
       // Reset search saat ganti tab — filter basi dari tab lama tidak
       // boleh membawa hasil ke scope baru.
       _searchCtrl.clear();
@@ -104,19 +110,14 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
       }
       // Ganti tab: tampilkan cache instan; RPC hanya bila cache basi.
       _load(refresh: true, skipIfFresh: true);
-      // Pulihkan posisi scroll scope baru setelah frame ter-render.
-      final target = _scrollOffsets[_current];
-      if (target != null && target > 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_scroll.hasClients) return;
-          final max = _scroll.position.maxScrollExtent;
-          _scroll.jumpTo(target.clamp(0.0, max));
-        });
-      }
     }
   }
 
   void _onScroll() {
+    // Hanya halaman scope yang SEDANG aktif yang boleh memicu load-more
+    // (controller scope lain bisa ikut memanggil saat dibangun di TabBarView).
+    if (!_scroll.hasClients) return;
+    if (!_scroll.position.hasContentDimensions) return;
     if (_scroll.position.pixels <
         _scroll.position.maxScrollExtent - 200) {
       return;
@@ -152,23 +153,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     ref.watch(themeProvider);
     super.build(context);
     final s = ref.watch(localeProvider).s;
-    // Rebuild granular: hanya rebuild saat daftar post / hasMore benar-benar
-    // berubah (bukan tiap notifyListeners — mis. pricing, loading).
-    final postsRaw = ref.watch(timelineProvider.select((t) => t.posts));
-    final hasMore =
-        ref.watch(timelineProvider.select((t) => t.hasMore));
-    final loading =
-        ref.watch(timelineProvider.select((t) => t.loading));
-    final fetchFailed =
-        ref.watch(timelineProvider.select((t) => t.fetchFailed));
-    final anonBlocked =
-        ref.watch(authProvider.select((a) => a.anonTimelineBlocked));
-    final scope = _scope;
-    // Debounce search: filter pakai _appliedSearch (di-update 250ms
-    // setelah keystroke terakhir) — tiap huruf tidak rebuild seluruh list.
-    // Hasil filter di-cache → tidak hitung ulang tiap build.
-    final effectiveSearch = _appliedSearch;
-    final posts = _computeFiltered(postsRaw);
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -293,8 +277,47 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
           ],
         ),
       ),
-      body: RefreshIndicator(
-              onRefresh: () => _load(refresh: true),
+      // Swipe antar-tab (Semua/Mengikuti/Postinganku) seperti halaman Grup.
+      // Tiap halaman punya ScrollController sendiri (lihat _scrolls).
+      body: TabBarView(
+        controller: _tab,
+        children: [
+          _buildFeed(0),
+          _buildFeed(1),
+          _buildFeed(2),
+        ],
+      ),
+    );
+  }
+
+  /// Body feed untuk satu scope (index tab). Dipakai ketiga halaman TabBarView.
+  Widget _buildFeed(int scopeIndex) {
+    final s = ref.watch(localeProvider).s;
+    final postsRaw = ref.watch(timelineProvider.select((t) => t.posts));
+    final hasMore = ref.watch(timelineProvider.select((t) => t.hasMore));
+    final loading = ref.watch(timelineProvider.select((t) => t.loading));
+    final fetchFailed =
+        ref.watch(timelineProvider.select((t) => t.fetchFailed));
+    final anonBlocked =
+        ref.watch(authProvider.select((a) => a.anonTimelineBlocked));
+    final scope =
+        scopeIndex == 0 ? 'all' : (scopeIndex == 1 ? 'following' : 'mine');
+    // Hanya scope AKTIF yang menampilkan data provider (data provider = scope
+    // aktif). Scope lain tampil skeleton/kosong sampai jadi aktif — mencegah
+    // menampilkan feed scope lain di halaman yang salah.
+    final isActive = scopeIndex == _current;
+    final posts = isActive ? _computeFiltered(postsRaw) : const [];
+    final effectiveSearch = isActive ? _appliedSearch : '';
+    final ctrl = _scrolls[scopeIndex];
+
+    return RefreshIndicator(
+              onRefresh: () async {
+                if (scopeIndex != _current) {
+                  // Swipe ke scope lain dulu baru refresh scope itu.
+                  _tab.animateTo(scopeIndex);
+                }
+                await _load(refresh: true);
+              },
               // Empty state HANYA saat fetch selesai & benar-benar kosong. Saat
               // loading pertama kali (atau tab switch) tampilkan spinner — jangan
               // blink ke "Belum ada postingan" kalau sebenarnya ada data.
@@ -409,7 +432,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
             // spinner/muter-muter).
             ? const PostSkeletonList(count: 3)
             : ListView.builder(
-                controller: _scroll,
+                controller: ctrl,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.only(top: 4, bottom: 88),
                 // PERF: cache kecil (dulu default 250px). Kartu di luar
@@ -450,10 +473,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                       post: posts[i],
                     ),
                   );
-                },
-              ),
-      ),
-    );
+                 },
+               ),
+      );
   }
 
   @override

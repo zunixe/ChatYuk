@@ -1005,7 +1005,15 @@ class _MainNavState extends ConsumerState<_MainNav>
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => _lastInteractionAt = DateTime.now(),
-      child: Scaffold(
+      child: PopScope(
+        // Back di tab SELAIN Online → kembali ke tab Online (index 0).
+        // Di Online sendiri → biarkan (keluar app seperti biasa).
+        canPop: tab == 0,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          ref.read(navProvider.notifier).goTo(0);
+        },
+        child: Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
@@ -1171,6 +1179,7 @@ class _MainNavState extends ConsumerState<_MainNav>
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: _BottomNav(currentIndex: tab, onTap: _onNavTap),
     ),
+      ),
     );
   }
 }

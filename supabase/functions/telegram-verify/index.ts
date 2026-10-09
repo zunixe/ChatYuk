@@ -11,7 +11,7 @@
 // Secrets: TELEGRAM_BOT_USERNAME.
 //
 // Konfirmasi (set verified) TIDAK di sini — itu di telegram-webhook setelah
-// user menekan "Bagikan nomor".
+// user menekan "Verifikasi Nomor Saya".
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
