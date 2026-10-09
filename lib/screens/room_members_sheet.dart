@@ -296,9 +296,24 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
                     TextField(controller: _pwCtrl, obscureText: true, decoration: InputDecoration(hintText: s.resetPasswordHint, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8))),
                     const SizedBox(height: 6),
                     Row(children: [
-                      Expanded(child: FilledButton(onPressed: _pwSaving ? null : () => _resetPw(false), child: Text(s.btnResetPassword))),
+                      Expanded(
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: _pwSaving ? null : () => _resetPw(false),
+                          child: Text(s.btnResetPassword),
+                        ),
+                      ),
                       const SizedBox(width: 8),
-                      TextButton(onPressed: _pwSaving ? null : () => _resetPw(true), child: Text(s.btnRemovePassword)),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.primary,
+                        ),
+                        onPressed: _pwSaving ? null : () => _resetPw(true),
+                        child: Text(s.btnRemovePassword),
+                      ),
                     ]),
                     const Divider(height: 24),
                   ],
@@ -403,33 +418,31 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
     if (!canModerate && widget.myRole != 'owner') return null;
 
     final items = <PopupMenuEntry<String>>[];
+    // Warna teks EKSPLISIT (textPrimary) — dulu Text() polos → di theme app
+    // teks menu jatuh ke default pucat/nyaris transparan.
+    Widget mi(String t) =>
+        Text(t, style: AppText.body.copyWith(color: AppTheme.textPrimary));
     // Promote member→admin: owner & admin. Demote admin→member: owner saja
     // (server selaras kick: admin tak bisa demote/kick admin).
     if ((widget.myRole == 'owner' || widget.myRole == 'admin') &&
         role == 'member') {
-      items.add(PopupMenuItem(
-        value: 'promote',
-        child: Text(s.roomActionPromote),
-      ));
+      items.add(PopupMenuItem(value: 'promote', child: mi(s.roomActionPromote)));
     }
     if (widget.myRole == 'owner' && role == 'admin') {
-      items.add(PopupMenuItem(
-        value: 'promote',
-        child: Text(s.roomActionDemote),
-      ));
+      items.add(PopupMenuItem(value: 'promote', child: mi(s.roomActionDemote)));
     }
     if (!(role == 'owner' || (role == 'admin' && widget.myRole == 'admin'))) {
-      items.add(PopupMenuItem(value: 'kick', child: Text(s.roomActionKick)));
+      items.add(PopupMenuItem(value: 'kick', child: mi(s.roomActionKick)));
     }
     items.add(PopupMenuItem(
       value: 'broadcast',
-      child: Text(
-          (uid == _liveUid || '${m['broadcast_granted']}' == 'true')
-              ? s.roomActionRevokeBroadcast
-              : s.roomActionBroadcast),
+      child: mi((uid == _liveUid || '${m['broadcast_granted']}' == 'true')
+          ? s.roomActionRevokeBroadcast
+          : s.roomActionBroadcast),
     ));
 
     return PopupMenuButton<String>(
+      color: AppTheme.bgCard,
       onSelected: (v) {
         switch (v) {
           case 'promote':

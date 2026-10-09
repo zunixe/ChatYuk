@@ -329,7 +329,12 @@ extension SAdminX on S {
       ? 'Grup dan semua pesannya hilang permanen untuk semua member.'
       : 'The group and all its messages are permanently gone for everyone.';
   String get groupInfoOwner => isId ? 'Pemilik' : 'Owner';
-  String get groupInfoMembers => isId ? 'Anggota' : 'Members';
+  // Ganti ikon/avatar grup (owner & admin).
+  String get groupChangeIcon => isId ? 'Ganti ikon grup' : 'Change group icon';
+  String get groupIconCamera => isId ? 'Kamera' : 'Camera';
+  String get groupIconGallery => isId ? 'Galeri' : 'Gallery';
+  String get groupIconUpdated => isId ? 'Ikon grup diperbarui' : 'Group icon updated';
+  String get groupIconFailed => isId ? 'Gagal memperbarui ikon' : 'Failed to update icon';  String get groupInfoMembers => isId ? 'Anggota' : 'Members';
   String get groupInfoCreated => isId ? 'Dibuat' : 'Created';
   String get groupInfoExpiry => isId ? 'Berlaku sampai' : 'Valid until';
   String get groupInfoPermanent => isId ? 'Permanen' : 'Permanent';

@@ -300,6 +300,8 @@ class RoomNotifier extends Notifier<RoomState> {
   Future<void> kick(String roomId, String uid) => _prv.kick(roomId, uid);
   Future<void> setRole(String roomId, String uid, String role) =>
       _prv.setRole(roomId, uid, role);
+  Future<Map<String, dynamic>> updateRoomIcon(String roomId, String icon) =>
+      _prv.updateRoomIcon(roomId, icon);
   Future<void> leavePrivate(String roomId) => _prv.leave(roomId);
   Future<void> rotateToken(String roomId) => _prv.rotateToken(roomId);
   Future<void> grantBroadcast(String roomId, String uid) =>
