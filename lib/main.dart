@@ -1603,7 +1603,10 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // TikTok App Events (TikTok Ads) — init SDK native (App ID dari manifest,
   // Access Token dari --dart-define). Best-effort, tidak memblok boot.
   unawaited(
-    TikTokService.instance.init(accessToken: AppEnv.tiktokAccessToken),
+    TikTokService.instance.init(
+      accessToken: AppEnv.tiktokAccessToken,
+      debug: AppEnv.tiktokDebug,
+    ),
   );
   // Atribusi sumber user (Play Install Referrer + Firebase Analytics).
   // Baca sekali; aman & murah bila dipanggil berkali-kali.

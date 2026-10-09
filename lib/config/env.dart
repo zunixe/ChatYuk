@@ -18,6 +18,12 @@ class AppEnv {
   static const String _kTikTokToken =
       String.fromEnvironment('TIKTOK_ACCESS_TOKEN');
 
+  /// Aktifkan log DEBUG TikTok SDK (EventName/batch terkirim) saat build:
+  ///   --dart-define=TIKTOK_DEBUG=true
+  /// Default OFF (produksi senyap). Dipakai untuk UJI event di HP via logcat.
+  static const bool tiktokDebug =
+      bool.fromEnvironment('TIKTOK_DEBUG');
+
   // ── PROD (JANGAN DIUBAH TANPA REVIEW) ──
   static const String prodUrl = 'https://fohcucyyejdryryoxitm.supabase.co';
   static const String prodAnonKey =
