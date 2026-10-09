@@ -53,17 +53,28 @@ class _SocialCountsLineState extends ConsumerState<SocialCountsLine> {
   Widget build(BuildContext context) {
     if (widget.uid.isEmpty) return const SizedBox.shrink();
     final s = ref.watch(localeProvider).s;
+    final style = AppText.caption.copyWith(
+      color: AppTheme.textSecondary,
+      fontWeight: FontWeight.w600,
+    );
     final v = ref.watch(
       socialCountsProvider.select((m) => m[widget.uid]),
     );
-    // Belum dimuat → sembunyi dulu (jangan tampilkan 0 palsu).
-    if (v == null) return const SizedBox.shrink();
+    // Belum dimuat → placeholder TAK TERLIHAT tapi TINGGINYA SAMA.
+    // Tanpa ini kartu "berkedip" (tambah tinggi) saat angka tiba ~1 dtk
+    // setelah cold start. Jangan tampilkan 0 palsu — kosongkan teksnya.
+    if (v == null) {
+      return Visibility(
+        visible: false,
+        maintainSize: true,
+        maintainAnimation: true,
+        maintainState: true,
+        child: Text('', style: style, maxLines: 1),
+      );
+    }
     return Text(
       s.socialCountsShort(compactCount(v.followers), compactCount(v.friends)),
-      style: AppText.caption.copyWith(
-        color: AppTheme.textSecondary,
-        fontWeight: FontWeight.w600,
-      ),
+      style: style,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
