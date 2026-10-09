@@ -1122,12 +1122,15 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
                             // RepaintBoundary per bubble: scroll tidak
                             // merender ulang bubble lain (isolasi repaint) —
                             // kunci utama anti-jank saat pesan banyak.
+                            // Video di luar 50 terbaru → poster tidak
+                            // auto-load (hemat kuota); tap memuat.
                             return RepaintBoundary(
                               child: MessageBubble(
                                 key: ValueKey(msg.id),
                                 link: _linkFor(msg.id),
                                 msg: msg,
                                 chatKey: _chatKey,
+                                autoVideoPoster: i < 50,
                                 isMe: isMe,
                                 isRead: isRead,
                                 isAdminView: true,

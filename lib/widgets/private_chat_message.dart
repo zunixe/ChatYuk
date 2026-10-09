@@ -932,6 +932,10 @@ class MessageBubble extends StatelessWidget {
   // icon refresh; klik memanggil onRetryImage(messageId).
   final bool isImageDeferred;
   final Future<void> Function(String messageId)? onRetryImage;
+  // Video di luar window auto-load (pesan lama) → poster TIDAK diunduh/
+  // generate otomatis; tampil placeholder + tap untuk memuat (pola sama
+  // seperti isImageDeferred untuk foto).
+  final bool autoVideoPoster;
   // Admin monitor: view-once yang sudah expired tetap bisa dilihat admin.
   final bool isAdminView;
   // Room chat pakai tabel 'messages' untuk clear view-once.
@@ -973,6 +977,7 @@ class MessageBubble extends StatelessWidget {
     this.isQueued = false,
     this.isImageDeferred = false,
     this.onRetryImage,
+    this.autoVideoPoster = true,
     this.isAdminView = false,
     this.showChecksBothSides = false,
     this.isRoom = false,
@@ -1204,6 +1209,7 @@ class MessageBubble extends StatelessWidget {
                               messageId: msg.id,
                               isMe: isMe,
                               isAdminView: isAdminView,
+                              autoPoster: autoVideoPoster,
                               timeStr: timeStr,
                               showChecks: isMe || showChecksBothSides,
                               isPending: isPending,
@@ -1251,6 +1257,7 @@ class MessageBubble extends StatelessWidget {
                               messageId: msg.id,
                               isMe: isMe,
                               isAdminView: isAdminView,
+                              autoPoster: autoVideoPoster,
                             ),
                             // Caption + jam SEBARIS ala chat teks (nempel, hemat
                             // tinggi): caption pendek → jam nempel di ujung
