@@ -28,6 +28,7 @@ import '../core/nav_guard.dart';
 import '../core/chat/chat_location.dart';
 import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
+import '../widgets/voice_bubble.dart';
 import '../widgets/date_chip.dart';
 import '../utils/mention.dart';
 import '../widgets/person_avatar.dart';
@@ -886,6 +887,11 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
     // Dedupe _pending: hapus satu per satu saat server konfirmasi — aman utk double-send text sama
     _msgsSub = _msgsStream.listen((msgs) {
+      // Hangatkan cache file voice terbaru (sekali per buka chat) supaya tap
+      // play instan seperti foto — tanpa ini voice selalu unduh saat di-tap.
+      if (msgs.isNotEmpty) {
+        unawaited(VoicePrefetch.warmChat(widget.chatId, msgs));
+      }
       // Pesan BARU dari lawan yang masuk sementara chat terbuka → tandai baca
       // agar last_read_at lawan maju → centang 2 (read) pengirim langsung terisi.
       // Tanpa ini, centang 2 baru muncul setelah keluar-masuk chat.
