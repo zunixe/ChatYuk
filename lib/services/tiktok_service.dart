@@ -33,9 +33,24 @@ class TikTokService {
   bool _initTried = false;
   bool _ready = false;
   String? _pendingIdentifyExternalId;
+  // Antrean event (standard + purchase) bila SDK belum ready — supaya event
+  // yang datang lebih awal (mis. REGISTRATION tepat setelah daftar) TIDAK
+  // hilang. Dikirim begitu init selesai.
+  final List<TikTokEvent> _pendingEvents = [];
+  final List<Map<String, dynamic>> _pendingPurchases = [];
 
   @visibleForTesting
   static MethodChannel channelForTest = _realChannel;
+
+  /// Reset state (khusus test): biar singleton bisa diuji antar-skenario.
+  @visibleForTesting
+  void resetForTest() {
+    _initTried = false;
+    _ready = false;
+    _pendingIdentifyExternalId = null;
+    _pendingEvents.clear();
+    _pendingPurchases.clear();
+  }
 
   /// True bila SDK sudah ter-init di native.
   bool get isReady => _ready;
@@ -60,6 +75,27 @@ class TikTokService {
       if (_ready && pending != null) {
         _pendingIdentifyExternalId = null;
         await identify(externalId: pending);
+      }
+      // Kirim event yang sempat di-antre (datang sebelum SDK siap).
+      if (_ready) {
+        final evts = List<TikTokEvent>.of(_pendingEvents);
+        _pendingEvents.clear();
+        for (final e in evts) {
+          await track(e);
+        }
+        final purch = _pendingPurchases
+            .map((m) => Map<String, dynamic>.of(m))
+            .toList();
+        _pendingPurchases.clear();
+        for (final m in purch) {
+          await purchase(
+            value: (m['value'] as num).toDouble(),
+            currency: m['currency'] as String? ?? 'IDR',
+            description: m['description'] as String? ?? '',
+            contentId: m['contentId'] as String? ?? '',
+            contentType: m['contentType'] as String? ?? '',
+          );
+        }
       }
       return _ready;
     } catch (e) {
@@ -109,8 +145,13 @@ class TikTokService {
   }
 
   /// Event standar tanpa konten (LOGIN/REGISTRATION/GENERATE_LEAD/RATE/dll).
+  /// Bila SDK belum siap → di-antre & dikirim setelah init (tak hilang).
   Future<bool> track(TikTokEvent event) async {
-    if (!_supported || !_ready) return false;
+    if (!_supported) return false;
+    if (!_ready) {
+      _pendingEvents.add(event);
+      return false;
+    }
     try {
       return await _channel.invokeMethod<bool>('track', {
             'event': event.name,
@@ -123,6 +164,7 @@ class TikTokService {
   }
 
   /// Event Purchase (pendapatan). [value] total, [currency] ISO 4217.
+  /// Bila SDK belum siap → di-antre & dikirim setelah init (tak hilang).
   Future<bool> purchase({
     required double value,
     String currency = 'IDR',
@@ -130,7 +172,17 @@ class TikTokService {
     String contentId = '',
     String contentType = '',
   }) async {
-    if (!_supported || !_ready) return false;
+    if (!_supported) return false;
+    if (!_ready) {
+      _pendingPurchases.add({
+        'value': value,
+        'currency': currency,
+        'description': description,
+        'contentId': contentId,
+        'contentType': contentType,
+      });
+      return false;
+    }
     try {
       return await _channel.invokeMethod<bool>('purchase', {
             'value': value,
