@@ -41,9 +41,20 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   void initState() {
     super.initState();
     _hasPassword = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).hasPassword;
+    // Status verifikasi HP bisa berubah di luar app (user menyelesaikan di
+    // Telegram) → tarik status terbaru saat layar dibuka supaya badge akurat.
+    // Dulu hanya di-refresh saat DIALOG verify dibuka → user yang sudah
+    // verified dari Telegram tetap melihat status "belum" lalu ditawari isi
+    // nomor lagi.
     Future.microtask(() async {
       final v = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).fetchHasPassword();
       if (mounted) setState(() => _hasPassword = v);
+    });
+    Future.microtask(() {
+      if (!mounted) return;
+      ProviderScope.containerOf(context, listen: false)
+          .read(phoneVerifyProvider.notifier)
+          .refresh();
     });
   }
 
@@ -498,13 +509,40 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   /// Dialog input nomor HP sedunia: pilihan kode negara (+62, +60, …)
   /// + nomor lokal. Hasil disimpan E.164 (mis. +62812…).
+  ///
+  /// Alur:
+  ///  - Nomor BELUM ada → input nomor → simpan → tawarkan verifikasi.
+  ///  - Nomor SUDAH ada & sudah verified → tampilkan status (tak minta apa-apa).
+  ///  - Nomor SUDAH ada & belum verified → LANGSUNG tawarkan verifikasi
+  ///    (tanpa input nomor ulang) + opsi ganti nomor.
   Future<void> _editPhone(BuildContext context) async {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final existingPhone = auth.profile?.phone ?? '';
+    final alreadyVerified = ProviderScope.containerOf(context, listen: false)
+        .read(phoneVerifyProvider)
+        .verified;
+
+    // Sudah punya nomor: jangan minta isi ulang. Status verified → info saja;
+    // belum verified → langsung tawarkan verifikasi Telegram.
+    if (existingPhone.isNotEmpty) {
+      if (alreadyVerified) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.phoneVerifySuccess)),
+        );
+        return;
+      }
+      final ok = await showPhoneVerifyDialog(context, s);
+      if (ok == true && mounted) {
+        _markOwnVerified();
+      }
+      return;
+    }
+
     final full = await showPhoneEditDialog(
       context,
       s,
-      currentPhone: auth.profile?.phone ?? '',
+      currentPhone: existingPhone,
       countryName: auth.profile?.country,
     );
     if (full == null || !mounted) return;
@@ -518,19 +556,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       // verified di-reset server-side, jadi selalu tawarkan.
       final ok = await showPhoneVerifyDialog(context, s);
       if (ok == true && mounted) {
-        // Tandai verified di provider agar badge langsung tampil.
-        final uid = ProviderScope.containerOf(context, listen: false)
-                .read(authProvider.notifier)
-                .uid ??
-            '';
-        if (uid.isNotEmpty) {
-          ProviderScope.containerOf(context, listen: false)
-              .read(phoneVerifyProvider.notifier)
-              .refresh();
-          ProviderScope.containerOf(context, listen: false)
-              .read(verifiedProvider.notifier)
-              .markVerified(uid);
-        }
+        _markOwnVerified();
       }
     } catch (_) {
       if (!mounted) return;
@@ -538,6 +564,23 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         SnackBar(content: Text(s.errGeneric)),
       );
     }
+  }
+
+  /// Tandai status verified milik sendiri agar badge langsung tampil tanpa
+  /// menunggu refresh berikutnya.
+  void _markOwnVerified() {
+    if (!mounted) return;
+    final uid = ProviderScope.containerOf(context, listen: false)
+            .read(authProvider.notifier)
+            .uid ??
+        '';
+    if (uid.isEmpty) return;
+    ProviderScope.containerOf(context, listen: false)
+        .read(phoneVerifyProvider.notifier)
+        .refresh();
+    ProviderScope.containerOf(context, listen: false)
+        .read(verifiedProvider.notifier)
+        .markVerified(uid);
   }
 
   /// Hapus akun (Google Play account deletion requirement).
