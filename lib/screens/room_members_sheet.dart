@@ -196,7 +196,15 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
       initialChildSize: 0.7,
       maxChildSize: 0.95,
       builder: (context, scrollCtrl) {
-        return Column(
+        // Root DI-BERI BACKGROUND SOLID: pemanggil (GroupInfoScreen) membuka
+        // via showModalBottomSheet(backgroundColor: transparent) + Draggable
+        // → tanpa ini seluruh card sheet TRANSPARAN (konten tembus ke belakang).
+        return Container(
+          decoration: BoxDecoration(
+            color: AppTheme.bgCard,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
           children: [
             const SheetDragHandle(),
             Padding(
@@ -404,6 +412,7 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
               ),
             ),
           ],
+          ),
         );
       },
     );
