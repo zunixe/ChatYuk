@@ -2927,10 +2927,6 @@ class _UserCard extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    // Jumlah follower & teman (gaya IG) — hanya bila ada.
-                    // Ambil dari provider (sumber tunggal) agar konsisten
-                    // dgn halaman lain; hindari kedip dari jalur presence.
-                    SocialCountsLine(uid: user.uid),
                     // Isi Tentang (dari RPC online, hormati about_visibility
                     // di server). Kosong = tidak tampil agar kartu ringkas.
                     // TANPA maxLines/ellipsis: teks "Tentang" tampil UTUH
@@ -2947,6 +2943,10 @@ class _UserCard extends ConsumerWidget {
                           ),
                         ),
                       ),
+                    // Jumlah follower & teman (gaya IG) — di BAWAH About,
+                    // hanya bila ada. Ambil dari provider (sumber tunggal)
+                    // agar konsisten dgn halaman lain.
+                    SocialCountsLine(uid: user.uid),
                   ],
                 ),
               ),
