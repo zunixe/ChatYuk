@@ -12,6 +12,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/regions.dart';
 import '../models/user_model.dart';
+import '../models/room_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
@@ -2310,27 +2311,41 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     );
   }
 
-  /// Buka Global Room kategori General dari halaman Online.
-  /// Selalu mengarah ke TAB GLOBAL ROOM (bukan timeline): kalau ada room
-  /// general langsung dibuka; kalau belum, buka halaman Global Room dengan
-  /// kategori General terpilih.
+  /// ID room General Indonesia (global room resmi). Pintasan "Global Room"
+  /// di halaman Online SELALU membuka room ini — TIDAK memakai `rooms.first`
+  /// yang urutannya berubah mengikuti jumlah online (dulu kadang masuk
+  /// "room faisol" user-made, kadang "General" — tidak konsisten).
+  static const String _kGlobalRoomId = 'Indonesia_general';
+
+  /// Buka Global Room kategori General NEGARA INDONESIA (selalu room yang sama).
   Future<void> _openGeneralRoom(BuildContext context) async {
     final rp = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
-    final rooms = rp.exploreRooms.where((r) => r.category == 'general');
-    if (rooms.isNotEmpty) {
-      final room = rooms.first;
-      unawaited(rp.markRoomRead(room.id));
-      if (!context.mounted) return;
-      final navKey = navKeyRoom(room.id);
+
+    // 1) Prioritas: room resmi dari daftar explore yang sudah termuat.
+    var room = rp.exploreRoomById(_kGlobalRoomId);
+    // 2) Belum termuat (mis. negara user bukan Indonesia) → ambil langsung.
+    if (room == null) {
+      final raw = await rp.fetchRoomById(_kGlobalRoomId);
+      if (raw != null) {
+        room = RoomModel.fromMap('${raw['id']}', raw);
+      }
+    }
+    if (!context.mounted) return;
+
+    if (room != null) {
+      final target = room;
+      unawaited(rp.markRoomRead(target.id));
+      final navKey = navKeyRoom(target.id);
       if (!tryClaimNav(navKey)) return;
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
+        MaterialPageRoute(builder: (_) => RoomChatScreen(room: target)),
       ).then((_) => releaseNav(navKey));
       return;
     }
-    // Belum ada room general termuat/tersedia → buka HALAMAN Global Room
-    // dengan kategori General terpilih (bukan pindah tab timeline).
+
+    // Room resmi belum ada (seeding belum jalan) → buka HALAMAN Global Room
+    // dengan kategori General terpilih.
     rp.setExploreCategory('general');
     if (!context.mounted) return;
     await Navigator.push(
