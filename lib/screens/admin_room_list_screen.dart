@@ -308,7 +308,7 @@ class _AdminRoomListScreenState extends ConsumerState<AdminRoomListScreen>
                     color: AppTheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(11),
                   ),
-                  child: Text(icon, style: const TextStyle(fontSize: 20)),
+                  child: Text(icon, style: const TextStyle(fontSize: AppGlyph.sm)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(

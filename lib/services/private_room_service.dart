@@ -97,6 +97,17 @@ class PrivateRoomService {
     });
   }
 
+  /// Ganti ikon/avatar grup (owner/admin saja — ditegakkan server).
+  /// `icon` = emoji ATAU path storage `room-icons/...` (upload dulu).
+  /// Return {ok, reason?}.
+  Future<Map<String, dynamic>> updateRoomIcon(String roomId, String icon) async {
+    final res = await measuredRpc(_sb, 'update_room_icon', params: {
+      'p_room_id': roomId,
+      'p_icon': icon,
+    });
+    return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+  }
+
   /// Undang user langsung jadi member (owner/admin saja — server menegakkan).
   /// Target: siapa pun yang pernah chat (teman/bukan). Bypass approval.
   Future<void> invite(String roomId, String targetUid) async {
