@@ -2592,6 +2592,10 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                                 isQueued: _queuedIds.contains(msg.id),
                                 isImageDeferred: isImageDeferred,
                                 onRetryImage: _msgsHandleFetchImage,
+                                // Video di luar 50 terbaru → poster tidak
+                                // auto-load (hemat kuota); tap memuat.
+                                // Pola sama seperti isImageDeferred foto.
+                                autoVideoPoster: di < 50,
                                 onLongPressMenu: onMessageLongPress,
                                 // Mode seleksi: tap = tambah/kurangi seleksi.
                                 onTapSelect: inSelection

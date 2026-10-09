@@ -98,6 +98,12 @@ class ChatVideoBubble extends StatefulWidget {
   final bool isPending;
   final bool isQueued;
   final bool isRead;
+  /// Poster otomatis (unduh + generate) saat bubble tampil. False = pesan
+  /// lama di luar window: hanya baca cache disk sinkron (instan bila ada),
+  /// sisanya placeholder + tap untuk memuat (pola sama foto deferred).
+  /// Default true (perilaku lama) supaya pemanggil yang tak peduli posisi
+  /// tidak berubah perilaku.
+  final bool autoPoster;
 
   const ChatVideoBubble({
     super.key,
@@ -114,6 +120,7 @@ class ChatVideoBubble extends StatefulWidget {
     this.isPending = false,
     this.isQueued = false,
     this.isRead = false,
+    this.autoPoster = true,
   });
 
   @override
@@ -174,12 +181,22 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         }
         dlog('[VideoBubble] poster MISS-sync key=${_posterKey.hashCode} → async');
       } catch (_) {}
+      // DEFERRED (pesan lama): idle placeholder — tap yang memuat. Jangan
+      // unduh video puluhan MB otomatis (hemat kuota + jank).
+      if (!widget.autoPoster) {
+        _loading = false;
+        return;
+      }
     }
     // LAZY: tunda 1 frame — bubble yang belum benar-benar tampil (di luar
     // viewport) tidak memicu unduh video + generate frame. Cegah puluhan
     // video berebut bandwidth saat cold start (gejala "ngeblink").
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_locked && widget.videoData.isNotEmpty && _poster == null) {
+      if (mounted &&
+          !_locked &&
+          widget.videoData.isNotEmpty &&
+          _poster == null &&
+          widget.autoPoster) {
         unawaited(_loadPoster());
       }
     });
@@ -190,7 +207,22 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     super.didUpdateWidget(oldWidget);
     // Pesan optimistik (base64) → path storage setelah upload selesai.
     if (widget.videoData != oldWidget.videoData) {
-      unawaited(_loadPoster());
+      if (widget.autoPoster) {
+        unawaited(_loadPoster());
+      } else {
+        // Deferred: coba cache disk sinkron saja; sisanya saat tap.
+        try {
+          final hit = MediaDiskCache.instance.readSync(_posterKey);
+          if (hit != null && hit.isNotEmpty && mounted) {
+            setState(() {
+              _poster = hit;
+              _loading = false;
+            });
+          } else if (mounted) {
+            setState(() => _loading = false);
+          }
+        } catch (_) {}
+      }
     }
   }
 
@@ -380,6 +412,14 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     if (_opening || _locked) return;
     _opening = true;
     try {
+      // Deferred (poster belum ada): muat poster dulu (unduh + generate +
+      // cache) supaya bubble terisi saat kembali dari fullscreen.
+      if (_poster == null &&
+          !_locked &&
+          widget.videoData.isNotEmpty) {
+        await _loadPoster();
+        if (!mounted) return;
+      }
       final file = await _ensureLocalFile();
       if (!mounted) return;
       if (file == null) {
