@@ -49,6 +49,7 @@ import '../core/call/call_permissions.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../utils/mention.dart';
 import '../widgets/gift_fly_overlay.dart';
+import '../widgets/social_counts_line.dart';
 import '../widgets/room_gift_panel.dart';
 import '../config/gifts.dart';
 import 'private_chat_screen.dart';
@@ -2875,6 +2876,9 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                               color: AppTheme.textSecondary,
                             ),
                           ),
+                          // Jumlah follower & teman (gaya IG) — di bawah
+                          // gender, hanya bila ada.
+                          SocialCountsLine(uid: msg.senderId),
                         ],
                       ),
                     ),
