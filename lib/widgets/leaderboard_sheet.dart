@@ -19,6 +19,7 @@ import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../screens/user_info_screen.dart';
 import 'social_actions.dart';
+import 'social_counts_line.dart';
 import 'person_avatar.dart';
 import 'profile_avatar.dart';
 
@@ -507,6 +508,11 @@ class LeaderboardRow extends ConsumerWidget {
                     color: isTop3 ? topColor : AppTheme.textSecondary,
                   ),
                 ),
+                // Baris pengikut & teman (sama seperti kartu menu Online).
+                // Ambil dari socialCountsProvider (bulk, ter-cache) —
+                // tampil instan & konsisten antar layar.
+                if (uid.isNotEmpty)
+                  SocialCountsLine(uid: uid),
               ],
             ),
           ),
