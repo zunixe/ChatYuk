@@ -308,6 +308,7 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
   void dispose() {
     _pollTimer.cancel();
     _callTimer?.cancel();
+    _photoSetStateTimer?.cancel();
     // Buang channel SEPENUHNYA (bukan hanya unsubscribe). `unsubscribe()`
     // saja meninggalkan channel di client Supabase → menumpuk tiap
     // buka-tutup chat → makin lambat saat bolak-balik (bocor socket).
@@ -794,12 +795,14 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
     return loaded;
   }
 
-  bool _photoSetStateScheduled = false;
+  Timer? _photoSetStateTimer;
   void _schedulePhotoSetState() {
-    if (_photoSetStateScheduled || !mounted) return;
-    _photoSetStateScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _photoSetStateScheduled = false;
+    if (!mounted) return;
+    // Coalesce 400ms: foto selesai berselang detik (network), bukan dalam
+    // frame yang sama — post-frame saja berarti 1 rebuild PER FOTO (12 foto
+    // = 12x rebuild 40 bubble). Timer ini menggabungkannya jadi sedikit.
+    if (_photoSetStateTimer?.isActive ?? false) return;
+    _photoSetStateTimer = Timer(const Duration(milliseconds: 400), () {
       if (mounted) setState(() {});
     });
   }

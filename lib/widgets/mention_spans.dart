@@ -20,6 +20,14 @@ List<TextSpan> mentionAwareSpans(
 }) {
   if (text.isEmpty) return [TextSpan(text: text, style: base)];
 
+  // FAST PATH: pesan biasa tanpa '@' (mention/@all/@everyone) dan tanpa
+  // 'http' (URL) tidak mungkin menghasilkan mark — lewati toLowerCase
+  // (copy string penuh), scan mention, dan kompilasi RegExp URL. Ini
+  // mayoritas bubble chat; hemat signifikan saat rebuild 40 bubble.
+  if (!text.contains('@') && !text.contains('http') && mentions.isEmpty) {
+    return [TextSpan(text: text, style: base)];
+  }
+
   final lower = text.toLowerCase();
   final marks = <_Mark>[];
 
