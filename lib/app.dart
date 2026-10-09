@@ -831,31 +831,38 @@ class _MainNavState extends ConsumerState<_MainNav>
         }
       }
       if (pausedFor != null && pausedFor.inSeconds >= 60) {
-        // Background lama → buang SEMUA cache RAM (pesan + foto) + bitmap,
-        // lalu minta arena native kembali ke OS. Dilakukan di RESUME (bukan
-        // pause) supaya background singkat tidak memicu re-decode massal.
+        // Background lama → buang cache RAM BESAR (pesan + foto full-res) +
+        // bitmap, lalu minta arena native kembali ke OS.
+        //
+        // PENTING (terukur): JANGAN buang thumb foto di sini. Dulu memakai
+        // trimMemCache() yang mengosongkan `_thumbMem` juga → saat user buka
+        // chat, semua thumbnail harus dibaca + di-decode ULANG dari disk:
+        // logcat menunjukkan "GC freed 1770KB, 372(17MB) LOS objects" +
+        // "WaitForGcToComplete blocked Explicit on HeapTrim for 33.862ms" →
+        // frame stall 200ms pada buka-pertama setelah resume (keluhan "masuk
+        // private chat harus beberapa kali baru cepet").
+        // Thumb = kecil (≤512px) & langsung dipakai bubble → dipertahankan.
         try {
           MessageCache.instance.trimMemCache();
         } catch (_) {}
         try {
-          PhotoCache.instance.trimMemCache();
+          PhotoCache.instance.trimHeavyCache();
         } catch (_) {}
-        try {
-          PostPhotoCache.instance.trimMemCache();
-        } catch (_) {}
+        // PostPhotoCache TIDAK di-trim: isinya thumb TIMELINE (bukan chat) dan
+        // membuangnya memaksa decode ulang saat kartu timeline di-build →
+        // jank di tab Timeline. Yang dibuang di atas (pesan + foto chat
+        // full-res + imageCache) sudah cukup untuk tujuan hemat memori.
         try {
           // clearAll() sudah membuang Flutter imageCache + cache app terdaftar.
           ImageCacheHygiene.clearAll();
         } catch (_) {}
         unawaited(NativeImage.trim());
       } else if (pausedFor != null && pausedFor.inSeconds >= 15) {
-        // Background sedang (15-60 dtk) → trim RAM foto saja (paling besar,
-        // paling murah dimuat ulang). Pesan tetap di RAM supaya chat instan.
+        // Background sedang (15-60 dtk) → trim RAM foto full-res saja (paling
+        // besar, paling murah dimuat ulang). Thumb + pesan tetap di RAM
+        // supaya chat instan.
         try {
-          PhotoCache.instance.trimMemCache();
-        } catch (_) {}
-        try {
-          PostPhotoCache.instance.trimMemCache();
+          PhotoCache.instance.trimHeavyCache();
         } catch (_) {}
       }
       // PERF: hangatkan koneksi HTTP Supabase DULUAN (fire-and-forget).
