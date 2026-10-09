@@ -1247,12 +1247,6 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     } catch (_) {}
     if (!cardCtx.mounted || msgs.isEmpty) return;
     HapticFeedback.mediumImpact();
-    // Hitung posisi card agar bubble nempel tepat di atas/bawah card
-    final box = cardCtx.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final cardTopLeft = box.localToGlobal(Offset.zero);
-    final cardSize = box.size;
-    final cardCenterX = cardTopLeft.dx + cardSize.width / 2;
     final overlay = Overlay.of(cardCtx);
     late OverlayEntry entry;
     entry = OverlayEntry(
@@ -1262,19 +1256,25 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         final bubbleHeight = (msgs.length * 48.0 + 40)
             .clamp(72, 280)
             .toDouble();
-        double left = cardCenterX - bubbleWidth / 2;
-        left = left.clamp(12, size.width - bubbleWidth - 12);
-        // Nempel tepat: 0 gap + ekor 8px
-        final spaceAbove = cardTopLeft.dy;
-        final spaceBelow = size.height - (cardTopLeft.dy + cardSize.height);
-        final isAbove =
-            spaceAbove > spaceBelow && spaceAbove >= bubbleHeight + 16;
+        // Anchor = TITIK JARI saat long-press (globalPos), bukan render box
+        // kartu. Sebelumnya pakai cardCtx.findRenderObject() yang bisa
+        // menunjuk RenderObject lain (Builder bukan RenderObject) → bubble
+        // kadang jauh dari kartu. Jari selalu tepat di atas kartu.
+        final anchorX = globalPos.dx;
+        final anchorY = globalPos.dy;
+        double left = anchorX - bubbleWidth / 2;
+        left = left.clamp(12.0, size.width - bubbleWidth - 12.0);
+        // Utamakan muncul di ATAS jari (dekat kartu); kalau tak cukup ruang
+        // → di bawah jari. Gap kecil 8px.
+        final spaceAbove = anchorY;
+        final isAbove = spaceAbove >= bubbleHeight + 16;
         double top;
         if (isAbove) {
-          top = cardTopLeft.dy - bubbleHeight - 8;
+          top = anchorY - bubbleHeight - 8;
         } else {
-          top = cardTopLeft.dy + cardSize.height + 8;
+          top = anchorY + 8;
         }
+        top = top.clamp(8.0, size.height - bubbleHeight - 8.0);
         return Stack(
           children: [
             Positioned.fill(
