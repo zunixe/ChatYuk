@@ -120,7 +120,8 @@ class AdminChatViewScreen extends ConsumerStatefulWidget {
   ConsumerState<AdminChatViewScreen> createState() => _AdminChatViewScreenState();
 }
 
-class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
+class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen>
+    with WidgetsBindingObserver {
   List<MessageModel> _msgs = [];
   // True setelah SQLite/server pertama selesai — supaya empty-state TIDAK
   // berkedip muncul sesaat sebelum pesan terisi.
@@ -140,7 +141,7 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
   // last_read_at kedua peserta (uid → waktu) — dasar hitung centang-2
   // sama seperti chat asli (bukan isMe).
   Map<String, DateTime> _lastRead = {};
-  late Timer _pollTimer;
+  Timer? _pollTimer;
   RealtimeChannel? _channel;
   /// Client pemilik [\_channel] — untuk `removeChannel` saat dispose (buang
   /// channel sepenuhnya, cegah bocor saat buka-tutup chat berulang).
@@ -279,6 +280,7 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Sisi kiri langsung dari judul/chatId — jangan tunggu pesan.
     // Kalau nunggu _applyMessages + kena early-return (cache == server),
     // _leftUid tetap null → semua bubble kanan.
@@ -309,9 +311,44 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
     });
   }
 
+  // ── Lifecycle: STOP polling saat app di-background ─────────────────────
+  //
+  // AKAR KELUHAN "admin lebih ngelag dari app user saat habis background":
+  // layar ini dulu TIDAK punya handler lifecycle, jadi `_pollTimer` +
+  // `_callTimer` (15 dtk) TETAP menembak RPC selama app di background — dan
+  // realtime channel juga tetap terbuka. Saat resume, RPC-RPC itu bertumpuk
+  // dengan rangkaian resume (warm-up koneksi + auth refresh + stats poll +
+  // Heartbeat presence) → server antre → buka chat pertama terasa ~1 dtk.
+  //
+  // App USER tidak punya masalah ini: `_MainNav`/`AdminPanelScreen` (induk)
+  // membatalkan semua timer saat pause. Layar ini sebelumnya luput.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _pollTimer?.cancel();
+      _callTimer?.cancel();
+      _callTimer = null;
+    } else if (state == AppLifecycleState.resumed) {
+      if (!mounted) return;
+      // Segarkan sekali (ambil pesan yang masuk selama background), lalu
+      // hidupkan kembali timer. Satu fetch — bukan tumpukan.
+      unawaited(_poll());
+      _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
+      if (_callTimer == null) {
+        _callTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+          if (!mounted) return;
+          final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+          await admin.fetchActiveCalls();
+          if (mounted) await _syncCallWatch();
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
-    _pollTimer.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _pollTimer?.cancel();
     _callTimer?.cancel();
     _photoSetStateTimer?.cancel();
     // Buang channel SEPENUHNYA (bukan hanya unsubscribe). `unsubscribe()`
@@ -550,8 +587,23 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen> {
       });
       _loadPhotos();
     }
-    // 2) SQLite (cache lokal) — cepat, tetap tanpa skeleton. Tampilkan begitu
-    //    ada, server menyusul & menggantikan.
+    // 2) DISK cache MONITOR (`admin_chatmsg_<id>`) — kunci SAMA dengan
+    //    prefetchChatMessages saat tap daftar. Dulu di sini memakai
+    //    `cacheKeyFor(chatId)` (kunci cache USER) → SELALU KOSONG, sehingga
+    //    buka-pertama jatuh ke RPC penuh (tunggu ~1 dtk) dan baru cepat di
+    //    buka berikutnya (data sudah di memori). Sekarang jalur disk monitor
+    //    dibaca lebih dulu → buka pertama sudah terisi.
+    try {
+      final raw = await MessageCache.instance.loadRawList(
+        AdminBase.adminChatMsgKey(widget.chatId),
+      );
+      if (mounted && raw.isNotEmpty && _msgs.isEmpty) {
+        if (_applyRawMessages(raw)) {
+          _hasMore = admin.chatMessagesHasMoreFor(widget.chatId);
+        }
+      }
+    } catch (_) {}
+    // 2b) SQLite (cache lokal versi USER) — pelengkap bila monitor belum ada.
     try {
       final cached = await MessageCache.instance.loadMessages(_chatKey);
       if (mounted && cached.isNotEmpty && _msgs.isEmpty) {

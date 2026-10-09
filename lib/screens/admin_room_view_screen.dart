@@ -41,7 +41,8 @@ class AdminRoomViewScreen extends ConsumerStatefulWidget {
       _AdminRoomViewScreenState();
 }
 
-class _AdminRoomViewScreenState extends ConsumerState<AdminRoomViewScreen> {
+class _AdminRoomViewScreenState extends ConsumerState<AdminRoomViewScreen>
+    with WidgetsBindingObserver {
   Timer? _pollTimer;
   RealtimeChannel? _channel;
   SupabaseClient? _channelClient;
@@ -50,6 +51,7 @@ class _AdminRoomViewScreenState extends ConsumerState<AdminRoomViewScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final admin =
         ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(() {
@@ -60,8 +62,24 @@ class _AdminRoomViewScreenState extends ConsumerState<AdminRoomViewScreen> {
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
   }
 
+  // Stop polling saat app di-background (sama seperti admin_chat_view_screen):
+  // tanpa ini timer 5 dtk terus menembak RPC selama background → saat resume
+  // RPC bertumpuk dengan rangkaian resume → terasa ngelag.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    } else if (state == AppLifecycleState.resumed) {
+      if (!mounted) return;
+      unawaited(_poll());
+      _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     // Buang channel SEPENUHNYA (bukan hanya unsubscribe) — cegah bocor socket
     // saat buka-tutup grup berulang (pola admin_chat_view_screen).
