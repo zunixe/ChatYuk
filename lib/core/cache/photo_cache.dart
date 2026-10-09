@@ -94,9 +94,11 @@ class PhotoCache {
   String? _thumbGet(String messageId) => _thumbMem[messageId];
 
   /// Buang SEMUA foto/thumb dari RAM saja (file disk tetap). Dipakai saat OS
-  /// memberi sinyal memory-pressure & saat app lama di-background: tiap entri
-  /// menahan base64 foto (bisa ~2MB) → melepasnya mencegah GC storm. Foto
-  /// dibaca ulang dari disk (murah) saat dibutuhkan lagi.
+  /// memberi sinyal memory-pressure. Melepas semuanya mencegah GC storm —
+  /// tapi WAJIB tahu konsekuensinya: buka chat berikutnya harus membaca +
+  /// men-decode ULANG semua thumbnail dari disk (terukur 17MB alokasi /
+  /// 372 LOS objects → GC blok 34ms → frame stall 200ms saat resume).
+  /// Untuk background biasa pakai [trimHeavyCache] (thumb dipertahankan).
   void trimMemCache() {
     _memCache.clear();
     _memChars = 0;
@@ -104,6 +106,16 @@ class PhotoCache {
     _thumbMem.clear();
     _thumbMemChars = 0;
     _thumbChatOf.clear();
+  }
+
+  /// Buang HANYA foto full-res (paling besar per entri), PERTAHANKAN thumb
+  /// yang sedang dipakai bubble. Dipakai saat resume dari background:
+  /// melepas memori besar tetap dilakukan, tapi buka chat berikutnya TIDAK
+  /// perlu men-decode ulang thumbnail → tidak ada GC blok / frame stall.
+  void trimHeavyCache() {
+    _memCache.clear();
+    _memChars = 0;
+    _memChatOf.clear();
   }
 
   Future<Directory> _folder() async {
