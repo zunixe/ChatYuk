@@ -484,30 +484,59 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   /// Dialog pemilih tanggal lahir. Menyimpan via AuthNotifier.updateProfile.
+  bool _datePickerOpen = false;
   Future<void> _pickBirthDate(BuildContext context) async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    final now = DateTime.now();
-    final current = auth.profile?.birthDate;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime(now.year - 20, now.month, now.day),
-      firstDate: DateTime(1900),
-      lastDate: now,
-      helpText: s.titlePickBirthDate,
-    );
-    if (picked == null || !mounted) return;
+    // Guard anti dobel: tap 2× cepat bisa memicu 2 date picker bertumpuk
+    // (rasa "ngelag"). Hanya satu boleh jalan.
+    if (_datePickerOpen) return;
+    _datePickerOpen = true;
     try {
-      await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).updateProfile(birthDate: picked);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.msgBirthDateSaved)),
+      final s = ProviderScope.containerOf(context, listen: false)
+          .read(localeProvider)
+          .s;
+      final auth = ProviderScope.containerOf(context, listen: false)
+          .read(authProvider.notifier);
+      final now = DateTime.now();
+      final current = auth.profile?.birthDate;
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: current ?? DateTime(now.year - 20, now.month, now.day),
+        firstDate: DateTime(1900),
+        lastDate: now,
+        helpText: s.titlePickBirthDate,
+        // Theme lokal: pastikan dialog memakai skema app (solid, bukan
+        // default terang) tanpa mewarisi konfigurasi berat dari atas.
+        builder: (ctx, child) => Theme(
+          data: AppTheme.isDark
+              ? ThemeData.dark(useMaterial3: true).copyWith(
+                  colorScheme: Theme.of(ctx).colorScheme,
+                  datePickerTheme: DatePickerThemeData(
+                    backgroundColor: AppTheme.bgCard,
+                    headerBackgroundColor: AppTheme.primary,
+                    headerForegroundColor: Colors.white,
+                  ),
+                )
+              : Theme.of(ctx),
+          child: child!,
+        ),
       );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.errGeneric)),
-      );
+      if (picked == null || !mounted) return;
+      try {
+        await ProviderScope.containerOf(context, listen: false)
+            .read(authProvider.notifier)
+            .updateProfile(birthDate: picked);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.msgBirthDateSaved)),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.errGeneric)),
+        );
+      }
+    } finally {
+      _datePickerOpen = false;
     }
   }
 

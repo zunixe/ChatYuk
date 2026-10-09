@@ -23,21 +23,37 @@ const WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') ?? '';
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
+/** Kirim pesan. `opts`: { parse_mode?, keyboard?, resize_keyboard?,
+ *  one_time_keyboard?, remove_keyboard? } — keyboard dikirim sebagai
+ *  reply_markup; sisanya diteruskan langsung ke Telegram. */
 async function sendMessage(
   chatId: number,
   text: string,
-  replyMarkup?: Record<string, unknown>,
+  opts?: {
+    parse_mode?: string;
+    keyboard?: unknown;
+    resize_keyboard?: boolean;
+    one_time_keyboard?: boolean;
+    remove_keyboard?: boolean;
+  },
 ): Promise<void> {
   if (!BOT_TOKEN) return;
+  const body: Record<string, unknown> = { chat_id: chatId, text };
+  if (opts?.parse_mode) body.parse_mode = opts.parse_mode;
+  if (opts?.remove_keyboard) {
+    body.reply_markup = { remove_keyboard: true };
+  } else if (opts?.keyboard) {
+    body.reply_markup = {
+      keyboard: opts.keyboard,
+      resize_keyboard: opts.resize_keyboard ?? true,
+      one_time_keyboard: opts.one_time_keyboard ?? true,
+    };
+  }
   try {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        reply_markup: replyMarkup,
-      }),
+      body: JSON.stringify(body),
     });
   } catch (_) { /* best-effort */ }
 }
@@ -82,8 +98,13 @@ Deno.serve(async (req) => {
       if (data?.id) {
         await sendMessage(
           chatId,
-          'Tekan tombol di bawah untuk membagikan nomor HP kamu dan menyelesaikan verifikasi.',
+          '👋 Halo! Ini *ChatYuk*.\n\n' +
+            'Untuk menyelesaikan verifikasi, silakan tekan tombol *📱 Verifikasi Nomor Saya* di bawah. ' +
+            'Telegram akan menampilkan konfirmasi "bagikan nomor" — itu *aman*, nomor kamu ' +
+            'hanya dipakai ChatYuk untuk menandai akunmu terverifikasi (badge centang emas). ' +
+            'Kami tidak pernah membagikan nomornya ke pengguna lain.',
           {
+            parse_mode: 'Markdown',
             keyboard: [[{ text: '📱 Verifikasi Nomor Saya', request_contact: true }]],
             resize_keyboard: true,
             one_time_keyboard: true,
@@ -92,13 +113,17 @@ Deno.serve(async (req) => {
       } else {
         await sendMessage(
           chatId,
-          'Link verifikasi tidak valid atau sudah kedaluwarsa. Buka ulang dari aplikasi ChatYuk.',
+          'Maaf, link verifikasi ini sudah tidak berlaku 🙂\n\n' +
+            'Silakan buka aplikasi *ChatYuk* dan mulai verifikasi ulang dari menu Profil.',
+          { parse_mode: 'Markdown' },
         );
       }
     } else {
       await sendMessage(
         chatId,
-        'Untuk memverifikasi nomor, buka link verifikasi dari aplikasi ChatYuk.',
+        'Halo! Untuk memverifikasi nomor HP, silakan buka aplikasi *ChatYuk* ' +
+          'dan ikuti langkah verifikasi dari menu Profil ya 🙂',
+        { parse_mode: 'Markdown' },
       );
     }
     return new Response('ok', { status: 200 });
@@ -122,7 +147,9 @@ Deno.serve(async (req) => {
     if (!row?.token) {
       await sendMessage(
         chatId,
-        'Tidak ada verifikasi yang sedang berjalan. Buka ulang dari aplikasi ChatYuk.',
+        'Sepertinya tidak ada verifikasi yang sedang berjalan 🙂\n\n' +
+          'Silakan buka aplikasi *ChatYuk* lalu mulai verifikasi dari menu Profil',
+        { parse_mode: 'Markdown' },
       );
       return new Response('ok', { status: 200 });
     }
@@ -138,14 +165,18 @@ Deno.serve(async (req) => {
     if (error || !okVerified) {
       await sendMessage(
         chatId,
-        'Nomor yang dibagikan tidak cocok dengan nomor yang kamu daftarkan. Coba lagi dari aplikasi ChatYuk.',
+        'Hmm, nomor yang kamu bagikan tidak cocok dengan nomor yang ' +
+          'didaftarkan di ChatYuk 🙂\n\nPastikan kamu membagikan nomor yang benar, ' +
+          'lalu ulangi verifikasi dari aplikasi ChatYuk.',
         { remove_keyboard: true },
       );
     } else {
       await sendMessage(
         chatId,
-        '✅ Nomor HP kamu berhasil diverifikasi! Kembali ke aplikasi ChatYuk.',
-        { remove_keyboard: true },
+        '✅ Nomor HP kamu *berhasil diverifikasi*!\n\n' +
+          'Terima kasih sudah memverifikasi. Silakan kembali ke aplikasi *ChatYuk* — ' +
+          'badge centang emas sudah aktif di profilmu 🎉',
+        { parse_mode: 'Markdown', remove_keyboard: true },
       );
     }
     return new Response('ok', { status: 200 });
