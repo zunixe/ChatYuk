@@ -24,15 +24,18 @@ class TikTokService {
   TikTokService._();
   static final TikTokService instance = TikTokService._();
 
-  static const MethodChannel _channel =
+  static const MethodChannel _realChannel =
       MethodChannel('com.chatyuk.chatyuk/tiktok');
+
+  /// Channel efektif — mock-able di test (default channel asli).
+  static MethodChannel get _channel => channelForTest;
 
   bool _initTried = false;
   bool _ready = false;
   String? _pendingIdentifyExternalId;
 
   @visibleForTesting
-  static MethodChannel channelForTest = _channel;
+  static MethodChannel channelForTest = _realChannel;
 
   /// True bila SDK sudah ter-init di native.
   bool get isReady => _ready;
