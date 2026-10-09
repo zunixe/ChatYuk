@@ -133,12 +133,14 @@ class StoryNotifier extends Notifier<StoryState> {
       try {
         final cached = await MessageCache.instance.loadRawList(_kTrayKey);
         if (cached.isNotEmpty && _tray.isEmpty) {
-          // Buang item cache yang SUDAH KEDALUWARSA sebelum ditampilkan —
-          // kalau tidak, story lama tampil sekejap lalu hilang setelah server
-          // refresh (gejala "ngeblink" saat cold start).
+          // Buang item cache yang SUDAH KEDALUWARSA — DAN yang TAK PUNYA
+          // expires_at (cache format lama): kalau ditampilkan, story yang
+          // sudah lewat muncul sekejap lalu hilang setelah server refresh
+          // (gejala "ngeblink" saat cold start). Server selalu kirim
+          // expires_at, jadi cache valid pasti punya.
           _tray = cached
               .map(StoryTrayItem.fromMap)
-              .where((t) => !t.isExpired)
+              .where((t) => t.isCacheFresh)
               .toList();
           if (_tray.isNotEmpty) {
             warmTrayThumbs();

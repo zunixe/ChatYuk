@@ -103,6 +103,28 @@ void main() {
       expect(noExpiry.isExpired, isFalse);
     });
 
+    test('isCacheFresh: tanpa expires_at = TIDAK layak dari cache (anti-blink)',
+        () {
+      // Cache format lama tanpa expires_at → jangan tampilkan (server selalu
+      // kirim expires_at). Mencegah story kedaluwarsa tampil sekejap.
+      final noExpiry = StoryTrayItem(authorId: 'x', authorName: 'X');
+      expect(noExpiry.isCacheFresh, isFalse);
+
+      final active = StoryTrayItem(
+        authorId: 'y',
+        authorName: 'Y',
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      );
+      expect(active.isCacheFresh, isTrue);
+
+      final expired = StoryTrayItem(
+        authorId: 'z',
+        authorName: 'Z',
+        expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
+      );
+      expect(expired.isCacheFresh, isFalse);
+    });
+
     test('hasOwnStory + ownItem', () async {
       when(() => service.fetchTrayRaw()).thenAnswer(
         (_) async => [

@@ -170,6 +170,12 @@ class StoryTrayItem {
   bool get isExpired =>
       expiresAt != null && !expiresAt!.isAfter(DateTime.now());
 
+  /// Layak ditampilkan DARI CACHE (cold start). `expiresAt` null = data cache
+  /// format lama (tanpa kolom expires_at) → TIDAK layak: kalau ditampilkan,
+  /// story yang sudah lewat akan muncul sekejap lalu hilang saat server
+  /// refresh = "ngeblink". Server (fresh) selalu kirim expires_at.
+  bool get isCacheFresh => expiresAt != null && !isExpired;
+
   factory StoryTrayItem.fromMap(Map<String, dynamic> m) {
     return StoryTrayItem(
       authorId: '${m['author_id'] ?? ''}',
