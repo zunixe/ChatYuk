@@ -108,10 +108,19 @@ class MessageCache {
     _memCacheUpdate(chatKey, messages);
     // Salin ringan (strip imageData) SEKARANG (di frame pemanggil), lalu
     // tulis disk di microtask agar tidak berebut dengan transisi.
+    // KECUALI path storage voice (`voice/...`, ~60 char): bubble voice
+    // HANYA tampil bila imageData terisi — kalau ikut di-strip, cold start
+    // menampilkan baris jam kecil dulu, card voice baru muncul saat RPC
+    // segar tiba (berkedip). Path mungil aman disimpan; base64 besar
+    // (foto/voice pending) tetap di-strip seperti semula.
     final rows = messages
         .map((m) {
           final map = m.toMap();
-          map['imageData'] = '';
+          final img = map['imageData'];
+          final keepVoicePath = m.type == 'voice' &&
+              img is String &&
+              img.startsWith('voice/');
+          if (!keepVoicePath) map['imageData'] = '';
           return MessageModel.fromMap(m.id, map);
         })
         .toList();
