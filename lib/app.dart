@@ -656,6 +656,7 @@ class _MainNavState extends ConsumerState<_MainNav>
   Timer? _idleTrimTimer;
   DateTime _lastInteractionAt = DateTime.now();
 
+
   // Instance halaman dibuat ulang HANYA saat mode terang/gelap berubah —
   // bukan tiap tab switch (menghindari rebuild berlebihan).
   List<Widget>? _pages;
@@ -795,6 +796,16 @@ class _MainNavState extends ConsumerState<_MainNav>
       // App di-kill/force-close → set idle (offline otomatis setelah threshold).
       auth.goIdle();
     } else if (state == AppLifecycleState.resumed) {
+      // CATATAN (dicoba & TIDAK berhasil — jangan ulangi): stall 181ms pada
+      // frame pertama setelah resume BUKAN kode kita, melainkan DDIC idle
+      // mode MIUI. Bukti: framestats ui_work=0ms, Vsync melompat +181ms;
+      // logcat "MI-SF: isTpIdleScene, mAverageFrameRate is 0" →
+      // "isDdicIdleMode: 1". Percobaan (a) kunci preferredDisplayModeId=60Hz
+      // dan (b) paksa frame bergerak 300ms saat resume — DUA-DUANYA GAGAL
+      // (54 event DDIC idle tetap muncul). MIUI butuh arus frame terus-
+      // menerus; begitu berhenti, panel langsung idle lagi. Ini kebijakan
+      // sistem (hemat baterai), di luar kendali app. Yang bisa dikurangi
+      // HANYA kerja app-nya (sudah: GC storm 158→17, PSS 385→220MB).
       // PERF: kalau app lama di-background (>60 dtk), buang cache pesan
       // in-memory (tiap chat menahan pesan + base64 foto) — cegah akumulasi
       // yang bikin "ngetik ngelag setelah dipakai lama". Background sebentar
