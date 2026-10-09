@@ -1,5 +1,6 @@
 ﻿import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart' show compute;
 import '../../utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -197,8 +198,12 @@ class MessageCache {
       if (rows.isEmpty) return;
       // Memori dulu (sinkron untuk pembaca berikutnya), lalu disk.
       _putMemRawList(key, List<Map<String, dynamic>>.of(rows));
+      // jsonEncode list besar (mis. 100 device + pesan) di ISOLATE — encode
+      // di UI thread mem-block frame (terukur: resume admin → GC 8MB LOS +
+      // stall 181ms karena encode list device). `compute` menghindari itu.
+      final encoded = await compute(_encodeJson, rows);
       await _ensureDb();
-      await MessageStore.instance.saveKv(key, jsonEncode(rows));
+      await MessageStore.instance.saveKv(key, encoded);
     } catch (_) {}
   }
 
@@ -491,7 +496,6 @@ class MessageCache {
   }
 
   Future<void> clearAll() => clearAllLegacy();
-
   /// Hapus HANYA cache format lama v1 â€” cache v2 aktif tetap utuh.
   /// Dipanggil saat app startup agar pesan cached tetap tersedia.
   Future<void> clearLegacyV1Only() async {
@@ -503,3 +507,6 @@ class MessageCache {
     for (final k in keys) await prefs.remove(k);
   }
 }
+
+/// Encode JSON di isolate (top-level agar bisa dipakai `compute`).
+String _encodeJson(List<Map<String, dynamic>> rows) => jsonEncode(rows);
