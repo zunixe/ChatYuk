@@ -494,11 +494,15 @@ class _MicRecordButtonState extends State<MicRecordButton>
                   ? Colors.red
                   : AppTheme.primary;
               final lockP = _lockProgress;
-              // Saat locked: bulatan TIDAK diberi offset inner — ia sudah ikut
-              // terangkat oleh transform luar (hitDy). Offset ganda dulu membuat
-              // bulatan tampak di -120px sementara kotak sentuh di -60px →
-              // bulatan dock tidak bisa dipencet. Sekarang visual = hit.
-              final circleDy = _lockedNow ? 0.0 : _dragDy;
+              // CENTER-SEJajar: bulatan di-anchor bawah (hindari luber ke
+              // bawah), lalu digeser TURUN sebesar setengah pertumbuhannya
+              // agar CENTER tetap sejajar tombol mic. Tanpa ini, saat membesar
+              // (geser-kiri pertama / recording) circle naik ~0.4×size → tampak
+              // "agak di atas" jalur bubble. Dengan kompensasi ini, geser-kiri
+              // (tanpa lock) dan lock→bawah→kiri sama-sama berada di JALUR yang
+              // sama, dan pertumbuhan jadi simetris (tidak overlap ke atas).
+              final circleDy = (_lockedNow ? 0.0 : _dragDy) +
+                  (diameter - widget.size) / 2;
               return SizedBox(
                 width: widget.size,
                 height: widget.size,
