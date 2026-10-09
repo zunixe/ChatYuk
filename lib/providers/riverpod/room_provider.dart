@@ -283,6 +283,14 @@ class RoomNotifier extends Notifier<RoomState> {
     await _service.markRoomRead(roomId);
   }
 
+  /// Room dari daftar explore saat ini berdasarkan id (tanpa fetch).
+  RoomModel? exploreRoomById(String id) {
+    for (final r in _explore) {
+      if (r.id == id) return r;
+    }
+    return null;
+  }
+
   // ── Passthrough (Fase 9b) ──
   final PrivateRoomService _prv = PrivateRoomService.instance;
   String? get prvUid => _prv.uid;
