@@ -363,10 +363,22 @@ class NativeImage {
     int quality = 70,
   }) async {
     if (base64.isEmpty) return null;
+    // Decode base64 di ISOLATE — string foto full-res (MB) bila di-decode di
+    // UI thread mem-block ratusan ms per foto (terukur frame 150ms saat buka
+    // chat admin berisi banyak foto baru). Bytes hasil isolate dikirim via
+    // channel sebagai typed-data (memcpy cepat).
+    Uint8List? bytes;
+    try {
+      bytes = await compute(_b64ToBytes, base64);
+    } catch (_) {
+      bytes = null;
+    }
+    bytes ??= _tryB64(base64);
+    if (bytes == null) return null;
     if (await isAvailable()) {
       try {
         final r = await _ch.invokeMethod<String>('processAdminThumb', {
-          'bytes': base64Decode(base64),
+          'bytes': bytes,
           'maxW': maxW,
           'quality': quality,
         });
@@ -374,8 +386,6 @@ class NativeImage {
         return null;
       } catch (_) {}
     }
-    final bytes = _tryB64(base64);
-    if (bytes == null) return null;
     return compute(dartimg.dartAdminThumbB64, (bytes, maxW, quality));
   }
 
@@ -450,6 +460,18 @@ class NativeImage {
     int quality = 75,
   }) async {
     if (base64.isEmpty) return null;
+    // String base64 BESAR (>~500KB biner) jangan lewat method channel —
+    // encode UTF-8 di UI thread mem-block puluhan-ratusan ms per foto.
+    // Alihkan langsung ke isolate Dart (hasil sama, tanpa block UI).
+    if (base64.length > 700000) {
+      try {
+        final r = await compute(
+          dartimg.dartDownscaleB64,
+          (base64, targetWidth, quality),
+        );
+        if (r != null && r.isNotEmpty) return r;
+      } catch (_) {}
+    }
     if (await isAvailable()) {
       try {
         final r = await _ch.invokeMethod<String>('downscaleB64', {
