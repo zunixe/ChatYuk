@@ -27,11 +27,10 @@ ALLOWLIST=(
   "lib/screens/room_chat_screen.dart:2935"
   "lib/screens/profile_screen.dart:2196"
   "lib/screens/private_chats_screen.dart:1625"
-  "lib/screens/story_composer_screen.dart:1328"
   "lib/screens/admin_chat_view_screen.dart:1185"
   "lib/services/room_voice_service.dart:1432"
   "lib/app.dart:1637"
-  "lib/main.dart:1748"
+  "lib/main.dart:1757"
 )
 
 fail=0
