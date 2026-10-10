@@ -263,24 +263,22 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         return null;
       }
     }
-    // Cache disk (putar ulang instan) dulu.
-    final cached = await MediaDiskCache.instance.read(widget.videoData);
+    // File temp STABIL per path — dipakai sebagai cache playback (bukan
+    // MediaDiskCache). KENAPA: video bisa puluhan MB; menyimpannya di
+    // MediaDiskCache (kuota 250MB bersama foto/avatar/voice) meng-evict LRU
+    // → poster/foto lain hilang → "cold start reload lagi". File temp ini
+    // di-manage OS (bukan kuota media).
     final dir = await getTemporaryDirectory();
-    // Nama file temp stabil per path — hashCode cukup (file sementara,
-    // bukan cache permanen; MediaDiskCache tetap sumber kebenaran).
     final target = File(
       '${dir.path}/chat_vid_${widget.videoData.hashCode.abs()}.mp4',
     );
-    if (cached != null && cached.isNotEmpty) {
-      await target.writeAsBytes(cached, flush: true);
-      return target;
+    if (await target.exists() && await target.length() > 0) {
+      return target; // sudah ada dari sesi/putar sebelumnya → play instan.
     }
     final bytes = await safeStorage(context).downloadBytes(
       widget.videoData,
     );
     if (bytes == null || bytes.isEmpty) return null;
-    // Simpan ke disk cache supaya putar ulang tidak unduh lagi.
-    unawaited(MediaDiskCache.instance.write(widget.videoData, bytes));
     await target.writeAsBytes(bytes, flush: true);
     return target;
   }
