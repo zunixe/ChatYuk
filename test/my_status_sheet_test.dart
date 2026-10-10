@@ -9,7 +9,7 @@ import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/config/theme.dart';
 import 'package:chatyuk/models/privacy_settings.dart';
 import 'package:chatyuk/providers/riverpod/privacy_provider.dart';
-import 'package:chatyuk/screens/online_users_screen.dart';
+import 'package:chatyuk/screens/online_users/widgets/my_status_sheet.dart';
 import 'package:chatyuk/services/privacy_service.dart';
 import 'package:chatyuk/widgets/person_avatar.dart';
 
