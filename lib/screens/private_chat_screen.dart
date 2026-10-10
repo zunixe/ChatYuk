@@ -291,7 +291,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
   // ── Kontrak ChatPhotoSendMixin ──
   @override
-  Future<void> photoDispatch({
+  Future<String?> photoDispatch({
     required String imageData,
     required String type,
     required String senderId,
@@ -304,7 +304,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     int? viewOnceSecs,
     int? videoDurationMs,
   }) async {
-    await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
+    return ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
       senderId: senderId,
       senderName: senderName,
