@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -25,7 +24,6 @@ import '../providers/riverpod/points_provider.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/admin_gate.dart';
-import '../core/nav_guard.dart';
 import '../utils.dart';
 import '../main.dart';
 import 'room_members_sheet.dart';
@@ -33,11 +31,14 @@ import 'group_info_screen.dart';
 import 'group_media_screen.dart';
 import '../widgets/app_gesture.dart';
 import '../widgets/date_chip.dart';
-import '../widgets/person_avatar.dart';
 import '../widgets/private_chat_message.dart';
 import 'room_chat/widgets/room_widgets.dart';
 import 'room_chat/widgets/room_message_bubble.dart';
 import 'room_chat/widgets/voice_stage_strip.dart';
+import 'room_chat/widgets/broadcast_stage.dart';
+import 'room_chat/widgets/voice_diagnostics_sheet.dart';
+import 'room_chat/widgets/room_search_sheet.dart';
+import 'room_chat/widgets/room_user_action_sheet.dart';
 import '../services/room_voice_service.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../widgets/chat_composer_input.dart';
@@ -49,11 +50,8 @@ import '../core/call/call_permissions.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../utils/mention.dart';
 import '../widgets/gift_fly_overlay.dart';
-import '../widgets/social_counts_line.dart';
 import '../widgets/room_gift_panel.dart';
 import '../config/gifts.dart';
-import 'private_chat_screen.dart';
-import 'user_info_screen.dart';
 import '../providers/riverpod/theme_provider.dart';
 import 'package:flutter/services.dart';
 import '../widgets/message_reaction_bar.dart';
@@ -532,122 +530,16 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     final session = _voiceSession;
     if (session == null || !mounted) return;
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    Map<String, dynamic>? diag;
-    try {
-      diag = await session
-          .diagnostics()
-          .timeout(const Duration(seconds: 8));
-    } catch (_) {
-      diag = null;
-    }
-    if (!mounted) return;
     final names = {for (final u in _lastRoomUsers) u.uid: u.nickname};
-    final me = _auth.uid;
-    final List<Widget> rows = [];
-    if (diag == null) {
-      rows.add(Text(s.storyViewersLoadFail, style: AppText.bodySmall));
-    } else {
-      rows.add(
-        Text(
-          'sess=${diag['sess']} joined=${diag['joined']} '
-          'stage=${diag['onStage']} muted=${diag['muted']} '
-          'pairing=${diag['pairing']} mic=${diag['mic']}',
-          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-        ),
-      );
-      final peers = Map<String, dynamic>.from(
-        (diag['peers'] as Map?) ?? const {},
-      );
-      if (peers.isEmpty) {
-        rows.add(
-          Text(
-            s.roomVoiceNoSpeakers,
-            style: AppText.bodySmall.copyWith(
-              color: AppTheme.textSecondary,
-            ),
-          ),
-        );
-      }
-      peers.forEach((key, v) {
-        final m = Map<String, dynamic>.from(v as Map? ?? const {});
-        final uid = key.startsWith('dn_') ? key.substring(3) : key;
-        final name = uid == me ? 'Kamu' : (names[uid] ?? uid);
-        final short = name.length > 10 ? '${name.substring(0, 10)}…' : name;
-        rows.add(
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              '$short [${m['dir'] ?? '?'}] ${m['conn'] ?? '?'}'
-              '/${m['ice'] ?? '?'} ${m['pair'] ?? 'no-pair'}'
-              ' in=${m['in'] ?? '-'} out=${m['out'] ?? '-'}',
-              style: AppText.bodySmall.copyWith(
-                color: AppTheme.textPrimary,
-              ),
-            ),
-          ),
-        );
-      });
-      final speakers = (diag['speakers'] as List?) ?? const [];
-      rows.add(
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(
-            'stage(${speakers.length}): ${speakers.join(', ')}',
-            style: AppText.caption.copyWith(
-              color: AppTheme.textSecondary,
-            ),
-          ),
-        ),
-      );
-    }
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.bgCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.bug_report_outlined,
-                    size: 20,
-                    color: AppTheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(s.roomVoiceDiagTitle, style: AppText.bodyStrong),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                s.roomVoiceDiagHint,
-                style: AppText.caption.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...rows,
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text(s.btnClose),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    await showVoiceDiagnosticsSheet(
+      context,
+      session: session,
+      names: names,
+      myUid: _auth.uid,
+      s: s,
     );
   }
+
 
   /// Tap avatar speaker lain → sheet mute (hanya bila boleh moderasi).
   Future<void> _onSpeakerTap(String uid) async {
@@ -1284,124 +1176,14 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   /// (loadOlder berulang bila belum termuat, maks 10x).
   Future<void> _openRoomSearch() async {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final qCtrl = TextEditingController();
-    List<Map<String, dynamic>> results = [];
-    bool searching = false;
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.bgCard,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) {
-          Future<void> doSearch(String q) async {
-            final query = q.trim();
-            if (query.length < 2) {
-              setSheet(() => results = []);
-              return;
-            }
-            setSheet(() => searching = true);
-            try {
-              final rows = await Supabase.instance.client
-                  .from('messages')
-                  .select('id,text,sender_name,sender_id,created_at')
-                  .eq('room_id', widget.room.id)
-                  .ilike('text', '%$query%')
-                  .order('created_at', ascending: false)
-                  .limit(30);
-              if (ctx.mounted) {
-                setSheet(() {
-                  results = (rows as List)
-                      .map((e) => Map<String, dynamic>.from(e as Map))
-                      .toList();
-                  searching = false;
-                });
-              }
-            } catch (_) {
-              if (ctx.mounted) setSheet(() => searching = false);
-            }
-          }
-
-          return SafeArea(
-            child: SizedBox(
-              height: MediaQuery.of(ctx).size.height * 0.7,
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                    child: TextField(
-                      autofocus: true,
-                      style:
-                          AppText.body.copyWith(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        prefixIcon:
-                            const Icon(Icons.search_rounded, size: 20),
-                        hintText: s.roomSearchHint,
-                      ),
-                      onChanged: (q) {
-                        // Debounce: guard sheet tertutup dulu, baru sentuh
-                        // controller (setelah dispose = exception).
-                        Future.delayed(
-                            const Duration(milliseconds: 350), () {
-                          if (!ctx.mounted) return;
-                          if (qCtrl.text != q) return;
-                          doSearch(q);
-                        });
-                      },
-                    ),
-                  ),
-                  if (searching)
-                    const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2.2),
-                      ),
-                    )
-                  else if (results.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(s.roomSearchEmpty,
-                          style: AppText.bodySmall.copyWith(
-                              color: AppTheme.textSecondary)),
-                    )
-                  else
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: results.length,
-                        itemBuilder: (_, i) {
-                          final r = results[i];
-                          return ListTile(
-                            dense: true,
-                            title: Text('${r['text'] ?? ''}',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppText.bodySmall),
-                            subtitle: Text(
-                                '${r['sender_name'] ?? '?'}',
-                                style: AppText.caption.copyWith(
-                                    color: AppTheme.textSecondary)),
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              _jumpToMessage('${r['id'] ?? ''}');
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+    await showRoomSearchSheet(
+      context,
+      roomId: widget.room.id,
+      s: s,
+      onJump: _jumpToMessage,
     );
-    qCtrl.dispose();
   }
+
 
   /// Lompat ke pesan: loadOlder berulang bila belum termuat (maks 10x),
   /// lalu scroll + highlight 2 detik.
@@ -2255,7 +2037,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
               ),
             ),
           if (showStageInline) ...[
-            _BroadcastStage(
+            BroadcastStage(
               session: _broadcastSession!,
               isBroadcaster: iAmBroadcasting,
               onMinimize: () => setState(() => _stageMinimized = true),
@@ -2787,7 +2569,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        _BroadcastStage(
+                        BroadcastStage(
                           session: _broadcastSession!,
                           isBroadcaster: iAmBroadcasting,
                           compact: true,
@@ -2820,179 +2602,15 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       return;
     }
     _sheetOpen = true;
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.bgCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  // Tutup sheet lalu buka halaman profil user.
-                  final navKey = navKeyUser(msg.senderId);
-                  if (!tryClaimNav(navKey)) return;
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => UserInfoScreen(
-                        userId: msg.senderId,
-                        fallbackName: msg.senderName,
-                      ),
-                    ),
-                  ).then((_) => releaseNav(navKey));
-                },
-                child: Row(
-                  children: [
-                    // PersonAvatar = standar yang sama persis dengan Pengguna
-                    // Online (foto + latar tint + ring warna gender).
-                    PersonAvatar(
-                      uid: msg.senderId,
-                      name: msg.senderName,
-                      gender: msg.senderGender,
-                      size: 40,
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(msg.senderName, style: AppText.bodyStrong),
-                          Text(
-                            msg.senderGender == 'male'
-                                ? s.genderMale
-                                : msg.senderGender == 'female'
-                                ? s.genderFemale
-                                : s.genderOther,
-                            style: AppText.bodySmall.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          // Jumlah follower & teman (gaya IG) — di bawah
-                          // gender, hanya bila ada.
-                          SocialCountsLine(uid: msg.senderId),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.chevron_right,
-                      color: AppTheme.textSecondary,
-                      size: 20,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            ListTile(
-              leading: RoomSheetIcon(
-                icon: Icons.chat_rounded,
-                color: AppTheme.primary,
-              ),
-              title: Text(
-                s.titlePrivateChat,
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-              onTap: () async {
-                final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
-                final locale = ProviderScope.containerOf(context, listen: false).read(localeProvider);
-                // User sudah dihapus (akun tidak ada) → jangan buka chat,
-                // policy RLS menolak insert chat dengan participant yang hilang.
-                final active = await chat.isUserActive(msg.senderId);
-                if (!context.mounted) return;
-                if (!active) {
-                  showChatSnack(context, locale.s.errUserNotFound);
-                  return;
-                }
-                // Pakai context screen (bukan context sheet) — context sheet
-                // sudah deactivated setelah pop, sehingga Navigator.push
-                // gagal diam-diam kalau startPrivateChat > animasi pop.
-                final navigator = Navigator.of(context);
-                final screenContext = context;
-                navigator.pop();
-                try {
-                  final chatId = await chat.startPrivateChat(
-                    myUid: auth.uid!,
-                    otherUid: msg.senderId,
-                    myName: auth.profile!.nickname,
-                    otherName: msg.senderName,
-                    myGender: auth.profile!.gender,
-                    otherGender: msg.senderGender,
-                    myAge: auth.profile!.age,
-                  );
-                  if (mounted && screenContext.mounted) {
-                    final navKey = navKeyChat(chatId);
-                    if (tryClaimNav(navKey)) {
-                      Navigator.of(screenContext).push(
-                        MaterialPageRoute(
-                          builder: (_) => PrivateChatScreen(
-                            chatId: chatId,
-                            otherName: msg.senderName,
-                            otherUid: msg.senderId,
-                            otherGender: msg.senderGender,
-                            otherCountry: '',
-                            otherRegistered: msg.isRegistered,
-                          ),
-                        ),
-                      ).then((_) => releaseNav(navKey));
-                    }
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-                    showChatSnack(context, s.errGeneric);
-                  }
-                }
-              },
-            ),
-            ListTile(
-              leading: const RoomSheetIcon(
-                icon: Icons.block_rounded,
-                color: AppTheme.danger,
-              ),
-              title: Text(
-                s.btnBlock,
-                style: const TextStyle(color: AppTheme.danger),
-              ),
-              onTap: () async {
-                Navigator.of(context).pop();
-                await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).blockUser(
-                  auth.uid!,
-                  msg.senderId,
-                );
-                if (mounted) {
-                  showChatSnack(context, s.blockSuccess);
-                }
-              },
-            ),
-            ListTile(
-              leading: const RoomSheetIcon(
-                icon: Icons.flag_rounded,
-                color: Colors.orange,
-              ),
-              title: Text(
-                s.btnReport,
-                style: const TextStyle(color: Colors.orange),
-              ),
-              onTap: () {
-                Navigator.of(context).pop();
-                _showReportDialog(msg.senderId, msg.senderName);
-              },
-            ),
-          ],
-        ),
-      ),
-    ).whenComplete(() {
-      _sheetOpen = false;
-    });
+    showRoomUserActionSheet(
+      context,
+      msg: msg,
+      auth: auth,
+      onSheetClosed: () => _sheetOpen = false,
+      onReport: _showReportDialog,
+    );
   }
+
 
   void _showReportDialog(String reportedId, String reportedName) {
     showReportUserDialog(
@@ -3005,144 +2623,3 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 }
 
 
-class _BroadcastStage extends ConsumerWidget {
-  const _BroadcastStage(
-      {required this.session, required this.isBroadcaster, this.onMinimize, this.compact = false});
-
-  final RoomBroadcastSession session;
-  final bool isBroadcaster;
-  final VoidCallback? onMinimize;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(localeProvider).s;
-    final tiles = <Widget>[];
-    if (isBroadcaster && session.localRendererReady) {
-      tiles.add(RTCVideoView(session.localRenderer,
-          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover, mirror: true));
-    }
-    for (final r in session.remoteRenderers.values) {
-      if (r.srcObject != null) {
-        tiles.add(RTCVideoView(r, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover));
-      }
-    }
-    // fallback single remoteRenderer lama
-    if (tiles.isEmpty && !isBroadcaster && session.remoteRenderer.srcObject != null) {
-      tiles.add(RTCVideoView(session.remoteRenderer,
-          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover));
-    }
-    return Container(
-      height: compact ? double.infinity : 220,
-      color: Colors.black,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (tiles.isEmpty)
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(strokeWidth: 2),
-                  const SizedBox(height: 8),
-                  Text(s.privateRoomsLiveConnecting,
-                      style: const TextStyle(color: Colors.white70)),
-                ],
-              ),
-            )
-          else if (tiles.length == 1)
-            tiles.first
-          else
-            GridView.count(
-              crossAxisCount: 2,
-              childAspectRatio: 1.6,
-              children: tiles,
-            ),
-          Positioned(
-            top: 8,
-            left: 10,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(s.liveViewerCount(session.viewerCount),
-                  style: AppText.micro.copyWith(color: Colors.white)),
-            ),
-          ),
-          // Drag ke bawah di AREA MANA PUN video utk minimize (hanya stage
-          // inline, bukan PiP). Double-tap juga minimize.
-          if (onMinimize != null)
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onVerticalDragUpdate: (d) {
-                  if (d.primaryDelta != null && d.primaryDelta! > 8) {
-                    onMinimize!();
-                  }
-                },
-                onDoubleTap: onMinimize,
-                child: const SizedBox.expand(),
-              ),
-            ),
-          if (onMinimize != null)
-            Positioned(
-              top: 6,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white54,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-            ),
-          if (isBroadcaster)
-            Positioned(
-              bottom: 8,
-              right: 10,
-              child: Row(children: [
-                IconButton.filledTonal(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => session.toggleCamera(),
-                  icon: Icon(Icons.videocam_rounded,
-                      size: 18,
-                      color: session.cameraOn ? null : AppTheme.danger),
-                ),
-                const SizedBox(width: 6),
-                IconButton.filledTonal(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => session.switchCamera(),
-                  icon: const Icon(Icons.cameraswitch_rounded, size: 18),
-                ),
-                const SizedBox(width: 6),
-                IconButton.filledTonal(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () async {
-                    await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
-                        .stopBroadcast(session.roomId);
-                    await session.stop();
-                  },
-                  icon: const Icon(Icons.stop_circle_rounded,
-                      size: 20, color: AppTheme.danger),
-                ),
-              ]),
-            ),
-          if (!isBroadcaster)
-            Positioned(
-              bottom: 8,
-              right: 10,
-              child: Text(s.viewerCount(session.viewerCount),
-                  style: AppText.micro.copyWith(color: Colors.white54)),
-            ),
-        ],
-      ),
-    );
-  }
-}
