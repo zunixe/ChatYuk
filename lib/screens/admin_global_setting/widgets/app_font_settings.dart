@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/fonts.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/riverpod/auth_provider.dart';
+import '../../../providers/riverpod/connectivity_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
-import '../../../core/admin_err.dart';
 import '../../../config/theme.dart';
 
 /// Pilih font global aplikasi (katalog AppFonts) — berlaku semua user

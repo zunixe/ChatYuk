@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../config/supabase_config.dart';
+import '../../core/admin_err.dart';
 import '../../utils.dart';
 
 /// Status koneksi global (Riverpod) — dipakai banner offline di atas semua
@@ -121,3 +123,23 @@ class ConnectivityNotifier extends Notifier<bool> {
 
 final connectivityProvider =
     NotifierProvider<ConnectivityNotifier, bool>(ConnectivityNotifier.new);
+
+/// Guard aksi TULIS admin saat offline, baca konektivitas dari [context].
+/// [notify] menerima teks pesan siap-tampil (mis. SnackBar/toast).
+///
+/// Dipindah dari `core/admin_err.dart` (boundary Fase B: `core/` dilarang
+/// import `providers/`). `blockIfOffline` tetap di core (murni).
+bool guardOfflineCtx(
+  BuildContext context,
+  String message,
+  void Function(String message) notify,
+) {
+  bool online = true;
+  try {
+    online = ProviderScope.containerOf(context, listen: false)
+        .read(connectivityProvider);
+  } catch (_) {
+    // Provider tidak tersedia (test/preview) → jangan blokir.
+  }
+  return blockIfOffline(online, notify, message: message);
+}
