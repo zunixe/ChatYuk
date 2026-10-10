@@ -533,6 +533,17 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       // "Sekali lihat" video ditandai lewat TYPE (video_once) — bukan
       // durationMs yang sudah dipakai untuk panjang video. Nilai `isOnce`
       // ditangkap pemanggil SEBELUM preview dibersihkan.
+      // Poster + video hangatkan ke disk cache DARI BYTES LOKAL (tanpa unduh
+      // ulang server). Dipanggil SEBELUM dispatch supaya poster sudah di disk
+      // saat bubble versi-path muncul (kalau dibalik, ada race: bubble render
+      // path baru sebelum poster tersimpan → MISS = "card ngeload").
+      final posterB64 = pendingVideoPosterB64;
+      final posterBytes = (posterB64 != null && posterB64.isNotEmpty)
+          ? base64Decode(posterB64)
+          : null;
+      unawaited(
+        VideoPrefetch.warmOne(path, videoBytes: bytes, posterBytes: posterBytes),
+      );
       await photoDispatch(
         imageData: path,
         type: videoSendType(isOnce),
@@ -545,15 +556,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         repliedToSenderName: reply?.senderName,
         // Durasi video (panjang playback) — SELALU dikirim.
         videoDurationMs: durationMs,
-      );
-      // Poster + video hangatkan ke disk cache DARI BYTES LOKAL (tanpa unduh
-      // ulang server) → cold start berikutnya anti-blink & play instan.
-      final posterB64 = pendingVideoPosterB64;
-      final posterBytes = (posterB64 != null && posterB64.isNotEmpty)
-          ? base64Decode(posterB64)
-          : null;
-      unawaited(
-        VideoPrefetch.warmOne(path, videoBytes: bytes, posterBytes: posterBytes),
       );
       photoFirstBonus(pp);
       photoOnSent(isOnce ? 'video_once' : 'video');

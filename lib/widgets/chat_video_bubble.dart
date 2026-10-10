@@ -14,6 +14,7 @@ import '../providers/riverpod/locale_provider.dart';
 import '../core/storage_paths.dart';
 import '../providers/riverpod/service_locator.dart';
 import '../utils.dart';
+import 'video_prefetch.dart';
 import 'package:video_player/video_player.dart';
 
 /// Gate konkurensi sederhana (max N paralel) — dipakai membatasi unduhan
@@ -161,7 +162,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
 
   // Kunci cache poster di disk (anti-blink cold start): poster yang sudah
   // pernah dibuat dipakai ulang TANPA unduh video + generate frame lagi.
-  String get _posterKey => 'video_poster:${widget.videoData}';
+  String get _posterKey => VideoPrefetch.posterKeyFor(widget.videoData);
 
   @override
   void initState() {
