@@ -25,7 +25,6 @@ ALLOWLIST=(
   "lib/config/strings_admin.dart:1519"
   "lib/screens/private_chat_screen.dart:3120"
   "lib/screens/room_chat_screen.dart:2938"
-  "lib/screens/profile_screen.dart:2196"
   "lib/app.dart:1637"
   "lib/main.dart:1761"
 )
