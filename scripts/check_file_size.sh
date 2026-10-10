@@ -29,7 +29,7 @@ ALLOWLIST=(
   "lib/screens/private_chats_screen.dart:1625"
   "lib/screens/admin_chat_list_screen.dart:1481"
   "lib/screens/story_composer_screen.dart:1328"
-  "lib/screens/admin_chat_view_screen.dart:1240"
+  "lib/screens/admin_chat_view_screen.dart:1185"
   "lib/screens/group_screen.dart:1177"
   "lib/screens/admin_panel/widgets/usermap_card.dart:1012"
   "lib/providers/riverpod/points_provider.dart:1019"
