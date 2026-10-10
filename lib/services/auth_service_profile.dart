@@ -135,11 +135,51 @@ mixin AuthServiceProfileMx on AuthBase {
   /// "Coba lagi" muncul padahal datanya ada (kasus "profilnya ga muncul").
   /// Sekarang: data profil dikembalikan apa adanya (kolom `avatar` masih
   /// berisi PATH), UI memuat avatar terpisah via [getAvatarByPath].
-  Future<UserModel?> getProfileById(String id) async {
+  Future<UserModel?> getProfileById(String id, {bool forceRefresh = false}) async {
     if (id.isEmpty) return null;
+    final key = 'profile:$id';
+    // PERSISTEN (SQLite): baca cache dulu → tampil instan tanpa "keload dulu".
+    if (!forceRefresh) {
+      final cached = await MessageCache.instance.loadRawObj(key);
+      if (cached.isNotEmpty) {
+        // Refresh server di BACKGROUND (data tampil dari cache segera).
+        unawaited(_refreshProfileCache(id, key));
+        return UserModel.fromMap(id, snakeToCamel(cached));
+      }
+    }
+    return _fetchAndCacheProfile(id, key);
+  }
+
+  /// Versi SINKRON dari cache (memori) — dipakai UI untuk frame pertama.
+  UserModel? peekProfileCache(String id) {
+    if (id.isEmpty) return null;
+    final obj = MessageCache.instance.peekRawObj('profile:$id');
+    return obj.isEmpty ? null : UserModel.fromMap(id, snakeToCamel(obj));
+  }
+
+  /// Preload cache profil ke memori (dipanggil bootstrap) agar `peekProfileCache`
+  /// sinkron tersedia.
+  Future<void> preloadProfileCache(String id) async {
+    if (id.isEmpty) return;
+    await MessageCache.instance.preloadRawObj('profile:$id');
+  }
+
+  Future<UserModel?> _fetchAndCacheProfile(String id, String key) async {
     final raw = await _sb.rpc('profile_public', params: {'p_user': id});
     if (raw is! Map || raw.isEmpty) return null;
-    return UserModel.fromMap(id, snakeToCamel(Map<String, dynamic>.from(raw)));
+    final map = Map<String, dynamic>.from(raw);
+    unawaited(MessageCache.instance.saveRawObj(key, map));
+    return UserModel.fromMap(id, snakeToCamel(map));
+  }
+
+  /// Refresh diam-diam: server → cache. Kegagalan diabaikan (cache tetap dipakai).
+  Future<void> _refreshProfileCache(String id, String key) async {
+    try {
+      final raw = await _sb.rpc('profile_public', params: {'p_user': id});
+      if (raw is Map && raw.isNotEmpty) {
+        await MessageCache.instance.saveRawObj(key, Map<String, dynamic>.from(raw));
+      }
+    } catch (_) {}
   }
 
   /// Resolve PATH avatar → base64 (RAM → disk → network). Dipanggil UI
