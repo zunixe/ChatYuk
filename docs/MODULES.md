@@ -17,18 +17,32 @@ screens → providers → services → core (+ models, config, utils)
   `lib/main.dart`).
 - Gate: `scripts/check_screen_boundary.sh` (CI). Pelanggaran saat ini = FAIL.
 
-## Pelanggaran terdata (TODO perbaiki, satu grup per commit)
+## Pelanggaran terdata (riwayat + status)
+
+**STATUS 2026-10-10 (Fase B SELESAI): 0 pelanggaran.** Gate
+`scripts/check_screen_boundary.sh` kini mencakup `screens/` + `widgets/` +
+`mixins/` (dilarang `services/`) DAN `core/` (dilarang `services/` +
+`providers/`). Semua temuan di bawah sudah ditutup:
+- B1: `topup_provider`, `room_voice_provider` (baru), `describeReferrer` →
+  `core/attribution_format.dart`, screen pakai provider.
+- B2: `message_cache` predikat path DIINJEKSI (`MessageCache.isStoragePath`
+  di main.dart), `guardOfflineCtx` → `connectivity_provider.dart`,
+  `core/storage_paths.dart` (murni), user_info → `avatarProvider`.
+- B3: 16 widget + 3 mixin → provider; helper `service_locator.dart`
+  (`safeAvatar`/`safeStorage`) untuk widget yang di-mount tanpa ProviderScope.
+
+Riwayat temuan (sudah diperbaiki, disimpan sebagai catatan):
 
 | Lokasi | Import terlarang | Perbaikan |
 |---|---|---|
-| `screens/room_chat_screen.dart:42`, `screens/room_chat/widgets/voice_stage_strip.dart:4`, `screens/room_chat/widgets/voice_diagnostics_sheet.dart:5` | `room_voice_service.dart` | TODO: `room_voice_provider` baru |
-| `screens/user_info_screen.dart:17-18` (+ `screens/user_info/user_info_init.dart:27`) | `storage_photo_service`, `avatar_service` | TODO: passthrough `storage_provider`/`avatar_provider` |
-| `screens/admin_attribution_tab.dart:10` | `attribution_service` | TODO: `attribution_provider` baru |
-| `screens/point_history/widgets/topup_sheet.dart:5-6` | `points_service`, `topup_service` | TODO: passthrough provider + `topup_provider` |
-| `core/cache/message_cache.dart:8` (dipakai `:434-435`) | `storage_photo_service` | TODO: injeksi fungsi `isPath`/`isVoicePath` |
-| `core/admin_err.dart:5,8` (dipakai `:104-105`) | `flutter_riverpod`, `connectivity_provider` | TODO: callback, bukan import provider |
-| `widgets/` 16 hits (`profile_avatar`, `person_avatar`, `comment_avatar`, `author_avatar`, `leaderboard_sheet` → avatar; `voice_bubble`, `chat_video_bubble`, `message_image`, `view_once_image` → storage; `chat_call_overlay`, `admin_call_watch_overlay`, `reaction_detail_sheet`, `location_picker_sheet`) | berbagai service | TODO: putuskan per widget — passthrough provider atau props |
-| `mixins/` 3 hits (`chat_outbox_mixin:12`, `chat_photo_send_mixin:18`, `chat_selection_mixin:14`) | storage/reaction service | TODO: injeksi via kontrak mixin |
+| `screens/room_chat_screen.dart:42`, `screens/room_chat/widgets/voice_stage_strip.dart:4`, `screens/room_chat/widgets/voice_diagnostics_sheet.dart:5` | `room_voice_service.dart` | ✅ `room_voice_provider` |
+| `screens/user_info_screen.dart:17-18` (+ `screens/user_info/user_info_init.dart:27`) | `storage_photo_service`, `avatar_service` | ✅ `avatarProvider` + `core/storage_paths.dart` |
+| `screens/admin_attribution_tab.dart:10` | `attribution_service` | ✅ `core/attribution_format.dart` |
+| `screens/point_history/widgets/topup_sheet.dart:5-6` | `points_service`, `topup_service` | ✅ `topup_provider` + passthrough |
+| `core/cache/message_cache.dart:8` | `storage_photo_service` | ✅ injeksi `MessageCache.isStoragePath` |
+| `core/admin_err.dart:5,8` | `flutter_riverpod`, `connectivity_provider` | ✅ `guardOfflineCtx` → provider |
+| `widgets/` 16 hits | berbagai service | ✅ semua → provider |
+| `mixins/` 3 hits | storage/reaction service | ✅ `storageProvider`/`messageReactionProvider` |
 
 ## Struktur lapisan (aktual)
 
@@ -52,13 +66,19 @@ screens → providers → services → core (+ models, config, utils)
 - `models/` (9), `config/` (15: `strings.dart` 4167 + `strings_admin.dart` 1519
   = data i18n, bukan logic).
 
-## Modul tanpa provider (tight coupling — TODO)
+## Modul tanpa provider (tight coupling — SELESAI)
 
-- `room_voice` (`RoomVoiceSession extends ChangeNotifier` di service,
-  diinstansiasi screen langsung), `topup_service`, `attribution_service`.
+- ~~`room_voice`~~ → `room_voice_provider` (B1).
+- ~~`topup_service`~~ → `topup_provider` (B1).
+- ~~`attribution_service`~~ (bagian murni) → `core/attribution_format.dart` (B1).
 
 ## Keputusan terbuka
 
-- Apakah `widgets/`/`mixins/` yang import `services/` dikecualikan tertulis atau
-  wajib passthrough semua? (Keputusan 2026-10-10: wajib passthrough — tabel di
-  atas adalah backlog-nya.)
+- Gate `widgets/`+`mixins/` diperluas (2026-10-10) DAN berlaku sekarang: UI
+  non-screen wajib passthrough provider. Helper murni tanpa I/O → `core/`
+  (mis. `storage_paths.dart`, `attribution_format.dart`). Inject dari
+  composition root bila butuh service tanpa import: `MessageCache.isStoragePath`,
+  `VoicePrefetch.downloader` (pola sama `PostPhotoCache.downloader`).
+- Widget yang mungkin di-mount tanpa `ProviderScope` (unit test murni/preview)
+  pakai `providers/riverpod/service_locator.dart` (`safeAvatar`/`safeStorage`/
+  `safeReactions`/`safeRead`) — baca provider bila scope ada, fallback singleton.
