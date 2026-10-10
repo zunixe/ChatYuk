@@ -30,6 +30,7 @@ import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/message/image_decode_core.dart';
 import '../widgets/voice_bubble.dart';
+import '../widgets/video_prefetch.dart';
 import '../widgets/date_chip.dart';
 import '../utils/mention.dart';
 import '../widgets/person_avatar.dart';
@@ -892,6 +893,8 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       // play instan seperti foto — tanpa ini voice selalu unduh saat di-tap.
       if (msgs.isNotEmpty) {
         unawaited(VoicePrefetch.warmChat(widget.chatId, msgs));
+        // Poster video terbaru — sama pola (anti-blink cold start).
+        unawaited(VideoPrefetch.warmChat(widget.chatId, msgs));
       }
       // Pesan BARU dari lawan yang masuk sementara chat terbuka → tandai baca
       // agar last_read_at lawan maju → centang 2 (read) pengirim langsung terisi.
