@@ -42,15 +42,24 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
     });
   }
 
-  /// T3a: tunda warm voice/video 400ms — unduhan + generate poster video tidak
-  /// boleh berebut dengan animasi transisi. Guard sekali per buka chat.
+  /// T3a/3c: hangatkan cache voice & POSTER VIDEO sesegera mungkin (post-frame,
+  /// fire-and-forget) — TIDAK ditunda lagi. Alasan: generate poster video lawan
+  /// butuh unduh video → lambat; menundanya (dulu 400ms) memperburuk
+  /// ketersediaan poster. Semua kerja di sini async I/O (unawaited) → tidak
+  /// memblok frame transisi; hanya pemanggilan yang dipindah ke post-frame.
+  /// Guard sekali per buka chat + ambil snapshot TERBARU dari cache (bukan
+  /// `msgs` emit pertama yang bisa sebagian) → video tertentu tak terlewat.
   void _scheduleWarmPrefetch(List<MessageModel> msgs) {
     if (msgs.isEmpty || _warmScheduled) return;
     _warmScheduled = true;
-    Timer(const Duration(milliseconds: 400), () {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(VoicePrefetch.warmChat(widget.chatId, msgs));
-      unawaited(VideoPrefetch.warmChat(widget.chatId, msgs));
+      final latest =
+          MessageCache.instance.peekMessages(cacheKeyFor(widget.chatId)) ??
+              const <MessageModel>[];
+      final target = latest.isNotEmpty ? latest : msgs;
+      unawaited(VoicePrefetch.warmChat(widget.chatId, target));
+      unawaited(VideoPrefetch.warmChat(widget.chatId, target));
     });
   }
 }

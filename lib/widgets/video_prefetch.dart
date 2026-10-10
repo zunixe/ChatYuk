@@ -35,7 +35,12 @@ class VideoPrefetch {
   /// Di-inject dari StoragePhotoService.storyVideoPoster.
   static Future<Uint8List?> Function(String videoFilePath)? posterGenerator;
 
-  static String _posterKey(String videoPath) => 'video_poster:$videoPath';
+  static String _posterKey(String videoPath) => posterKeyFor(videoPath);
+
+  /// Kunci cache poster — SATU sumber untuk [VideoPrefetch] & [ChatVideoBubble].
+  /// JANGAN bikin kunci serupa di tempat lain (kunci beda = selalu MISS =
+  /// "card ngeload"). Format: `video_poster:<path>`.
+  static String posterKeyFor(String videoPath) => 'video_poster:$videoPath';
 
   /// Hangatkan SATU video (path storage) → poster disk.
   ///

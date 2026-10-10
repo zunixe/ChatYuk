@@ -158,6 +158,54 @@ sudah ada sejak frame pertama, tanpa layar kosong atau centang yang "nyusul".
 - **`await prefetchPrivateChat` sebelum push** → transisi baru mulai setelah
   query SQLite (DB besar = telat) → dibetulkan (paralel, 2026-10-11).
 
+### 3c. POSTER VIDEO — logika wajib (WAJIB dibaca sebelum menyentuh bubble/foto video)
+
+Video beda dengan **voice** (voice langsung tampil karena card-nya statis:
+ikon + durasi, tanpa gambar). Video butuh **poster** = 1 frame thumbnail.
+Poster inilah sumber "card ngeload / reload saat cold start". Urusan poster
+punya ATURAN KETAT berikut:
+
+**A. Kunci cache poster = `video_poster:<videoPath>`** (`ChatVideoBubble._posterKey`
+= `VideoPrefetch._posterKey`). HARUS sama persis di kedua tempat — kalau beda,
+prefetch menulis ke kunci X tapi bubble baca kunci Y → selalu MISS = reload.
+
+**B. Poster disimpan HANYA di `MediaDiskCache` (kecil ~20-50 KB). Video bytes
+TIDAK PERNAH disimpan di `MediaDiskCache`.** Kuota media 250 MB dibagi bersama
+foto/avatar/voice; video puluhan MB akan meng-evict LRU → poster & foto lain
+hilang → "cold start reload lagi" (insiden 2026-10-11). Video bytes untuk
+playback disimpan di **file temp stabil** (`ChatVideoBubble._ensureLocalFile`,
+`${tmp}/chat_vid_<hash>.mp4`) yang di-manage OS, bukan kuota media.
+
+**C. Sumber poster (urutan prioritas):**
+1. **Pengirim** (baru kirim): poster SUDAH ada dari hasil kompres
+   (`storyVideoPoster` di `_processPickedVideo`) → dikirim ke
+   `VideoPrefetch.warmOne(path, videoBytes:…, posterBytes:…)`. **Tanpa unduh
+   ulang** server. `pendingVideoPosterB64` disediakan mixin (getter
+   di-override layar).
+2. **Video lawan**: `VideoPrefetch.warmChat(chatId, msgs)` (dipanggil dari
+   `_scheduleWarmPrefetch`, ditunda 400 ms) → unduh video, generate poster
+   (native `storyVideoPoster`), simpan poster, **buang** video bytes.
+   `maxPerChat = 6` poster terbaru.
+3. **Cache MISS total** (belum sempat warm): bubble generate sendiri lewat
+   `ChatVideoBubble._loadPoster()` (unduh + generate, 1×) → simpan disk.
+
+**D. Baca poster SELALU sinkron lebih dulu di `initState`** (`readSync`) —
+poster yang sudah ada tampil SEJAK frame pertama, tanpa spinner. `autoPoster`
+HANYA membatasi apakah bubble **mengunduh+generate sendiri** saat cold start
+(hemat kuota), **BUKAN** membatasi pembacaan cache. Jadi bubble dengan
+`autoPoster=false` (item di luar 50 terbaru, `di < 50`) tetap HARUS menampilkan
+poster bila sudah ada di cache.
+
+**E. `autoPoster`** = `di < 50` (`private_chat_screen.dart`, pola sama
+`isImageDeferred` foto). Video di luar 50 terbaru tidak auto-unduh poster;
+tap yang memuat (fallback `_loadPoster`).
+
+**Jebakan (jangan diulang):**
+- Menyimpan video bytes ke `MediaDiskCache` → evict kuota → poster hilang.
+- Kunci poster berbeda antar penulis/pembaca → selalu MISS.
+- `warmOne` selalu unduh ulang walau pengirim punya bytes+poster lokal.
+- `autoPoster=false` lalu SKIP baca cache (harus selalu baca cache sinkron).
+
 ### 3b. Swipe-to-reply (geser kanan = balas) — private & grup
 
 | Lapis | Lokasi |
