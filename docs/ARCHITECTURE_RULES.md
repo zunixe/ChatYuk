@@ -277,7 +277,7 @@ Treat these rules as persistent project conventions. Apply them to new features,
 | 1–3 | Role, inspect, modular monolith | Kuat | `AGENTS.md`, `FEATURE_MAP.md`, Supabase monolit (PG+Auth+Realtime+24 Edge), tanpa microservice |
 | 4 | Module responsibilities | Sebagian besar | `services/` 48 file per domain, `ChatService` part+mixin 6 domain, `providers/riverpod` 29 file; `MODULES.md` baru dibuat |
 | 5 | Source code rules | Parsial | Modul bersama ada (5 mixin + `ChatComposerInput`); tapi `strings.dart` 4167, `private_chat_screen` 3117, `room_chat_screen` 2935, `main.dart` 1748 masih raksasa |
-| 6 | Boundaries | Pola ada, bocor terdata | `screens→providers→services→core`; bocor: 6 file screens (7 import), `message_cache.dart:8`, `admin_err.dart`, `widgets/` 16 hits, `mixins/` 3 hits; gate diperluas 2026-10-10 |
+| 6 | Boundaries | Pola ada, gate diperluas & bocor ditutup | `screens→providers→services→core`; gate `check_screen_boundary.sh` kini mencakup screens/widgets/mixins (dilarang services/) + core (dilarang services/providers). Fase B 2026-10-10: 0 pelanggaran (helper murni → core/, inject di main.dart, `service_locator.dart` untuk widget tanpa scope) |
 | 7 | DB & API compat | Paling matang | 454 migrasi unik, 30 frozen + `menyentuh:`/`SAFE:`, snapshot 1742 baris, apply via Management API |
 | 8 | Chat & realtime | Kuat, 1 gap | Outbox + `ChatStreamSession` debounce/dedupe + `rt_resilient` backoff + presence frozen + read-receipt monoton; gap: message creation tidak idempoten server-side (lihat ADR-0001) |
 | 9 | Security | Kuat | RLS + smoke anon + `AdminGate` + keystore v2 + `check_release_apk`/`check_google_signin`; at-rest AES-GCM + TLS, tanpa klaim E2EE |
