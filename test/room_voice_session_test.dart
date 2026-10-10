@@ -56,11 +56,11 @@ void main() {
     });
 
     test('v_bye basi (sess lama) diabaikan, sess baru diproses', () {
-      expect(RoomVoiceSession.isStaleBye(5, 3), isTrue);
-      expect(RoomVoiceSession.isStaleBye(5, 5), isFalse);
-      expect(RoomVoiceSession.isStaleBye(5, 7), isFalse);
+      expect(isStaleBye(5, 3), isTrue);
+      expect(isStaleBye(5, 5), isFalse);
+      expect(isStaleBye(5, 7), isFalse);
       // Belum pernah dengar speaker (-1): bye apa pun diproses.
-      expect(RoomVoiceSession.isStaleBye(-1, 0), isFalse);
+      expect(isStaleBye(-1, 0), isFalse);
     });
   });
 
@@ -73,7 +73,7 @@ void main() {
 
     test('candPcId cocok → pc arah yang tepat (uplink)', () {
       expect(
-        RoomVoiceSession.resolveCandidateKey(
+        resolveCandidateKey(
           from: a,
           candPcId: 'up_1',
           dir: '',
@@ -86,7 +86,7 @@ void main() {
 
     test('candPcId cocok → pc arah yang tepat (downlink)', () {
       expect(
-        RoomVoiceSession.resolveCandidateKey(
+        resolveCandidateKey(
           from: a,
           candPcId: 'dn_2',
           dir: '',
@@ -99,7 +99,7 @@ void main() {
 
     test('hint dir=down → key downlink meski uplink ada', () {
       expect(
-        RoomVoiceSession.resolveCandidateKey(
+        resolveCandidateKey(
           from: a,
           candPcId: '',
           dir: 'down',
@@ -112,7 +112,7 @@ void main() {
 
     test('hint dir=up → key uplink', () {
       expect(
-        RoomVoiceSession.resolveCandidateKey(
+        resolveCandidateKey(
           from: a,
           candPcId: '',
           dir: 'up',
@@ -125,7 +125,7 @@ void main() {
 
     test('tanpa pcId/hint: pcId tak dikenal + tidak ada peer → downlink', () {
       expect(
-        RoomVoiceSession.resolveCandidateKey(
+        resolveCandidateKey(
           from: a,
           candPcId: 'unknown',
           dir: '',
@@ -138,7 +138,7 @@ void main() {
 
     test('tanpa pcId/hint: ada uplink → pakai uplink', () {
       expect(
-        RoomVoiceSession.resolveCandidateKey(
+        resolveCandidateKey(
           from: a,
           candPcId: '',
           dir: '',
@@ -153,7 +153,7 @@ void main() {
   group('Keputusan relay-only ICE (percepat connect + fallback)', () {
     test('peer belum fallback → relay-only (config tercepat)', () {
       expect(
-        RoomVoiceSession.relayOnlyFor(
+        relayOnlyFor(
           peerUid: 'A',
           allCandTried: const {},
         ),
@@ -163,7 +163,7 @@ void main() {
 
     test('peer sudah fallback all-candidates → relay-only OFF (tak ping-pong)', () {
       expect(
-        RoomVoiceSession.relayOnlyFor(
+        relayOnlyFor(
           peerUid: 'A',
           allCandTried: const {'A'},
         ),
@@ -173,9 +173,9 @@ void main() {
 
     test('fallback HANYA berlaku untuk peer itu (peer lain tetap relay-only)', () {
       const tried = {'A'};
-      expect(RoomVoiceSession.relayOnlyFor(peerUid: 'A', allCandTried: tried),
+      expect(relayOnlyFor(peerUid: 'A', allCandTried: tried),
           isFalse);
-      expect(RoomVoiceSession.relayOnlyFor(peerUid: 'B', allCandTried: tried),
+      expect(relayOnlyFor(peerUid: 'B', allCandTried: tried),
           isTrue);
     });
   });
@@ -183,7 +183,7 @@ void main() {
   group('Full mesh 3-6 orang (keputusan offer uplink per-peer)', () {
     test('aku di stage & belum ada pc → offer ke speaker lain', () {
       expect(
-        RoomVoiceSession.meshNeedsOfferTo(
+        meshNeedsOfferTo(
           myUid: 'me',
           peerUid: 'A',
           onStage: true,
@@ -195,7 +195,7 @@ void main() {
 
     test('pc uplink sudah ada → TIDAK offer lagi (idempoten)', () {
       expect(
-        RoomVoiceSession.meshNeedsOfferTo(
+        meshNeedsOfferTo(
           myUid: 'me',
           peerUid: 'A',
           onStage: true,
@@ -207,7 +207,7 @@ void main() {
 
     test('tidak di stage (pendengar) → tidak offer', () {
       expect(
-        RoomVoiceSession.meshNeedsOfferTo(
+        meshNeedsOfferTo(
           myUid: 'me',
           peerUid: 'A',
           onStage: false,
@@ -219,7 +219,7 @@ void main() {
 
     test('self & uid kosong → tidak offer', () {
       expect(
-        RoomVoiceSession.meshNeedsOfferTo(
+        meshNeedsOfferTo(
           myUid: 'me',
           peerUid: 'me',
           onStage: true,
@@ -228,7 +228,7 @@ void main() {
         isFalse,
       );
       expect(
-        RoomVoiceSession.meshNeedsOfferTo(
+        meshNeedsOfferTo(
           myUid: 'me',
           peerUid: '',
           onStage: true,

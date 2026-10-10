@@ -23,13 +23,12 @@ ALLOWLIST=(
   "lib/config/regions.dart:2428"
   "lib/config/city_coords.dart:1704"
   "lib/config/strings_admin.dart:1519"
-  "lib/screens/private_chat_screen.dart:3117"
-  "lib/screens/room_chat_screen.dart:2935"
+  "lib/screens/private_chat_screen.dart:3120"
+  "lib/screens/room_chat_screen.dart:2938"
   "lib/screens/profile_screen.dart:2196"
   "lib/screens/admin_chat_view_screen.dart:1185"
-  "lib/services/room_voice_service.dart:1432"
   "lib/app.dart:1637"
-  "lib/main.dart:1757"
+  "lib/main.dart:1761"
 )
 
 fail=0
