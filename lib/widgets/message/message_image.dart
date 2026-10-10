@@ -10,7 +10,8 @@ import '../../config/theme.dart';
 import '../../core/cache/photo_cache.dart';
 import '../../core/media/chat_photo_helper.dart';
 import '../../core/media/native_image.dart';
-import '../../services/storage_photo_service.dart';
+import '../../core/storage_paths.dart';
+import '../../providers/riverpod/storage_provider.dart';
 import '../../providers/riverpod/locale_provider.dart';
 import 'image_decode_core.dart';
 import 'photo_viewer_screen.dart';
@@ -160,7 +161,7 @@ class _MessageImageState extends State<MessageImage> {
   // ratusan KB; decode penuh di UI thread saat bubble mount/rebuild (mis. ada
   // pesan baru saat user mengetik) = stall input ("ngetik berenti").
   void _reservePlaceholder(String data) {
-    if (data.isEmpty || StoragePhotoService.instance.isPath(data)) return;
+    if (data.isEmpty || isStoragePathValue(data)) return;
     try {
       var dims = parseImageDimensions(_decodeHeaderPrefix(data));
       // Header di luar prefix (EXIF besar) → fallback decode penuh (jarang).
@@ -200,7 +201,7 @@ class _MessageImageState extends State<MessageImage> {
     }
     // PATH storage (belum base64) → download dulu. decodeImageB64 melempar
     // null untuk input non-base64, jadi jangan memanggilnya dengan path.
-    if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
+    if (data.isNotEmpty && isStoragePathValue(data)) {
       // Prefetch background (list pesan) biasanya sudah menyimpan thumb di
       // disk → tampilkan instan tanpa menunggu download + drain. Versi full
       // menyusul via drain (aspek sama, swap gapless).
@@ -234,7 +235,7 @@ class _MessageImageState extends State<MessageImage> {
           }
         }
       } catch (_) {}
-      data = await StoragePhotoService.instance.download(data) ?? '';
+      data = await ProviderScope.containerOf(context, listen: false).read(storageProvider).download(data) ?? '';
     }
     if (!mounted || gen != _gen) return;
     if (data.isEmpty) {

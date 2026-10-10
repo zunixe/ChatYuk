@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
-import '../services/avatar_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/riverpod/avatar_provider.dart';
 import 'user_avatar.dart';
 
 /// Avatar satu orang yang KONSISTEN di seluruh app.
@@ -66,9 +67,12 @@ class PersonAvatar extends StatefulWidget {
 
 class _PersonAvatarState extends State<PersonAvatar> {
   /// Src efektif — kalau [PersonAvatar.avatarB64] kosong, resolve by-uid
-  /// (RAM/disk/network via AvatarB64Service) supaya foto tetap tampil walau
+  /// (RAM/disk/network via AvatarNotifier) supaya foto tetap tampil walau
   /// pemanggil hanya punya uid (mis. header chat private).
   String _src = '';
+
+  AvatarNotifier get _avatarSvc =>
+      ProviderScope.containerOf(context, listen: false).read(avatarProvider);
 
   @override
   void initState() {
@@ -92,13 +96,13 @@ class _PersonAvatarState extends State<PersonAvatar> {
   Future<void> _resolveUid() async {
     if (widget.uid.isEmpty) return;
     // Fast-path sinkron: kalau sudah di RAM, tampil tanpa menunggu async.
-    final sync = AvatarB64Service.instance.cachedSync(widget.uid);
+    final sync = _avatarSvc.cachedSync(widget.uid);
     if (sync != null && sync.isNotEmpty) {
       if (mounted) setState(() => _src = sync);
       return;
     }
     try {
-      final b64 = await AvatarB64Service.instance.get(widget.uid);
+      final b64 = await _avatarSvc.get(widget.uid);
       if (!mounted || widget.uid.isEmpty) return;
       if (b64.isNotEmpty) setState(() => _src = b64);
     } catch (_) {}

@@ -6,7 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../config/theme.dart';
 import '../core/chat/chat_location.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../services/location_service.dart';
+import '../providers/riverpod/location_provider.dart';
 
 /// Alur lengkap "kirim lokasi" ala WhatsApp: izin → ambil posisi → sheet
 /// pilihan (kirim lokasi saat ini / bagikan lokasi live / tempat sekitar).
@@ -20,7 +20,7 @@ Future<ChatLocation?> pickChatLocation(
   required ScaffoldMessengerState messenger,
 }) async {
   final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-  final loc = LocationService();
+  final loc = ProviderScope.containerOf(context, listen: false).read(locationProvider);
   // 1. Minta izin (boleh memunculkan dialog sistem).
   final granted = await loc.requestPermission();
   if (!granted) {
@@ -107,7 +107,7 @@ class _LocationPickerSheetState extends ConsumerState<_LocationPickerSheet> {
   }
 
   Future<void> _load() async {
-    final svc = LocationService();
+    final svc = ref.read(locationProvider);
     final places = await svc.nearbyPlaces(_lat, _lng);
     if (!mounted) return;
     setState(() {

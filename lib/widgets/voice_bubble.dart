@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../models/message_model.dart';
-import '../services/storage_photo_service.dart';
+import '../providers/riverpod/storage_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Prefetch file voice TERBARU di background sekali per buka chat — supaya
 /// tap play terasa instan seperti foto (yang auto-load dari disk).
@@ -25,6 +27,11 @@ class VoicePrefetch {
 
   static final Set<String> _warmed = {};
 
+  /// Downloader byte voice — DIINJEKSI dari luar (boundary: widgets dilarang
+  /// import services/). Di-wire di `main.dart` ke `StoragePhotoService`.
+  /// Default null = prefetch dilewati (aman di test tanpa I/O).
+  static Future<Uint8List?> Function(String path)? downloader;
+
   static Future<void> warmChat(String chatKey, List<MessageModel> msgs) async {
     if (chatKey.isEmpty || msgs.isEmpty) return;
     if (_warmed.contains(chatKey)) return;
@@ -37,13 +44,13 @@ class VoicePrefetch {
           )
           .toList()
         ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      final dl = downloader;
+      if (dl == null) return;
       for (final m in voices.take(maxPerChat)) {
         try {
           final f = await MediaDiskCache.instance.fileFor(m.imageData);
           if (f != null) continue;
-          final bytes = await StoragePhotoService.instance.downloadBytes(
-            m.imageData,
-          );
+          final bytes = await dl(m.imageData);
           if (bytes == null || bytes.isEmpty) continue;
           await MediaDiskCache.instance.write(m.imageData, bytes);
         } catch (_) {}
@@ -176,8 +183,10 @@ class _VoiceBubbleState extends State<VoiceBubble> {
         }
         // Cache miss → tampilkan spinner selama unduh.
         setState(() => _loading = true);
-        final bytes = await StoragePhotoService.instance
-            .downloadBytes(widget.path);
+        final bytes = await ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(storageProvider).downloadBytes(widget.path);
         if (bytes == null || bytes.isEmpty) return;
         await MediaDiskCache.instance.write(widget.path, bytes);
         final f2 = await MediaDiskCache.instance.fileFor(widget.path);

@@ -15,7 +15,6 @@ import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
-import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../screens/user_info_screen.dart';
 import 'social_actions.dart';
@@ -541,15 +540,15 @@ class LeaderboardRow extends ConsumerWidget {
     // Urutan: RAM+disk via PATH → RAM+disk via UID → getByPath (await,
     // disk/network). Kalau tetap kosong, halaman memuat sendiri.
     var cached = avatar.isNotEmpty
-        ? AvatarB64Service.instance.cachedByPathSync(avatar)
+        ? ProviderScope.containerOf(context, listen: false).read(avatarProvider).cachedByPathSync(avatar)
         : null;
     if (cached == null || cached.isEmpty) {
-      cached = AvatarB64Service.instance.cachedSyncIncludeDisk(uid);
+      cached = ProviderScope.containerOf(context, listen: false).read(avatarProvider).cachedSyncIncludeDisk(uid);
     }
     if ((cached == null || cached.isEmpty) && avatar.isNotEmpty) {
       try {
         // Timeout: jangan menahan navigasi kalau jaringan lambat/menggantung.
-        cached = await AvatarB64Service.instance
+        cached = await ProviderScope.containerOf(context, listen: false).read(avatarProvider)
             .getByPath(avatar)
             .timeout(const Duration(milliseconds: 1500));
       } catch (_) {}
@@ -593,8 +592,8 @@ class LeaderboardRow extends ConsumerWidget {
     Uint8List? bytes;
     if (uid.isNotEmpty) {
       final b64 =
-          AvatarB64Service.instance.cachedSync(uid) ??
-          AvatarB64Service.instance.cachedSyncIncludeDisk(uid);
+          ProviderScope.containerOf(context, listen: false).read(avatarProvider).cachedSync(uid) ??
+          ProviderScope.containerOf(context, listen: false).read(avatarProvider).cachedSyncIncludeDisk(uid);
       if (b64 != null && b64.isNotEmpty) {
         try {
           bytes = base64Decode(b64);

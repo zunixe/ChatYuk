@@ -21,18 +21,34 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 
-# Core = helper murni (non-I/O bisnis): DILARANG import services/.
-# Ketergantungan network/Storage di-inject dari luar (lihat main.dart).
-core_hits=$(grep -rn "import '\(\.\./\)\+services/" lib/core --include='*.dart' || true)
+# Widgets & mixins: juga lapisan UI/kontrak — DILARANG import services/
+# langsung (gate diperluas Fase B 2026-10-10). Semua I/O via providers/.
+for dir in lib/widgets lib/mixins; do
+  h=$(grep -rn "import '\(\.\./\)\+services/" "$dir" --include='*.dart' || true)
+  if [ -n "$h" ]; then
+    echo "DITOLAK: $dir dilarang import services/ (pakai provider)."
+    echo "$h" | head -20
+    echo
+    echo "Perbaikan: tambah passthrough di provider, atau inject dari"
+    echo "composition root (main.dart) untuk helper murni core/."
+    exit 1
+  fi
+done
 
-if [ -n "$core_hits" ]; then
-  echo "DITOLAK: core/ dilarang import services/ (helper murni saja)."
-  echo "$core_hits" | head -20
-  echo
-  echo "Perbaikan: inject dependensi dari luar (mis. PostPhotoCache.downloader)"
-  echo "yang di-wire di lib/main.dart, atau pindahkan file ke lib/services/."
-  exit 1
-fi
+# Core = helper murni (non-I/O bisnis): DILARANG import services/ maupun
+# providers/ (boundary Fase B 2026-10-10).
+for pat in "\(\.\./\)\+services/" "\(\.\./\)\+providers/" "package:chatyuk/services/" "package:chatyuk/providers/"; do
+  core_hits=$(grep -rn "import '$pat" lib/core --include='*.dart' || true)
+  if [ -n "$core_hits" ]; then
+    echo "DITOLAK: core/ dilarang import services/providers (helper murni saja)."
+    echo "$core_hits" | head -20
+    echo
+    echo "Perbaikan: inject dependensi dari luar (mis. PostPhotoCache.downloader"
+    echo "atau MessageCache.isStoragePath di-wire di lib/main.dart), atau"
+    echo "pindahkan file ke lib/services/."
+    exit 1
+  fi
+done
 
 # Cari import core/<sub>/ yang tidak lewat prefix core (defensif).
-echo "OK: 0 screen & 0 core import services/ (boundary bersih)."
+echo "OK: 0 screen/widget/mixin import services/ + 0 core import services/providers."

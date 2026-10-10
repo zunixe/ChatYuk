@@ -7,7 +7,7 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../config/theme.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../services/admin_call_watch_service.dart';
+import '../providers/admin_provider.dart';
 import 'profile_avatar.dart';
 
 /// Overlay pantau panggilan video di monitor chat admin — pola sama dengan

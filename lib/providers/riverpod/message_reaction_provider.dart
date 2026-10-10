@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/message_reaction_service.dart';
+export '../../services/message_reaction_service.dart' show ToggleResult;
 
 /// Reaksi & bintang pesan (Riverpod) — action-only (pembungkus service),
 /// tanpa state reaktif. Migrasi dari ChangeNotifier (0 notifyListeners).
@@ -46,6 +47,7 @@ class MessageReactionNotifier {
 
   Future<Map<String, Map<String, int>>> loadCachedReactions(String chatId) =>
       service.loadCachedReactions(chatId);
+
   Future<void> saveCachedReactions(
     String chatId,
     Map<String, Map<String, int>> reactions,
@@ -65,6 +67,17 @@ class MessageReactionNotifier {
   Future<void> preloadAllStarred() => service.preloadAllStarred();
   Future<void> saveCachedStarred(String chatId, Set<String> ids) =>
       service.saveCachedStarred(chatId, ids);
+
+  /// Passthrough daftar reactor + nickname (Fase B boundary: widget/screen
+  /// dilarang import services/).
+  Future<List<Map<String, String>>> fetchReactors({
+    required String chatType,
+    required String messageId,
+  }) =>
+      service.fetchReactors(chatType: chatType, messageId: messageId);
+
+  Future<Map<String, String>> fetchNicknames(Set<String> uids) =>
+      service.fetchNicknames(uids);
 }
 
 final messageReactionProvider =

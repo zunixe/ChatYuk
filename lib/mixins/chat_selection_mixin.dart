@@ -11,7 +11,7 @@ import '../models/room_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../services/message_reaction_service.dart';
+import '../providers/riverpod/message_reaction_provider.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/forward_picker_sheet.dart';
 import '../widgets/message_reaction_bar.dart';
@@ -200,7 +200,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     final msg = singleSelected;
     hideActionBar();
     if (msg == null) return;
-    final res = await MessageReactionService.instance.toggleReaction(
+    final res = await ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).toggleReaction(
       chatType: chatKind,
       chatId: chatId,
       messageId: msg.id,
@@ -237,7 +237,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     var res = ToggleResult.removed;
     var anyChanged = false;
     for (final id in selectedIds) {
-      res = await MessageReactionService.instance.toggleStar(
+      res = await ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).toggleStar(
         chatType: chatKind,
         chatId: chatId,
         messageId: id,

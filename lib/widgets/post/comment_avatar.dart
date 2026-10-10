@@ -3,10 +3,11 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import '../../services/avatar_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/storage_paths.dart';
+import '../../providers/riverpod/avatar_provider.dart';
 import '../../core/cache/media_disk_cache.dart';
 import '../../core/media/native_image.dart';
-import '../../services/storage_photo_service.dart';
 import '../gender_avatar.dart';
 import '../user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes;
 
@@ -60,7 +61,7 @@ class CommentAvatarState extends State<CommentAvatar> {
         _bytes = cached;
         return true;
       }
-      if (StoragePhotoService.instance.isAvatarPath(avatar)) {
+      if (isAvatarPathValue(avatar)) {
         final disk = MediaDiskCache.instance.readSync(avatar);
         if (disk != null && disk.isNotEmpty) {
           rememberAvatarBytes(widget.uid, disk);
@@ -91,9 +92,9 @@ class CommentAvatarState extends State<CommentAvatar> {
       if (mounted) setState(() => _bytes = cached);
       return;
     }
-    final isPath = StoragePhotoService.instance.isAvatarPath(avatar);
+    final isPath = isAvatarPathValue(avatar);
     final b64 =
-        isPath ? await AvatarB64Service.instance.getByPath(avatar) : avatar;
+        isPath ? await ProviderScope.containerOf(context, listen: false).read(avatarProvider).getByPath(avatar) : avatar;
     if (b64.isEmpty || !mounted || _resolvedFor != avatar) return;
     final bytes = await NativeImage.decodeAvatar(b64, maxPx: 256);
     if (bytes == null || !mounted || _resolvedFor != avatar) return;

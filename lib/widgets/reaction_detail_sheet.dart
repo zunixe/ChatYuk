@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../providers/riverpod/locale_provider.dart';
-import '../services/message_reaction_service.dart';
+import '../providers/riverpod/message_reaction_provider.dart';
 import 'profile_avatar.dart';
 import '../config/theme.dart';
 
@@ -72,7 +72,7 @@ class _ReactionDetailSheetState extends ConsumerState<_ReactionDetailSheet> {
   }
 
   Future<void> _load() async {
-    final svc = MessageReactionService.instance;
+    final svc = ref.read(messageReactionProvider);
     final rows = await svc.fetchReactors(
       chatType: widget.chatType,
       messageId: widget.messageId,
@@ -106,7 +106,7 @@ class _ReactionDetailSheetState extends ConsumerState<_ReactionDetailSheet> {
 
   Future<void> _remove(_Reactor r) async {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final ok = await MessageReactionService.instance.removeReaction(
+    final ok = await ref.read(messageReactionProvider).removeReaction(
       chatType: widget.chatType,
       messageId: widget.messageId,
       emoji: r.emoji,
