@@ -26,7 +26,6 @@ ALLOWLIST=(
   "lib/screens/private_chat_screen.dart:3117"
   "lib/screens/room_chat_screen.dart:2935"
   "lib/screens/profile_screen.dart:2196"
-  "lib/screens/user_info_screen.dart:1677"
   "lib/screens/story_viewer_screen.dart:1652"
   "lib/screens/private_chats_screen.dart:1625"
   "lib/screens/admin_chat_list_screen.dart:1481"
