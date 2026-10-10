@@ -11,7 +11,7 @@ import '../../core/cache/photo_cache.dart';
 import '../../core/media/chat_photo_helper.dart';
 import '../../core/media/native_image.dart';
 import '../../core/storage_paths.dart';
-import '../../providers/riverpod/storage_provider.dart';
+import '../../providers/riverpod/service_locator.dart';
 import '../../providers/riverpod/locale_provider.dart';
 import 'image_decode_core.dart';
 import 'photo_viewer_screen.dart';
@@ -235,7 +235,7 @@ class _MessageImageState extends State<MessageImage> {
           }
         }
       } catch (_) {}
-      data = await ProviderScope.containerOf(context, listen: false).read(storageProvider).download(data) ?? '';
+      data = await safeStorage(context).download(data) ?? '';
     }
     if (!mounted || gen != _gen) return;
     if (data.isEmpty) {

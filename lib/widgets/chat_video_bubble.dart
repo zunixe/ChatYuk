@@ -12,7 +12,7 @@ import '../core/cache/media_disk_cache.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../core/storage_paths.dart';
-import '../providers/riverpod/storage_provider.dart';
+import '../providers/riverpod/service_locator.dart';
 import '../utils.dart';
 import 'package:video_player/video_player.dart';
 
@@ -275,7 +275,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       await target.writeAsBytes(cached, flush: true);
       return target;
     }
-    final bytes = await ProviderScope.containerOf(context, listen: false).read(storageProvider).downloadBytes(
+    final bytes = await safeStorage(context).downloadBytes(
       widget.videoData,
     );
     if (bytes == null || bytes.isEmpty) return null;
@@ -350,7 +350,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
           if (mounted) setState(() => _loading = false);
           return;
         }
-        final thumb = await ProviderScope.containerOf(context, listen: false).read(storageProvider).storyVideoPoster(
+        final thumb = await safeStorage(context).storyVideoPoster(
           file.path,
         );
         if (!mounted) return;
@@ -377,7 +377,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         }
         return;
       }
-      final thumb = await ProviderScope.containerOf(context, listen: false).read(storageProvider).storyVideoPoster(
+      final thumb = await safeStorage(context).storyVideoPoster(
         file.path,
       );
       if (!mounted) return;
