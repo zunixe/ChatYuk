@@ -31,7 +31,6 @@ ALLOWLIST=(
   "lib/screens/story_composer_screen.dart:1328"
   "lib/screens/admin_chat_view_screen.dart:1185"
   "lib/screens/group_screen.dart:1177"
-  "lib/screens/admin_panel/widgets/usermap_card.dart:1012"
   "lib/services/room_voice_service.dart:1432"
   "lib/app.dart:1637"
   "lib/main.dart:1748"
