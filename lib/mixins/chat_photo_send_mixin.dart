@@ -425,6 +425,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// getter layar dan selalu bernilai 0 (durasi hilang saat kirim).
   int get pendingVideoMs => 0;
 
+  /// Poster video preview (base64) — layar meng-override dengan state-nya.
+  /// Dipakai untuk hangatkan poster ke disk TANPA unduh ulang server.
+  String? get pendingVideoPosterB64 => null;
+
   /// Jalur kirim video: optimistic bubble → poin → upload → dispatch.
   /// Tanpa view-once (video tidak punya mode sekali lihat).
   Future<void> _sendVideoLike({
@@ -542,8 +546,15 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         // Durasi video (panjang playback) — SELALU dikirim.
         videoDurationMs: durationMs,
       );
-      // Poster video (path server) hangatkan ke disk → cold start anti-blink.
-      unawaited(VideoPrefetch.warmOne(path));
+      // Poster + video hangatkan ke disk cache DARI BYTES LOKAL (tanpa unduh
+      // ulang server) → cold start berikutnya anti-blink & play instan.
+      final posterB64 = pendingVideoPosterB64;
+      final posterBytes = (posterB64 != null && posterB64.isNotEmpty)
+          ? base64Decode(posterB64)
+          : null;
+      unawaited(
+        VideoPrefetch.warmOne(path, videoBytes: bytes, posterBytes: posterBytes),
+      );
       photoFirstBonus(pp);
       photoOnSent(isOnce ? 'video_once' : 'video');
       outboxScrollToBottom();

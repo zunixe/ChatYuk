@@ -22,8 +22,9 @@ import '../models/message_model.dart';
 class VideoPrefetch {
   VideoPrefetch._();
 
-  /// Maks poster dihangatkan per chat per sesi (video besar → batasi ketat).
-  static const int maxPerChat = 2;
+  /// Maks poster dihangatkan per chat per sesi. 6 (dulu 2) — cukup untuk
+  /// beberapa video terbaru; hanya POSTER yang disimpan (kecil), bukan video.
+  static const int maxPerChat = 6;
 
   static final Set<String> _warmed = {};
 
@@ -36,20 +37,62 @@ class VideoPrefetch {
 
   static String _posterKey(String videoPath) => 'video_poster:$videoPath';
 
-  /// Hangatkan SATU video (path storage) → poster disk. Dipakai setelah
-  /// pengirim sukses upload (bubble versi server langsung anti-blink saat
-  /// cold start berikutnya).
-  static Future<void> warmOne(String videoPath) async {
+  /// Hangatkan SATU video (path storage) → poster disk.
+  ///
+  /// [videoBytes] & [posterBytes] OPSIONAL: bila pengirim sudah punya bytes
+  /// lokal (hasil kompres) + poster (hasil generate sebelum kirim), kirimkan
+  /// lewat sini → TIDAK perlu unduh ulang video dari server (dulu `warmOne`
+  /// selalu download → boros kuota & lambat). Bila null, fallback unduh
+  /// (dipakai untuk video lawan).
+  ///
+  /// PENTING: yang disimpan ke [MediaDiskCache] HANYA POSTER (kecil, ~20-50KB),
+  /// BUKAN video bytes (bisa puluhan MB — akan mengisi kuota 250MB bersama
+  /// foto/avatar/voice & meng-evict LRU → poster/foto lain hilang → "cold
+  /// start reload lagi"). Video bytes untuk playback ditangani mekanisme
+  /// terpisah (`ChatVideoBubble._ensureLocalFile` → file temp native).
+  static Future<void> warmOne(
+    String videoPath, {
+    Uint8List? videoBytes,
+    Uint8List? posterBytes,
+  }) async {
     if (videoPath.isEmpty) return;
-    final dl = downloader;
-    final gen = posterGenerator;
-    if (dl == null || gen == null) return;
     try {
       final hit = MediaDiskCache.instance.readSync(_posterKey(videoPath));
-      if (hit != null && hit.isNotEmpty) return;
+      final hasPoster = hit != null && hit.isNotEmpty;
+
+      // Poster diberikan langsung (pengirim) → tulis, selesai (tanpa unduh).
+      if (posterBytes != null && posterBytes.isNotEmpty) {
+        if (!hasPoster) {
+          await MediaDiskCache.instance.write(_posterKey(videoPath), posterBytes);
+        }
+        return;
+      }
+      if (hasPoster) return;
+
+      // Bytes lokal ada tapi poster belum → generate LOKAL (tanpa unduh).
+      if (videoBytes != null && videoBytes.isNotEmpty) {
+        final gen = posterGenerator;
+        if (gen == null) return;
+        final dir = await getTemporaryDirectory();
+        final f = File('${dir.path}/vp1_${videoPath.hashCode.abs()}.mp4');
+        await f.writeAsBytes(videoBytes, flush: true);
+        final poster = await gen(f.path);
+        if (poster != null && poster.isNotEmpty) {
+          await MediaDiskCache.instance.write(_posterKey(videoPath), poster);
+        }
+        try {
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+        return;
+      }
+
+      // Tidak ada bytes lokal → unduh video, generate poster, BUANG video bytes
+      // (jangan simpan ke cache kecil — cukup poster + file temp sementara).
+      final dl = downloader;
+      final gen = posterGenerator;
+      if (dl == null || gen == null) return;
       final bytes = await dl(videoPath);
       if (bytes == null || bytes.isEmpty) return;
-      unawaited(MediaDiskCache.instance.write(videoPath, bytes));
       final dir = await getTemporaryDirectory();
       final f = File('${dir.path}/vp1_${videoPath.hashCode.abs()}.mp4');
       await f.writeAsBytes(bytes, flush: true);
@@ -95,9 +138,10 @@ class VideoPrefetch {
           if (hit != null && hit.isNotEmpty) continue;
           final bytes = await dl(m.imageData);
           if (bytes == null || bytes.isEmpty) continue;
-          // Video juga disimpan (bukan cuma poster) → play instan nanti.
-          unawaited(MediaDiskCache.instance.write(m.imageData, bytes));
-          // Tulis file temp → generate poster.
+          // Tulis file temp HANYA untuk generate poster, lalu BUANG.
+          // JANGAN simpan video bytes ke MediaDiskCache (kuota 250MB dipakai
+          // bersama foto/avatar/voice → video besar akan meng-evict LRU =
+          // "cold start reload lagi").
           final dir = await getTemporaryDirectory();
           final f = File(
             '${dir.path}/vp_${m.imageData.hashCode.abs()}.mp4',
