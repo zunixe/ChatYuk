@@ -50,6 +50,7 @@ import 'services/notification_prefs_service.dart';
 import 'services/storage_photo_service.dart';
 import 'services/topup_service.dart';
 import 'widgets/voice_bubble.dart';
+import 'widgets/video_prefetch.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -1515,6 +1516,9 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Boundary: widgets/voice_bubble prefetch butuh downloader tanpa import
   // services/ — inject di composition root.
   VoicePrefetch.downloader = StoragePhotoService.instance.downloadBytes;
+  // Prefetch POSTER video (anti-blink cold start, pola sama voice).
+  VideoPrefetch.downloader = StoragePhotoService.instance.downloadBytes;
+  VideoPrefetch.posterGenerator = StoragePhotoService.instance.storyVideoPoster;
   //
   // Setiap anggota DIBATASI timeout: satu init yang menggantung (Keystore /
   // SQLite / Firebase) tidak boleh menahan first-frame selamanya → gejala
