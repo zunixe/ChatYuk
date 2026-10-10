@@ -104,9 +104,10 @@ sudah ada sejak frame pertama, tanpa layar kosong atau centang yang "nyusul".
 
 | Lapis | Lokasi |
 |---|---|
-| Transisi route | `private_chats_screen.dart:626` (tap list), `online_users_screen.dart:907`, `story_viewer_screen.dart:718` — `PageRouteBuilder` 150 ms slide |
+| Transisi route | **SATU helper** `widgets/chat_route.dart` `chatRoute()` (Slide+Fade 150/120) dipakai semua jalur (2026-10-11) |
 | Prime centang-2 | `private_chat_screen.dart` — `_primeReadFromCache()` (sinkron), `_loadCachedRead()` (fallback kv), `_persistRead()` |
 | Stream pesan | `chat_stream_session.dart` — `replay onListen`, emit memori → SQLite → server (merge) |
+| Timing buka | `private_chat/private_chat_open_timing.dart` — `_startMessagesStream()` (post-frame), `_scheduleWarmPrefetch()` (400ms) |
 | Pemanasan cache | `private_chats_screen.dart` — `_warmTopChats()` (6 chat teratas) → `ChatService.prefetchPrivateChat()` → `MessageCache.preloadMessages()` |
 | Snapshot list | `chat_service.dart` — `_privateChatsLast`, `_applyChatEvent()`, `_applyLocalRead()`, `lastPrivateChatsSnapshot()` |
 
@@ -124,14 +125,24 @@ sudah ada sejak frame pertama, tanpa layar kosong atau centang yang "nyusul".
 4. **`initialData` StreamBuilder = `MessageCache.peekMessages()`** (sinkron),
    bukan `const []`. Jangan ganti ke future/async.
 5. **Subscription non-kritis ditunda ke post-frame** (`_subscribeStatus`,
-   `_subscribeTyping`, `_chatInfoSub`, fetch profil lawan, `markAsRead`).
-   Jangan dikembalikan ke `initState` langsung — frame pertama jadi berat.
+   `_subscribeTyping`, `_chatInfoSub`, fetch profil lawan, `markAsRead`,
+   **`_startMessagesStream` sejak 2026-10-11**). Jangan dikembalikan ke
+   `initState` langsung — frame pertama jadi berat.
 6. **Toast bonus sekali per buka chat** (`_bonusToastScheduled`). Jangan pakai
    `Future.microtask` mentah di dalam `build()` — dulu ke-dobel tiap rebuild.
 7. **Bubble typing = item list paling bawah** (`itemCount + 1`, index 0 saat
    `reverse: true`). Kalau ditaruh di luar `ListView`, bubble tidak ikut scroll.
 8. **Transisi route tetap ada** (150 ms `SlideTransition`), jangan di-nol-kan
    (terasa "patah") dan jangan dinaikkan ke 300 ms+ (terasa lag).
+9. **Semua jalur ke chat pakai `chatRoute()`** (`widgets/chat_route.dart`),
+   jangan `PageRouteBuilder`/`MaterialPageRoute` manual lagi → transisi
+   seragam. Halaman lain tetap Slide murni (jangan tambah Fade global).
+10. **`prefetchPrivateChat` TIDAK di-await** sebelum `Navigator.push` (paralel,
+    `unawaited`) → tap→transisi instan. Jangan kembalikan `await`.
+11. **Warm voice/video ditunda 400ms** (`_scheduleWarmPrefetch`), bukan di emit
+    pertama (yang jatuh tepat saat transisi).
+12. **Channel `getUserStatus` = SATU per uid + refcount** — jangan kembalikan
+    nama channel pakai `instanceId` unik (boros channel).
 
 **Regresi yang pernah terjadi (jangan diulang):**
 - Transisi 320 ms → terasa jeda saat buka chat.
@@ -142,6 +153,10 @@ sudah ada sejak frame pertama, tanpa layar kosong atau centang yang "nyusul".
   baca tidak ikut centang-2. Sekarang pakai `!isAfter` (`<=`).
 - Prefetch saat tap jalan paralel dengan build screen → frame pertama miss cache.
 - Bubble typing di luar `ListView` → tidak ikut scroll (keluhan user).
+- **Transisi chat tak konsisten** (hanya 2 jalur Slide+Fade, sisanya Slide murni)
+  → dibetulkan 2026-10-11 lewat `chatRoute()`.
+- **`await prefetchPrivateChat` sebelum push** → transisi baru mulai setelah
+  query SQLite (DB besar = telat) → dibetulkan (paralel, 2026-10-11).
 
 ### 3b. Swipe-to-reply (geser kanan = balas) — private & grup
 
