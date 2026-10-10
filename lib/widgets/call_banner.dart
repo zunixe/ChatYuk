@@ -9,7 +9,6 @@ import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../screens/private_chat_screen.dart';
 import '../screens/call_screen.dart';
-import '../services/call_service.dart';
 import '../utils.dart';
 
 class CallBanner extends ConsumerStatefulWidget {

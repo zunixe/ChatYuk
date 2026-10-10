@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chatyuk/services/call_service.dart';
+import 'package:chatyuk/services/call/call_session.dart';
 import 'package:chatyuk/core/call/call_permissions.dart';
 import 'package:chatyuk/widgets/chat_call_overlay.dart';
 
