@@ -21,8 +21,9 @@ class LocationNotifier {
   Future<bool> requestPermission() => location.requestPermission();
   Future<void> openSettings() => location.openSettings();
   Future<void> setShareLocation(bool value) => location.setShareLocation(value);
-  Future<List<Map<String, dynamic>>> nearbyUsers(double radiusKm) =>
-      location.nearbyUsers(radiusKm);
+  Future<List<Map<String, dynamic>>> nearbyUsers(double radiusKm,
+          {int limit = 50, int offset = 0}) =>
+      location.nearbyUsers(radiusKm, limit: limit, offset: offset);
   Future<(double, double, int)?> precisePosition() => location.precisePosition();
 
   Future<GeoInfo?> detect() => geo.detect();

@@ -41,6 +41,11 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
   bool _shareOn = false;
   String? _error;
   List<Map<String, dynamic>> _users = [];
+  // Paginasi.
+  static const int _pageSize = 50;
+  final ScrollController _scrollCtrl = ScrollController();
+  bool _hasMore = true;
+  bool _loadingMore = false;
   // Cegah 2 query tumpang-tindih (refresh awal + refresh GPS latar) yang
   // memicu RPC dobel & radar berkedip. Refresh terakhir menang.
   bool _refreshing = false;
@@ -48,7 +53,36 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollCtrl.addListener(_onScroll);
     _init();
+  }
+
+  void _onScroll() {
+    if (!_hasMore || _loadingMore) return;
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore || _loading) return;
+    setState(() => _loadingMore = true);
+    try {
+      final rows = await _loc.nearbyUsers(
+        _radiusKm,
+        limit: _pageSize,
+        offset: _users.length,
+      );
+      if (!mounted) return;
+      setState(() {
+        _users = [..._users, ...rows];
+        _hasMore = rows.length >= _pageSize;
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   Future<void> _init() async {
@@ -113,7 +147,7 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
       _error = null;
     });
     try {
-      final list = await _loc.nearbyUsers(_radiusKm);
+      final list = await _loc.nearbyUsers(_radiusKm, limit: _pageSize);
       // Radar minimal 350ms — cukup terasa "mencari" tanpa delay buatan
       // panjang. (Dulu 600ms = tambahan latensi murni tiap buka/geser.)
       final elapsed = DateTime.now().difference(started);
@@ -123,6 +157,7 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
       if (!mounted) return;
       setState(() {
         _users = list;
+        _hasMore = list.length >= _pageSize;
         _loading = false;
       });
     } catch (e) {
@@ -373,19 +408,34 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView.builder(
+        controller: _scrollCtrl,
         padding: EdgeInsets.fromLTRB(
           10,
           8,
           10,
           MediaQuery.of(context).padding.bottom + 12,
         ),
-        itemCount: _users.length,
-        itemBuilder: (_, i) => RepaintBoundary(
-          child: NearbyCard(
-            data: _users[i],
-            onTap: () => _startChat(_users[i]),
-          ),
-        ),
+        itemCount: _users.length + (_hasMore ? 1 : 0),
+        itemBuilder: (_, i) {
+          if (i >= _users.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+          return RepaintBoundary(
+            child: NearbyCard(
+              data: _users[i],
+              onTap: () => _startChat(_users[i]),
+            ),
+          );
+        },
       ),
     );
   }
@@ -431,6 +481,13 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
+    super.dispose();
   }
 }
 

@@ -172,14 +172,20 @@ class SocialService {
     String kind,
     String userUid, {
     int limit = 50,
+    int offset = 0,
   }) {
     return _coalesce<List<Map<String, dynamic>>>(
-      'social_list:$kind:$userUid',
+      'social_list:$kind:$userUid:$limit:$offset',
       () async {
         try {
           final res = await measuredRpc(_sb, 
             'social_list',
-            params: {'p_kind': kind, 'p_user': userUid, 'p_limit': limit},
+            params: {
+              'p_kind': kind,
+              'p_user': userUid,
+              'p_limit': limit,
+              if (offset > 0) 'p_offset': offset,
+            },
           );
           return _list(res);
         } catch (e) {
