@@ -119,7 +119,7 @@ class ViewOnceHostState extends State<ViewOnceHost>
   void outboxOnSent() {}
 
   @override
-  Future<void> photoDispatch({
+  Future<String?> photoDispatch({
     required String imageData,
     required String type,
     required String senderId,
