@@ -30,13 +30,14 @@ class RenderHeartbeat extends StatefulWidget {
   final Widget child;
 
   /// Jarak antar "denyut" di foreground. Harus < ~70ms agar tidak kena
-  /// SDM Idle Timeout; 32ms (~30 fps) memberi margin aman tanpa 60 fps penuh.
+  /// SDM Idle Timeout; 56ms (~18 fps) memberi margin aman (~14ms di bawah
+  /// batas) sambil jauh lebih hemat daya daripada 32ms/60fps-penuh.
   final Duration interval;
 
   const RenderHeartbeat({
     super.key,
     required this.child,
-    this.interval = const Duration(milliseconds: 32),
+    this.interval = const Duration(milliseconds: 56),
   });
 
   @override
