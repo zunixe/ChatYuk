@@ -34,11 +34,10 @@ ALLOWLIST=(
   "lib/screens/admin_chat_view_screen.dart:1240"
   "lib/screens/group_screen.dart:1177"
   "lib/screens/admin_panel/widgets/usermap_card.dart:1012"
-  "lib/providers/riverpod/auth_provider.dart:2042"
   "lib/providers/riverpod/points_provider.dart:1019"
   "lib/services/room_voice_service.dart:1432"
   "lib/services/admin_service.dart:1058"
-  "lib/app.dart:1636"
+  "lib/app.dart:1637"
   "lib/main.dart:1748"
 )
 
