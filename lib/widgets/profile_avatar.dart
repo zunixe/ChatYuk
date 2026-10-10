@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../core/media/native_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/avatar_provider.dart';
+import '../providers/riverpod/service_locator.dart';
 import 'user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes;
 
 Uint8List? _decodeAvatarB64(String b64) {
@@ -53,9 +54,16 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
   Uint8List? _bytes;
 
   /// Akses avatar service lewat provider (boundary Fase B: widgets dilarang
-  /// import services/ langsung). Fallback container → aman di test tanpa scope.
-  AvatarNotifier get _avatarSvc =>
-      ProviderScope.containerOf(context, listen: false).read(avatarProvider);
+  /// import services/ langsung). Fallback ke singleton bila tanpa ProviderScope
+  /// (unit test widget murni / preview) — perilaku identik.
+  AvatarNotifier get _avatarSvc {
+    try {
+      return ProviderScope.containerOf(context, listen: false)
+          .read(avatarProvider);
+    } catch (_) {
+      return AvatarNotifier(UiServices.avatar);
+    }
+  }
 
   @override
   void initState() {

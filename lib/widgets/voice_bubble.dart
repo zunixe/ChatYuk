@@ -5,8 +5,7 @@ import 'package:audioplayers/audioplayers.dart';
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../models/message_model.dart';
-import '../providers/riverpod/storage_provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/riverpod/service_locator.dart';
 
 /// Prefetch file voice TERBARU di background sekali per buka chat — supaya
 /// tap play terasa instan seperti foto (yang auto-load dari disk).
@@ -183,10 +182,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
         }
         // Cache miss → tampilkan spinner selama unduh.
         setState(() => _loading = true);
-        final bytes = await ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(storageProvider).downloadBytes(widget.path);
+        final bytes = await safeStorage(context).downloadBytes(widget.path);
         if (bytes == null || bytes.isEmpty) return;
         await MediaDiskCache.instance.write(widget.path, bytes);
         final f2 = await MediaDiskCache.instance.fileFor(widget.path);

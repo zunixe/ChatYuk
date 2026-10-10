@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/avatar_provider.dart';
+import '../providers/riverpod/service_locator.dart';
 import 'user_avatar.dart';
 
 /// Avatar satu orang yang KONSISTEN di seluruh app.
@@ -71,8 +72,14 @@ class _PersonAvatarState extends State<PersonAvatar> {
   /// pemanggil hanya punya uid (mis. header chat private).
   String _src = '';
 
-  AvatarNotifier get _avatarSvc =>
-      ProviderScope.containerOf(context, listen: false).read(avatarProvider);
+  AvatarNotifier get _avatarSvc {
+    try {
+      return ProviderScope.containerOf(context, listen: false)
+          .read(avatarProvider);
+    } catch (_) {
+      return AvatarNotifier(UiServices.avatar);
+    }
+  }
 
   @override
   void initState() {

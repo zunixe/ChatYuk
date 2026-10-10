@@ -3,9 +3,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/storage_paths.dart';
-import '../../providers/riverpod/avatar_provider.dart';
+import '../../providers/riverpod/service_locator.dart';
 import '../../core/cache/media_disk_cache.dart';
 import '../../core/media/native_image.dart';
 import '../gender_avatar.dart';
@@ -94,7 +93,7 @@ class CommentAvatarState extends State<CommentAvatar> {
     }
     final isPath = isAvatarPathValue(avatar);
     final b64 =
-        isPath ? await ProviderScope.containerOf(context, listen: false).read(avatarProvider).getByPath(avatar) : avatar;
+        isPath ? await safeAvatar(context).getByPath(avatar) : avatar;
     if (b64.isEmpty || !mounted || _resolvedFor != avatar) return;
     final bytes = await NativeImage.decodeAvatar(b64, maxPx: 256);
     if (bytes == null || !mounted || _resolvedFor != avatar) return;
