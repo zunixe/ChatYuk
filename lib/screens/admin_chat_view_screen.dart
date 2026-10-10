@@ -1177,8 +1177,17 @@ class _AdminChatViewScreenState extends ConsumerState<AdminChatViewScreen>
                             final isRead =
                                 readAt != null &&
                                 msg.timestamp.isBefore(readAt);
+                            // Foto kosong & pesan lama (> 50 dari terbaru) →
+                            // deferred (ikon refresh; tap memuat). SAMA
+                            // dengan chat user: tanpa batas ini, membuka chat
+                            // berisi ratusan foto lama memicu ratusan
+                            // RPC/unduh sekaligus. `i` = indeks dari item
+                            // terbaru (list reverse), jadi i>=50 = di luar 50
+                            // pesan terbaru.
                             final isImageDeferred =
-                                msg.type == 'image' && msg.imageData.isEmpty;
+                                msg.type == 'image' &&
+                                msg.imageData.isEmpty &&
+                                i >= 50;
                             // RepaintBoundary per bubble: scroll tidak
                             // merender ulang bubble lain (isolasi repaint) —
                             // kunci utama anti-jank saat pesan banyak.

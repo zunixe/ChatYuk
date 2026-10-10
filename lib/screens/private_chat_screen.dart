@@ -2584,7 +2584,16 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                               final searchKey = searching
                                   ? _searchKeys[msg.id]
                                   : null;
-                              return MessageBubble(
+                              // RepaintBoundary per bubble: satu bubble berubah
+                              // (centang, reaksi, foto masuk, animasi like)
+                              // tidak memicu repaint seluruh list — isolasi
+                              // layer per kartu. Pola SAMA dengan monitor admin
+                              // & kartu list lain (chat/online/timeline) yang
+                              // sudah memakainya (docs/PERFORMANCE.md §2.5).
+                              // Dipakai HANYA di jalur bubble chat biasa —
+                              // kartu/typing-wrapper tetap seperti semula.
+                              return RepaintBoundary(
+                                child: MessageBubble(
                                 key: searchKey ?? ValueKey(msg.id),
                                 link: linkFor(msg.id),
                                 msg: msg,
@@ -2621,6 +2630,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                                     ? null
                                     : () => replyMessage(msg),
                                 deletedIds: deletedIds,
+                                ),
                               );
                             },
                           );
