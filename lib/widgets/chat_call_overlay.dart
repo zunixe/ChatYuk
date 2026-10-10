@@ -8,7 +8,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../services/call/call_session.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../core/call/call_permissions.dart';
 import '../core/perf/perf_probe.dart';
 import 'call_control_button.dart';

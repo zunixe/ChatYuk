@@ -49,6 +49,7 @@ import 'services/meta_analytics_service.dart';
 import 'services/notification_prefs_service.dart';
 import 'services/storage_photo_service.dart';
 import 'services/topup_service.dart';
+import 'widgets/voice_bubble.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -1511,6 +1512,9 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // predikat path storage DIINJEKSI di sini (composition root).
   MessageCache.isStoragePath = StoragePhotoService.instance.isPath;
   MessageCache.isStorageVoicePath = StoragePhotoService.instance.isVoicePath;
+  // Boundary: widgets/voice_bubble prefetch butuh downloader tanpa import
+  // services/ — inject di composition root.
+  VoicePrefetch.downloader = StoragePhotoService.instance.downloadBytes;
   //
   // Setiap anggota DIBATASI timeout: satu init yang menggantung (Keystore /
   // SQLite / Firebase) tidak boleh menahan first-frame selamanya → gejala

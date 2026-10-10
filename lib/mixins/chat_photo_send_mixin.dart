@@ -15,7 +15,7 @@ import '../utils.dart';
 import '../core/media/native_image.dart';
 import '../core/photo_quality_pref.dart';
 import '../core/cache/offline_outbox.dart';
-import '../services/storage_photo_service.dart';
+import '../core/storage_paths.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/message/image_decode_core.dart' show warmPhotoCacheForPath;
 import 'chat_outbox_mixin.dart';
@@ -320,7 +320,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     //    jangan buang waktu kompres video 5 menit).
     final rawMs = await storage.videoDurationMs(path);
     if (!mounted) return false;
-    if (rawMs > 0 && rawMs > StoragePhotoService.chatVideoMaxMs) {
+    if (rawMs > 0 && rawMs > chatVideoMaxMsValue) {
       toast(s.videoTooLong);
       return false;
     }
@@ -346,7 +346,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
 
     // 3) Batas ukuran hasil.
     final bytes = await out.readAsBytes();
-    if (bytes.length > StoragePhotoService.chatVideoMaxBytes) {
+    if (bytes.length > chatVideoMaxBytesValue) {
       toast(s.videoTooLarge);
       return false;
     }
@@ -502,7 +502,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     }
 
     try {
-      final path = await StoragePhotoService.instance.uploadChatVideo(
+      final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadChatVideo(
         chatId: photoUploadChatId,
         bytes: bytes,
       );
@@ -671,7 +671,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     }
 
     try {
-      final path = await StoragePhotoService.instance.upload(
+      final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).upload(
         chatId: photoUploadChatId,
         base64: base64,
       );

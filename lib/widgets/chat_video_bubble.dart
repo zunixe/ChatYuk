@@ -11,7 +11,8 @@ import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../services/storage_photo_service.dart';
+import '../core/storage_paths.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../utils.dart';
 import 'package:video_player/video_player.dart';
 
@@ -233,7 +234,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   }
 
   /// True bila videoData berupa path storage (bukan base64 lokal).
-  bool get _isPath => StoragePhotoService.instance.isChatVideoPath(
+  bool get _isPath => isChatVideoPathValue(
     widget.videoData,
   );
 
@@ -274,7 +275,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       await target.writeAsBytes(cached, flush: true);
       return target;
     }
-    final bytes = await StoragePhotoService.instance.downloadBytes(
+    final bytes = await ProviderScope.containerOf(context, listen: false).read(storageProvider).downloadBytes(
       widget.videoData,
     );
     if (bytes == null || bytes.isEmpty) return null;
@@ -349,7 +350,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
           if (mounted) setState(() => _loading = false);
           return;
         }
-        final thumb = await StoragePhotoService.instance.storyVideoPoster(
+        final thumb = await ProviderScope.containerOf(context, listen: false).read(storageProvider).storyVideoPoster(
           file.path,
         );
         if (!mounted) return;
@@ -376,7 +377,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         }
         return;
       }
-      final thumb = await StoragePhotoService.instance.storyVideoPoster(
+      final thumb = await ProviderScope.containerOf(context, listen: false).read(storageProvider).storyVideoPoster(
         file.path,
       );
       if (!mounted) return;

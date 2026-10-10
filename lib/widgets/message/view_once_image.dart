@@ -10,7 +10,8 @@ import '../../core/media/native_image.dart';
 import '../../core/screen_secure_service.dart';
 import '../../providers/riverpod/chat_provider.dart';
 import '../../providers/riverpod/locale_provider.dart';
-import '../../services/storage_photo_service.dart';
+import '../../core/storage_paths.dart';
+import '../../providers/riverpod/storage_provider.dart';
 import '../chat_video_bubble.dart';
 import 'image_decode_core.dart';
 import 'photo_viewer_screen.dart';
@@ -99,8 +100,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   Future<void> _decodeAdmin() async {
     var data = widget.imageData;
     // imageData bisa berupa PATH storage (foto baru) → download dari bucket.
-    if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
-      data = await StoragePhotoService.instance.download(data) ?? '';
+    if (data.isNotEmpty && isStoragePathValue(data)) {
+      data = await ProviderScope.containerOf(context, listen: false).read(storageProvider).download(data) ?? '';
     }
     if (data.isEmpty) return;
     final res = await NativeImage.decodeWithDims(data);
@@ -168,8 +169,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       return;
     }
     // Data bisa berupa PATH storage → download dulu sebelum decode.
-    if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
-      data = await StoragePhotoService.instance.download(data) ?? '';
+    if (data.isNotEmpty && isStoragePathValue(data)) {
+      data = await ProviderScope.containerOf(context, listen: false).read(storageProvider).download(data) ?? '';
       if (data.isEmpty) return;
     }
     final res = await NativeImage.decodeWithDims(data);

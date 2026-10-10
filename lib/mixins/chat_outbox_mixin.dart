@@ -9,7 +9,7 @@ import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
-import '../services/storage_photo_service.dart';
+import '../providers/riverpod/storage_provider.dart';
 import '../utils/mention.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/message/image_decode_core.dart' show warmPhotoCacheForPath;
@@ -165,7 +165,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
           var imageData = e.imagePayload;
           if (e.needsUpload && imageData.isNotEmpty) {
             if (e.uploadKind == 'voice') {
-              final path = await StoragePhotoService.instance.uploadVoice(
+              final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadVoice(
                 chatId: outboxUploadChatId,
                 bytes: base64Decode(imageData),
               );
@@ -175,7 +175,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
               imageData = path;
             } else if (e.uploadKind == 'video') {
               // Video: payload = bytes video mentah (base64).
-              final path = await StoragePhotoService.instance.uploadChatVideo(
+              final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadChatVideo(
                 chatId: outboxUploadChatId,
                 bytes: base64Decode(imageData),
               );
@@ -184,7 +184,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
               }
               imageData = path;
             } else {
-              final path = await StoragePhotoService.instance.upload(
+              final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).upload(
                 chatId: outboxUploadChatId,
                 base64: imageData,
               );

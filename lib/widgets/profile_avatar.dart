@@ -3,7 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../core/media/native_image.dart';
-import '../services/avatar_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/riverpod/avatar_provider.dart';
 import 'user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes;
 
 Uint8List? _decodeAvatarB64(String b64) {
@@ -51,6 +52,11 @@ class ProfileAvatar extends StatefulWidget {
 class _ProfileAvatarState extends State<ProfileAvatar> {
   Uint8List? _bytes;
 
+  /// Akses avatar service lewat provider (boundary Fase B: widgets dilarang
+  /// import services/ langsung). Fallback container → aman di test tanpa scope.
+  AvatarNotifier get _avatarSvc =>
+      ProviderScope.containerOf(context, listen: false).read(avatarProvider);
+
   @override
   void initState() {
     super.initState();
@@ -71,7 +77,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
       _bytes = shared;
       return;
     }
-    final ram = AvatarB64Service.instance.cachedSync(widget.uid);
+    final ram = _avatarSvc.cachedSync(widget.uid);
     if (ram == null) return;
     final decoded = _decodeAvatarB64(ram);
     if (decoded != null) {
@@ -103,7 +109,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
     // (kalau tidak, avatar stuck inisial sampai rebuild = kedip).
     // 3× (dulu 10×) — cukup untuk inflight race tanpa membebani list.
     for (var attempt = 0; attempt < 3; attempt++) {
-      final b64 = await AvatarB64Service.instance.get(uid);
+      final b64 = await _avatarSvc.get(uid);
       if (!mounted || widget.uid != uid) return;
       if (b64.isNotEmpty) {
         final cached = cachedUserAvatarBytes(uid);
