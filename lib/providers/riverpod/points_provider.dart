@@ -13,6 +13,7 @@ import '../../core/admin_gate.dart';
 import '../../screens/point_history/widgets/topup_sheet.dart';
 import '../../services/points_service.dart';
 import '../../utils.dart';
+import '../../widgets/points_toast.dart';
 
 /// State poin/koin (immutable — yang di-watch widget).
 class PointsState {
@@ -86,14 +87,29 @@ class PointsState {
 
   @override
   int get hashCode => Object.hashAll([
-        points, enabledRaw, enabledConfirmed, bonusBalance, earnedBalance,
-        yukcoinV2Active, ghostMode, extraPhotoSlots, photoUnlockOnce,
-        photoUnlockPerm, roomCreatePaid, roomCreatePwPaid, roomJoinPaid,
-        roomExtendPaid, bonusMultiplier, callAudioCostPerMin,
-        callVideoCostPerMin, filterGenderCost, nearbyCost,
-        Object.hashAllUnordered(featureFlags.entries
-            .map((e) => Object.hash(e.key, e.value))),
-      ]);
+    points,
+    enabledRaw,
+    enabledConfirmed,
+    bonusBalance,
+    earnedBalance,
+    yukcoinV2Active,
+    ghostMode,
+    extraPhotoSlots,
+    photoUnlockOnce,
+    photoUnlockPerm,
+    roomCreatePaid,
+    roomCreatePwPaid,
+    roomJoinPaid,
+    roomExtendPaid,
+    bonusMultiplier,
+    callAudioCostPerMin,
+    callVideoCostPerMin,
+    filterGenderCost,
+    nearbyCost,
+    Object.hashAllUnordered(
+      featureFlags.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
+  ]);
 
   bool get enabled => enabledConfirmed && enabledRaw;
   int get paidBalance => earnedBalance;
@@ -118,12 +134,11 @@ class PointsState {
 
 /// Saldo koin + harga fitur + lifecycle online (Riverpod).
 /// Migrasi dari ChangeNotifier → Notifier. Global (persist sepanjang sesi).
-class PointsNotifier extends Notifier<PointsState>
-    with WidgetsBindingObserver {
+class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   final PointsService _service;
 
   PointsNotifier({PointsService? service})
-      : _service = service ?? PointsService(Supabase.instance.client);
+    : _service = service ?? PointsService(Supabase.instance.client);
 
   var _disposed = false;
   int _points = 50;
@@ -180,24 +195,25 @@ class PointsNotifier extends Notifier<PointsState>
     unawaited(refreshEnabled());
     subscribeEnabled();
     try {
-      _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((
-        state,
-      ) {
-        if (_disposed) return;
-        if (state.event == AuthChangeEvent.initialSession ||
-            state.event == AuthChangeEvent.signedIn ||
-            state.event == AuthChangeEvent.tokenRefreshed ||
-            state.event == AuthChangeEvent.signedOut) {
-          subscribeOwnPoints();
-        }
-        if (state.event == AuthChangeEvent.signedOut) {
-          _enabledSub?.cancel();
-          _enabledSub = null;
-          subscribeEnabled();
-        }
-      }, onError: (e) {
-        dlog('[POINTS] auth stream error: $e');
-      });
+      _authSub = Supabase.instance.client.auth.onAuthStateChange.listen(
+        (state) {
+          if (_disposed) return;
+          if (state.event == AuthChangeEvent.initialSession ||
+              state.event == AuthChangeEvent.signedIn ||
+              state.event == AuthChangeEvent.tokenRefreshed ||
+              state.event == AuthChangeEvent.signedOut) {
+            subscribeOwnPoints();
+          }
+          if (state.event == AuthChangeEvent.signedOut) {
+            _enabledSub?.cancel();
+            _enabledSub = null;
+            subscribeEnabled();
+          }
+        },
+        onError: (e) {
+          dlog('[POINTS] auth stream error: $e');
+        },
+      );
     } catch (e) {
       dlog('[POINTS] auth listener error: $e');
     }
@@ -273,10 +289,10 @@ class PointsNotifier extends Notifier<PointsState>
       final p = await _service.meteredPricing();
       _callAudioCostPerMin =
           (p['call_audio_cost_per_min'] as num?)?.toInt() ??
-              _callAudioCostPerMin;
+          _callAudioCostPerMin;
       _callVideoCostPerMin =
           (p['call_video_cost_per_min'] as num?)?.toInt() ??
-              _callVideoCostPerMin;
+          _callVideoCostPerMin;
       _filterGenderCost =
           (p['filter_gender_cost'] as num?)?.toInt() ?? _filterGenderCost;
       _nearbyCost = (p['nearby_cost'] as num?)?.toInt() ?? _nearbyCost;
@@ -313,8 +329,10 @@ class PointsNotifier extends Notifier<PointsState>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E2E),
-        title: Text(s.callNeedCoinTitle,
-            style: const TextStyle(color: Colors.white)),
+        title: Text(
+          s.callNeedCoinTitle,
+          style: const TextStyle(color: Colors.white),
+        ),
         content: Text(
           s.callNeedCoinBody(need),
           style: AppText.bodySmall.copyWith(color: Colors.white70),
@@ -322,8 +340,10 @@ class PointsNotifier extends Notifier<PointsState>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(isId ? 'Nanti' : 'Later',
-                style: const TextStyle(color: Colors.white70)),
+            child: Text(
+              isId ? 'Nanti' : 'Later',
+              style: const TextStyle(color: Colors.white70),
+            ),
           ),
           FilledButton.icon(
             onPressed: () {
@@ -424,8 +444,7 @@ class PointsNotifier extends Notifier<PointsState>
     String feature,
     int amount, {
     String? ref,
-  }) =>
-      _service.spendYukcoin(feature, amount, ref: ref);
+  }) => _service.spendYukcoin(feature, amount, ref: ref);
   Future<Map<String, dynamic>> undoMessage(int messageId) =>
       _service.undoMessage(messageId);
   Future<Map<String, dynamic>> editMessage(int messageId, String newText) =>
@@ -453,21 +472,24 @@ class PointsNotifier extends Notifier<PointsState>
   void subscribeOwnPoints() {
     try {
       _pointsSub?.cancel();
-      _pointsSub = _service.watchOwnPoints().listen((value) {
-        if (_disposed) return;
-        final changed = value != _points;
-        _points = value;
-        _emit();
-        if (changed) {
-          _walletDebounce?.cancel();
-          _walletDebounce = Timer(const Duration(milliseconds: 800), () {
-            if (_disposed) return;
-            refreshWallet();
-          });
-        }
-      }, onError: (e) {
-        dlog('[POINTS] points stream error: $e');
-      });
+      _pointsSub = _service.watchOwnPoints().listen(
+        (value) {
+          if (_disposed) return;
+          final changed = value != _points;
+          _points = value;
+          _emit();
+          if (changed) {
+            _walletDebounce?.cancel();
+            _walletDebounce = Timer(const Duration(milliseconds: 800), () {
+              if (_disposed) return;
+              refreshWallet();
+            });
+          }
+        },
+        onError: (e) {
+          dlog('[POINTS] points stream error: $e');
+        },
+      );
       refreshWallet();
     } catch (e) {
       dlog('[POINTS] watchOwnPoints error: $e');
@@ -484,14 +506,17 @@ class PointsNotifier extends Notifier<PointsState>
 
   void subscribeEnabled() {
     try {
-      _enabledSub ??= _service.watchEnabled().listen((value) {
-        if (_disposed) return;
-        _enabledConfirmed = true;
-        _enabled = value;
-        _emit();
-      }, onError: (e) {
-        dlog('[POINTS] enabled stream error: $e');
-      });
+      _enabledSub ??= _service.watchEnabled().listen(
+        (value) {
+          if (_disposed) return;
+          _enabledConfirmed = true;
+          _enabled = value;
+          _emit();
+        },
+        onError: (e) {
+          dlog('[POINTS] enabled stream error: $e');
+        },
+      );
     } catch (e) {
       dlog('[POINTS] watchEnabled error: $e');
     }
@@ -845,7 +870,7 @@ class PointsNotifier extends Notifier<PointsState>
       }
 
       entry = OverlayEntry(
-        builder: (_) => _PointsToast(
+        builder: (_) => PointsToast(
           message: message,
           isError: isError,
           onDismiss: removeOnce,
@@ -921,99 +946,6 @@ class PointsNotifier extends Notifier<PointsState>
   }
 }
 
-final pointsProvider =
-    NotifierProvider<PointsNotifier, PointsState>(PointsNotifier.new);
-
-class _PointsToast extends StatefulWidget {
-  final String message;
-  final bool isError;
-  final VoidCallback onDismiss;
-  const _PointsToast({
-    required this.message,
-    this.isError = false,
-    required this.onDismiss,
-  });
-
-  @override
-  State<_PointsToast> createState() => _PointsToastState();
-}
-
-class _PointsToastState extends State<_PointsToast>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 400),
-  );
-  late final Animation<Offset> _slide = Tween<Offset>(
-    begin: const Offset(0, -0.3),
-    end: Offset.zero,
-  ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack));
-  late final Animation<double> _fade = CurvedAnimation(
-    parent: _ctrl,
-    curve: Curves.easeOut,
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl.forward();
-    Future.delayed(
-      const Duration(seconds: 1),
-      () => _ctrl.reverse().then((_) {
-        if (mounted) widget.onDismiss();
-      }),
-    );
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: 100,
-      left: 0,
-      right: 0,
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder: (_, __) => FadeTransition(
-          opacity: _fade,
-          child: SlideTransition(
-            position: _slide,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: widget.isError
-                      ? Colors.red.shade700
-                      : const Color(0xFF2E7D32),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  widget.message,
-                  style: AppText.bodySmall.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+final pointsProvider = NotifierProvider<PointsNotifier, PointsState>(
+  PointsNotifier.new,
+);
