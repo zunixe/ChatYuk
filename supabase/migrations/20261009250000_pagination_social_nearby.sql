@@ -12,6 +12,13 @@
 --
 -- Logika inti TIDAK diubah (hanya tambah offset untuk paging).
 -- ============================================================
+-- menyentuh: nearby_users
+--
+-- nearby_users FROZEN: signature + p_limit/p_offset (overload lama
+-- `nearby_users(double precision)` DI-DROP). Snapshot sudah
+-- di-regenerate (scripts/snapshot_functions.sh) — cabang kritis
+-- (dummy/visibility) tak berubah, hanya penambahan paging.
+-- ============================================================
 
 -- ── social_list: + p_offset ──
 drop function if exists public.social_list(text, uuid, integer);

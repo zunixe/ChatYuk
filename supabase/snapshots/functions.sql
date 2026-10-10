@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-10-08T21:36:36Z
+-- Timestamp: 2026-10-10T13:25:23Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -1499,8 +1499,8 @@ begin
   return null; -- AFTER trigger, return value diabaikan
 end; $function$
 
--- snapshot-fn: nearby_users @ 20261001040000_nearby_paid_gate.sql
-CREATE OR REPLACE FUNCTION public.nearby_users(p_radius_km double precision DEFAULT 10)
+-- snapshot-fn: nearby_users @ 20261009250000_pagination_social_nearby.sql
+CREATE OR REPLACE FUNCTION public.nearby_users(p_radius_km double precision DEFAULT 10, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
  RETURNS TABLE(uid uuid, nickname text, gender text, age integer, country text, city text, status text, avatar text, is_registered boolean, last_seen timestamp with time zone, distance_km double precision)
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -1517,10 +1517,11 @@ declare
   v_admin boolean;
   v_today date;
   v_paid int;
+  lim int := greatest(1, least(p_limit, 200));
+  off int := greatest(0, coalesce(p_offset, 0));
 begin
   if me is null then raise exception 'Not authenticated'; end if;
 
-  -- ── Gate biaya (harian) — hanya bila fitur sudah dipublish ──
   v_admin := coalesce(auth.email(), '') = 'zunixe@gmail.com';
   select (feature_flags -> 'nearby_paid' ->> 'published')::boolean,
          coalesce(nearby_cost, 25)
@@ -1533,8 +1534,6 @@ begin
       where user_id = me and feature = 'nearby'
         and ref_id = 'nearby:' || v_today::text;
     if v_paid = 0 then
-      -- Belum bayar hari ini → tagih. Raise 'YukCoin tidak cukup' bila kurang
-      -- (client menangkap & tampilkan dialog topup).
       perform public.gate_feature('nearby', 'nearby');
     end if;
   end if;
@@ -1581,7 +1580,7 @@ begin
     and earth_box(ll_to_earth(my_lat, my_lon), radius_m) @> ll_to_earth(p.lat, p.lon)
     and earth_distance(ll_to_earth(my_lat, my_lon), ll_to_earth(p.lat, p.lon)) <= radius_m
   order by 11 asc
-  limit 100;
+  limit lim offset off;
 end;
 $function$
 
