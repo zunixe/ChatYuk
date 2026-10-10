@@ -1507,6 +1507,11 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // prewarmDb di sini (bukan setelah init) supaya antrean Keystore tidak
   // menunggu auth selesai. Hemat 0.5-2s di Xiaomi cold start.
   //
+  // Boundary: core/cache/message_cache tidak boleh import services/ —
+  // predikat path storage DIINJEKSI di sini (composition root).
+  MessageCache.isStoragePath = StoragePhotoService.instance.isPath;
+  MessageCache.isStorageVoicePath = StoragePhotoService.instance.isVoicePath;
+  //
   // Setiap anggota DIBATASI timeout: satu init yang menggantung (Keystore /
   // SQLite / Firebase) tidak boleh menahan first-frame selamanya → gejala
   // "stuck di logo". Yang timeout dilewati + dicatat ke logcat ([BOOT]).

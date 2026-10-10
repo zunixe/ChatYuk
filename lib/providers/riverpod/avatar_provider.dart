@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/storage_paths.dart';
 import '../../services/avatar_service.dart';
 
 /// Avatar (base64 by uid/path + cache) — action-only, wrapper service.
@@ -11,6 +12,7 @@ class AvatarNotifier {
 
   Future<String> get(String uid) => service.get(uid);
   Future<String> getByPath(String path) => service.getByPath(path);
+  bool isAvatarPath(String v) => isAvatarPathValue(v);
   String? cachedSync(String uid) => service.cachedSync(uid);
   String? cachedSyncIncludeDisk(String uid) => service.cachedSyncIncludeDisk(uid);
   String? cachedByPathSync(String path) => service.cachedByPathSync(path);

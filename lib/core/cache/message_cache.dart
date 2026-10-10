@@ -5,7 +5,6 @@ import '../../utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/message_model.dart';
-import '../../services/storage_photo_service.dart';
 import 'crypto_native.dart';
 import 'message_store.dart';
 
@@ -18,6 +17,12 @@ import 'message_store.dart';
 class MessageCache {
   MessageCache._();
   static final MessageCache instance = MessageCache._();
+
+  /// Predikat path storage — DIINJEKSI dari luar (boundary: `core/` dilarang
+  /// import `services/`). Di-wire di `main.dart` ke `StoragePhotoService`.
+  /// Default aman untuk test (selalu false = anggap inline base64).
+  static bool Function(String value) isStoragePath = (_) => false;
+  static bool Function(String value) isStorageVoicePath = (_) => false;
 
   static const _keyPrefix = 'chat_cache_v2_';
   static const _storage = FlutterSecureStorage(
@@ -431,8 +436,8 @@ class MessageCache {
       // Foto dengan base64 (bukan path storage) = kandidat strip.
       if (isPhoto &&
           m.imageData.isNotEmpty &&
-          !StoragePhotoService.instance.isPath(m.imageData) &&
-          !StoragePhotoService.instance.isVoicePath(m.imageData)) {
+          !isStoragePath(m.imageData) &&
+          !isStorageVoicePath(m.imageData)) {
         out.add(m.copyWith(imageData: ''));
         changed = true;
       } else {

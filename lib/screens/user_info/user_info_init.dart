@@ -24,7 +24,10 @@ mixin _UiInitMx on _UserInfoBase {
     final seedAvatar = _profile?.avatar ?? '';
     final seedIsPath =
         seedAvatar.isNotEmpty &&
-        StoragePhotoService.instance.isAvatarPath(seedAvatar);
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(avatarProvider).isAvatarPath(seedAvatar);
     if (seedAvatar.isNotEmpty && !seedIsPath) {
       // B64 langsung dari pemanggil.
       _avatarB64 = seedAvatar;
@@ -59,7 +62,10 @@ mixin _UiInitMx on _UserInfoBase {
     final uid = widget.userId;
     if (uid.isEmpty) return;
     try {
-      final b64 = await AvatarB64Service.instance.get(uid);
+      final b64 = await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(avatarProvider).get(uid);
       if (!mounted) return;
       if (b64.isNotEmpty) setState(() => _avatarB64 = b64);
     } catch (_) {}

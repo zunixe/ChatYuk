@@ -12,8 +12,8 @@ import '../../widgets/gender_avatar.dart';
 import '../user_info_screen.dart';
 import '../admin_chat_view_screen.dart';
 import '../../providers/riverpod/admin_provider.dart';
+import '../../providers/riverpod/connectivity_provider.dart';
 import '../../utils.dart';
-import '../../core/admin_err.dart';
 
 class AdminChatCard extends StatelessWidget {
   final Map<String, dynamic> chat;

@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
+import '../../../providers/riverpod/connectivity_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
-import '../../../core/admin_err.dart';
 import 'provider_section.dart';
 import '../../../providers/riverpod/admin_provider.dart';
 

@@ -4,12 +4,12 @@ import 'package:flutter/services.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
-import '../../../core/admin_err.dart';
 import '../../../utils.dart';
 import '../../../widgets/detail_row.dart';
 import '../../admin_devices/widgets/location_route_map.dart';
 import '../../../widgets/sheet_drag_handle.dart';
 import '../../../providers/riverpod/admin_provider.dart';
+import '../../../providers/riverpod/connectivity_provider.dart';
 
 /// Bottom sheet detail satu entry arsip terhapus: profil + riwayat device
 /// + aksi hapus user anon (pending).

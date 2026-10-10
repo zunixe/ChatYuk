@@ -8,6 +8,7 @@ import 'admin_deleted/widgets/deleted_detail_sheet.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../widgets/admin_error_view.dart';
+import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../main.dart' show resumeWarmup;
 import '../providers/riverpod/theme_provider.dart';
@@ -15,7 +16,6 @@ import '../utils.dart';
 import '../core/ui/scroll_pagination.dart';
 import '../widgets/search_field.dart';
 import '../widgets/filter_chip_pill.dart';
-import '../core/admin_err.dart';
 import '../providers/riverpod/admin_provider.dart';
 
 /// Admin: arsip user yang sudah dihapus (tab Terhapus).

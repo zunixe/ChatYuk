@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
+import '../../../providers/riverpod/connectivity_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
-import '../../../core/admin_err.dart';
 import '../../../utils.dart' show formatRelativeTime;
 import '../../../providers/riverpod/admin_provider.dart';
 

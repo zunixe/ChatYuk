@@ -1,11 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-import '../providers/riverpod/connectivity_provider.dart';
 
 /// Kategori kegagalan operasi admin.
 ///
@@ -92,19 +88,7 @@ bool blockIfOffline(
   return true;
 }
 
-/// Versi ringkas untuk layar admin: baca konektivitas dari [context].
-/// [notify] menerima teks pesan siap-tampil (mis. SnackBar/toast).
-bool guardOfflineCtx(
-  BuildContext context,
-  String message,
-  void Function(String message) notify,
-) {
-  bool online = true;
-  try {
-    online = ProviderScope.containerOf(context, listen: false)
-        .read(connectivityProvider);
-  } catch (_) {
-    // Provider tidak tersedia (test/preview) → jangan blokir.
-  }
-  return blockIfOffline(online, notify, message: message);
-}
+// CATATAN: `guardOfflineCtx(context, ...)` (butuh ProviderContainer) TIDAK di
+// sini — dipindah ke `providers/riverpod/connectivity_provider.dart` karena
+// `core/` dilarang import `providers/` (boundary Fase B). Import
+// `connectivity_provider.dart` untuk memakainya.

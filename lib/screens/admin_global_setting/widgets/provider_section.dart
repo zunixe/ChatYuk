@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
+import '../../../providers/riverpod/connectivity_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
-import '../../../core/admin_err.dart';
 import '../../../utils.dart';
 import '../../../providers/riverpod/admin_provider.dart';
 
