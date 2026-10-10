@@ -26,6 +26,12 @@ jobs:
       - name: Guard boundary screen (larangan import services/)
         run: bash scripts/check_screen_boundary.sh
 
+      # Guard ukuran file (ratchet): file lib/*.dart > 1000 baris wajib
+      # terdaftar di allowlist & hanya boleh menyusut. Cegah "file raksasa"
+      # tumbuh lagi. Setiap refactor yang memecah file → hapus entri allowlist.
+      - name: Guard ukuran file (ratchet anti file-raksasa)
+        run: bash scripts/check_file_size.sh
+
       # Lapis 4: larangan tipografi (AGENTS.md) — hanya ANGKA literal yang
       # dilarang; nilai dari token resmi (AppText/AppGlyph/StoryText) sah.
       - name: Guard tipografi (fontSize numerik + height manual di luar config)

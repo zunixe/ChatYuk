@@ -17,7 +17,7 @@ RPC Postgres (SECURITY DEFINER), trigger, cron, dan Edge Functions (Deno).
 ```
 ┌──────────────────────── Flutter app (lib/) ────────────────────────┐
 │  screens/  ── UI (termasuk panel admin)                            │
-│  providers/ ── state (ChangeNotifier) + orkestrasi                 │
+│  providers/ ── state (Riverpod) + orkestrasi                       │
 │  services/  ── akses Supabase (RPC, table, realtime, storage)       │
 │  core/      ── cache, media, perf, ui util (tak bergantung UI)     │
 └───────────────┬───────────────────────────────┬────────────────────┘
@@ -42,7 +42,7 @@ RPC Postgres (SECURITY DEFINER), trigger, cron, dan Edge Functions (Deno).
 | `config/` | Theme, strings (i18n ID/EN), `supabase_config.dart` (init + HTTP client), `app_flavor.dart` (flavor), regions |
 | `core/` | Non-UI: `cache/` (SQLite terenkripsi), `media/`, `call/`, `chat/`, `perf/` (PerfProbe), `ui/` (nav guard, util widget) |
 | `models/` | Model data (User, Message, Room, dll) + (de)serialisasi |
-| `providers/` | State management `ChangeNotifier` (Provider). Provider besar dipecah `part` mixin (mis. `providers/admin/*`) |
+| `providers/` | State management **Riverpod** (`flutter_riverpod`). Global = `NotifierProvider` (non-autoDispose); action-only = `Provider`. Provider besar dipecah `mixin` per domain (mis. `providers/admin/*`). |
 | `screens/` | UI screen; panel admin di `screens/admin_*` + `screens/admin_panel/` |
 | `services/` | Akses Supabase: RPC, tabel, realtime channel, storage, edge function |
 | `widgets/` | Widget bersama yang dipakai lintas screen |
@@ -54,7 +54,7 @@ RPC Postgres (SECURITY DEFINER), trigger, cron, dan Edge Functions (Deno).
 - Keduanya berbagi `lib/app.dart` (root widget + daftar provider).
 
 ### Alur data (pola umum)
-`screens` membaca state via `context.watch/select` → `Provider` memanggil
+`screens` membaca state via `ref.watch/select` → notifier memanggil
 `Service` → `Service` memanggil Supabase (RPC/tabel) → hasil dipetakan ke
 `Model` → `notifyListeners()` → UI rebuild. Realtime: `Service` membuka
 channel Supabase dan mem-push update ke provider.
@@ -138,6 +138,19 @@ Detil build/signing: lihat [`../README.md`](../README.md) & [`../AGENTS.md`](../
 - **Cache dengan TTL** — pilih TTL sesuai sifat data (lihat FEATURE_MAP §10b).
 - **Widget bersama** — jangan bikin salinan baru; pakai yang ada
   (mis. `GenderAvatar`, `ProfileAvatar`) — lihat FEATURE_MAP §10d.
+
+### Guard otomatis (CI, `.github/workflows/ci.yml`)
+- **Boundary layar** — `scripts/check_screen_boundary.sh`: screen/core dilarang
+  import `services/` (I/O bisnis lewat provider).
+- **Ukuran file (ratchet)** — `scripts/check_file_size.sh`: file `lib/**/*.dart`
+  tidak boleh > 1000 baris. File yang masih besar terdaftar di allowlist script
+  & hanya boleh MENYUSUT. Setiap refactor yang memecah file → hapus/pindah entri
+  allowlist. `lib/config/` (data statis) menyusul dipisah.
+- **Tipografi** — hanya angka literal `fontSize:`/`height: 1.x` di luar
+  `lib/config/` yang dilarang (pakai token `AppText`/`AppGlyph`).
+- **Coverage ratchet** — lantai coverage per folder (`providers/`, `services/`,
+  `models/`, `mixins/`) tidak boleh turun.
+- **Migrasi** — `scripts/check_migrations.sh`.
 
 ---
 
