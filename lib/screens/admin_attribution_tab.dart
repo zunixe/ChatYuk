@@ -7,7 +7,7 @@ import '../config/strings_admin.dart';
 import '../providers/admin_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/theme_provider.dart';
-import '../services/attribution_service.dart';
+import '../core/attribution_format.dart';
 import '../widgets/admin_error_view.dart';
 import '../widgets/app_gesture.dart';
 import 'admin_devices/widgets/user_detail_sheet.dart';
@@ -497,8 +497,8 @@ class _AttributionUsersSheetState extends ConsumerState<_AttributionUsersSheet> 
     final utmSource = '${u['utm_source'] ?? ''}'.trim();
     final utmMedium = '${u['utm_medium'] ?? ''}'.trim();
     final source = '${u['source'] ?? ''}';
-    // Terjemahan "link apa yang membawa user ini" — dari service murni.
-    final explain = AttributionService.describeReferrer(
+    // Terjemahan "link apa yang membawa user ini" — dari helper core murni.
+    final explain = describeAttributionSource(
       referrerRaw: raw,
       source: source,
       utmSource: utmSource,

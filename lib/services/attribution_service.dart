@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils.dart';
+import '../core/attribution_format.dart';
 
 /// Atribusi sumber user — "user datang dari link mana".
 ///
@@ -228,46 +229,15 @@ class AttributionService {
     String utmMedium = '',
     String utmCampaign = '',
   }) {
-    final raw = referrerRaw.trim().toLowerCase();
-    final src = source.trim().toLowerCase();
-    final us = utmSource.trim().toLowerCase();
-
-    // Referrer default Play/Android = install organik (bukan iklan).
-    if (us == 'google-play' || src == 'google-play') {
-      return 'Install organik — cari sendiri di Play Store (bukan iklan)';
-    }
-    if (raw.contains('gclid=') || src == 'google') {
-      return utmCampaign.isNotEmpty
-          ? 'Google Ads — kampanye "$utmCampaign"'
-          : 'Google Ads (klik iklan)';
-    }
-    if (raw.contains('fbclid=') || src == 'facebook') {
-      return utmCampaign.isNotEmpty
-          ? 'Facebook Ads — kampanye "$utmCampaign"'
-          : 'Facebook Ads (klik iklan)';
-    }
-    if (src == 'instagram') {
-      return utmCampaign.isNotEmpty
-          ? 'Instagram Ads — kampanye "$utmCampaign"'
-          : 'Instagram Ads (klik iklan)';
-    }
-    if (raw.contains('ttclid=') || src == 'tiktok') {
-      return utmCampaign.isNotEmpty
-          ? 'TikTok Ads — kampanye "$utmCampaign"'
-          : 'TikTok Ads (klik iklan)';
-    }
-    if (src == 'referral') {
-      return 'Referral — dari link share user lain';
-    }
-    if (src == 'organic' || (raw.isEmpty && us.isEmpty)) {
-      return 'Organik / tanpa link iklan';
-    }
-    // Ada utm_source lain (twitter/x, snapchat, dst) — tampilkan apa adanya.
-    if (us.isNotEmpty) {
-      return 'Utm source: $us'
-          '${utmMedium.isNotEmpty ? ' · medium: $utmMedium' : ''}';
-    }
-    return 'Kanal tidak dikenal — tidak ada data link';
+    // Delegasi ke core murni (dipisah agar UI bisa pakai tanpa import
+    // services/ — boundary Fase B). Perilaku identik.
+    return describeAttributionSource(
+      referrerRaw: referrerRaw,
+      source: source,
+      utmSource: utmSource,
+      utmMedium: utmMedium,
+      utmCampaign: utmCampaign,
+    );
   }
 }
 

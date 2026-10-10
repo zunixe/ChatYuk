@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../config/theme.dart';
 import '../../../models/user_model.dart';
-import '../../../services/room_voice_service.dart';
+import '../../../providers/riverpod/room_voice_provider.dart';
 import '../../../widgets/person_avatar.dart';
 
 /// Tombol mic voice stage di AppBar room global.

@@ -944,6 +944,11 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     _onlineTickTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
   }
+
+  /// Passthrough paket topup (Fase B boundary): screen topup dilarang import
+  /// services/. Delegasi ke `_service.listTopupPackages()`.
+  Future<List<Map<String, dynamic>>> listTopupPackages() =>
+      _service.listTopupPackages();
 }
 
 final pointsProvider = NotifierProvider<PointsNotifier, PointsState>(
