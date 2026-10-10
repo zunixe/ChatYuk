@@ -5,6 +5,7 @@ import '../providers/riverpod/social_provider.dart';
 import '../widgets/person_avatar.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../config/theme.dart';
+import '../core/cache/message_cache.dart';
 
 class FriendRequestsScreen extends ConsumerStatefulWidget {
   const FriendRequestsScreen({super.key});
@@ -30,6 +31,19 @@ class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
   }
 
   Future<void> _load() async {
+    // Cache disk dulu (instan, tahan offline) sebelum server.
+    if (_inbox.isEmpty && _outbox.isEmpty) {
+      try {
+        final ci = await MessageCache.instance.loadRawList('friend_req_inbox');
+        final co = await MessageCache.instance.loadRawList('friend_req_outbox');
+        if (mounted && (ci.isNotEmpty || co.isNotEmpty)) {
+          setState(() {
+            _inbox = ci;
+            _outbox = co;
+          });
+        }
+      } catch (_) {}
+    }
     final inbox = await _service.friendRequestInbox();
     final outbox = await _service.friendRequestOutbox();
     if (!mounted) return;
@@ -38,6 +52,12 @@ class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
       _outbox = outbox;
       _loading = false;
     });
+    if (inbox.isNotEmpty) {
+      MessageCache.instance.saveRawList('friend_req_inbox', inbox);
+    }
+    if (outbox.isNotEmpty) {
+      MessageCache.instance.saveRawList('friend_req_outbox', outbox);
+    }
   }
 
   Future<void> _respond(Map<String, dynamic> req, bool accept) async {
