@@ -60,7 +60,7 @@ class _SocialListScreenState extends ConsumerState<SocialListScreen> {
         });
       }
     }
-    final items = await _service.socialList(widget.kind, uid);
+    final items = await _service.socialList(widget.kind, uid, limit: 200);
     if (!mounted) return;
     setState(() {
       _items = items;

@@ -5,6 +5,7 @@ import '../providers/riverpod/locale_provider.dart';
 import '../widgets/person_avatar.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../providers/riverpod/social_provider.dart';
+import '../core/cache/message_cache.dart';
 
 class SubscriptionsScreen extends ConsumerStatefulWidget {
   const SubscriptionsScreen({super.key});
@@ -25,12 +26,27 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
   }
 
   Future<void> _load() async {
+    // Cache disk dulu (instan, tahan offline) sebelum server.
+    if (_items.isEmpty) {
+      try {
+        final cached = await MessageCache.instance.loadRawList('my_subscriptions');
+        if (mounted && cached.isNotEmpty) {
+          setState(() {
+            _items = cached;
+            _loading = false;
+          });
+        }
+      } catch (_) {}
+    }
     final items = await _service.mySubscriptions();
     if (!mounted) return;
     setState(() {
       _items = items;
       _loading = false;
     });
+    if (items.isNotEmpty) {
+      MessageCache.instance.saveRawList('my_subscriptions', items);
+    }
   }
 
   Future<void> _unsubscribe(String creatorUid) async {

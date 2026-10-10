@@ -10,6 +10,7 @@ import '../config/theme.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../providers/riverpod/points_provider.dart';
+import '../core/cache/message_cache.dart';
 
 // Top-level untuk compute() — decode avatar base64 di background isolate
 class LeaderboardScreen extends ConsumerStatefulWidget {
@@ -27,10 +28,26 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
   bool _loading = true;
   List<dynamic> _entries = [];
   Map<String, dynamic>? _me;
+  // Paginasi + cache disk.
+  static const int _pageSize = 50;
+  final ScrollController _scrollCtrl = ScrollController();
+  bool _hasMore = true;
+  bool _loadingMore = false;
+
+  String get _cacheKey => 'leaderboard_$_scope';
+
+  void _onScroll() {
+    if (!_hasMore || _loadingMore) return;
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _scrollCtrl.addListener(_onScroll);
     _tab.addListener(() {
       if (_tab.indexIsChanging) return;
       final scope = _tab.index == 0 ? 'weekly' : 'alltime';
@@ -44,25 +61,41 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
 
   @override
   void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
     _tab.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    // Cache disk dulu (instan, tahan offline) sebelum server.
     try {
-      final res = await _service.leaderboard(_scope);
+      final cached = await MessageCache.instance.loadRawList(_cacheKey);
+      if (cached.isNotEmpty && _entries.isEmpty && mounted) {
+        setState(() => _entries = cached);
+      }
+    } catch (_) {}
+    try {
+      final res = await _service.leaderboard(_scope, limit: _pageSize, offset: 0);
       if (!mounted) return;
+      final entries = (res['entries'] as List?) ?? [];
+      _hasMore = entries.length >= _pageSize;
       setState(() {
-        _entries = (res['entries'] as List?) ?? [];
+        _entries = entries;
         _me = res['me'] is Map ? Map<String, dynamic>.from(res['me']) : null;
         _loading = false;
       });
-      // Prefetch avatar semua uid sekaligus (1 query) — cegah N+1 per kartu.
+      if (entries.isNotEmpty) {
+        MessageCache.instance.saveRawList(
+          _cacheKey,
+          entries.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+        );
+      }
       unawaited(
         ProviderScope.containerOf(context, listen: false).read(avatarProvider).prefetch(
-          _entries
-              .map((e) => '${(e as Map)['uid'] ?? ''}')
+          entries
+              .map((e) => '${(e)['uid'] ?? ''}')
               .where((u) => u.isNotEmpty)
               .toList(),
         ),
@@ -70,10 +103,33 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _entries = [];
-        _me = null;
+        if (_entries.isEmpty) {
+          _entries = [];
+          _me = null;
+        }
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore || _loading) return;
+    setState(() => _loadingMore = true);
+    try {
+      final res = await _service.leaderboard(
+        _scope,
+        limit: _pageSize,
+        offset: _entries.length,
+      );
+      if (!mounted) return;
+      final more = (res['entries'] as List?) ?? [];
+      setState(() {
+        _entries = [..._entries, ...more];
+        _hasMore = more.length >= _pageSize;
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -131,13 +187,28 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                 : RefreshIndicator(
                     onRefresh: _load,
                     child: ListView.separated(
+                      controller: _scrollCtrl,
                       padding: const EdgeInsets.only(bottom: 80),
-                      itemCount: _entries.length,
+                      itemCount: _entries.length + (_hasMore ? 1 : 0),
                       separatorBuilder: (_, otherIndex) =>
                           const Divider(height: 1, indent: 64),
-                      itemBuilder: (_, i) => _RankTile(
-                        entry: Map<String, dynamic>.from(_entries[i] as Map),
-                      ),
+                      itemBuilder: (_, i) {
+                        if (i >= _entries.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          );
+                        }
+                        return _RankTile(
+                          entry: Map<String, dynamic>.from(_entries[i] as Map),
+                        );
+                      },
                     ),
                   ),
           ),

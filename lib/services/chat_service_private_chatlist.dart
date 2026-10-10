@@ -275,16 +275,18 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     // `hidden_by`/`hidden_at` TIDAK diambil di sini: chat tersembunyi
     // disaring lewat `getHiddenChats` (query terpisah, sudah ada) sehingga
     // kolom itu tidak pernah dibaca dari hasil fetch. Membuangnya memangkas
-    // payload per baris × 50 baris — jalur ini terukur 505-788ms.
+    // payload per baris × baris — jalur ini terukur 505-788ms.
     const cols =
         'chat_id,participants,participant_names,participant_genders,'
         'participant_locations,participant_ages,participant_registered,'
         'last_message,last_message_at,last_sender_id,message_count,'
         'unread_counts,last_read_at,pinned_by,pinned_at,muted_by,archived_by,'
         'deleted_participants';
-    // Fetch rows + daftar hidden PARALEL: dulu berurutan (fetch → await
-    // hidden), jadi jalur kritis menanggung 2 RTT. Keduanya tidak saling
-    // bergantung → satu RTT.
+    // Limit 50 → 200: daftar Pesan memaginasi di klien (`take(page*20)`),
+    // jadi chat ke-51+ dulu TIDAK PERNAH termuat (paginasi klien palsu bila
+    // server cuma kirim 50). 200 menutup celah itu untuk mayoritas user tanpa
+    // payload berat (payload per baris sudah dipangkas di atas). Realtime
+    // tetap menjaga baris ini fresh; refetch penuh sudah 30s-gated.
     final results = await Future.wait([
       PerfProbe.timed(
         'chat.listFetch',
@@ -293,7 +295,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
             .select(cols)
             .contains('participants', [myUid])
             .order('last_message_at', ascending: false)
-            .limit(50),
+            .limit(200),
       ),
       PerfProbe.timed('chat.hiddenFetch', () => getHiddenChats(myUid)),
     ]);

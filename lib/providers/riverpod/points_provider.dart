@@ -438,12 +438,17 @@ class PointsNotifier extends Notifier<PointsState>
   Future<Map<String, dynamic>> quests(int tz) => _service.quests(tz);
   Future<Map<String, dynamic>> claimWeeklyQuest(String key, int tz) =>
       _service.claimWeeklyQuest(key, tz);
-  Future<Map<String, dynamic>> leaderboard(String scope) =>
-      _service.leaderboard(scope);
+  Future<Map<String, dynamic>> leaderboard(
+    String scope, {
+    int limit = 50,
+    int offset = 0,
+  }) => _service.leaderboard(scope, limit: limit, offset: offset);
   Future<Map<String, dynamic>> activityLeaderboard(String scope) =>
       _service.activityLeaderboard(scope);
-  Future<List<Map<String, dynamic>>> pointHistory({int limit = 100}) =>
-      _service.pointHistory(limit: limit);
+  Future<List<Map<String, dynamic>>> pointHistory({
+    int limit = 100,
+    int offset = 0,
+  }) => _service.pointHistory(limit: limit, offset: offset);
 
   void subscribeOwnPoints() {
     try {
