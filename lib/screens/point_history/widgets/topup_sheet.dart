@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
-import '../../../services/points_service.dart';
-import '../../../services/topup_service.dart';
+import '../../../providers/riverpod/points_provider.dart';
+import '../../../providers/riverpod/topup_provider.dart';
 
 /// Bottom sheet pilih paket topup YukCoin (Google Play Billing).
 /// Harga & paket dari server (topup_packages) + product dari Play.
@@ -19,14 +20,14 @@ void showTopupSheet(BuildContext context, S s) {
   );
 }
 
-class _TopupSheet extends StatefulWidget {
+class _TopupSheet extends ConsumerStatefulWidget {
   const _TopupSheet();
 
   @override
-  State<_TopupSheet> createState() => _TopupSheetState();
+  ConsumerState<_TopupSheet> createState() => _TopupSheetState();
 }
 
-class _TopupSheetState extends State<_TopupSheet> {
+class _TopupSheetState extends ConsumerState<_TopupSheet> {
   List<Map<String, dynamic>> _packages = const [];
   bool _loading = true;
 
@@ -37,12 +38,12 @@ class _TopupSheetState extends State<_TopupSheet> {
   }
 
   Future<void> _load() async {
-    // Pakai paket dari TopupService bila ada (Play); else ambil dari server
-    // (build admin → verifikasi UI paket).
-    var pkgs = TopupService.instance.packages;
+    // Pakai paket dari TopupService (Play) bila ada; else ambil dari server
+    // (build admin → verifikasi UI paket). Lewat provider (Fase B boundary).
+    var pkgs = ref.read(topupProvider).packages;
     if (pkgs.isEmpty) {
       try {
-        pkgs = await PointsService().listTopupPackages();
+        pkgs = await ref.read(pointsProvider.notifier).listTopupPackages();
       } catch (_) {}
     }
     if (mounted) setState(() { _packages = pkgs; _loading = false; });
@@ -52,7 +53,7 @@ class _TopupSheetState extends State<_TopupSheet> {
   Widget build(BuildContext context) {
     final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
     // Tombol beli aktif hanya bila Play Billing tersedia (build Play).
-    final canBuy = TopupService.instance.available;
+    final canBuy = ref.read(topupProvider).available;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -91,7 +92,11 @@ class _TopupSheetState extends State<_TopupSheet> {
               )
             else
               ..._packages.map(
-                (p) => _PackageTile(package: p, canBuy: canBuy),
+                (p) => _PackageTile(
+                  package: p,
+                  canBuy: canBuy,
+                  onBuy: (id) => ref.read(topupProvider).buy(id),
+                ),
               ),
           ],
         ),
@@ -103,7 +108,12 @@ class _TopupSheetState extends State<_TopupSheet> {
 class _PackageTile extends StatelessWidget {
   final Map<String, dynamic> package;
   final bool canBuy;
-  const _PackageTile({required this.package, this.canBuy = false});
+  final void Function(String productId) onBuy;
+  const _PackageTile({
+    required this.package,
+    this.canBuy = false,
+    required this.onBuy,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +131,7 @@ class _PackageTile extends StatelessWidget {
           onTap: (productId == null || !canBuy)
               ? null
               : () {
-                  TopupService.instance.buy(productId);
+                  onBuy(productId);
                   Navigator.of(context).pop();
                 },
           child: Padding(

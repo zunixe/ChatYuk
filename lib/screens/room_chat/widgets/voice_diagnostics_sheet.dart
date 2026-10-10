@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
-import '../../../services/room_voice_service.dart';
+import '../../../providers/riverpod/room_voice_provider.dart';
 
 /// Sheet diagnostik voice room — dipakai untuk debug koneksi speaker.
 ///

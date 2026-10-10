@@ -39,7 +39,7 @@ import '../widgets/message/swipe_to_reply.dart';
 import 'room_chat/widgets/voice_diagnostics_sheet.dart';
 import 'room_chat/widgets/room_search_sheet.dart';
 import 'room_chat/widgets/room_user_action_sheet.dart';
-import '../services/room_voice_service.dart';
+import '../providers/riverpod/room_voice_provider.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../widgets/chat_composer_input.dart';
 import '../widgets/chat_info_snack.dart';
@@ -485,7 +485,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         if (!mounted) return;
         final myUid = _auth.uid;
         if (myUid == null) return;
-        session = RoomVoiceSession(
+        session = ref.read(roomVoiceProvider).create(
           roomId: widget.room.id,
           myUid: myUid,
           onStageFull: () {
