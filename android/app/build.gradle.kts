@@ -160,6 +160,17 @@ android {
         abortOnError = false
         checkReleaseBuilds = false
     }
+
+    // Buang ABI x86_64 (emulator/Chromebook Intel) dari APK — tak ada di HP
+    // fisik (semua ARM). `defaultConfig.ndk.abiFilters` DIABAIKAN Flutter
+    // Gradle plugin (Flutter set target-platforms sendiri), jadi filter di
+    // level packaging (jniLibs excludes) — berlaku SETELAH Flutter menaruh
+    // .so. Permanen di gradle. arm64-v8a + armeabi-v7a DIPERTAHANKAN.
+    packaging {
+        jniLibs {
+            excludes += listOf("lib/x86_64/**")
+        }
+    }
 }
 
 // Jaminan nama: build dev (variant mengandung "Dev") SELALU dapat nama
