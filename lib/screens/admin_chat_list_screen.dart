@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -8,24 +9,19 @@ import '../widgets/admin_error_view.dart';
 import '../models/active_call_model.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../core/admin_err.dart';
-import '../utils.dart';
 import '../main.dart' show resumeWarmup;
-import 'admin_chat_view_screen.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../core/ui/scroll_pagination.dart';
-import '../core/nav_guard.dart';
-import '../widgets/gender_avatar.dart';
-import '../widgets/app_gesture.dart';
-import 'user_info_screen.dart';
 import '../providers/riverpod/admin_provider.dart';
+import 'admin_chat_list/admin_chat_list_widgets.dart';
 
 /// Admin: daftar semua percakapan user (monitoring).
 class AdminChatListScreen extends ConsumerStatefulWidget {
   const AdminChatListScreen({super.key});
 
   @override
-  ConsumerState<AdminChatListScreen> createState() => _AdminChatListScreenState();
+  ConsumerState<AdminChatListScreen> createState() =>
+      _AdminChatListScreenState();
 }
 
 class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
@@ -42,7 +38,10 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final admin = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(adminProvider);
     Future.microtask(() {
       admin.loadChatOrg();
       admin.fetchChats();
@@ -61,7 +60,10 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
   void _startTimers() {
     _refreshTimer?.cancel();
     _callTimer?.cancel();
-    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final admin = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(adminProvider);
     // 30 dtk (dulu 15) — cukup fresh tanpa rebuild berlebihan.
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
@@ -86,7 +88,11 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
       if (_refreshTimer == null) {
         unawaited(
           resumeWarmup().then((_) {
-            if (mounted) ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchActiveCalls();
+            if (mounted)
+              ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(adminProvider).fetchActiveCalls();
           }),
         );
         _startTimers();
@@ -115,7 +121,6 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
       if (mounted) setState(() {});
     });
   }
-
 
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> chats) {
     // Sembunyikan chat kosong (belum ada percakapan) dari monitor.
@@ -154,7 +159,8 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
     // filter kategori. Perubahan pin/kategori mengganti ukuran set-nya, jadi
     // signature ikut berubah → cache invalid. Perubahan ISI satu chat (mis.
     // last_message baru) datang dengan list `chats` BARU (identitas beda).
-    final sig = '${identityHashCode(chats)}|${activeByChat.length}|'
+    final sig =
+        '${identityHashCode(chats)}|${activeByChat.length}|'
         '$_pinnedCount|$_catMapCount|${activeCategory ?? "\u0000"}|$_query';
     if (_sortedCache != null && _sortedCacheSig == sig) return _sortedCache!;
     final out = _sortedFilteredCompute(
@@ -230,7 +236,10 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
   /// True bila SEMUA chat kategori [cat] sudah ada di daftar yang termuat →
   /// chip bisa tampil instan tanpa fetch/pindai lagi.
   bool _categoryFullyLoaded(String cat) {
-    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final admin = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(adminProvider);
     final want = admin.categoryChatIds(cat);
     if (want.isEmpty) return true;
     final have = admin.chats.map((c) => '${c['chat_id']}').toSet();
@@ -260,7 +269,10 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
     }
     // Kategori KOSONG (belum ada chat dipetakan) → tak ada yang dicari.
     // Tampilkan empty-state, JANGAN spinner.
-    final wants = ProviderScope.containerOf(context, listen: false).read(adminProvider).categoryChatIds(activeCategory);
+    final wants = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(adminProvider).categoryChatIds(activeCategory);
     if (wants.isEmpty) {
       _categorySearching = false;
       return;
@@ -280,7 +292,10 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
         _categorySearching = false;
         return;
       }
-      final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+      final admin = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(adminProvider);
       final cat = admin.activeChatCategory;
       if (cat == null || cat.isEmpty) {
         _autoLoadingCategory = false;
@@ -292,7 +307,9 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
       await admin.ensureChatsContain(admin.categoryChatIds(cat));
       _autoLoadingCategory = false;
       _categorySearching = false;
-      if (!_categoryFullyLoaded(cat) && admin.chatsHasMore && !admin.chatsLoading) {
+      if (!_categoryFullyLoaded(cat) &&
+          admin.chatsHasMore &&
+          !admin.chatsLoading) {
         // Masih belum lengkap padahal halaman belum habis → anggap gagal
         // jaringan (jangan spinner tanpa akhir; tampilkan tombol retry).
         _categoryLoadFailed = true;
@@ -311,7 +328,10 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
     // deleted) ikut me-rebuild layar monitor yang berat.
     ref.watch(adminProvider.select((p) => p.revChats));
     ref.watch(adminProvider.select((p) => p.revCalls));
-    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final admin = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(adminProvider);
     final s = ref.watch(localeProvider).s;
     // Hitung SEKALI per build: dulu `_sortedFiltered()` (filter+sort)
     // dipanggil di empty-check + itemCount + di dalam itemBuilder per baris
@@ -411,11 +431,7 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
                 ),
               // Tombol buat kategori baru (tanpa perlu pin chat dulu).
               ActionChip(
-                avatar: Icon(
-                  Icons.add,
-                  size: 16,
-                  color: AppTheme.primary,
-                ),
+                avatar: Icon(Icons.add, size: 16, color: AppTheme.primary),
                 label: Text(s.adminChatNewCategory),
                 onPressed: () async {
                   final name = await _promptCategoryName(context, s);
@@ -425,9 +441,7 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
                     admin.setActiveChatCategory(name);
                   }
                 },
-                labelStyle: AppText.bodySmall.copyWith(
-                  color: AppTheme.primary,
-                ),
+                labelStyle: AppText.bodySmall.copyWith(color: AppTheme.primary),
                 backgroundColor: AppTheme.bgInput,
                 side: BorderSide(color: AppTheme.primary),
                 visualDensity: VisualDensity.compact,
@@ -542,68 +556,70 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
                       ),
                     Expanded(
                       child: RefreshIndicator(
-                  onRefresh: () => admin.fetchChats(),
-                  child: ListView.builder(
-                    controller: _scrollCtrl,
-                    padding: EdgeInsets.fromLTRB(
-                      12,
-                      0,
-                      12,
-                      MediaQuery.of(context).padding.bottom + 12,
-                    ),
-                    // Spinner "muat lebih" HANYA saat halaman berikutnya
-                    // BENAR-BENAR sedang dimuat (`chatsFetchingMore`) — dulu
-                    // pakai `chatsHasMore` (masih ada halaman) sehingga footer
-                    // spinner MUTER TERUS saat idle. Plus hanya bila ada baris
-                    // tampil (daftar kosong → empty-state, bukan spinner).
-                    itemCount:
-                        visibleChats.length +
-                        (admin.chatsFetchingMore && visibleChats.isNotEmpty
-                            ? 1
-                            : 0),
-                    itemBuilder: (_, i) {
-                      if (i >= visibleChats.length) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.primary,
-                            ),
+                        onRefresh: () => admin.fetchChats(),
+                        child: ListView.builder(
+                          controller: _scrollCtrl,
+                          padding: EdgeInsets.fromLTRB(
+                            12,
+                            0,
+                            12,
+                            MediaQuery.of(context).padding.bottom + 12,
                           ),
-                        );
-                      }
-                      final chat = visibleChats[i];
-                      final chatId = '${chat['chat_id'] ?? ''}';
-                      // Panaskan cache monitor SEJAK KARTU DI-RENDER (bukan
-                      // hanya saat tap): baca disk `admin_chatmsg_<id>` ke
-                      // memori provider sementara user masih menelusuri daftar.
-                      // Tanpa ini, buka-pertama menunggu RPC (~1 dtk) dan baru
-                      // cepat pada buka berikutnya (keluhan "harus beberapa
-                      // kali baru cepet"). Debounce internal di provider →
-                      // hanya 1 baca per chat, tak mengulang tiap rebuild.
-                      admin.prefetchChatMessages(chatId);
-                      // RepaintBoundary: kartu lain tidak ikut repaint saat
-                      // satu kartu berubah (badge call/unread) — list monitor
-                      // panjang jadi lebih hemat (konsisten dgn menu Online).
-                      return RepaintBoundary(
-                        child: _AdminChatCard(
-                          chat: chat,
-                          s: s,
-                          adminUids: admin.adminUids,
-                          activeCall: admin.activeCallsByChat[chat['chat_id']],
-                          pinned: admin.isChatPinned(chatId),
-                          category: admin.chatCategoryOf(chatId),
-                          onLongPressMenu: () => _chatActions(
-                            context,
-                            chat,
-                            label: _chatLabel(chat, s),
-                          ),
+                          // Spinner "muat lebih" HANYA saat halaman berikutnya
+                          // BENAR-BENAR sedang dimuat (`chatsFetchingMore`) — dulu
+                          // pakai `chatsHasMore` (masih ada halaman) sehingga footer
+                          // spinner MUTER TERUS saat idle. Plus hanya bila ada baris
+                          // tampil (daftar kosong → empty-state, bukan spinner).
+                          itemCount:
+                              visibleChats.length +
+                              (admin.chatsFetchingMore &&
+                                      visibleChats.isNotEmpty
+                                  ? 1
+                                  : 0),
+                          itemBuilder: (_, i) {
+                            if (i >= visibleChats.length) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.primary,
+                                  ),
+                                ),
+                              );
+                            }
+                            final chat = visibleChats[i];
+                            final chatId = '${chat['chat_id'] ?? ''}';
+                            // Panaskan cache monitor SEJAK KARTU DI-RENDER (bukan
+                            // hanya saat tap): baca disk `admin_chatmsg_<id>` ke
+                            // memori provider sementara user masih menelusuri daftar.
+                            // Tanpa ini, buka-pertama menunggu RPC (~1 dtk) dan baru
+                            // cepat pada buka berikutnya (keluhan "harus beberapa
+                            // kali baru cepet"). Debounce internal di provider →
+                            // hanya 1 baca per chat, tak mengulang tiap rebuild.
+                            admin.prefetchChatMessages(chatId);
+                            // RepaintBoundary: kartu lain tidak ikut repaint saat
+                            // satu kartu berubah (badge call/unread) — list monitor
+                            // panjang jadi lebih hemat (konsisten dgn menu Online).
+                            return RepaintBoundary(
+                              child: AdminChatCard(
+                                chat: chat,
+                                s: s,
+                                adminUids: admin.adminUids,
+                                activeCall:
+                                    admin.activeCallsByChat[chat['chat_id']],
+                                pinned: admin.isChatPinned(chatId),
+                                category: admin.chatCategoryOf(chatId),
+                                onLongPressMenu: () => _chatActions(
+                                  context,
+                                  chat,
+                                  label: _chatLabel(chat, s),
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
                     ),
                   ],
                 ),
@@ -659,8 +675,14 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
     Map<String, dynamic> chat, {
     required String label,
   }) async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    final admin = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(adminProvider);
     final chatId = '${chat['chat_id'] ?? ''}';
     if (chatId.isEmpty) return;
     final pinned = admin.isChatPinned(chatId);
@@ -732,8 +754,10 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
             ),
             if (currentCat != null)
               ListTile(
-                leading: Icon(Icons.folder_off_outlined,
-                    color: AppTheme.textSecondary),
+                leading: Icon(
+                  Icons.folder_off_outlined,
+                  color: AppTheme.textSecondary,
+                ),
                 title: Text(s.adminChatRemoveFromCategory),
                 onTap: () async {
                   await admin.setChatCategory(chatId, null);
@@ -753,8 +777,14 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
     String chatId,
     String? current,
   ) async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    final admin = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(adminProvider);
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -770,12 +800,17 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
               child: Row(
                 children: [
-                  const Icon(Icons.folder_outlined,
-                      size: 18, color: Color(0xFF7E57C2)),
+                  const Icon(
+                    Icons.folder_outlined,
+                    size: 18,
+                    color: Color(0xFF7E57C2),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(s.adminChatMoveToCategory,
-                        style: AppText.bodyStrong),
+                    child: Text(
+                      s.adminChatMoveToCategory,
+                      style: AppText.bodyStrong,
+                    ),
                   ),
                   TextButton.icon(
                     onPressed: () async {
@@ -855,8 +890,14 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
 
   /// Kelola kategori (rename / hapus) — dari long-press chip kategori.
   Future<void> _manageCategory(BuildContext context, String cat) async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    final admin = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(adminProvider);
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -887,13 +928,14 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
                   context: context,
                   builder: (dctx) => AlertDialog(
                     backgroundColor: AppTheme.bgCard,
-                    title: Text(s.adminChatRenameCategory,
-                        style: AppText.title),
+                    title: Text(
+                      s.adminChatRenameCategory,
+                      style: AppText.title,
+                    ),
                     content: TextField(
                       controller: ctrl,
                       autofocus: true,
-                      style:
-                          AppText.body.copyWith(color: AppTheme.textPrimary),
+                      style: AppText.body.copyWith(color: AppTheme.textPrimary),
                       decoration: InputDecoration(
                         hintText: s.adminChatCategoryNameHint,
                       ),
@@ -904,8 +946,7 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
                         child: Text(s.btnCancel),
                       ),
                       FilledButton(
-                        onPressed: () =>
-                            Navigator.pop(dctx, ctrl.text.trim()),
+                        onPressed: () => Navigator.pop(dctx, ctrl.text.trim()),
                         child: Text(s.btnSave),
                       ),
                     ],
@@ -918,8 +959,7 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
               },
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.delete_outline, color: AppTheme.danger),
+              leading: const Icon(Icons.delete_outline, color: AppTheme.danger),
               title: Text(
                 s.adminChatDeleteCategory,
                 style: AppText.body.copyWith(color: AppTheme.danger),
@@ -931,549 +971,6 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
             ),
             const SizedBox(height: 6),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AdminChatCard extends StatelessWidget {
-  final Map<String, dynamic> chat;
-  final S s;
-  final List<String> adminUids;
-
-  /// Call aktif di chat ini (null = tidak sedang call).
-  final ActiveCallInfo? activeCall;
-  /// Disematkan admin (ikon pin + border).
-  final bool pinned;
-  /// Kategori (folder) chat ini (null = tanpa kategori).
-  final String? category;
-  /// Tahan kartu → buka sheet aksi (pin/kategori).
-  final VoidCallback? onLongPressMenu;
-  const _AdminChatCard({
-    required this.chat,
-    required this.s,
-    required this.adminUids,
-    this.activeCall,
-    this.pinned = false,
-    this.category,
-    this.onLongPressMenu,
-  });
-
-  /// Buka profil user (sama seperti dari private chat: tap avatar header).
-  /// Dipakai avatar peserta di kartu monitor.
-  void _openUserProfile(BuildContext context, String uid, String name) {
-    if (uid.isEmpty) return;
-    final navKey = navKeyUser(uid);
-    if (!tryClaimNav(navKey)) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => UserInfoScreen(userId: uid, fallbackName: name),
-      ),
-    ).then((_) => releaseNav(navKey));
-  }
-
-  /// Dua avatar peserta (kiri = nama pertama di judul) berdampingan sedikit
-  /// tumpang-tindih. Tiap avatar BISA DIKETUK → buka profil user tsb.
-  /// Bila tak ada uid (data aneh) → fallback ikon forum seperti dulu.
-  ///
-  /// [genders] = peta uid→gender (dari `participant_genders`). Untuk peserta
-  /// TANPA foto, avatar diberi ring warna gender (male=biru / female=pink /
-  /// lain=accent) — sama seperti daftar "Pengguna Online". Foto tetap tanpa
-  /// ring (lihat ProfileAvatar: ring hanya muncul di placeholder inisial).
-  Widget _avatarPair(
-    BuildContext context,
-    List<String> uids,
-    Map<dynamic, dynamic> names, {
-    Map<dynamic, dynamic> genders = const {},
-  }) {
-    final shown = uids.take(2).toList();
-    if (shown.isEmpty) {
-      return SizedBox(
-        width: 44,
-        height: 44,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: AppTheme.primary.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(
-            Icons.forum_outlined,
-            color: AppTheme.primary,
-            size: 22,
-          ),
-        ),
-      );
-    }
-    const size = 40.0;
-    const overlap = 10.0;
-    final width = shown.length == 1 ? size : size * 2 - overlap;
-    return SizedBox(
-      width: width,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          for (var i = 0; i < shown.length; i++)
-            Positioned(
-              left: i * (size - overlap),
-              // Avatar kanan digambar di atas → sisi tumpang terlihat rapi.
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openUserProfile(
-                  context,
-                  shown[i],
-                  '${names[shown[i]] ?? ''}',
-                ),
-                child: Container(
-                  // Ring pemisah HANYA saat avatar tumpang-tindih (≥2 peserta)
-                  // supaya batas antar-avatar rapi. Avatar TUNGGAL tampil polos
-                  // (tanpa border) — persis gaya daftar "Pengguna Online".
-                  decoration: shown.length > 1
-                      ? BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppTheme.bgCard,
-                            width: 2,
-                          ),
-                        )
-                      : null,
-                  child: GenderAvatar(
-                    uid: shown[i],
-                    name: '${names[shown[i]] ?? ''}',
-                    gender: '${genders[shown[i]] ?? ''}',
-                    size: size,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
-    final genders =
-        (chat['participant_genders'] as Map<dynamic, dynamic>?) ?? const {};
-    final participants = (chat['participants'] as List<dynamic>?) ?? const [];
-    final chatId = '${chat['chat_id'] ?? ''}';
-    // Urutan uid DETERMINISTIK dari chatId (uid sorted, abadi) — bukan
-    // urutan key `participant_names` (JSONB) yang ikut berubah saat nama
-    // di-rename / beda antara snapshot cache & fetch baru. Inilah yang dulu
-    // membuat judul "A & B" menukar urutan DAN semua bubble lawan pindah
-    // ke kanan saat urutan flip.
-    final orderUids = stableChatParticipantOrder(
-      chatId: chatId,
-      participants: participants.map((p) => '$p').toList(),
-    );
-    final nameList = [
-      for (final u in orderUids)
-        if (names[u] != null && '${names[u]}'.isNotEmpty) '${names[u]}',
-    ];
-    final label = nameList.isNotEmpty
-        ? nameList.join(' & ')
-        : participants.length == 1
-        ? '${participants.length} ${s.adminUserSingular}'
-        : '${participants.length} ${s.adminUsersPlural}';
-    final lastMsg = (chat['last_message'] as String? ?? '').trim();
-    final count = chat['message_count'] ?? 0;
-    final tsRaw = chat['last_message_at'];
-    final ts = tsRaw != null ? DateTime.tryParse('$tsRaw') : null;
-
-    return Container(
-      margin: EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(14),
-        border: activeCall != null
-            ? Border.all(color: const Color(0xFF2E9E5B), width: 1.2)
-            : pinned
-            ? Border.all(color: AppTheme.primary, width: 1.2)
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: AppGestureDetector(
-        // Tap & long-press via AppGestureDetector (RawGesture, long-press
-        // 450ms, tanpa double-tap) — pola sama dgn list chat user & menu
-        // Online yang responsif. Dulu `InkWell` di dalam Material: tap
-        // menunggu gesture arena Material/ink → terasa lambat saat
-        // bulak-balik buka chat monitor.
-        behavior: HitTestBehavior.opaque,
-        onLongPress: onLongPressMenu,
-        onTap: () async {
-          final id = chat['chat_id'] as String? ?? '';
-          // Tap 2× cepat menumpuk 2 route identik → 1× back terlihat mati.
-          if (!tryClaimChatPush(id)) return;
-          // Panaskan cache pesan MONITOR lalu TUNGGU (pola SAMA dengan chat
-          // user: `await prefetchPrivateChat` sebelum push). Dulu ini
-          // fire-and-forget → layar mount saat cache belum siap → satu jeda
-          // "kosong dulu" lalu terisi (keluhan "harus beberapa kali baru
-          // cepet"). Dengan await, `peekChatMessages` PASTI hit saat mount →
-          // frame pertama langsung terisi seperti chat user (ala WhatsApp).
-          // Baca disk/SQLite-monitor terukur sangat cepat (<10ms) — delay tak
-          // terasa, jauh lebih murah daripada menunggu layar render kosong.
-          await ProviderScope.containerOf(context, listen: false)
-              .read(adminProvider)
-              .prefetchChatMessages(id);
-          if (!context.mounted) return;
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AdminChatViewScreen(
-                chatId: id,
-                chatLabel: label,
-                participantOrder: orderUids,
-                participantNames: {
-                  for (final e in names.entries)
-                    '${e.key}': '${e.value ?? ''}',
-                },
-                participantGenders: {
-                  for (final e in genders.entries)
-                    '${e.key}': '${e.value ?? ''}',
-                },
-              ),
-            ),
-          ).then((_) => releaseChatPush(id));
-        },
-        child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Avatar peserta (menggantikan ikon forum) — tiap avatar
-                    // bisa diketuk untuk melihat profil user, sama seperti
-                    // dari private chat.
-                    _avatarPair(context, orderUids, names, genders: genders),
-                    if (activeCall != null)
-                      Positioned(
-                        right: -4,
-                        bottom: -4,
-                        child: _CallActiveBadge(callType: activeCall!.callType),
-                      ),
-                  ],
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: AppText.bodyStrong,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (pinned || (category != null && category!.isNotEmpty))
-                        Padding(
-                          padding: const EdgeInsets.only(top: 3),
-                          child: Row(
-                            children: [
-                              if (pinned) ...[
-                                Icon(
-                                  Icons.push_pin,
-                                  size: 12,
-                                  color: AppTheme.primary,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  s.adminChatPin,
-                                  style: AppText.micro.copyWith(
-                                    color: AppTheme.primary,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                              if (pinned &&
-                                  category != null &&
-                                  category!.isNotEmpty)
-                                const SizedBox(width: 8),
-                              if (category != null && category!.isNotEmpty) ...[
-                                Icon(
-                                  Icons.folder,
-                                  size: 12,
-                                  color: const Color(0xFF7E57C2),
-                                ),
-                                const SizedBox(width: 3),
-                                Flexible(
-                                  child: Text(
-                                    category!,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppText.micro.copyWith(
-                                      color: const Color(0xFF7E57C2),
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      SizedBox(height: 3),
-                      Text(
-                        lastMsg.isEmpty
-                            ? (count > 0 ? '$count ${s.adminChatMsgs}' : '')
-                            : lastMsg,
-                        style: AppText.bodySmall.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (activeCall != null) ...[
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            activeCall!.callType == 'video'
-                                ? Icons.videocam
-                                : Icons.call,
-                            size: 14,
-                            color: const Color(0xFF2E9E5B),
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            s.adminCallLive,
-                            style: AppText.micro.copyWith(
-                              color: const Color(0xFF2E9E5B),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 2),
-                    ],
-                    if (count > 0)
-                      Text(
-                        '$count',
-                        style: AppText.bodySmall.copyWith(
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    if (ts != null) ...[
-                      SizedBox(height: 2),
-                      Text(
-                        formatRelativeTime(ts, isId: s.isId),
-                        style: AppText.micro.copyWith(
-                          color: AppTheme.textSecondary,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(width: 4),
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: () => _showDeleteDialog(context),
-                  child: const Padding(
-                    padding: EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.delete_outline,
-                      size: 20,
-                      color: AppTheme.danger,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-    );
-  }
-
-  Future<void> _showDeleteDialog(BuildContext context) async {
-    final participants = (chat['participants'] as List<dynamic>?) ?? const [];
-    final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
-    final myUids = participants.map((e) => '$e').toList();
-    if (myUids.length < 2) return;
-    // Aksi tulis: tidak boleh jalan saat offline.
-    if (guardOfflineCtx(
-      context,
-      s.adminNeedsConnection,
-      (m) => ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(m))),
-    )) {
-      return;
-    }
-
-    final selected = <String>{};
-    // Secara default centang SEMUA user yang bukan admin.
-    for (final uid in myUids) {
-      if (!adminUids.contains(uid)) selected.add(uid);
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) {
-          return AlertDialog(
-            backgroundColor: AppTheme.bgCard,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            title: Row(
-              children: [
-                Icon(Icons.delete_forever, color: AppTheme.danger, size: 22),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    s.adminDeleteChatTitle,
-                    style: AppText.titleEmphasis,
-                  ),
-                ),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    s.adminDeleteChatBody,
-                    style: AppText.bodySmall.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Tampilkan SEMUA peserta — sebelumnya hanya 2 pertama yang
-                  // muncul di dialog, padahal `selected` berisi semua non-admin
-                  // → peserta ke-3+ terhapus diam-diam tanpa persetujuan.
-                  for (final uid in myUids)
-                    CheckboxListTile(
-                      value: selected.contains(uid),
-                      onChanged: adminUids.contains(uid)
-                          ? null
-                          : (v) => setState(() {
-                              v == true
-                                  ? selected.add(uid)
-                                  : selected.remove(uid);
-                            }),
-                      title: Text(
-                        '${s.adminDeleteUser}: ${names[uid] ?? 'User'}${adminUids.contains(uid) ? ' ${s.adminCannotDeleteAdmin}' : ''}',
-                        style: AppText.bodySmall.copyWith(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      dense: true,
-                      activeColor: AppTheme.danger,
-                    ),
-                  SizedBox(height: 4),
-                  Text(
-                    s.adminDeleteChatOnly,
-                    style: AppText.bodySmall.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(
-                  s.btnCancel,
-                  style: TextStyle(color: AppTheme.textSecondary),
-                ),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
-                child: Text(
-                  s.adminDeleteChat,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
-    final ok = await admin.deleteChat(
-      chat['chat_id'] as String? ?? '',
-      selected.toList(),
-    );
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? s.adminChatDeleted : s.adminDeleteFail)),
-    );
-    admin.fetchChats();
-  }
-}
-
-/// Badge call aktif — lingkaran hijau berdenyut dengan icon video/audio.
-class _CallActiveBadge extends StatefulWidget {
-  final String callType;
-  const _CallActiveBadge({required this.callType});
-
-  @override
-  State<_CallActiveBadge> createState() => _CallActiveBadgeState();
-}
-
-class _CallActiveBadgeState extends State<_CallActiveBadge>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-      lowerBound: 0.55,
-      upperBound: 1.0,
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _ctrl,
-      child: Container(
-        width: 20,
-        height: 20,
-        decoration: BoxDecoration(
-          color: const Color(0xFF2E9E5B),
-          shape: BoxShape.circle,
-          border: Border.all(color: AppTheme.bgCard, width: 2),
-        ),
-        child: Icon(
-          widget.callType == 'video' ? Icons.videocam : Icons.call,
-          size: 10,
-          color: Colors.white,
         ),
       ),
     );
