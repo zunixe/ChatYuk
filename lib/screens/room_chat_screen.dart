@@ -116,7 +116,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   // ── Kontrak ChatPhotoSendMixin ──
   @override
-  Future<void> photoDispatch({
+  Future<String?> photoDispatch({
     required String imageData,
     required String type,
     required String senderId,
@@ -131,7 +131,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     // tetap diterima demi kontrak mixin bersama.
     int? videoDurationMs,
   }) async {
-    await _chat.sendRoomMessage(
+    return _chat.sendRoomMessage(
       roomId: widget.room.id,
       senderId: senderId,
       senderName: senderName,
@@ -148,6 +148,9 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   @override
   String get photoUploadChatId => 'room_${widget.room.id}';
+
+  @override
+  String get photoCacheChatKey => 'room_${widget.room.id}';
 
   @override
   String get photoSeed => widget.room.id;

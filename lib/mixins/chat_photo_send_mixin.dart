@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -15,9 +16,11 @@ import '../utils.dart';
 import '../core/media/native_image.dart';
 import '../core/photo_quality_pref.dart';
 import '../core/cache/offline_outbox.dart';
+import '../core/cache/photo_cache.dart';
 import '../core/storage_paths.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/message/image_decode_core.dart' show warmPhotoCacheForPath;
+import '../widgets/video_prefetch.dart';
 import 'chat_outbox_mixin.dart';
 
 /// Modul BERSAMA kirim foto & view-once (private ↔ room).
@@ -47,7 +50,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// Kirim pesan gambar (private: sendPrivateMessage; room: sendRoomMessage).
   /// [viewOnceSecs]: durasi view-once detik (0 = sampai ditutup);
   /// null = bukan view-once timer / legacy.
-  Future<void> photoDispatch({
+  Future<String?> photoDispatch({
     required String imageData,
     required String type,
     required String senderId,
@@ -71,6 +74,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
 
   /// Folder upload storage (private: chatId; room: `room_<id>`).
   String get photoUploadChatId;
+
+  /// chatKey untuk `PhotoCache` (private: `private_<chatId>`; room: `room_<id>`).
+  /// Default `private_<uploadChatId>`; room meng-override.
+  String get photoCacheChatKey => 'private_$photoUploadChatId';
 
   /// Seed watermark view-once (private: uid lawan; room: id room).
   String get photoSeed;
@@ -535,6 +542,8 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         // Durasi video (panjang playback) — SELALU dikirim.
         videoDurationMs: durationMs,
       );
+      // Poster video (path server) hangatkan ke disk → cold start anti-blink.
+      unawaited(VideoPrefetch.warmOne(path));
       photoFirstBonus(pp);
       photoOnSent(isOnce ? 'video_once' : 'video');
       outboxScrollToBottom();
@@ -691,7 +700,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       // Isi path == base64 yang baru di-upload → daftarkan decode-nya supaya
       // bubble versi server langsung tampil (tidak download + kotak dulu).
       warmPhotoCacheForPath(path, base64);
-      await photoDispatch(
+      final msgId = await photoDispatch(
         imageData: path,
         type: effType,
         senderId: uid,
@@ -703,6 +712,13 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         repliedToSenderName: reply?.senderName,
         viewOnceSecs: viewSecs,
       );
+      // Simpan thumb ke DISK (PhotoCache) dari base64 asli → cold start
+      // berikutnya HIT disk (anti-blink foto kiriman sendiri; dulu hanya
+      // warm memori `warmPhotoCacheForPath` sehingga restart = blink).
+      if (msgId != null && msgId.isNotEmpty) {
+        unawaited(PhotoCache.instance
+            .save(photoCacheChatKey, msgId, base64));
+      }
       if (kind == 'image') photoFirstBonus(pp);
       photoOnSent(kind);
       photoClearViewTimer();
