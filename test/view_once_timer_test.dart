@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/mixins/chat_photo_send_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
-import 'package:chatyuk/widgets/private_chat_message.dart';
+import 'package:chatyuk/widgets/message/view_once_state.dart';
 
 /// Aturan durasi view-once (durationMs pesan):
 /// null/negatif = legacy 10 dtk, 0 = sampai ditutup (1x), N = N detik.

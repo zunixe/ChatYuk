@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chatyuk/widgets/private_chat_message.dart';
+import 'package:chatyuk/widgets/message/swipe_to_reply.dart';
 
 /// REGRESSION (docs/FEATURE_MAP.md §3b):
 /// 1. `SwipeToReply` WAJIB publik — sempat ditulis `_SwipeToReply` (privat)

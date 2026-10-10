@@ -12,7 +12,7 @@ import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
 import '../utils/mention.dart';
 import '../widgets/chat_info_snack.dart';
-import '../widgets/private_chat_message.dart' show warmPhotoCacheForPath;
+import '../widgets/message/image_decode_core.dart' show warmPhotoCacheForPath;
 
 /// Modul BERSAMA antrean pesan offline (private ↔ room).
 ///

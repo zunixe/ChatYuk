@@ -28,6 +28,7 @@ import '../core/nav_guard.dart';
 import '../core/chat/chat_location.dart';
 import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
+import '../widgets/message/image_decode_core.dart';
 import '../widgets/voice_bubble.dart';
 import '../widgets/date_chip.dart';
 import '../utils/mention.dart';

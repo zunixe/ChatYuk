@@ -7,7 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
 import 'package:chatyuk/core/media/chat_photo_helper.dart';
-import 'package:chatyuk/widgets/private_chat_message.dart';
+import 'package:chatyuk/widgets/message/image_decode_core.dart';
+import 'package:chatyuk/widgets/message/message_image.dart';
 
 /// Mengunci anti-kedip bubble foto private chat: placeholder langsung
 /// dicadangkan sesuai aspek (bukan kotak 200×200 dulu), dan hasil decode
