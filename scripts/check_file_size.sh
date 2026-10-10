@@ -23,7 +23,6 @@ ALLOWLIST=(
   "lib/config/regions.dart:2428"
   "lib/config/city_coords.dart:1704"
   "lib/config/strings_admin.dart:1519"
-  "lib/widgets/post_card.dart:2164"
   "lib/screens/private_chat_screen.dart:3117"
   "lib/screens/room_chat_screen.dart:2935"
   "lib/screens/profile_screen.dart:2196"
