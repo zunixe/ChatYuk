@@ -23,8 +23,9 @@ class CallUiChannel implements CallUi {
   static final CallUiChannel _instance = CallUiChannel._();
   static CallUiChannel get instance => _instance;
 
-  static const MethodChannel _channel =
-      MethodChannel('com.chatyuk.chatyuk/call_ui');
+  static const MethodChannel _channel = MethodChannel(
+    'com.chatyuk.chatyuk/call_ui',
+  );
 
   FutureOr<void> Function(String callId)? _onAccept;
   FutureOr<void> Function(String callId)? _onDecline;
@@ -106,24 +107,21 @@ class CallUiChannel implements CallUi {
     required String callId,
     required String callerName,
     required String callType,
-  }) =>
-      _invoke('showIncoming', {
-        'callId': callId,
-        'callerName': callerName,
-        'callType': callType,
-      });
+  }) => _invoke('showIncoming', {
+    'callId': callId,
+    'callerName': callerName,
+    'callType': callType,
+  });
 
   @override
   Future<void> setConnected(String callId) =>
       _invoke('setConnected', {'callId': callId});
 
   @override
-  Future<void> dismiss(String callId) =>
-      _invoke('dismiss', {'callId': callId});
+  Future<void> dismiss(String callId) => _invoke('dismiss', {'callId': callId});
 
   @override
-  Future<void> setProximity(bool on) =>
-      _invoke('setProximity', {'on': on});
+  Future<void> setProximity(bool on) => _invoke('setProximity', {'on': on});
 
   @override
   bool get usesSystemUi => true;

@@ -5,7 +5,9 @@ import '../../config/supabase_config.dart';
 import '../../main.dart';
 import '../../screens/incoming_call_screen.dart';
 import '../../services/call_service.dart';
-export '../../services/call_service.dart'
+import '../../services/call/call_session.dart';
+export '../../services/call_service.dart' show CallService;
+export '../../services/call/call_session.dart'
     show CallSession, CallPhase, CallEndReason, CallEndReasonMessage;
 import '../../services/call_notification.dart';
 import '../../services/call/call_ui_factory.dart';
