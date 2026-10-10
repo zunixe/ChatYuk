@@ -35,7 +35,7 @@ UserModel _user({
 void main() {
   group('mergeProfileEvent', () {
     test('kolom hilang di payload → pertahankan lokal (about)', () {
-      final out = AuthNotifier.mergeProfileEvent(
+      final out = mergeProfileEvent(
         current: _user(about: 'halo'),
         event: _user(about: ''),
         presentKeys: {'id', 'nickname', 'status'},
@@ -45,7 +45,7 @@ void main() {
     });
 
     test('kolom hadir di payload → pakai event', () {
-      final out = AuthNotifier.mergeProfileEvent(
+      final out = mergeProfileEvent(
         current: _user(nickname: 'Lama', about: 'lama'),
         event: _user(nickname: 'Baru', about: 'baru'),
         presentKeys: {'id', 'nickname', 'about'},
@@ -55,7 +55,7 @@ void main() {
     });
 
     test('status/avatar hilang → pertahankan lokal', () {
-      final out = AuthNotifier.mergeProfileEvent(
+      final out = mergeProfileEvent(
         current: _user(status: 'online', avatar: 'b64foto'),
         event: _user(status: 'offline', avatar: ''),
         presentKeys: {'id', 'nickname'},
@@ -65,7 +65,7 @@ void main() {
     });
 
     test('current null → pakai event mentah', () {
-      final out = AuthNotifier.mergeProfileEvent(
+      final out = mergeProfileEvent(
         current: null,
         event: _user(about: 'x'),
         presentKeys: const {},
@@ -74,7 +74,7 @@ void main() {
     });
 
     test('points hadir → ikut event (badge tetap hidup)', () {
-      final out = AuthNotifier.mergeProfileEvent(
+      final out = mergeProfileEvent(
         current: _user(points: 50),
         event: _user(points: 60),
         presentKeys: {'id', 'points'},
@@ -87,7 +87,7 @@ void main() {
     // lokal, flag berubah true→false saat status/points berubah → user anon
     // baru langsung lolos ke MainNav ("login anon otomatis").
     test('needsOnboarding TIDAK hilang saat event realtime lain', () {
-      final out = AuthNotifier.mergeProfileEvent(
+      final out = mergeProfileEvent(
         current: _user(needsOnboarding: true),
         event: _user(needsOnboarding: false), // payload tanpa kolom ini
         presentKeys: {'id', 'status', 'points'},

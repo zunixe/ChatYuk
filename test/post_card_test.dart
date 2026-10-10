@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:chatyuk/models/auth_data.dart';
 import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/providers/riverpod/timeline_provider.dart';

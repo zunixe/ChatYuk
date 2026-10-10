@@ -7,6 +7,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/theme.dart';
+import 'models/auth_data.dart';
 import 'providers/riverpod/auth_provider.dart';
 import 'providers/riverpod/room_provider.dart';
 import 'providers/riverpod/chat_provider.dart';

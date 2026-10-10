@@ -13,6 +13,7 @@ import 'package:chatyuk/core/cache/offline_outbox.dart';
 import 'package:chatyuk/mixins/chat_outbox_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/models/user_model.dart';
+import 'package:chatyuk/models/auth_data.dart';
 import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/services/points_service.dart';
