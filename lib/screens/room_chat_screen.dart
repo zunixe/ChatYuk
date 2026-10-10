@@ -103,12 +103,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   void chatScrollToBottom() => _scrollToBottom();
 
   @override
-  Future<bool> chatDeleteMessage(String id) =>
-      _chat.deleteRoomMessage(id);
+  Future<bool> chatDeleteMessage(String id) => _chat.deleteRoomMessage(id);
 
   @override
-  Future<bool> chatUndeleteMessage(String id) =>
-      _chat.undeleteRoomMessage(id);
+  Future<bool> chatUndeleteMessage(String id) => _chat.undeleteRoomMessage(id);
 
   @override
   String chatDeletedLabel(S s) => s.msgDeletedRoom;
@@ -217,14 +215,20 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     // Private room: cek role SEBELUM kirim — komposer interaktif sejak
     // awal (tanpa gerbang loading). Bukan member → snackbar ajak join.
     if (isPrivateRoom && !_roleChecked) {
-      _myRole = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).myRole(widget.room.id);
+      _myRole = await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).myRole(widget.room.id);
       _roleChecked = true;
       if (!mounted) return false;
       setState(() {});
       if (_myRole == null) {
         showChatSnack(
           context,
-          ProviderScope.containerOf(context, listen: false).read(localeProvider).s.privateRoomNeedApproval,
+          ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(localeProvider).s.privateRoomNeedApproval,
         );
         return false;
       }
@@ -237,7 +241,9 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   @override
   Future<bool> sendEditPersist(MessageModel editing, String raw) =>
-      ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).editRoomMessage(editing.id, raw);
+      ProviderScope.containerOf(context, listen: false)
+          .read(chatRiverpod.chatProvider.notifier)
+          .editRoomMessage(editing.id, raw);
 
   @override
   Future<void> sendDispatchText({
@@ -260,16 +266,23 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   @override
   void sendOnSentText() {
-    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+    final pp = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier);
     if (pp.enabled) {
       pp.showPointsToast(
         context,
-        ProviderScope.containerOf(context, listen: false).read(localeProvider).s.pointsDeduct(1),
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(localeProvider).s.pointsDeduct(1),
       );
     }
     // Bonus "first room chat" DIHAPUS (overhaul coin: tidak ada poin gratis).
     _scrollToBottom();
   }
+
   final _scrollCtrl = ScrollController();
   bool _showUsers = false;
   bool _sheetOpen = false;
@@ -398,8 +411,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       isPrivateRoom && (_myRole == 'owner' || _myRole == 'admin');
   // Moderasi voice global room: owner room ATAU app admin (server cek ulang).
   bool get canModerateVoice =>
-      !isPrivateRoom &&
-      (widget.room.ownerId == _auth.uid || _auth.isRealAdmin);
+      !isPrivateRoom && (widget.room.ownerId == _auth.uid || _auth.isRealAdmin);
 
   // ── Voice stage global room (audio-only, max 6 mic) ──
   RoomVoiceSession? _voiceSession;
@@ -456,7 +468,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   /// di stage → toggle mute; belum stage → naik stage.
   Future<void> _onMicTap() async {
     if (_voiceJoining) return;
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     final messenger = ScaffoldMessenger.of(context);
     var session = _voiceSession;
     if (session == null) {
@@ -529,7 +544,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   Future<void> _showVoiceDiagnostics() async {
     final session = _voiceSession;
     if (session == null || !mounted) return;
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     final names = {for (final u in _lastRoomUsers) u.uid: u.nickname};
     await showVoiceDiagnosticsSheet(
       context,
@@ -540,11 +558,13 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     );
   }
 
-
   /// Tap avatar speaker lain → sheet mute (hanya bila boleh moderasi).
   Future<void> _onSpeakerTap(String uid) async {
     if (!canModerateVoice || !mounted) return;
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     final session = _voiceSession;
     if (session == null) return;
     final names = {for (final u in _lastRoomUsers) u.uid: u.nickname};
@@ -580,19 +600,19 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     );
     if (confirm != true || !mounted) return;
     try {
-      await Supabase.instance.client.rpc('room_voice_mute', params: {
-        'p_room_id': widget.room.id,
-        'p_target': uid,
-      });
+      await Supabase.instance.client.rpc(
+        'room_voice_mute',
+        params: {'p_room_id': widget.room.id, 'p_target': uid},
+      );
     } catch (_) {}
   }
+
   bool get iAmBroadcasting =>
       _broadcastSession != null &&
       _broadcastSession!.isBroadcaster &&
       _liveUid == _auth.uid;
   bool get isGrantedBroadcast => _isGrantedBroadcast;
-  bool get watchingLive =>
-      _broadcastSession != null && !iAmBroadcasting;
+  bool get watchingLive => _broadcastSession != null && !iAmBroadcasting;
 
   /// Slider ukuran font chat berubah → rebuild bubble & composer room.
   void _onFontScaleChanged() {
@@ -623,11 +643,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   /// Target `@all` (owner/admin) — dibatasi 100 uid agar payload aman.
-  List<Mention> _mentionAllExpansion() =>
-      _mentionCandidates.take(100).toList();
+  List<Mention> _mentionAllExpansion() => _mentionCandidates.take(100).toList();
 
   /// Resolusi teks → mention ber-uid. `@all` hanya di grup oleh owner/admin.
-  
+
   @override
   void initState() {
     super.initState();
@@ -635,8 +654,14 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     WidgetsBinding.instance.addObserver(this);
     // Ukuran font chat berubah (slider) → rebuild bubble & composer room.
     ChatTextScale.notifier.addListener(_onFontScaleChanged);
-    _auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    _chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
+    _auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
+    _chat = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chatRiverpod.chatProvider.notifier);
     // DEFER seperti private chat — hindari setState-during-build glitch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) activeChatId.value = widget.room.id;
@@ -645,25 +670,32 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     // supaya badge unread hilang walau pemanggil (explore/grup/notif) lupa.
     // Aman dipanggil berulang (RPC idempoten, provider pakai _readRoomIds).
     unawaited(
-      ProviderScope.containerOf(context, listen: false)
-          .read(roomProvider.notifier)
-          .markRoomRead(widget.room.id),
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).markRoomRead(widget.room.id),
     );
     final msgsHandle = _chat.getRoomMessages(widget.room.id);
     _msgsHandle = msgsHandle;
     _msgsStream = msgsHandle.stream;
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
-    _pointsProv = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+    _pointsProv = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier);
     _msgsSub = _msgsStream.listen(_onMessagesForGift);
     // Kandidat mention room global butuh daftar user online walau strip
     // horizontal sedang disembunyikan — simpan snapshot di _lastRoomUsers.
-    _usersSub = _usersStream.listen((users) {
-      if (users.isNotEmpty) _lastRoomUsers = users;
-    }, onError: (e) {
-      // OFFLINE: stream user room (.stream() mentah) bisa error — tanpa
-      // onError, error tak tertangkap merusak frame/dispatcher (back mati).
-      debugPrint('[NAV] room users stream error: $e');
-    });
+    _usersSub = _usersStream.listen(
+      (users) {
+        if (users.isNotEmpty) _lastRoomUsers = users;
+      },
+      onError: (e) {
+        // OFFLINE: stream user room (.stream() mentah) bisa error — tanpa
+        // onError, error tak tertangkap merusak frame/dispatcher (back mati).
+        debugPrint('[NAV] room users stream error: $e');
+      },
+    );
     if (isPrivateRoom) {
       unawaited(_initPrivate());
     }
@@ -673,31 +705,42 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Cache dulu (tampil instan), stream menimpa sesudahnya.
-      ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).loadCachedReactions(widget.room.id).then((
-        cached,
-      ) {
-        if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
-        reactions = cached;
-        _scheduleRebuild();
-      });
-      _reactionsSub = ProviderScope.containerOf(context, listen: false).read(messageReactionProvider)
+      ProviderScope.containerOf(context, listen: false)
+          .read(messageReactionProvider)
+          .loadCachedReactions(widget.room.id)
+          .then((cached) {
+            if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
+            reactions = cached;
+            _scheduleRebuild();
+          });
+      _reactionsSub = ProviderScope.containerOf(context, listen: false)
+          .read(messageReactionProvider)
           .watchReactions(widget.room.id)
-          .listen((m) {
-        reactions = m;
-        _scheduleRebuild();
-        ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).saveCachedReactions(widget.room.id, m);
-      }, onError: (e) {
-        // OFFLINE: reactions (.stream() mentah) error → jangan tak tertangkap.
-        debugPrint('[NAV] room reactions stream error: $e');
-      });
-      _starredSub = ProviderScope.containerOf(context, listen: false).read(messageReactionProvider)
+          .listen(
+            (m) {
+              reactions = m;
+              _scheduleRebuild();
+              ProviderScope.containerOf(context, listen: false)
+                  .read(messageReactionProvider)
+                  .saveCachedReactions(widget.room.id, m);
+            },
+            onError: (e) {
+              // OFFLINE: reactions (.stream() mentah) error → jangan tak tertangkap.
+              debugPrint('[NAV] room reactions stream error: $e');
+            },
+          );
+      _starredSub = ProviderScope.containerOf(context, listen: false)
+          .read(messageReactionProvider)
           .watchStarred(widget.room.id)
-          .listen((m) {
-        starredIds = m;
-        _scheduleRebuild();
-      }, onError: (e) {
-        debugPrint('[NAV] room starred stream error: $e');
-      });
+          .listen(
+            (m) {
+              starredIds = m;
+              _scheduleRebuild();
+            },
+            onError: (e) {
+              debugPrint('[NAV] room starred stream error: $e');
+            },
+          );
     });
     // Antrean offline: koneksi pulih → kirim otomatis; muat sisa antrean
     // sesi lalu (app sempat ditutup saat offline).
@@ -723,7 +766,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     setState(() => _broadcastStarting = true);
     try {
       if (_liveUid != _auth.uid) {
-        await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).startBroadcast(widget.room.id);
+        await ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(roomProvider.notifier).startBroadcast(widget.room.id);
         await _refreshLiveUid();
       }
       await _startBroadcastSession();
@@ -735,28 +781,39 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   Future<void> _initPrivate() async {
     dlog('[BDBG] initPrivate start room=${widget.room.id} uid=${_auth.uid}');
     try {
-      _myRole = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).myRole(widget.room.id);
+      _myRole = await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).myRole(widget.room.id);
       dlog('[BDBG] myRole=$_myRole isPrivate=${widget.room.isPrivate}');
       // Anggota untuk kandidat mention grup (termasuk yang offline).
       try {
-        _roomMembers =
-            await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).listMembers(widget.room.id);
+        _roomMembers = await ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(roomProvider.notifier).listMembers(widget.room.id);
       } catch (_) {}
       if (canModerate) {
         try {
-          final req = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
-              .listJoinRequests(widget.room.id);
+          final req = await ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(roomProvider.notifier).listJoinRequests(widget.room.id);
           _pendingCount = req.length;
         } catch (_) {}
       }
       await _refreshLiveUid();
       try {
-        _muted = await ProviderScope.containerOf(context, listen: false)
-            .read(notificationPrefsProvider)
-            .isChatMuted(widget.room.id);
+        _muted = await ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(notificationPrefsProvider).isChatMuted(widget.room.id);
       } catch (_) {}
       try {
-        final granted = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).myBroadcastGranted(widget.room.id);
+        final granted = await ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(roomProvider.notifier).myBroadcastGranted(widget.room.id);
         _isGrantedBroadcast = granted || _liveUid == _auth.uid;
         dlog('[BDBG] init granted=$_isGrantedBroadcast live=$_liveUid');
       } catch (e) {
@@ -789,12 +846,18 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       if (old != null) unawaited(Supabase.instance.client.removeChannel(old));
     } catch (_) {}
     try {
-      final ch = Supabase.instance.client.channel('room-live-${widget.room.id}');
+      final ch = Supabase.instance.client.channel(
+        'room-live-${widget.room.id}',
+      );
       ch.onPostgresChanges(
         event: PostgresChangeEvent.update,
         schema: 'public',
         table: 'rooms',
-        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: widget.room.id),
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'id',
+          value: widget.room.id,
+        ),
         callback: (payload) {
           if (!mounted) return;
           final live = payload.newRecord['live_uid']?.toString();
@@ -818,10 +881,16 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   Future<void> _refreshGrant() async {
     try {
-      final granted = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).myBroadcastGranted(widget.room.id);
+      final granted = await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).myBroadcastGranted(widget.room.id);
       final g = granted || _liveUid == _auth.uid;
-      dlog('[BDBG] refreshGrant granted=$granted live=$_liveUid uid=${_auth.uid} g=$g');
-      if (mounted && g != _isGrantedBroadcast) setState(() => _isGrantedBroadcast = g);
+      dlog(
+        '[BDBG] refreshGrant granted=$granted live=$_liveUid uid=${_auth.uid} g=$g',
+      );
+      if (mounted && g != _isGrantedBroadcast)
+        setState(() => _isGrantedBroadcast = g);
     } catch (e) {
       dlog('[BDBG] refreshGrant error: $e');
     }
@@ -927,8 +996,14 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _openRoomGiftPanel() async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
     if (!auth.canUsePaid) {
       showChatSnack(
         context,
@@ -966,8 +1041,8 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         msg.contains('Not enough')
             ? s.giftInsufficient
             : msg.contains('registered')
-                ? s.errCoinRegisterOnly
-                : s.errSendCoin,
+            ? s.errCoinRegisterOnly
+            : s.errSendCoin,
       );
     }
   }
@@ -980,7 +1055,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     if (_liveUid == null || _liveUid == _auth.uid) return;
     if (_broadcastSession != null && !_broadcastSession!.isBroadcaster) return;
     try {
-      final cnt = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).broadcastCount(widget.room.id);
+      final cnt = await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).broadcastCount(widget.room.id);
       if (!mounted) return;
       if (cnt == 0) return;
       unawaited(_startViewerSession());
@@ -988,7 +1066,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _refreshLiveUid() async {
-    final row = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchRoomById(widget.room.id);
+    final row = await ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(roomProvider.notifier).fetchRoomById(widget.room.id);
     final live = row?['live_uid']?.toString();
     dlog('[BDBG] refreshLiveUid fetched=$live current=$_liveUid');
     if (!mounted) return;
@@ -1001,8 +1082,7 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   void _syncBroadcastSession() {
     final iAmLive = _liveUid != null && _liveUid == _auth.uid;
-    final someoneElse = _liveUid != null &&
-        _liveUid != _auth.uid;
+    final someoneElse = _liveUid != null && _liveUid != _auth.uid;
 
     if (iAmLive) {
       // Jangan auto-start — biarkan user klik manual dari chip/broadcast button.
@@ -1012,10 +1092,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       }
     } else {
       // Tidak ada live → bersihkan.
-    unawaited(_broadcastSession?.stop());
-    _voiceSession?.removeListener(_onVoiceChanged);
-    unawaited(_voiceSession?.stop());
-    _voiceSession = null;
+      unawaited(_broadcastSession?.stop());
+      _voiceSession?.removeListener(_onVoiceChanged);
+      unawaited(_voiceSession?.stop());
+      _voiceSession = null;
       _broadcastSession = null;
     }
     if (mounted) setState(() {});
@@ -1024,39 +1104,65 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   Future<void> _startBroadcastSession() async {
     // cap 4
     try {
-      final cnt = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).broadcastCount(widget.room.id);
+      final cnt = await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).broadcastCount(widget.room.id);
       if (cnt >= 4) {
         if (!mounted) return;
-        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-        showChatSnack(context, s.roomBroadcastFull, backgroundColor: AppTheme.danger);
+        final s = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(localeProvider).s;
+        showChatSnack(
+          context,
+          s.roomBroadcastFull,
+          backgroundColor: AppTheme.danger,
+        );
         return;
       }
     } catch (_) {}
     unawaited(_broadcastSession?.stop());
     _broadcastSession = null;
-    final session = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).createBroadcastSession(
-      roomId: widget.room.id,
-      isBroadcaster: true,
-      onEnded: () {
-        ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStopLive();
-        if (mounted) {
-          setState(() {
-            _broadcastSession = null;
-            _liveUid = null;
-          });
-        }
-      },
-    );
+    final session = ProviderScope.containerOf(context, listen: false)
+        .read(roomProvider.notifier)
+        .createBroadcastSession(
+          roomId: widget.room.id,
+          isBroadcaster: true,
+          onEnded: () {
+            ProviderScope.containerOf(
+              context,
+              listen: false,
+            ).read(callProvider.notifier).notifStopLive();
+            if (mounted) {
+              setState(() {
+                _broadcastSession = null;
+                _liveUid = null;
+              });
+            }
+          },
+        );
     _broadcastSession = session;
     try {
       await session.start();
       if (!mounted) return;
       // Foreground service: broadcast tetap hidup saat app di-background
-      ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStartLive(
-          text: ProviderScope.containerOf(context, listen: false).read(localeProvider).s.broadcastLiveNotif);
+      ProviderScope.containerOf(context, listen: false)
+          .read(callProvider.notifier)
+          .notifStartLive(
+            text: ProviderScope.containerOf(
+              context,
+              listen: false,
+            ).read(localeProvider).s.broadcastLiveNotif,
+          );
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString().contains('Broadcast full') ? ProviderScope.containerOf(context, listen: false).read(localeProvider).s.roomBroadcastFull : '$e';
+      final msg = e.toString().contains('Broadcast full')
+          ? ProviderScope.containerOf(
+              context,
+              listen: false,
+            ).read(localeProvider).s.roomBroadcastFull
+          : '$e';
       showChatSnack(context, msg);
       _broadcastSession = null;
     }
@@ -1066,37 +1172,56 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   Future<void> _startViewerSession() async {
     unawaited(_broadcastSession?.stop());
     _broadcastSession = null;
-    final session = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).createBroadcastSession(
-      roomId: widget.room.id,
-      isBroadcaster: false,
-      onEnded: () {
-        ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStopLive();
-        if (mounted) {
-          setState(() => _broadcastSession = null);
-        }
-      },
-    );
+    final session = ProviderScope.containerOf(context, listen: false)
+        .read(roomProvider.notifier)
+        .createBroadcastSession(
+          roomId: widget.room.id,
+          isBroadcaster: false,
+          onEnded: () {
+            ProviderScope.containerOf(
+              context,
+              listen: false,
+            ).read(callProvider.notifier).notifStopLive();
+            if (mounted) {
+              setState(() => _broadcastSession = null);
+            }
+          },
+        );
     _broadcastSession = session;
     await session.start();
     if (!mounted) return;
     // Foreground service: menonton broadcast tetap hidup di background
-    ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifStartLive(
-        text: ProviderScope.containerOf(context, listen: false).read(localeProvider).s.broadcastWatchingNotif);
+    ProviderScope.containerOf(context, listen: false)
+        .read(callProvider.notifier)
+        .notifStartLive(
+          text: ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(localeProvider).s.broadcastWatchingNotif,
+        );
     await session.requestStream();
     if (mounted) setState(() {});
   }
 
-
   /// Hand raise — kirim signal ke admin.
   Future<void> _raiseHand() async {
-    await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).sendSignal(
-      widget.room.id,
-      type: 'hand_raise',
-      payload: {'nickname': _auth.profile?.nickname ?? ''},
-    );
+    await ProviderScope.containerOf(context, listen: false)
+        .read(roomProvider.notifier)
+        .sendSignal(
+          widget.room.id,
+          type: 'hand_raise',
+          payload: {'nickname': _auth.profile?.nickname ?? ''},
+        );
     if (!mounted) return;
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    showChatSnack(context, s.roomHandRaised, duration: const Duration(seconds: 2));
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    showChatSnack(
+      context,
+      s.roomHandRaised,
+      duration: const Duration(seconds: 2),
+    );
   }
 
   /// Menu ⋮ grup ala WA: tambah anggota, info, media, cari, bisu, lainnya.
@@ -1108,8 +1233,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
           // tanpa ini member lama bisa muncul lagi di picker.
           final memberIds = <String>{};
           try {
-            final members = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
-                .listMembers(widget.room.id);
+            final members = await ProviderScope.containerOf(
+              context,
+              listen: false,
+            ).read(roomProvider.notifier).listMembers(widget.room.id);
             for (final m in members) {
               memberIds.add('${m['user_id'] ?? ''}');
             }
@@ -1122,7 +1249,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
             onInvited: () {
               // Anggota baru → segarkan daftar grupku (biar langsung ada
               // di tab Grup) + hitung ulang jumlah anggota tampilan.
-              ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).loadMyGroups(refresh: true);
+              ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(roomProvider.notifier).loadMyGroups(refresh: true);
               setState(() {});
             },
           );
@@ -1132,10 +1262,8 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => GroupInfoScreen(
-              room: widget.room,
-              myRole: _myRole ?? 'member',
-            ),
+            builder: (_) =>
+                GroupInfoScreen(room: widget.room, myRole: _myRole ?? 'member'),
           ),
         );
         break;
@@ -1160,7 +1288,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _toggleMute() async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     final next = !_muted;
     try {
       // Sinkron ke server (rooms.muted_by) + cermin lokal — model sama
@@ -1175,7 +1306,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   /// Cari pesan dalam room: sheet hasil → tap lompat ke pesan
   /// (loadOlder berulang bila belum termuat, maks 10x).
   Future<void> _openRoomSearch() async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     await showRoomSearchSheet(
       context,
       roomId: widget.room.id,
@@ -1184,14 +1318,11 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     );
   }
 
-
   /// Lompat ke pesan: loadOlder berulang bila belum termuat (maks 10x),
   /// lalu scroll + highlight 2 detik.
   Future<void> _jumpToMessage(String id) async {
     if (id.isEmpty || _msgsHandle == null) return;
-    for (var i = 0;
-        i < 10 && !_lastMsgs.any((m) => m.id == id);
-        i++) {
+    for (var i = 0; i < 10 && !_lastMsgs.any((m) => m.id == id); i++) {
       try {
         await _msgsHandle!.loadOlder();
       } catch (_) {
@@ -1215,7 +1346,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   /// Submenu "Lainnya": keluar grup (+ hapus grup khusus owner).
   void _showMoreMenu() {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     final isOwner = _myRole == 'owner';
     // Admin build boleh hapus SETIAP room (server cek owner/admin ulang).
     final canDelete = isOwner || AdminGate.enabled;
@@ -1239,14 +1373,17 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
             ),
             if (canDelete)
               ListTile(
-                leading:
-                    Icon(Icons.delete_outline_rounded, color: AppTheme.danger),
-                title: Text(s.menuDeleteGroup,
-                    style: TextStyle(color: AppTheme.danger)),
+                leading: Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppTheme.danger,
+                ),
+                title: Text(
+                  s.menuDeleteGroup,
+                  style: TextStyle(color: AppTheme.danger),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _confirm(
-                      s.deleteGroupTitle, s.deleteGroupBody, _deleteGroup);
+                  _confirm(s.deleteGroupTitle, s.deleteGroupBody, _deleteGroup);
                 },
               ),
             const SizedBox(height: 8),
@@ -1266,14 +1403,24 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.btnCancel),
+            child: Text(
+              ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(localeProvider).s.btnCancel,
+            ),
           ),
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
               await fn();
             },
-            child: Text(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.btnDelete),
+            child: Text(
+              ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(localeProvider).s.btnDelete,
+            ),
           ),
         ],
       ),
@@ -1282,14 +1429,20 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   Future<void> _exitGroup() async {
     try {
-      await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).leavePrivate(widget.room.id);
+      await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).leavePrivate(widget.room.id);
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       showChatSnack(
         context,
-        ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errGeneric,
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(localeProvider).s.errGeneric,
         backgroundColor: AppTheme.danger,
       );
     }
@@ -1297,20 +1450,27 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
 
   Future<void> _deleteGroup() async {
     try {
-      await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).deleteRoom(widget.room.id);
+      await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).deleteRoom(widget.room.id);
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       showChatSnack(
         context,
-        ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errGeneric,
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(localeProvider).s.errGeneric,
         backgroundColor: AppTheme.danger,
       );
     }
   }
 
-  Future<void> _openMembersSheet() async {    await showModalBottomSheet(
+  Future<void> _openMembersSheet() async {
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -1324,8 +1484,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         onChanged: () async {
           if (canModerate) {
             try {
-              final req = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
-                  .listJoinRequests(widget.room.id);
+              final req = await ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(roomProvider.notifier).listJoinRequests(widget.room.id);
               _pendingCount = req.length;
             } catch (_) {}
           }
@@ -1370,8 +1532,14 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _joinRoom() async {
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
+    final chat = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chatRiverpod.chatProvider.notifier);
     if (auth.profile != null) {
       await chat.joinRoom(widget.room.id, auth.profile!);
       await chat.loadBlockedUids(auth.uid!);
@@ -1496,7 +1664,6 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     // Bonus "first room chat" DIHAPUS (overhaul coin: tidak ada poin gratis).
   }
 
-
   /// Izinkan → ambil posisi → sheet pilihan → konfirmasi (room) → LANGSUNG
   /// terkirim ke chat (tanpa preview/caption).
   Future<void> _sendLocation() async {
@@ -1523,12 +1690,18 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     String text = '',
     MessageModel? reply,
   }) async {
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
     // Konfirmasi: lokasi akan terlihat semua anggota room.
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (dctx) => AlertDialog(
@@ -1561,17 +1734,19 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     );
     String? sentId;
     try {
-      sentId = await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendRoomMessage(
-        roomId: widget.room.id,
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        text: payload.encode(),
-        type: 'location',
-        repliedToId: reply?.id,
-        repliedToText: reply?.text,
-        repliedToSenderName: reply?.senderName,
-      );
+      sentId = await ProviderScope.containerOf(context, listen: false)
+          .read(chatRiverpod.chatProvider.notifier)
+          .sendRoomMessage(
+            roomId: widget.room.id,
+            senderId: uid,
+            senderName: profile.nickname,
+            senderGender: profile.gender,
+            text: payload.encode(),
+            type: 'location',
+            repliedToId: reply?.id,
+            repliedToText: reply?.text,
+            repliedToSenderName: reply?.senderName,
+          );
     } catch (_) {
       if (!mounted) return;
       showChatSnack(context, s.errSendFailed);
@@ -1592,7 +1767,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   /// Kirim pembaruan koordinat lokasi live (room) tiap 30 detik.
   void _startLiveLocationUpdates(String messageId, ChatLocation initial) {
     _liveTimer?.cancel();
-    final lp = ProviderScope.containerOf(context, listen: false).read(locationProvider);
+    final lp = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(locationProvider);
     _liveTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
       final exp = initial.expiresAt;
       if (exp == null || DateTime.now().toUtc().isAfter(exp)) {
@@ -1609,8 +1787,14 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
   }
 
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
+    final chat = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chatRiverpod.chatProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -1653,17 +1837,23 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         await queueVoiceOffline(bytes, f);
         return;
       }
-      final storagePath = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadVoice(
-        chatId: 'room_${widget.room.id}',
-        bytes: bytes,
-      );
+      final storagePath =
+          await ProviderScope.containerOf(context, listen: false)
+              .read(storageProvider)
+              .uploadVoice(chatId: 'room_${widget.room.id}', bytes: bytes);
       if (storagePath == null || storagePath.isEmpty) {
         if (!outboxIsOnline) {
           await queueVoiceOffline(bytes, f);
           return;
         }
         if (mounted) {
-          showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errVoiceUploadFailed);
+          showChatSnack(
+            context,
+            ProviderScope.containerOf(
+              context,
+              listen: false,
+            ).read(localeProvider).s.errVoiceUploadFailed,
+          );
         }
         return;
       }
@@ -1691,7 +1881,9 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         imageData: storagePath,
         durationMs: durationMs,
       );
-      try { await f.delete(); } catch (_) {}
+      try {
+        await f.delete();
+      } catch (_) {}
       _scrollToBottom();
     } catch (e) {
       dlog('[RoomVoice] send error: $e');
@@ -1706,14 +1898,18 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         } catch (_) {}
       }
       if (mounted) {
-        showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errSendFailed);
+        showChatSnack(
+          context,
+          ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(localeProvider).s.errSendFailed,
+        );
       }
     }
   }
 
-
   // LayerLink per pesan — anchor action bar (Balas / Hapus) tepat di atas bubble.
-
 
   bool _showAttachRow = false;
 
@@ -1721,9 +1917,6 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     if (!_showAttachRow) FocusScope.of(context).unfocus();
     setState(() => _showAttachRow = !_showAttachRow);
   }
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -1735,7 +1928,10 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       _connOnline = next;
       if (mounted && next) flushOutbox();
     });
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
     final s = ref.watch(localeProvider).s;
     // select (bukan watch penuh): perubahan saldo/poin tidak perlu
     // me-rebuild seluruh layar room — hanya flag enabled yang dipakai.
@@ -1753,764 +1949,423 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
         }
       },
       child: Scaffold(
-      backgroundColor: AppTheme.bgCard,
-      appBar: inSelection ? buildSelectionAppBar() : AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
+        backgroundColor: AppTheme.bgCard,
+        appBar: inSelection
+            ? buildSelectionAppBar()
+            : _buildRoomAppBar(context, s),
+        body: _buildRoomBody(context, s, auth, points),
+      ),
+    );
+  }
+
+  Widget _buildRoomBody(
+    BuildContext context,
+    S s,
+    AuthNotifier auth,
+    bool points,
+  ) {
+    final showStageInline =
+        isPrivateRoom &&
+        !_stageMinimized &&
+        _liveUid != null &&
+        _broadcastSession != null;
+    final showPip =
+        isPrivateRoom &&
+        _stageMinimized &&
+        _liveUid != null &&
+        _broadcastSession != null;
+    // Bottom bar 3-state (private room): sebelum role selesai dicek,
+    // tampilkan composer yang SAMA tapi non-interaktif — layout stabil
+    // sejak frame pertama, tidak ada fase aktif-palsu lalu hilang.
+    // SafeArea bawah: composer tidak kepotong nav bar Android.
+    final Widget bottomBar;
+    if (isPrivateRoom && _roleChecked && _myRole == null) {
+      // Pending approval: composer diganti bar info — jangan biarkan user
+      // mencoba kirim lalu gagal diam-diam.
+      bottomBar = Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        color: AppTheme.bgCard,
+        child: Row(
           children: [
-            Text(widget.room.icon, style: TextStyle(fontSize: AppGlyph.sm)),
-            SizedBox(width: 8),
-            Text(widget.room.name),
+            Icon(Icons.lock_outline_rounded, size: 18, color: Colors.orange),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                s.privateRoomNeedApproval,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
           ],
         ),
-        actions: [
-          if (isPrivateRoom) ...[
-            // Hand-raise utk member biasa; Start broadcast utk yang live_uid == saya (di-grant)
-            if (_liveUid == null && !canModerate && !isGrantedBroadcast)
-              IconButton(
-                tooltip: s.roomActionHandRaise,
-                icon: const Icon(Icons.pan_tool_rounded),
-                onPressed: _raiseHand,
-              ),
-            if (((_liveUid == _auth.uid && !iAmBroadcasting) || (_liveUid == null && isGrantedBroadcast && !iAmBroadcasting)) || _broadcastStarting)
-              GestureDetector(
-                onTap: _broadcastStarting ? null : _onStartBroadcastTap,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: _broadcastStarting ? 0.25 : 0.12),
-                    borderRadius: BorderRadius.circular(8),
+      );
+    } else {
+      final input = ChatComposerInput(
+        controller: _msgCtrl,
+        onSend: sendMessage,
+        showAttachRow: _showAttachRow,
+        onToggleAttach: _toggleAttachRow,
+        onTakePhoto: () {
+          setState(() => _showAttachRow = false);
+          photoTakeToPreview();
+        },
+        onSendPhoto: () {
+          setState(() => _showAttachRow = false);
+          photoPickFromGalleryToPreview();
+        },
+        onSendViewOnce: () {
+          setState(() => _showAttachRow = false);
+          sendViewOnceFromPicker();
+        },
+        onSendVoice: _sendVoiceMessage,
+        // Gift (fitur koin) hanya bila sistem koin aktif — hilang
+        // total saat dimatikan admin (ikut flag points.enabled).
+        onOpenGiftPanel: points && isPrivateRoom && _myRole != 'owner'
+            ? _openRoomGiftPanel
+            : null,
+        onSendLocation: _sendLocation,
+        pendingLocation: _pendingLocation,
+        onCancelLocation: _pendingLocation != null
+            ? () => setState(() => _pendingLocation = null)
+            : null,
+        pendingPhotoBase64: _pendingPhotoBase64,
+        onCancelPhoto: _pendingPhotoBase64 != null
+            ? () => setState(() {
+                _pendingPhotoBase64 = null;
+                photoClearPreviewState();
+              })
+            : null,
+        photoHd: photoHd,
+        onHdChanged: _pendingPhotoBase64 != null
+            ? (v) => setState(() => photoHd = v)
+            : null,
+        mentionCandidates: _mentionCandidates,
+        mentionAllowAll: isPrivateRoom && canModerate,
+        mentionAllExpansion: _mentionAllExpansion(),
+        // Room/grup: scaffold = bgCard (putih) → pill wajib bgInput agar
+        // kontras. Private chat tidak mengirim ini (tetap bgCard di atas
+        // background foto).
+        inputFillColor: AppTheme.bgInput,
+      );
+      bottomBar = input;
+    }
+    final column = Column(
+      children: [
+        // Banner "menunggu persetujuan" kini mengambang di atas list pesan
+        // (overlay) — tidak menggeser layout saat muncul.
+        if (isPrivateRoom &&
+            isGrantedBroadcast &&
+            (!iAmBroadcasting || _broadcastStarting))
+          GestureDetector(
+            onTap: _broadcastStarting ? null : _onStartBroadcastTap,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              color: AppTheme.primary.withValues(alpha: 0.12),
+              child: Row(
+                children: [
+                  if (_broadcastStarting)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    Icon(
+                      Icons.videocam_rounded,
+                      color: AppTheme.primary,
+                      size: 18,
+                    ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _broadcastStarting
+                          ? s.roomBroadcastConnecting
+                          : s.privateRoomsStartBroadcast,
+                      style: AppText.bodySmall.copyWith(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_broadcastStarting)
-                        const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      else
-                        Icon(Icons.videocam_rounded, color: AppTheme.primary, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        _broadcastStarting
-                            ? (s.roomBroadcastConnecting)
-                            : s.privateRoomsStartBroadcast,
-                        style: AppText.label.copyWith(
-                          color: AppTheme.primary.withValues(alpha: _broadcastStarting ? 0.6 : 1),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppTheme.primary,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (showStageInline) ...[
+          BroadcastStage(
+            session: _broadcastSession!,
+            isBroadcaster: iAmBroadcasting,
+            onMinimize: () => setState(() => _stageMinimized = true),
+          ),
+        ],
+        // Strip speaker voice (global room): tampil bila ikut voice.
+        // Tap avatar SENDIRI → sheet diagnostik (debug suara).
+        if (!isPrivateRoom && _voiceSession != null)
+          VoiceStageStrip(
+            session: _voiceSession!,
+            usersByUid: {for (final u in _lastRoomUsers) u.uid: u},
+            myUid: _auth.uid,
+            onSpeakerTap: (uid) =>
+                uid == _auth.uid ? _showVoiceDiagnostics() : _onSpeakerTap(uid),
+          ),
+        // User list horizontal — private room selalu tampil, global room via toggle.
+        // Anti-dobel avatar: yang sudah tampil di strip voice (atas) tidak
+        // diulang di list (bawah). Gate sinkron dari cache (builder di dalam
+        // memfilter ulang dengan data stream segar).
+        if (isPrivateRoom || (_showUsers && !_voiceStripCoversUsers))
+          Container(
+            height: 90,
+            color: AppTheme.bgCard,
+            child: StreamBuilder<List<UserModel>>(
+              stream: _usersStream,
+              builder: (_, snap) {
+                // Persisten anti-glitch: stream presence bisa blip kosong
+                // sesaat (realtime/heartbeat race). Tahan list terakhir;
+                // kosong hanya diakui setelah 4 detik konsisten.
+                final data = snap.data;
+                if (data != null && data.isNotEmpty) {
+                  _lastRoomUsers = data;
+                  _roomUsersEmpty = false;
+                  _roomUsersEmptyTimer?.cancel();
+                } else if (data != null &&
+                    data.isEmpty &&
+                    _lastRoomUsers.isNotEmpty &&
+                    !_roomUsersEmpty) {
+                  _roomUsersEmptyTimer?.cancel();
+                  _roomUsersEmptyTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) {
+                      setState(() => _roomUsersEmpty = true);
+                    }
+                  });
+                }
+                final cached = _roomUsersEmpty
+                    ? const <UserModel>[]
+                    : _lastRoomUsers;
+                // "Kamu" optimistis: presence sendiri (joinRoom upsert)
+                // butuh roundtrip network → chip sendiri telat muncul
+                // dan menggeser strip. Sisipkan langsung dari profil.
+                final users = [...cached];
+                final myUid = auth.uid;
+                final me = auth.profile;
+                if (myUid != null &&
+                    me != null &&
+                    !users.any((u) => u.uid == myUid)) {
+                  final now = DateTime.now();
+                  users.insert(
+                    0,
+                    UserModel(
+                      uid: myUid,
+                      nickname: me.nickname,
+                      gender: me.gender,
+                      age: me.age,
+                      country: me.country,
+                      city: me.city,
+                      ipAddress: '',
+                      status: 'online',
+                      avatar: me.avatar,
+                      isRegistered: me.isRegistered,
+                      loginAt: now,
+                      createdAt: now,
+                      lastSeen: now,
+                    ),
+                  );
+                }
+                // Saring yang sudah ada di strip voice (anti-dobel avatar).
+                final stripGone = _stripUids;
+                final visible = stripGone.isEmpty
+                    ? users
+                    : users.where((u) => !stripGone.contains(u.uid)).toList();
+                if (visible.isEmpty) {
+                  // Semua sudah di strip → tak ada sisa untuk list bawah.
+                  if (users.isNotEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  // Belum pernah load → placeholder bulat (tinggi sama,
+                  // tanpa teks kedip). Sudah load & kosong → teks info.
+                  if (data == null) {
+                    return ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      itemCount: 4,
+                      itemBuilder: (_, __) => Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircleAvatar(
+                              radius: 22,
+                              backgroundColor: AppTheme.primary.withValues(
+                                alpha: 0.10,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              width: 36,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                    );
+                  }
+                  return Center(
+                    child: Text(
+                      s.noOnlineUsers,
+                      style: AppText.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  itemCount: visible.length,
+                  itemBuilder: (_, i) => RoomUserChip(
+                    key: ValueKey(visible[i].uid),
+                    user: visible[i],
+                    myUid: auth.uid,
+                    color: Color(
+                      userColorPalette[colorHashForUid(visible[i].uid) %
+                          userColorPalette.length],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+        _buildMessageList(s, auth),
+
+        if (_queuedIds.isNotEmpty)
+          Container(
+            color: AppTheme.bgCard,
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    s.msgQueuedCount(_queuedIds.length),
+                    style: AppText.caption.copyWith(
+                      color: AppTheme.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (replyingTo != null)
+          Container(
+            color: AppTheme.bgCard,
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            child: Row(
+              children: [
+                Container(
+                  width: 3,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        replyingTo!.senderName,
+                        style: AppText.chatCaption.copyWith(
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        replyingTo!.text.isNotEmpty
+                            ? (isLocationPayload(replyingTo!.text)
+                                  ? '📍 ${s.msgLocation}'
+                                  : replyingTo!.text)
+                            : s.msgPhoto,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.chatBodySmall,
                       ),
                     ],
                   ),
                 ),
-              ),
-            if (iAmBroadcasting)
-              IconButton(
-                tooltip: s.privateRoomsStopBroadcast,
-                icon: Icon(Icons.cancel_rounded, color: AppTheme.danger),
-                onPressed: () async {
-                  await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).stopBroadcast(widget.room.id);
-                  await _broadcastSession?.stop();
-                  if (mounted) setState(() { _broadcastSession = null; });
-                },
-              ),
-            IconButton(
-              tooltip: s.privateRoomsMembersTitle,
-              icon: Badge(
-                isLabelVisible:
-                    canModerate && _pendingCount > 0,
-                label: Text('$_pendingCount'),
-                child: const Icon(Icons.group_outlined),
-              ),
-              onPressed: _openMembersSheet,
-            ),
-            PopupMenuButton<String>(
-              tooltip: s.menuMore,
-              icon: const Icon(Icons.more_vert),
-              onSelected: _onGroupMenu,
-              itemBuilder: (_) => [
-                if (canModerate)
-                  PopupMenuItem(
-                    value: 'add',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.person_add_alt_rounded,
-                          size: 20),
-                      title: Text(s.menuAddMembers),
-                    ),
-                  ),
-                PopupMenuItem(
-                  value: 'info',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading:
-                        const Icon(Icons.info_outline_rounded, size: 20),
-                    title: Text(s.menuGroupInfo),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'media',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.photo_library_outlined,
-                        size: 20),
-                    title: Text(s.menuGroupMedia),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'search',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.search_rounded, size: 20),
-                    title: Text(s.menuSearchMessages),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'mute',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                        _muted
-                            ? Icons.notifications_off_outlined
-                            : Icons.notifications_outlined,
-                        size: 20),
-                    title: Text(
-                        _muted ? s.menuUnmuteNotif : s.menuMuteNotif),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'more',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading:
-                        const Icon(Icons.more_horiz_rounded, size: 20),
-                    title: Text(s.menuMore),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: cancelReply,
+                  color: AppTheme.textSecondary,
                 ),
               ],
             ),
-          ] else ...[
-            // Mic voice stage (global room): status sesuai sesi.
-            VoiceMicButton(
-              session: _voiceSession,
-              joining: _voiceJoining,
-              onTap: _onMicTap,
-              onLongPress: _onMicLongPress,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: RoomHeaderToggle(
-                showUsers: _showUsers,
-                onTap: () => setState(() => _showUsers = !_showUsers),
-              ),
-            ),
-          ],
-        ],
-      ),
-      body: Builder(builder: (context) {
-        final showStageInline = isPrivateRoom &&
-            !_stageMinimized &&
-            _liveUid != null &&
-            _broadcastSession != null;
-        final showPip = isPrivateRoom &&
-            _stageMinimized &&
-            _liveUid != null &&
-            _broadcastSession != null;
-        // Bottom bar 3-state (private room): sebelum role selesai dicek,
-        // tampilkan composer yang SAMA tapi non-interaktif — layout stabil
-        // sejak frame pertama, tidak ada fase aktif-palsu lalu hilang.
-        // SafeArea bawah: composer tidak kepotong nav bar Android.
-        final Widget bottomBar;
-        if (isPrivateRoom && _roleChecked && _myRole == null) {
-          // Pending approval: composer diganti bar info — jangan biarkan user
-          // mencoba kirim lalu gagal diam-diam.
-          bottomBar = Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          ),
+        if (editingMessage != null)
+          Container(
             color: AppTheme.bgCard,
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
             child: Row(
               children: [
-                Icon(Icons.lock_outline_rounded, size: 18, color: Colors.orange),
+                const Icon(Icons.edit, size: 16, color: AppTheme.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    s.privateRoomNeedApproval,
-                    style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                    s.editingMessage,
+                    style: AppText.chatBodySmall.copyWith(
+                      color: AppTheme.primary,
+                    ),
                   ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: cancelEdit,
+                  color: AppTheme.textSecondary,
                 ),
               ],
             ),
-          );
-        } else {
-          final input = ChatComposerInput(
-            controller: _msgCtrl,
-            onSend: sendMessage,
-            showAttachRow: _showAttachRow,
-            onToggleAttach: _toggleAttachRow,
-            onTakePhoto: () {
-              setState(() => _showAttachRow = false);
-              photoTakeToPreview();
-            },
-            onSendPhoto: () {
-              setState(() => _showAttachRow = false);
-              photoPickFromGalleryToPreview();
-            },
-            onSendViewOnce: () {
-              setState(() => _showAttachRow = false);
-              sendViewOnceFromPicker();
-            },
-            onSendVoice: _sendVoiceMessage,
-            // Gift (fitur koin) hanya bila sistem koin aktif — hilang
-            // total saat dimatikan admin (ikut flag points.enabled).
-            onOpenGiftPanel: points &&
-                    isPrivateRoom &&
-                    _myRole != 'owner'
-                ? _openRoomGiftPanel
-                : null,
-            onSendLocation: _sendLocation,
-            pendingLocation: _pendingLocation,
-            onCancelLocation: _pendingLocation != null
-                ? () => setState(() => _pendingLocation = null)
-                : null,
-            pendingPhotoBase64: _pendingPhotoBase64,
-            onCancelPhoto: _pendingPhotoBase64 != null
-                ? () => setState(() {
-                      _pendingPhotoBase64 = null;
-                      photoClearPreviewState();
-                    })
-                : null,
-            photoHd: photoHd,
-            onHdChanged: _pendingPhotoBase64 != null
-                ? (v) => setState(() => photoHd = v)
-                : null,
-            mentionCandidates: _mentionCandidates,
-            mentionAllowAll: isPrivateRoom && canModerate,
-            mentionAllExpansion: _mentionAllExpansion(),
-            // Room/grup: scaffold = bgCard (putih) → pill wajib bgInput agar
-            // kontras. Private chat tidak mengirim ini (tetap bgCard di atas
-            // background foto).
-            inputFillColor: AppTheme.bgInput,
-          );
-          bottomBar = input;
-        }
-        final column = Column(
+          ),
+        // Bottom bar 3-state didefinisikan di atas (bottomBar) —
+        // SafeArea bawah agar tidak kepotong nav bar Android.
+        SafeArea(top: false, child: bottomBar),
+      ],
+    );
+    // Overlay gift fly + kombo — di atas semua konten (IgnorePointer,
+    // tidak mengganggu gesture chat/stage).
+    final giftOverlay = GiftFlyOverlay(controller: _giftFly);
+    if (!showPip) {
+      return Stack(
         children: [
-          // Banner "menunggu persetujuan" kini mengambang di atas list pesan
-          // (overlay) — tidak menggeser layout saat muncul.
-          if (isPrivateRoom && isGrantedBroadcast && (!iAmBroadcasting || _broadcastStarting))
-            GestureDetector(
-              onTap: _broadcastStarting ? null : _onStartBroadcastTap,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                color: AppTheme.primary.withValues(alpha: 0.12),
-                child: Row(
-                  children: [
-                    if (_broadcastStarting)
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      Icon(Icons.videocam_rounded, color: AppTheme.primary, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _broadcastStarting
-                            ? s.roomBroadcastConnecting
-                            : s.privateRoomsStartBroadcast,
-                        style: AppText.bodySmall.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    Icon(Icons.chevron_right_rounded, color: AppTheme.primary, size: 18),
-                  ],
-                ),
-              ),
-            ),
-          if (showStageInline) ...[
-            BroadcastStage(
-              session: _broadcastSession!,
-              isBroadcaster: iAmBroadcasting,
-              onMinimize: () => setState(() => _stageMinimized = true),
-            ),
-          ],
-          // Strip speaker voice (global room): tampil bila ikut voice.
-          // Tap avatar SENDIRI → sheet diagnostik (debug suara).
-          if (!isPrivateRoom && _voiceSession != null)
-            VoiceStageStrip(
-              session: _voiceSession!,
-              usersByUid: {for (final u in _lastRoomUsers) u.uid: u},
-              myUid: _auth.uid,
-              onSpeakerTap: (uid) => uid == _auth.uid
-                  ? _showVoiceDiagnostics()
-                  : _onSpeakerTap(uid),
-            ),
-          // User list horizontal — private room selalu tampil, global room via toggle.
-          // Anti-dobel avatar: yang sudah tampil di strip voice (atas) tidak
-          // diulang di list (bawah). Gate sinkron dari cache (builder di dalam
-          // memfilter ulang dengan data stream segar).
-          if (isPrivateRoom ||
-              (_showUsers && !_voiceStripCoversUsers))
-            Container(
-              height: 90,
-              color: AppTheme.bgCard,
-              child: StreamBuilder<List<UserModel>>(
-                stream: _usersStream,
-                builder: (_, snap) {
-                  // Persisten anti-glitch: stream presence bisa blip kosong
-                  // sesaat (realtime/heartbeat race). Tahan list terakhir;
-                  // kosong hanya diakui setelah 4 detik konsisten.
-                  final data = snap.data;
-                  if (data != null && data.isNotEmpty) {
-                    _lastRoomUsers = data;
-                    _roomUsersEmpty = false;
-                    _roomUsersEmptyTimer?.cancel();
-                  } else if (data != null &&
-                      data.isEmpty &&
-                      _lastRoomUsers.isNotEmpty &&
-                      !_roomUsersEmpty) {
-                    _roomUsersEmptyTimer?.cancel();
-                    _roomUsersEmptyTimer = Timer(
-                      const Duration(seconds: 4),
-                      () {
-                        if (mounted) {
-                          setState(() => _roomUsersEmpty = true);
-                        }
-                      },
-                    );
-                  }
-                  final cached =
-                      _roomUsersEmpty ? const <UserModel>[] : _lastRoomUsers;
-                  // "Kamu" optimistis: presence sendiri (joinRoom upsert)
-                  // butuh roundtrip network → chip sendiri telat muncul
-                  // dan menggeser strip. Sisipkan langsung dari profil.
-                  final users = [...cached];
-                  final myUid = auth.uid;
-                  final me = auth.profile;
-                  if (myUid != null &&
-                      me != null &&
-                      !users.any((u) => u.uid == myUid)) {
-                    final now = DateTime.now();
-                    users.insert(
-                      0,
-                      UserModel(
-                        uid: myUid,
-                        nickname: me.nickname,
-                        gender: me.gender,
-                        age: me.age,
-                        country: me.country,
-                        city: me.city,
-                        ipAddress: '',
-                        status: 'online',
-                        avatar: me.avatar,
-                        isRegistered: me.isRegistered,
-                        loginAt: now,
-                        createdAt: now,
-                        lastSeen: now,
-                      ),
-                    );
-                  }
-                  // Saring yang sudah ada di strip voice (anti-dobel avatar).
-                  final stripGone = _stripUids;
-                  final visible = stripGone.isEmpty
-                      ? users
-                      : users
-                          .where((u) => !stripGone.contains(u.uid))
-                          .toList();
-                  if (visible.isEmpty) {
-                    // Semua sudah di strip → tak ada sisa untuk list bawah.
-                    if (users.isNotEmpty) {
-                      return const SizedBox.shrink();
-                    }
-                    // Belum pernah load → placeholder bulat (tinggi sama,
-                    // tanpa teks kedip). Sudah load & kosong → teks info.
-                    if (data == null) {
-                      return ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        itemCount: 4,
-                        itemBuilder: (_, __) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircleAvatar(
-                                radius: 22,
-                                backgroundColor: AppTheme.primary.withValues(
-                                  alpha: 0.10,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                width: 36,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primary.withValues(
-                                    alpha: 0.10,
-                                  ),
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-                    return Center(
-                      child: Text(
-                        s.noOnlineUsers,
-                        style: AppText.bodySmall.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    );
-                  }
-                  return ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    itemCount: visible.length,
-                    itemBuilder: (_, i) => RoomUserChip(
-                      key: ValueKey(visible[i].uid),
-                      user: visible[i],
-                      myUid: auth.uid,
-                      color: Color(
-                        userColorPalette[colorHashForUid(visible[i].uid) %
-                            userColorPalette.length],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-          Expanded(
-            child: Stack(
-              children: [
-                StreamBuilder<List<MessageModel>>(
-                  stream: _msgsStream,
-                  // FRAME PERTAMA LANGSUNG: data awal dari cache memori
-                  // (sinkron) → pesan "nempel" sejak frame pertama (ala
-                  // WhatsApp), bukan layar kosong lalu muncul. Pola sama
-                  // seperti private chat.
-                  initialData:
-                      MessageCache.instance.peekMessages(
-                        'room_${widget.room.id}',
-                      ) ??
-                      const <MessageModel>[],
-              builder: (_, snap) {
-                final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-                // Persisten anti-glitch bawah: saat stream belum emit /
-                // blip kosong, tampilkan batch terakhir (_lastMsgs diisi
-                // listener tiap emisi) — list tidak kedip hilang.
-                final raw = snap.data;
-                final msgs = (raw == null || raw.isEmpty) &&
-                        _lastMsgs.isNotEmpty
-                    ? _lastMsgs
-                    : (raw ?? []);
-                // Bubble optimistik milik sendiri (centang-1) selalu tampil
-                // di ujung list — walau offline, walau stream belum emit.
-                // `_pending` biasanya kosong: jangan alokasi list gabungan
-                // tiap build kalau tidak perlu (identitas `msgs` stabil dari
-                // stream → `_deriveItems` tetap cache-hit).
-                final all = _pending.isEmpty
-                    ? msgs
-                    : [...msgs, ..._pending];
-                if (all.isEmpty) {
-                  // Room baru/kosong — tampilkan layar kosong saja,
-                  // tanpa ikon/teks "mulai percakapan".
-                  return const SizedBox.shrink();
-                }
-                if (msgs.length > _lastMsgCount && _isNearBottom) {
-                  _lastMsgCount = msgs.length;
-                  WidgetsBinding.instance.addPostFrameCallback(
-                    (_) => _scrollToBottom(),
-                  );
-                } else {
-                  _lastMsgCount = msgs.length;
-                }
-                // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
-                // pola WhatsApp — item list berisi pesan + separator tanggal.
-                // PRIVASI: kumpulan id pesan terhapus — quote reply yang
-                // menunjuk pesan ini dirender "Pesan dihapus", bukan isinya.
-                // Derivasi di-CACHE (lihat `_deriveItems`): rebuild parent
-                // (reaksi/starred/typing/menu) tidak lagi menghitung O(N).
-                final now = DateTime.now();
-                final (items, deletedIds) = _deriveItems(
-                  s,
-                  msgs,
-                  all,
-                  day: DateTime(now.year, now.month, now.day),
-                );
-                return ListView.builder(
-                  controller: _scrollCtrl,
-                  reverse: true,
-                  padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
-                  itemCount: items.length,
-                  itemBuilder: (_, i) {
-                    final item = items[items.length - 1 - i];
-                    if (item.dateLabel != null)
-                      return DateChip(label: item.dateLabel!);
-                    final m = item.msg!;
-                    final isMe = m.senderId == auth.uid;
-                    final mkey = _msgKeys.putIfAbsent(m.id, () => GlobalKey());
-                    final selected = selectedIds.contains(m.id);
-                    final reacts = reactions[m.id];
-                    final starred = starredIds.contains(m.id);
-                    // RepaintBoundary per baris: satu bubble berubah
-                    // (reaksi/star/centang/highlight) tidak merepaint seluruh
-                    // list panjang. Pola sama seperti kartu list lain.
-                    return RepaintBoundary(
-                      child: Container(
-                      // Tanpa wash biru selebar baris (sama private chat —
-                      // hanya border bubble). Wash tersisa hanya untuk flash
-                      // sesaat saat lompat ke pesan (_highlightId).
-                      color: _highlightId == m.id
-                          ? AppTheme.primary.withValues(alpha: 0.22)
-                          : Colors.transparent,
-                      child: CompositedTransformTarget(
-                      link: linkFor(m.id),
-                      // AppGestureDetector: tahan 600ms (longPressBubble) —
-                      // sama seperti bubble private chat: hindari toolbar
-                      // muncul tak sengaja saat scroll.
-                      child: AppGestureDetector(
-                        onLongPressStart: (d) => onMessageLongPress(d, m, linkFor(m.id)),
-                        onTap: inSelection ? () => toggleSelect(m) : null,
-                        longPressDuration: AppTiming.longPressBubble,
-                        child: SwipeToReply(
-                          // Geser kanan = balas (grup & room). Pesan sendiri
-                          // dikecualikan agar tidak bentrok swipe-back sistem.
-                          enabled: !inSelection &&
-                              m.senderId != auth.uid &&
-                              !m.isDeleted,
-                          onReply: () => replyMessage(m),
-                          child: Column(
-                            crossAxisAlignment: isMe
-                                ? CrossAxisAlignment.end
-                                : CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (m.isForwarded)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 4, right: 4, bottom: 2),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.forward,
-                                        size: 14,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        s.msgForwardedLabel,
-                                        style: AppText.caption.copyWith(
-                                          color: AppTheme.textSecondary,
-                                          fontStyle: FontStyle.italic,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Container(
-                                    // Border seleksi digambar DI DALAM bubble
-                                    // (sama seperti private chat) — dulu di
-                                    // Container pembungkus sehingga border
-                                    // memanjang sampai ujung layar.
-                                    child: RoomMessageBubble(
-                                      key: mkey,
-                                      msg: m,
-                                      isMe: isMe,
-                                      isPending:
-                                          m.id.startsWith('pending-'),
-                                      isQueued:
-                                          _queuedIds.contains(m.id),
-                                      isSelected: selected,
-                                      color: Color(
-                                        userColorPalette[colorHashForUid(
-                                                    m.senderId) %
-                                            userColorPalette.length],
-                                      ),
-                                      roomId: widget.room.id,
-                                      onTapUser: () => _onTapUser(m, auth),
-                                      deletedIds: deletedIds,
-                                      highlightMentionAll:
-                                          isPrivateRoom && canModerate,
-                                    ),
-                                  ),
-                                  if (starred)
-                                    Positioned(
-                                      top: -6,
-                                      right: isMe ? 0 : null,
-                                      left: isMe ? null : 0,
-                                      child: const Icon(
-                                        Icons.star,
-                                        size: 14,
-                                        color: Color(0xFFFFB300),
-                                      ),
-                                    ),
-                                  if (reacts != null && reacts.isNotEmpty)
-                                    Positioned(
-                                      bottom: -10,
-                                      left: isMe ? null : 8,
-                                      right: isMe ? 8 : null,
-                                      child: ReactionBadge(
-                                        counts: reacts,
-                                        isMe: isMe,
-                                        onTap: inSelection
-                                            ? null
-                                            : () => openReactionDetail(m),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              if (reacts != null && reacts.isNotEmpty)
-                                const SizedBox(height: 10),
-                            ],
-                          ),
-                        ),
-                      ),
-                      ),
-                      ),
-                    );
-                  },
-                );
-              },
-                ),
-                // Banner approval mengambang — hanya setelah role dicek,
-                // tidak menggeser list pesan saat muncul.
-                if (isPrivateRoom && _roleChecked && _myRole == null)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Color.alphaBlend(
-                          Colors.orange.withValues(alpha: 0.12),
-                          AppTheme.bgCard,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(s.privateRoomNeedApproval, style: AppText.bodySmall.copyWith(color: Colors.orange.shade800))),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          if (_queuedIds.isNotEmpty)
-            Container(
-              color: AppTheme.bgCard,
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      s.msgQueuedCount(_queuedIds.length),
-                      style: AppText.caption.copyWith(
-                        color: AppTheme.textSecondary,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (replyingTo != null)
-            Container(
-              color: AppTheme.bgCard,
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-              child: Row(
-                children: [
-                  Container(width: 3, height: 36, decoration: BoxDecoration(color: AppTheme.primary, borderRadius: BorderRadius.circular(2))),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(replyingTo!.senderName, style: AppText.chatCaption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
-                        Text(replyingTo!.text.isNotEmpty ? (isLocationPayload(replyingTo!.text) ? '📍 ${s.msgLocation}' : replyingTo!.text) : s.msgPhoto, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.chatBodySmall),
-                      ],
-                    ),
-                  ),
-                  IconButton(icon: const Icon(Icons.close, size: 18), onPressed: cancelReply, color: AppTheme.textSecondary),
-                ],
-              ),
-            ),
-          if (editingMessage != null)
-            Container(
-              color: AppTheme.bgCard,
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.edit,
-                    size: 16,
-                    color: AppTheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      s.editingMessage,
-                      style: AppText.chatBodySmall.copyWith(color: AppTheme.primary),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: cancelEdit,
-                    color: AppTheme.textSecondary,
-                  ),
-                ],
-              ),
-            ),
-          // Bottom bar 3-state didefinisikan di atas (bottomBar) —
-          // SafeArea bawah agar tidak kepotong nav bar Android.
-          SafeArea(
-            top: false,
-            child: bottomBar,
-          ),
-        ],
-      );
-        // Overlay gift fly + kombo — di atas semua konten (IgnorePointer,
-        // tidak mengganggu gesture chat/stage).
-        final giftOverlay = GiftFlyOverlay(controller: _giftFly);
-        if (!showPip) {
-          return Stack(children: [column, Positioned.fill(child: giftOverlay)]);
-        }
-        return Stack(children: [
           column,
           Positioned.fill(child: giftOverlay),
-          Builder(builder: (context) {
+        ],
+      );
+    }
+    return Stack(
+      children: [
+        column,
+        Positioned.fill(child: giftOverlay),
+        Builder(
+          builder: (context) {
             final mq = MediaQuery.of(context);
             final minW = 100.0, maxW = mq.size.width * 0.8;
             final minH = 130.0, maxH = mq.size.height * 0.6;
@@ -2534,7 +2389,8 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                 onDoubleTap: () => setState(() => _stageMinimized = false),
                 onPanStart: (d) {
                   _pipResizing =
-                      d.localPosition.dx > w - handle && d.localPosition.dy > h - handle;
+                      d.localPosition.dx > w - handle &&
+                      d.localPosition.dy > h - handle;
                   _pipResizeStartSize = _pipSize;
                   _pipResizeStartLocal = d.localPosition;
                 },
@@ -2542,15 +2398,25 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                   setState(() {
                     if (_pipResizing) {
                       _pipSize = Size(
-                        (_pipResizeStartSize.width + d.localPosition.dx - _pipResizeStartLocal.dx)
+                        (_pipResizeStartSize.width +
+                                d.localPosition.dx -
+                                _pipResizeStartLocal.dx)
                             .clamp(minW, maxW),
-                        (_pipResizeStartSize.height + d.localPosition.dy - _pipResizeStartLocal.dy)
+                        (_pipResizeStartSize.height +
+                                d.localPosition.dy -
+                                _pipResizeStartLocal.dy)
                             .clamp(minH, maxH),
                       );
                     } else {
                       _pipPos = Offset(
-                        (_pipPos!.dx + d.delta.dx).clamp(8.0, mq.size.width - w - 8),
-                        (_pipPos!.dy + d.delta.dy).clamp(8.0, mq.size.height - h - 8),
+                        (_pipPos!.dx + d.delta.dx).clamp(
+                          8.0,
+                          mq.size.width - w - 8,
+                        ),
+                        (_pipPos!.dy + d.delta.dy).clamp(
+                          8.0,
+                          mq.size.height - h - 8,
+                        ),
                       );
                     }
                   });
@@ -2562,7 +2428,9 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                     color: Colors.black,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.white24),
-                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                    boxShadow: [
+                      BoxShadow(color: Colors.black26, blurRadius: 8),
+                    ],
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
@@ -2578,7 +2446,11 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                         Positioned(
                           right: 4,
                           bottom: 4,
-                          child: Icon(Icons.zoom_out_map_rounded, size: 14, color: Colors.white38),
+                          child: Icon(
+                            Icons.zoom_out_map_rounded,
+                            size: 14,
+                            color: Colors.white38,
+                          ),
                         ),
                       ],
                     ),
@@ -2586,18 +2458,460 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
                 ),
               ),
             );
-          }),
-        ]);
-      }),
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessageList(S s, AuthNotifier auth) {
+    return Expanded(
+      child: Stack(
+        children: [
+          StreamBuilder<List<MessageModel>>(
+            stream: _msgsStream,
+            // FRAME PERTAMA LANGSUNG: data awal dari cache memori
+            // (sinkron) → pesan "nempel" sejak frame pertama (ala
+            // WhatsApp), bukan layar kosong lalu muncul. Pola sama
+            // seperti private chat.
+            initialData:
+                MessageCache.instance.peekMessages(
+                  'room_${widget.room.id}',
+                ) ??
+                const <MessageModel>[],
+            builder: (_, snap) {
+              final s = ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(localeProvider).s;
+              // Persisten anti-glitch bawah: saat stream belum emit /
+              // blip kosong, tampilkan batch terakhir (_lastMsgs diisi
+              // listener tiap emisi) — list tidak kedip hilang.
+              final raw = snap.data;
+              final msgs =
+                  (raw == null || raw.isEmpty) && _lastMsgs.isNotEmpty
+                  ? _lastMsgs
+                  : (raw ?? []);
+              // Bubble optimistik milik sendiri (centang-1) selalu tampil
+              // di ujung list — walau offline, walau stream belum emit.
+              // `_pending` biasanya kosong: jangan alokasi list gabungan
+              // tiap build kalau tidak perlu (identitas `msgs` stabil dari
+              // stream → `_deriveItems` tetap cache-hit).
+              final all = _pending.isEmpty ? msgs : [...msgs, ..._pending];
+              if (all.isEmpty) {
+                // Room baru/kosong — tampilkan layar kosong saja,
+                // tanpa ikon/teks "mulai percakapan".
+                return const SizedBox.shrink();
+              }
+              if (msgs.length > _lastMsgCount && _isNearBottom) {
+                _lastMsgCount = msgs.length;
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _scrollToBottom(),
+                );
+              } else {
+                _lastMsgCount = msgs.length;
+              }
+              // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
+              // pola WhatsApp — item list berisi pesan + separator tanggal.
+              // PRIVASI: kumpulan id pesan terhapus — quote reply yang
+              // menunjuk pesan ini dirender "Pesan dihapus", bukan isinya.
+              // Derivasi di-CACHE (lihat `_deriveItems`): rebuild parent
+              // (reaksi/starred/typing/menu) tidak lagi menghitung O(N).
+              final now = DateTime.now();
+              final (items, deletedIds) = _deriveItems(
+                s,
+                msgs,
+                all,
+                day: DateTime(now.year, now.month, now.day),
+              );
+              return ListView.builder(
+                controller: _scrollCtrl,
+                reverse: true,
+                padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+                itemCount: items.length,
+                itemBuilder: (_, i) {
+                  final item = items[items.length - 1 - i];
+                  if (item.dateLabel != null)
+                    return DateChip(label: item.dateLabel!);
+                  final m = item.msg!;
+                  final isMe = m.senderId == auth.uid;
+                  final mkey = _msgKeys.putIfAbsent(
+                    m.id,
+                    () => GlobalKey(),
+                  );
+                  final selected = selectedIds.contains(m.id);
+                  final reacts = reactions[m.id];
+                  final starred = starredIds.contains(m.id);
+                  // RepaintBoundary per baris: satu bubble berubah
+                  // (reaksi/star/centang/highlight) tidak merepaint seluruh
+                  // list panjang. Pola sama seperti kartu list lain.
+                  return RepaintBoundary(
+                    child: Container(
+                      // Tanpa wash biru selebar baris (sama private chat —
+                      // hanya border bubble). Wash tersisa hanya untuk flash
+                      // sesaat saat lompat ke pesan (_highlightId).
+                      color: _highlightId == m.id
+                          ? AppTheme.primary.withValues(alpha: 0.22)
+                          : Colors.transparent,
+                      child: CompositedTransformTarget(
+                        link: linkFor(m.id),
+                        // AppGestureDetector: tahan 600ms (longPressBubble) —
+                        // sama seperti bubble private chat: hindari toolbar
+                        // muncul tak sengaja saat scroll.
+                        child: AppGestureDetector(
+                          onLongPressStart: (d) =>
+                              onMessageLongPress(d, m, linkFor(m.id)),
+                          onTap: inSelection ? () => toggleSelect(m) : null,
+                          longPressDuration: AppTiming.longPressBubble,
+                          child: SwipeToReply(
+                            // Geser kanan = balas (grup & room). Pesan sendiri
+                            // dikecualikan agar tidak bentrok swipe-back sistem.
+                            enabled:
+                                !inSelection &&
+                                m.senderId != auth.uid &&
+                                !m.isDeleted,
+                            onReply: () => replyMessage(m),
+                            child: Column(
+                              crossAxisAlignment: isMe
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (m.isForwarded)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 4,
+                                      right: 4,
+                                      bottom: 2,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.forward,
+                                          size: 14,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          s.msgForwardedLabel,
+                                          style: AppText.caption.copyWith(
+                                            color: AppTheme.textSecondary,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Container(
+                                      // Border seleksi digambar DI DALAM bubble
+                                      // (sama seperti private chat) — dulu di
+                                      // Container pembungkus sehingga border
+                                      // memanjang sampai ujung layar.
+                                      child: RoomMessageBubble(
+                                        key: mkey,
+                                        msg: m,
+                                        isMe: isMe,
+                                        isPending: m.id.startsWith(
+                                          'pending-',
+                                        ),
+                                        isQueued: _queuedIds.contains(m.id),
+                                        isSelected: selected,
+                                        color: Color(
+                                          userColorPalette[colorHashForUid(
+                                                m.senderId,
+                                              ) %
+                                              userColorPalette.length],
+                                        ),
+                                        roomId: widget.room.id,
+                                        onTapUser: () =>
+                                            _onTapUser(m, auth),
+                                        deletedIds: deletedIds,
+                                        highlightMentionAll:
+                                            isPrivateRoom && canModerate,
+                                      ),
+                                    ),
+                                    if (starred)
+                                      Positioned(
+                                        top: -6,
+                                        right: isMe ? 0 : null,
+                                        left: isMe ? null : 0,
+                                        child: const Icon(
+                                          Icons.star,
+                                          size: 14,
+                                          color: Color(0xFFFFB300),
+                                        ),
+                                      ),
+                                    if (reacts != null && reacts.isNotEmpty)
+                                      Positioned(
+                                        bottom: -10,
+                                        left: isMe ? null : 8,
+                                        right: isMe ? 8 : null,
+                                        child: ReactionBadge(
+                                          counts: reacts,
+                                          isMe: isMe,
+                                          onTap: inSelection
+                                              ? null
+                                              : () => openReactionDetail(m),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                if (reacts != null && reacts.isNotEmpty)
+                                  const SizedBox(height: 10),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          // Banner approval mengambang — hanya setelah role dicek,
+          // tidak menggeser list pesan saat muncul.
+          if (isPrivateRoom && _roleChecked && _myRole == null)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Color.alphaBlend(
+                    Colors.orange.withValues(alpha: 0.12),
+                    AppTheme.bgCard,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.hourglass_top_rounded,
+                      color: Colors.orange,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        s.privateRoomNeedApproval,
+                        style: AppText.bodySmall.copyWith(
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildRoomAppBar(BuildContext context, S s) {
+    return AppBar(
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(widget.room.icon, style: TextStyle(fontSize: AppGlyph.sm)),
+          SizedBox(width: 8),
+          Text(widget.room.name),
+        ],
+      ),
+      actions: [
+        if (isPrivateRoom) ...[
+          // Hand-raise utk member biasa; Start broadcast utk yang live_uid == saya (di-grant)
+          if (_liveUid == null && !canModerate && !isGrantedBroadcast)
+            IconButton(
+              tooltip: s.roomActionHandRaise,
+              icon: const Icon(Icons.pan_tool_rounded),
+              onPressed: _raiseHand,
+            ),
+          if (((_liveUid == _auth.uid && !iAmBroadcasting) ||
+                  (_liveUid == null &&
+                      isGrantedBroadcast &&
+                      !iAmBroadcasting)) ||
+              _broadcastStarting)
+            GestureDetector(
+              onTap: _broadcastStarting ? null : _onStartBroadcastTap,
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(
+                    alpha: _broadcastStarting ? 0.25 : 0.12,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_broadcastStarting)
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Icon(
+                        Icons.videocam_rounded,
+                        color: AppTheme.primary,
+                        size: 16,
+                      ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _broadcastStarting
+                          ? (s.roomBroadcastConnecting)
+                          : s.privateRoomsStartBroadcast,
+                      style: AppText.label.copyWith(
+                        color: AppTheme.primary.withValues(
+                          alpha: _broadcastStarting ? 0.6 : 1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (iAmBroadcasting)
+            IconButton(
+              tooltip: s.privateRoomsStopBroadcast,
+              icon: Icon(Icons.cancel_rounded, color: AppTheme.danger),
+              onPressed: () async {
+                await ProviderScope.containerOf(
+                  context,
+                  listen: false,
+                ).read(roomProvider.notifier).stopBroadcast(widget.room.id);
+                await _broadcastSession?.stop();
+                if (mounted)
+                  setState(() {
+                    _broadcastSession = null;
+                  });
+              },
+            ),
+          IconButton(
+            tooltip: s.privateRoomsMembersTitle,
+            icon: Badge(
+              isLabelVisible: canModerate && _pendingCount > 0,
+              label: Text('$_pendingCount'),
+              child: const Icon(Icons.group_outlined),
+            ),
+            onPressed: _openMembersSheet,
+          ),
+          PopupMenuButton<String>(
+            tooltip: s.menuMore,
+            icon: const Icon(Icons.more_vert),
+            onSelected: _onGroupMenu,
+            itemBuilder: (_) => [
+              if (canModerate)
+                PopupMenuItem(
+                  value: 'add',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.person_add_alt_rounded, size: 20),
+                    title: Text(s.menuAddMembers),
+                  ),
+                ),
+              PopupMenuItem(
+                value: 'info',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.info_outline_rounded, size: 20),
+                  title: Text(s.menuGroupInfo),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'media',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.photo_library_outlined, size: 20),
+                  title: Text(s.menuGroupMedia),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'search',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.search_rounded, size: 20),
+                  title: Text(s.menuSearchMessages),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'mute',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    _muted
+                        ? Icons.notifications_off_outlined
+                        : Icons.notifications_outlined,
+                    size: 20,
+                  ),
+                  title: Text(_muted ? s.menuUnmuteNotif : s.menuMuteNotif),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'more',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.more_horiz_rounded, size: 20),
+                  title: Text(s.menuMore),
+                ),
+              ),
+            ],
+          ),
+        ] else ...[
+          // Mic voice stage (global room): status sesuai sesi.
+          VoiceMicButton(
+            session: _voiceSession,
+            joining: _voiceJoining,
+            onTap: _onMicTap,
+            onLongPress: _onMicLongPress,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: RoomHeaderToggle(
+              showUsers: _showUsers,
+              onTap: () => setState(() => _showUsers = !_showUsers),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
   void _onTapUser(MessageModel msg, AuthNotifier auth) {
     if (msg.senderId == auth.uid) return;
     if (_sheetOpen) return;
-    if (ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).isBlocked(msg.senderId)) {
-      final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    if (ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chatRiverpod.chatProvider.notifier).isBlocked(msg.senderId)) {
+      final s = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(localeProvider).s;
       showChatSnack(context, s.msgBlocked);
       return;
     }
@@ -2611,7 +2925,6 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
     );
   }
 
-
   void _showReportDialog(String reportedId, String reportedName) {
     showReportUserDialog(
       context,
@@ -2619,7 +2932,4 @@ class _RoomChatScreenState extends ConsumerState<RoomChatScreen>
       reportedName: reportedName,
     );
   }
-
 }
-
-
