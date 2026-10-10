@@ -48,6 +48,15 @@ abstract class ChatBase {
   DateTime? _invisibleFetchedAt;
   final Map<String, RealtimeChannel> _privateBroadcastChannels = {};
   final Map<String, int> _privateBroadcastRefs = {};
+  // T3b (2026-10-11): refcount channel status per-uid. Dulu tiap `getUserStatus`
+  // membuat channel `user-status-<uid>-<instanceId>` BARU (nama unik per
+  // instance) → saat beberapa layar menonton uid sama (chat + info + daftar),
+  // ada banyak channel Supabase untuk data SAMA = boros & overhead join.
+  // Sekarang: SATU channel per uid (nama tanpa instanceId) + refcount; channel
+  // diputus hanya saat penonton terakhir (refs==0) cancel.
+  final Map<String, RealtimeChannel> _statusChannels = {};
+  final Map<String, int> _statusChannelRefs = {};
+  final Map<String, List<StreamController<String>>> _statusControllers = {};
   final Map<String, String> _onlinePathByUid = {};
   final Map<String, List<void Function()>> _chatReloaders = {};
   final Map<String, StreamController<List<PrivateChatInfo>>>

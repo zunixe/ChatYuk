@@ -88,36 +88,65 @@ mixin ChatServicePresenceMx on ChatBase {
     }
 
     // Nama channel harus UNIK per instance — 2 screen bisa menonton user
-    // yang sama bersamaan (nama sama = join gagal, status mati sebelah).
-    final instanceId = DateTime.now().microsecondsSinceEpoch;
-    final channel = _sb.channel('user-status-$uid-$instanceId');
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.update,
-      schema: 'public',
-      table: 'profiles',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'id',
-        value: uid,
-      ),
-      callback: (payload) {
-        if (controller.isClosed) return;
-        final s = ChatService.effectiveStatusOf(
-          payload.newRecord['status'] as String?,
-          payload.newRecord['last_seen'] as String?,
-        );
-        if (s != _current) {
-          _current = s;
-          controller.add(_current);
-        }
-      },
+    // T3b (2026-10-11): SATU channel realtime per uid + refcount penonton.
+    // Dulu nama channel pakai instanceId unik tiap subscribe → banyak channel
+    // untuk uid sama (chat + info + list) = overhead join & boros. Sekarang
+    // channel dibagi; callback meneruskan status ke SEMUA controller uid itu.
+    final uidControllers = _statusControllers.putIfAbsent(
+      uid,
+      () => <StreamController<String>>[],
     );
-    channel.subscribe((status, err) {
-      if (err != null) dlog('[Presence] status realtime error: $err');
-    });
+    uidControllers.add(controller);
+    _statusChannelRefs[uid] = (_statusChannelRefs[uid] ?? 0) + 1;
+
+    var channel = _statusChannels[uid];
+    if (channel == null) {
+      channel = _sb.channel('user-status-$uid');
+      channel.onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'profiles',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'id',
+          value: uid,
+        ),
+        callback: (payload) {
+          final s = ChatService.effectiveStatusOf(
+            payload.newRecord['status'] as String?,
+            payload.newRecord['last_seen'] as String?,
+          );
+          for (final c in List<StreamController<String>>.from(
+            _statusControllers[uid] ?? const [],
+          )) {
+            if (!c.isClosed) c.add(s);
+          }
+        },
+      );
+      channel.subscribe((status, err) {
+        if (err != null) dlog('[Presence] status realtime error: $err');
+      });
+      _statusChannels[uid] = channel;
+    }
     if (initialStatus == null) fetchStatus();
 
-    controller.onCancel = () => _sb.removeChannel(channel);
+    controller.onCancel = () {
+      // Keluar dari daftar controller uid ini.
+      final list = _statusControllers[uid];
+      if (list != null) {
+        list.remove(controller);
+        if (list.isEmpty) _statusControllers.remove(uid);
+      }
+      // Refcount: putus channel hanya saat penonton TERAKHIR lepas.
+      final refs = (_statusChannelRefs[uid] ?? 1) - 1;
+      if (refs <= 0) {
+        _statusChannelRefs.remove(uid);
+        final ch = _statusChannels.remove(uid);
+        if (ch != null) _sb.removeChannel(ch);
+      } else {
+        _statusChannelRefs[uid] = refs;
+      }
+    };
     return controller.stream;
   }
 

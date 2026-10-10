@@ -6,10 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/nav_guard.dart';
 import '../../../models/user_model.dart';
 import '../../../providers/riverpod/auth_provider.dart';
-import '../../../providers/riverpod/call_provider.dart';
 import '../../../providers/riverpod/chat_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
-import '../../private_chat_screen.dart';
+import '../../../widgets/chat_route.dart';
 
 /// Buka private chat dengan [user] dari daftar Online — deterministik (tanpa
 /// network saat push), prefetch pesan sebelum push, guard double-push, dan
@@ -43,53 +42,22 @@ Future<void> startPrivateChatFromOnline(
   // docs/PERFORMANCE.md §18.
   final navKey = navKeyChat(chatId);
   if (!tryClaimNav(navKey)) return;
-  // Prefetch pesan ke memori SEBELUM push (di-await) → frame pertama chat
-  // langsung terisi (peekMessages hit), bukan layar kosong dulu.
-  await ProviderScope.containerOf(context, listen: false)
+  // PUSH INSTAN (2026-10-11): prefetch paralel (fire-and-forget), TIDAK
+  // di-await sebelum push → transisi langsung jalan (konsisten & cepat).
+  unawaited(ProviderScope.containerOf(context, listen: false)
       .read(chatProvider.notifier)
-      .prefetchPrivateChat(chatId);
-  if (!context.mounted) {
-    releaseNav(navKey);
-    return;
-  }
+      .prefetchPrivateChat(chatId));
   Navigator.push(
     context,
-    PageRouteBuilder(
-      transitionDuration: const Duration(milliseconds: 150),
-      reverseTransitionDuration: const Duration(milliseconds: 120),
-      settings: RouteSettings(name: privateChatRoute(chatId)),
-      pageBuilder: (_, __, ___) => PrivateChatScreen(
-        chatId: chatId,
-        otherName: user.nickname,
-        otherUid: user.uid,
-        otherGender: user.gender,
-        otherCountry: user.country,
-        otherCity: user.city,
-        otherAge: user.age,
-        otherRegistered: user.isRegistered,
-      ),
-      transitionsBuilder: (_, animation, __, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
-        );
-        // Slide + Fade (halus, tutupi celah raster saat slide full-screen).
-        return FadeTransition(
-          opacity: curved,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(curved),
-            child: child,
-          ),
-        );
-      },
+    chatRoute(
+      chatId: chatId,
+      otherName: user.nickname,
+      otherUid: user.uid,
+      otherGender: user.gender,
+      otherCountry: user.country,
+      otherAge: user.age,
+      otherRegistered: user.isRegistered,
     ),
-    // WAJIB release klaim nav saat route di-pop (aturan nav_guard §18).
-    // Dulu jalur ini LUPA `.then(releaseNav)` → klaim `navKeyChat` nyangkut
-    // → tap kartu user YANG SAMA diulang tak nyahut dalam window 2 dtk.
   ).then((_) => releaseNav(navKey));
 
   // Validasi + upsert di background setelah screen sudah terbuka — DITUNDA

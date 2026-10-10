@@ -10,7 +10,7 @@ import '../../../providers/riverpod/locale_provider.dart';
 import '../../../widgets/chat_info_snack.dart';
 import '../../../widgets/person_avatar.dart';
 import '../../../widgets/social_counts_line.dart';
-import '../../private_chat_screen.dart';
+import '../../../widgets/chat_route.dart';
 import '../../user_info_screen.dart';
 import 'room_widgets.dart';
 
@@ -140,15 +140,12 @@ void showRoomUserActionSheet(
                   final navKey = navKeyChat(chatId);
                   if (tryClaimNav(navKey)) {
                     Navigator.of(screenContext).push(
-                      MaterialPageRoute(
-                        builder: (_) => PrivateChatScreen(
-                          chatId: chatId,
-                          otherName: msg.senderName,
-                          otherUid: msg.senderId,
-                          otherGender: msg.senderGender,
-                          otherCountry: '',
-                          otherRegistered: msg.isRegistered,
-                        ),
+                      chatRoute(
+                        chatId: chatId,
+                        otherName: msg.senderName,
+                        otherUid: msg.senderId,
+                        otherGender: msg.senderGender,
+                        otherRegistered: msg.isRegistered,
                       ),
                     ).then((_) => releaseNav(navKey));
                   }

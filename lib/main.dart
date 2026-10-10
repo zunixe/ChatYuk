@@ -50,6 +50,7 @@ import 'services/notification_prefs_service.dart';
 import 'services/storage_photo_service.dart';
 import 'services/topup_service.dart';
 import 'widgets/voice_bubble.dart';
+import 'widgets/chat_route.dart';
 import 'widgets/video_prefetch.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -1183,13 +1184,11 @@ void _openFromData(Map<String, dynamic> data) {
     return;
   }
   nav.pushAndRemoveUntil(
-          MaterialPageRoute(
-            settings: RouteSettings(name: target),
-            builder: (_) => PrivateChatScreen(
-              chatId: chatId,
-              otherName: otherName,
-              otherUid: otherUid,
-            ),
+          chatRoute(
+            chatId: chatId,
+            otherName: otherName,
+            otherUid: otherUid,
+            routeName: target,
           ),
           (route) => route.isFirst,
         );

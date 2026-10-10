@@ -12,7 +12,7 @@ import '../providers/riverpod/points_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 
-import 'private_chat_screen.dart';
+import '../widgets/chat_route.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../providers/riverpod/location_provider.dart';
 
@@ -279,17 +279,14 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
       if (!tryClaimNav(navKey)) return;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => PrivateChatScreen(
-            chatId: chatId,
-            otherName: '${u['nickname'] ?? ''}',
-            otherUid: otherUid,
-            otherGender: '${u['gender'] ?? ''}',
-            otherCountry: '${u['country'] ?? ''}',
-            otherCity: '${u['city'] ?? ''}',
-            otherAge: (u['age'] as num?)?.toInt() ?? 0,
-            otherRegistered: u['is_registered'] == true,
-          ),
+        chatRoute(
+          chatId: chatId,
+          otherName: '${u['nickname'] ?? ''}',
+          otherUid: otherUid,
+          otherGender: '${u['gender'] ?? ''}',
+          otherCountry: '${u['country'] ?? ''}',
+          otherAge: (u['age'] as num?)?.toInt() ?? 0,
+          otherRegistered: u['is_registered'] == true,
         ),
       ).then((_) => releaseNav(navKey));
     } catch (e) {

@@ -22,7 +22,7 @@ import '../widgets/call_permission_dialog.dart';
 import '../core/call/call_permissions.dart';
 import '../providers/riverpod/theme_provider.dart';
 import 'call_screen.dart';
-import 'private_chat_screen.dart';
+import '../widgets/chat_route.dart';
 import 'social_list_screen.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/privacy_provider.dart';

@@ -9,7 +9,7 @@ import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../widgets/profile_avatar.dart';
 import 'call_screen.dart';
-import 'private_chat_screen.dart';
+import '../widgets/chat_route.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../core/call/call_permissions.dart';
 import '../utils.dart';
@@ -235,14 +235,12 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
       // chatId sudah tervalidasi di atas (startPrivateChat / fallback id).
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          settings: RouteSettings(name: privateChatRoute(chatId)),
-          builder: (_) => PrivateChatScreen(
-            chatId: chatId,
-            otherName: session.remoteName,
-            otherUid: widget.callerUid,
-            otherRegistered: true,
-          ),
+        chatRoute(
+          chatId: chatId,
+          otherName: session.remoteName,
+          otherUid: widget.callerUid,
+          otherRegistered: true,
+          routeName: privateChatRoute(chatId),
         ),
       );
     }

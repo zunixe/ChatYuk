@@ -7,7 +7,7 @@ import '../core/nav_guard.dart';
 import '../main.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../screens/private_chat_screen.dart';
+import 'chat_route.dart';
 import '../screens/call_screen.dart';
 import '../utils.dart';
 
@@ -88,13 +88,11 @@ class _CallBannerState extends ConsumerState<CallBanner> {
       final navKey = navKeyChat(chatId);
       if (!tryClaimNav(navKey)) return;
       nav.push(
-        MaterialPageRoute(
-          settings: RouteSettings(name: target),
-          builder: (_) => PrivateChatScreen(
-            chatId: chatId,
-            otherUid: sess.remoteUid,
-            otherName: sess.remoteName,
-          ),
+        chatRoute(
+          chatId: chatId,
+          otherUid: sess.remoteUid,
+          otherName: sess.remoteName,
+          routeName: target,
         ),
       ).then((_) => releaseNav(navKey));
     } else if (!routeTracker.contains(kCallScreenRoute)) {
