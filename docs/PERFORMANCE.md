@@ -1146,6 +1146,51 @@ diperbaiki kode. Sisa keterlambatan (bila ada) = frame pacing (§2.17), bukan
 jalur Timeline. Jangan ubah `TimelineScreen`/`PostCard`/provider tanpa angka
 baru.
 
+### 2.19 Transisi buka chat: instan & konsisten (2026-10-11)
+
+Keluhan: buka chat dari list "telat/berat" & transisi tak konsisten antar jalur.
+Rencana T0–T3 (disetujui user). **JANGAN DIBALIK** — alasan:
+
+**T1a — push instan.** `_openChat` (chat_list) & `startPrivateChatFromOnline`
+(Online) dulu `await prefetchPrivateChat` SEBELUM `Navigator.push` → transisi
+baru mulai setelah query SQLite selesai (DB besar = makin lambat, tak stabil).
+Sekarang prefetch **paralel** (`unawaited`), push langsung. Chat list:
+`private_chats_select.dart`; Online: `online_users/widgets/chat_nav.dart`.
+**Catatan trade-off:** pada cache miss, chat bisa tampil skeleton sekilas —
+dapat diterima (transisi instan > layar instan). Jangan kembalikan await.
+
+**T1b/T1c — I/O keluar dari frame animasi.** `ChatStreamSession.start()`
+(handshake channel Supabase + reload RPC) + `getMyPrivateChats` dulu jalan
+SAAT initState, yaitu di frame transisi 150ms → jank "pas kebuka". Sekarang:
+- Stream pesan disalurkan lewat `StreamController.broadcast` milik screen
+  (`private_chat/private_chat_open_timing.dart`), listener dipasang di
+  initState, tapi `start()` dipanggil **post-frame** (`_startMessagesStream`).
+- Frame pertama tetap terisi dari `initialData: peekMessages` (cache memori
+  sinkron) → **tidak** ada layar kosong walau start ditunda 1 frame.
+
+**T2a — transisi SERAGAM.** Dulu hanya 2 jalur chat (chat_list, Online) pakai
+Slide+Fade manual (kode disalin 2×), jalur lain (Nearby/CallHistory/UserInfo/
+RoomSheet) hanya Slide murni → tak konsisten. Sekarang SATU helper
+`lib/widgets/chat_route.dart` `chatRoute()` (Slide+Fade 150/120ms
+`easeOutCubic`) dipakai SEMUA jalur ke chat. **Halaman lain (room, profil,
+setelan, admin) tetap Slide murni** dari `AppSlidePageTransitionsBuilder`
+(theme.dart) — JANGAN tambah Fade global. **T2c:** celah nav_guard
+`incoming_call_screen` ditutup (kini lewat chatRoute).
+
+**T3a — warm voice/video ditunda 400ms** (`_scheduleWarmPrefetch`) — dulu di
+emit pertama (tepat saat transisi), unduhan file + generate poster video
+berebut animasi. **T3b — refcount channel `getUserStatus` per-uid**
+(`chat_service_presence.dart`): dulu nama channel pakai instanceId unik tiap
+subscribe → banyak channel Supabase untuk uid sama (chat + info + list).
+Sekarang SATU channel per uid + refcount; `removeChannel` hanya saat penonton
+terakhir lepas.
+
+**Verifikasi:** analyze lib 0/0 · boundary OK · migrations OK · file-size OK
+(`private_chat_screen` 3120→3116, growth ditolak ratchet → helper pindah ke
+`part`) · test 1847 hijau (1 pre-existing) · build terpasang, logcat bersih.
+**Belum terukur angka** (adb wireless tak andal dari sesi ini) — perlu
+`dumpsys SurfaceFlinger --latency` saat buka chat berulang untuk mengisi angka.
+
 ### 8. Target tersisa
 
 **Tidak ada.** Semua item bagian 6 sudah tertutup:
