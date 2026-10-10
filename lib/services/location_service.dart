@@ -224,10 +224,18 @@ class LocationService {
   /// Ambil daftar orang sekitar dalam radius (km). Return list map:
   /// uid, nickname, gender, age, country, city, status, avatar,
   /// is_registered, last_seen, distance_km.
-  Future<List<Map<String, dynamic>>> nearbyUsers(double radiusKm) async {
+  Future<List<Map<String, dynamic>>> nearbyUsers(
+    double radiusKm, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
     final res = await _sb.rpc(
       'nearby_users',
-      params: {'p_radius_km': radiusKm},
+      params: {
+        'p_radius_km': radiusKm,
+        'p_limit': limit,
+        if (offset > 0) 'p_offset': offset,
+      },
     );
     final list = res is List ? res : <dynamic>[];
     return list.cast<Map<String, dynamic>>();

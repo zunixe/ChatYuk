@@ -35,11 +35,54 @@ class _SocialListScreenState extends ConsumerState<SocialListScreen> {
   SocialNotifier get _service => ProviderScope.containerOf(context, listen: false).read(socialProvider.notifier);
   bool _loading = true;
   List<Map<String, dynamic>> _items = [];
+  static const int _pageSize = 50;
+  final ScrollController _scrollCtrl = ScrollController();
+  bool _hasMore = true;
+  bool _loadingMore = false;
 
   @override
   void initState() {
     super.initState();
+    _scrollCtrl.addListener(_onScroll);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_hasMore || _loadingMore) return;
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore || _loading) return;
+    final uid = widget.userId ?? _service.uid;
+    if (uid == null) return;
+    setState(() => _loadingMore = true);
+    try {
+      final rows = await _service.socialList(
+        widget.kind,
+        uid,
+        limit: _pageSize,
+        offset: _items.length,
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = [..._items, ...rows];
+        _hasMore = rows.length >= _pageSize;
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   Future<void> _load() async {
@@ -60,10 +103,11 @@ class _SocialListScreenState extends ConsumerState<SocialListScreen> {
         });
       }
     }
-    final items = await _service.socialList(widget.kind, uid, limit: 200);
+    final items = await _service.socialList(widget.kind, uid, limit: _pageSize);
     if (!mounted) return;
     setState(() {
       _items = items;
+      _hasMore = items.length >= _pageSize;
       _loading = false;
     });
     // Simpan ke cache SQLite (persisten lintas cold start).
@@ -100,14 +144,29 @@ class _SocialListScreenState extends ConsumerState<SocialListScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView.builder(
+                controller: _scrollCtrl,
                 padding: EdgeInsets.fromLTRB(
                   12,
                   12,
                   12,
                   MediaQuery.of(context).padding.bottom + 24,
                 ),
-                itemCount: _items.length,
-                itemBuilder: (_, i) => _SocialTile(entry: _items[i]),
+                itemCount: _items.length + (_hasMore ? 1 : 0),
+                itemBuilder: (_, i) {
+                  if (i >= _items.length) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    );
+                  }
+                  return _SocialTile(entry: _items[i]);
+                },
               ),
             ),
     );

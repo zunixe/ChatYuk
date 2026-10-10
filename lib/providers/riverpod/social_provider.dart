@@ -259,8 +259,9 @@ class SocialNotifier extends Notifier<SocialState> {
   Future<Map<String, dynamic>> mySocialStatus(String otherUid,
           {bool force = false}) =>
       _service.mySocialStatus(otherUid, force: force);
-  Future<List<Map<String, dynamic>>> socialList(String kind, String uid, {int limit = 50}) =>
-      _service.socialList(kind, uid, limit: limit);
+  Future<List<Map<String, dynamic>>> socialList(String kind, String uid,
+          {int limit = 50, int offset = 0}) =>
+      _service.socialList(kind, uid, limit: limit, offset: offset);
   Future<Map<String, dynamic>> unsubscribeCreator(String uid) =>
       _service.unsubscribeCreator(uid);
 
