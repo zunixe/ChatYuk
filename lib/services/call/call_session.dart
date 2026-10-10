@@ -12,6 +12,12 @@ import '../../core/perf/perf_probe.dart';
 import '../../utils.dart';
 import '../call_service.dart';
 
+part 'call_session_media.dart';
+part 'call_session_signal.dart';
+part 'call_session_watch.dart';
+
+const _watchPcStale = Duration(seconds: 20);
+
 /// Fase panggilan.
 enum CallPhase { connecting, ringing, inCall, ended, error }
 
@@ -47,7 +53,8 @@ extension CallEndReasonMessage on CallEndReason {
 ///   buat answer.
 /// Offer hanya dibuat setelah callee jawab — broadcast tidak replay,
 /// jadi callee tidak boleh ketinggalan offer saat masih ringing.
-class CallSession extends ChangeNotifier {
+/// State instance + helper bersama — dipakai mixin per-domain (file `part`).
+abstract class _CallBase extends ChangeNotifier {
   final String callId;
   final String remoteUid;
   final String remoteName;
@@ -59,7 +66,7 @@ class CallSession extends ChangeNotifier {
 
   final CallService _service = CallService.instance;
 
-  CallSession({
+  _CallBase({
     required this.callId,
     required this.remoteUid,
     required this.remoteName,
@@ -138,6 +145,7 @@ class CallSession extends ChangeNotifier {
     _mediaError = mediaError;
     notifyListeners();
   }
+
   // Sinyal yang datang sebelum peer connection siap (offer bisa sampai
   // sebelum getUserMedia selesai di callee) — diproses setelah setup.
   final List<Map<String, dynamic>> _pendingSignals = [];
@@ -158,11 +166,12 @@ class CallSession extends ChangeNotifier {
   // begitu `_setupMediaAndPeer` selesai (dulu request dibuang diam-diam →
   // admin menunggu tick permintaan berikutnya = audio telat).
   final Set<String> _pendingWatchRequests = {};
+
   /// Waktu pc watch dibuat per watcher — kunci anti-deadlock: pc yang belum
   /// `connected` lebih dari [_watchPcStale] dianggap mati → boleh rebuild
   /// (mis. offer hilang / ICE nyangkut di `connecting`).
   final Map<String, DateTime> _watchPcCreatedAt = {};
-  static const _watchPcStale = Duration(seconds: 20);
+
   CallPhase _phase = CallPhase.connecting;
   CallEndReason _endReason = CallEndReason.ended;
   bool _micOn = true;
@@ -196,6 +205,35 @@ class CallSession extends ChangeNotifier {
     return tracks.any((t) => t.enabled);
   }
 
+  // Kontrak lintas-mixin (didefinisikan di CallSession / mixin lain) — agar
+  // mixin per-domain (`on _CallBase`) bisa memanggilnya tanpa siklik.
+  void _recordConnected(String source);
+  void _setProximity(bool on);
+  void _startBilling();
+  void _finish(CallEndReason reason);
+  Future<void> _retryWithAllCandidates();
+  Future<void> _createOffer();
+  Future<void> _handleSignal(Map<String, dynamic> msg);
+  Future<void> _sampleAudioRtt();
+  Future<void> _syncAll();
+  Future<void> _handleWatchRequest(Map<String, dynamic> msg);
+  Future<void> _handleWatchAnswer(Map<String, dynamic> msg);
+  Future<void> _handleWatchCandidate(Map<String, dynamic> msg);
+}
+
+class CallSession extends _CallBase
+    with _CallSessionMediaMx, _CallSessionSignalMx, _CallSessionWatchMx {
+  CallSession({
+    required super.callId,
+    required super.remoteUid,
+    required super.remoteName,
+    required super.callType,
+    required super.isCaller,
+    super.myName,
+    super.myGender,
+    super.pendingSignals,
+  });
+
   /// Siapkan renderer + media lokal + peer connection + listener sinyal.
   /// Belum membuat offer — caller menunggu callee jawab.
   Future<void> init() async {
@@ -203,9 +241,7 @@ class CallSession extends ChangeNotifier {
       '[ICE] ===== init#${hashCode} start isCaller=$isCaller callId=$callId (pc=${_pc != null}) =====',
     );
     if (_pc != null) {
-      dlog(
-        '[ICE] init() already ran (pc exists) -> skip to avoid phase reset',
-      );
+      dlog('[ICE] init() already ran (pc exists) -> skip to avoid phase reset');
       return;
     }
     _initStartedAt = DateTime.now();
@@ -216,10 +252,12 @@ class CallSession extends ChangeNotifier {
     // (headset tidak terputus saat masuk call). Best-effort.
     await _initAudioRoute();
 
-    _signalSub = _service.onSignal(callId).listen(
-      _onSignal,
-      onError: (e) => dlog('[CallService] signal stream error: $e'),
-    );
+    _signalSub = _service
+        .onSignal(callId)
+        .listen(
+          _onSignal,
+          onError: (e) => dlog('[CallService] signal stream error: $e'),
+        );
 
     // Status call: caller lihat declined/busy, callee lihat canceled.
     _statusSub = _service.onCallStatus(callId).listen((status) {
@@ -328,411 +366,10 @@ class CallSession extends ChangeNotifier {
     }
   }
 
-  Future<void> _setupMediaAndPeer() async {
-    try {
-      _mediaError = null;
-      // Relay-only saat Cloudflare OK (deterministik & cepat). Fallback ke
-      // semua tipe kandidat terjadi lewat `_retryWithAllCandidates()` bila
-      // ICE gagal menetap — di sini cukup pakai default.
-      final peerConfig = await CallConfig.getPeerConfig(relayOnly: _relayOnly);
-      // Sinkronkan flag dengan kebijakan yang BENAR-BENAR diterapkan —
-      // relay-only hanya aktif bila Cloudflare tersedia. Kalau tidak,
-      // kandidat host/srflx sudah dipakai → fallback tak perlu.
-      _relayOnly = CallConfig.lastConfigWasRelayOnly;
-      // Constraint audio eksplisit (latency rendah + jernih):
-      // AEC/NS/AGC standar + perbaikan Google (highpass = low-rumble hilang,
-      // typing-noise = ketikan keyboard tidak bocor) + mono (hemat bandwidth).
-      // Tanpa constraint eksplisit, tiap device memakai default berbeda —
-      // di Xiaomi pernah mic jauh yang kepilih (suara pelan).
-      _localStream = await navigator.mediaDevices.getUserMedia({
-        'audio': {
-          'echoCancellation': true,
-          'noiseSuppression': true,
-          'autoGainControl': true,
-          'googEchoCancellation': true,
-          'googAutoGainControl': true,
-          'googNoiseSuppression': true,
-          'googHighpassFilter': true,
-          'googTypingNoiseDetection': true,
-          'channelCount': 1,
-        },
-        'video': callType == 'video' ? {'facingMode': 'user'} : false,
-      });
-      localRenderer.srcObject = _localStream;
-      // Pilih mic terbaik (audioinput pertama): di sebagian device (Xiaomi)
-      // default bisa jatuh ke mic jauh sehingga suara pelan. Best-effort.
-      try {
-        final devices = await navigator.mediaDevices.enumerateDevices();
-        for (final d in devices) {
-          if (d.kind == 'audioinput' && d.deviceId.isNotEmpty) {
-            await Helper.selectAudioInput(d.deviceId);
-            break;
-          }
-        }
-      } catch (_) {}
-
-      _pc = await createPeerConnection(peerConfig);
-      _pc!.onTrack = (event) async {
-        dlog('[ICE] onTrack kind=${event.track.kind}');
-        // Sender menaruh audio + video dalam satu stream lokal yang sama,
-        // jadi event.streams.first untuk kedua track adalah objek stream
-        // identik yang sudah memuat video. Pakai stream ini langsung (bukan
-        // merge manual) agar flutter_webrtc melaporkan video track dan
-        // renderer menampilkan gambar. Assign + set srcObject di SETIAP
-        // onTrack supaya view ikut refresh saat video tiba.
-        final stream = event.streams.isNotEmpty
-            ? event.streams.first
-            : (_remoteStream ??= await createLocalMediaStream('remote'));
-        if (event.streams.isEmpty) {
-          try {
-            await stream.addTrack(event.track);
-          } catch (_) {}
-        }
-        _remoteStream = stream;
-        remoteRenderer.srcObject = stream;
-        dlog(
-          '[ICE] remoteStream videoTracks=${stream.getVideoTracks().length} audioTracks=${stream.getAudioTracks().length}',
-        );
-        // JANGAN set inCall dari onTrack: track remote bisa tiba SEBELUM
-        // ICE benar-benar connect, sehingga timer 00:00 sempat "blink" lalu
-        // balik ke "Menghubungkan". inCall (timer) hanya dipasang saat
-        // connectionState / iceConnectionState = Connected — itu arti
-        // "sudah nyambung" yang sebenarnya. Audio tetap jalan karena
-        // remoteRenderer sudah di-set di atas & selalu di-render di UI.
-        if (!_closed) notifyListeners();
-      };
-      _pc!.onIceCandidate = (candidate) {
-        dlog('[ICE] local candidate: ${candidate.candidate}');
-        _service.sendSignal(
-          callId,
-          'candidate',
-          payload: {'candidate': candidate.toMap()},
-        );
-      };
-      _pc!.onConnectionState = (state) {
-        dlog('[ICE] connectionState: $state');
-        if (_closed) return;
-        if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-          if (!_closed && _phase != CallPhase.inCall) {
-            _phase = CallPhase.inCall;
-            _connectedAt = DateTime.now();
-            _recordConnected('pcState');
-            _startBilling();
-            _setProximity(true);
-            notifyListeners();
-          }
-        }
-        if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-            state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-          Future.delayed(const Duration(seconds: 4), () async {
-            if (_closed) return;
-            try {
-              final cur = _pc?.connectionState;
-              if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected)
-                return;
-              if (cur == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-                  cur == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-                // Relay-only gagal menetap → coba all-candidates (P2P) dulu;
-                // ini menyelamatkan call saat relay TURN tak terjangkau.
-                if (_relayOnly && !_iceAllCandidatesTried) {
-                  dlog('[ICE] grace-timeout still $cur -> fallback all-candidates');
-                  await _retryWithAllCandidates();
-                  return;
-                }
-                // Otomatis restart 1× dulu; kalau masih gagal → tombol manual
-                // (jangan auto-tutup; user pilih sambung-ulang/akhiri).
-                if (!_iceRestarted) {
-                  dlog('[ICE] grace-timeout still $cur -> restart otomatis');
-                  await _attemptIceRestart();
-                  return;
-                }
-                dlog('[ICE] grace-timeout still $cur -> tombol manual');
-                _iceReconnectFailed = true;
-                notifyListeners();
-              }
-            } catch (_) {
-              if (!_closed) {
-                try {
-                  await _service.sendSignal(callId, 'bye');
-                  await _service.updateStatus(callId, 'ended');
-                } catch (_) {}
-                _finish(
-                  _phase == CallPhase.inCall
-                      ? CallEndReason.ended
-                      : CallEndReason.error,
-                );
-              }
-            }
-          });
-        }
-      };
-      Future.delayed(const Duration(seconds: 15), () async {
-        if (_closed) return;
-        if (_phase == CallPhase.inCall) return;
-        // Restart/retry manual sedang berjalan → jangan auto-tutup di sini;
-        // user yang pegang kendali (tombol sambung-ulang / akhiri).
-        if (_iceRestarted || _iceReconnectFailed) return;
-        final cur = _pc?.connectionState;
-        final ice = _pc?.iceConnectionState;
-        // PENTING: sebagian device tidak memanggil onConnectionState/
-        // onIceConnectionState walau media sudah mengalir → `_phase` tetap
-        // "connecting" → dulu timer ini MENUTUP call yang sebenarnya
-        // tersambung ("call mati sendiri" setelah ~15-20 dtk). Cek state PC
-        // LANGSUNG; kalau sudah Connected → set inCall (jangan putus).
-        if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected ||
-            ice == RTCIceConnectionState.RTCIceConnectionStateConnected ||
-            ice == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
-          if (_phase != CallPhase.inCall) {
-            dlog('[ICE] 15s check: pc/ice Connected -> SET inCall (anti putus)');
-            _phase = CallPhase.inCall;
-            _connectedAt = _connectedAt ?? DateTime.now();
-            _recordConnected('timeout15Check');
-            _startBilling();
-            _setProximity(true);
-            notifyListeners();
-          }
-          return;
-        }
-        // Relay-only belum tersambung & fallback belum dicoba → jangan
-        // menyerah; coba all-candidates (P2P) dulu sebelum menyatakan gagal.
-        if (_relayOnly && !_iceAllCandidatesTried) {
-          dlog('[ICE] 15s timeout still $cur -> fallback all-candidates');
-          await _retryWithAllCandidates();
-          return;
-        }
-        dlog(
-          '[ICE] 15s timeout still $cur phase=$_phase -> bye + _finish error',
-        );
-        try {
-          await _service.sendSignal(callId, 'bye');
-          await _service.updateStatus(callId, 'ended');
-        } catch (_) {}
-        _finish(CallEndReason.error);
-      });
-      _pc!.onIceConnectionState = (state) {
-        dlog('[ICE] iceConnectionState: $state');
-        if (_closed) return;
-        if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
-            state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
-          var changed = false;
-          if (_iceReconnectFailed) {
-            _iceReconnectFailed = false;
-            changed = true;
-          }
-          if (_phase != CallPhase.inCall) {
-            dlog('[ICE] iceConnected -> SET inCall');
-            _phase = CallPhase.inCall;
-            _connectedAt = _connectedAt ?? DateTime.now();
-            _recordConnected('iceState');
-            _startBilling();
-            _setProximity(true);
-            changed = true;
-          }
-          if (changed) notifyListeners();
-        }
-        if (state ==
-            RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
-          // Putus sementara (pindah WiFi/data): tunggu 2 dtk, kalau belum
-          // pulih → restart otomatis 1×; masih gagal → tombol manual.
-          dlog('[ICE] iceDisconnected -> grace 2s');
-          Future.delayed(const Duration(seconds: 2), () async {
-            if (_closed) return;
-            final cur = _pc?.connectionState;
-            if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-              return;
-            }
-            if (!_iceRestarted) {
-              await _attemptIceRestart();
-            } else {
-              _iceReconnectFailed = true;
-              dlog('[ICE] still bad after restart -> tombol manual');
-              notifyListeners();
-            }
-          });
-        }
-      };
-      _pc!.onIceGatheringState = (state) {
-        dlog('[ICE] iceGatheringState: $state');
-      };
-      _pc!.onSignalingState = (state) {
-        dlog('[ICE] signalingState: $state');
-      };
-      for (final track in _localStream!.getTracks()) {
-        await _pc!.addTrack(track, _localStream!);
-      }
-      // Paksa codec Opus untuk transceiver audio — HARUS setelah addTrack
-      // (transceiver baru ada) dan SEBELUM createOffer/createAnswer agar
-      // efektif. Default bisa jatuh ke PCMU/PCMA (boros + tanpa FEC).
-      // Best-effort: platform tak mendukung → pakai default.
-      try {
-        await _preferOpusCodec();
-      } catch (_) {}
-      // Proses sinyal yang diterima sebelum screen terbuka (dari IncomingCallScreen).
-      if (pendingSignals.isNotEmpty) {
-        for (final msg in pendingSignals) {
-          _pendingSignals.add(msg);
-        }
-      }
-      // Proses sinyal yang datang saat peer connection belum siap.
-      if (_pendingSignals.isNotEmpty) {
-        final queued = List.of(_pendingSignals);
-        _pendingSignals.clear();
-        for (final msg in queued) {
-          await _handleSignal(msg);
-        }
-      }
-    } catch (e) {
-      dlog('[CallSession] media/peer setup failed: $e');
-      if (!_closed) {
-        _mediaError = _classifyMediaError(e);
-        _phase = CallPhase.error;
-        notifyListeners();
-      }
-    }
-  }
-
-  /// Terjemahkan error getUserMedia/createPeerConnection ke [CallMediaError]
-  /// supaya UI bisa menampilkan alasan yang benar (izin vs kamera terpakai).
-  CallMediaError _classifyMediaError(Object e) {
-    final m = e.toString().toLowerCase();
-    if (m.contains('notallowederror') ||
-        m.contains('permission') ||
-        m.contains('securityerror')) {
-      return CallMediaError.permission;
-    }
-    if (m.contains('notreadableerror') ||
-        m.contains('trackstarterror') ||
-        m.contains('could not start') ||
-        m.contains('in use')) {
-      return CallMediaError.inUse;
-    }
-    if (m.contains('notfounderror') ||
-        m.contains('devicesnotfound') ||
-        m.contains('overconstrained')) {
-      return CallMediaError.notFound;
-    }
-    return CallMediaError.other;
-  }
-
-  /// Paksa codec Opus untuk transceiver audio (latency rendah + FEC).
-  /// Dipanggil setelah addTrack (transceiver sudah ada) dan sebelum
-  /// createOffer/createAnswer. Best-effort: gagal → pakai default.
-  Future<void> _preferOpusCodec() async {
-    final pc = _pc;
-    if (pc == null || _closed) return;
-    try {
-      final transceivers = await pc.getTransceivers();
-      for (final t in transceivers) {
-        try {
-          final kind = t.receiver.track?.kind;
-          if (kind != null && kind != 'audio') continue;
-          await t.setCodecPreferences([
-            RTCRtpCodecCapability(
-              mimeType: 'audio/opus',
-              clockRate: 48000,
-              channels: 2,
-              sdpFmtpLine: 'minptime=10;useinbandfec=1',
-            ),
-          ]);
-        } catch (_) {}
-      }
-    } catch (_) {}
-  }
-
-  /// Sampling RTT audio (getStats inbound-rtp) 3× tiap 5 dtk setelah connect.
-  /// Nilai terburuk dicatat sebagai `call.audioRttMs` — pembanding latency
-  /// suara sebelum/sesudah optimasi Opus. Best-effort, tanpa mengganggu call.
-  Future<void> _sampleAudioRtt() async {
-    double? worst;
-    for (var i = 0; i < 3; i++) {
-      await Future<void>.delayed(const Duration(seconds: 5));
-      if (_closed) return;
-      try {
-        final stats = await _pc?.getStats();
-        for (final r in stats ?? const []) {
-          if (r.type != 'inbound-rtp') continue;
-          final kind = '${r.values['kind'] ?? r.values['mediaType'] ?? ''}';
-          if (kind.isNotEmpty && kind != 'audio') continue;
-          final rtt = (r.values['roundTripTime'] as num?)?.toDouble();
-          if (rtt != null && rtt.isFinite && rtt >= 0) {
-            worst = worst == null || rtt > worst ? rtt : worst;
-          }
-        }
-      } catch (_) {}
-    }
-    if (worst != null) {
-      final ms = (worst * 1000).round();
-      PerfProbe.record('call.audioRttMs', Duration(milliseconds: ms));
-      dlog('[PERF] audio RTT worst=${ms}ms');
-    }
-  }
-
   /// ICE restart: dipanggil otomatis 1× saat Disconnected/Failed menetap,
   /// atau manual lewat tombol "Sambung ulang" ([reconnect]).
   /// Caller men-drive re-negosiasi (restartIce + offer ulang); callee cukup
   /// restartIce (offer ulang dari caller akan tiba via signaling).
-  Future<void> _attemptIceRestart() async {
-    final pc = _pc;
-    if (pc == null || _closed) return;
-    _iceRestarted = true;
-    dlog('[ICE] restart attempt (isCaller=$isCaller)');
-    try {
-      await pc.restartIce();
-    } catch (e) {
-      dlog('[ICE] restartIce failed: $e');
-    }
-    if (isCaller && !_closed && _pc != null) {
-      _offered = false;
-      await _createOffer();
-    }
-    // Recheck: masih buruk → serahkan ke tombol manual.
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_closed) return;
-      if (_phase == CallPhase.inCall) {
-        if (_iceReconnectFailed) {
-          _iceReconnectFailed = false;
-          notifyListeners();
-        }
-        return;
-      }
-      final cur = _pc?.connectionState;
-      if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-        return;
-      }
-      _iceReconnectFailed = true;
-      dlog('[ICE] still bad after restart -> tombol manual');
-      notifyListeners();
-    });
-  }
-
-  /// Tombol "Sambung ulang" manual: ulangi ICE restart (reset status
-  /// percobaan otomatis supaya bisa dicoba berkali-kali). Bila setup media
-  /// sebelumnya gagal (phase `error`, pc belum ada) → ulangi setup penuh,
-  /// supaya panggilan bisa pulih tanpa harus menutup & menelepon ulang.
-  Future<void> reconnect() async {
-    if (_closed) return;
-    _iceReconnectFailed = false;
-    _iceRestarted = false;
-    _offered = false;
-    notifyListeners();
-    // pc tidak pernah terbentuk (gagal getUserMedia dsb) → setup ulang.
-    if (_pc == null) {
-      _phase = CallPhase.connecting;
-      notifyListeners();
-      await _setupMediaAndPeer();
-      if (_pc != null && isCaller && !_closed) {
-        await _createOffer();
-      }
-      return;
-    }
-    // Relay-only & belum pernah coba all-candidates → fallback P2P dulu
-    // (relay bisa tak terjangkau), baru ICE restart biasa.
-    if (_relayOnly && !_iceAllCandidatesTried) {
-      await _retryWithAllCandidates();
-      return;
-    }
-    await _attemptIceRestart();
-  }
 
   /// Fallback saat relay-only tidak connect: buat ulang peer connection
   /// TANPA `iceTransportPolicy: 'relay'` sehingga kandidat host/srflx ikut
@@ -770,10 +407,12 @@ class CallSession extends ChangeNotifier {
     if (_closed) return;
     // Langganan sinyal WAJIB dipasang ulang (dibatalkan di atas) — tanpa ini
     // answer/offer balasan tidak pernah tiba & call gantung selamanya.
-    _signalSub = _service.onSignal(callId).listen(
-      _onSignal,
-      onError: (e) => dlog('[CallService] signal stream error: $e'),
-    );
+    _signalSub = _service
+        .onSignal(callId)
+        .listen(
+          _onSignal,
+          onError: (e) => dlog('[CallService] signal stream error: $e'),
+        );
     if (_pc == null) {
       _iceReconnectFailed = true;
       notifyListeners();
@@ -794,207 +433,6 @@ class CallSession extends ChangeNotifier {
     });
   }
 
-  Future<void> _createOffer() async {
-    if (_closed || _pc == null || _offered) return;
-    _offered = true;
-    _offerSentAt = DateTime.now();
-    try {
-      final offer = await _pc!.createOffer();
-      // Munge SDP lokal SEBELUM setLocalDescription: Opus low-latency + FEC.
-      // applyOpusLowLatencyPrefs idempoten & mengembalikan input utuh bila
-      // tak ada Opus → aman (fallback implisit, tak pernah string kosong).
-      final munged = applyOpusLowLatencyPrefs(offer.sdp ?? '');
-      final local = RTCSessionDescription(
-        munged.isEmpty ? (offer.sdp ?? '') : munged,
-        offer.type,
-      );
-      await _pc!.setLocalDescription(local);
-      await _service.sendSignal(
-        callId,
-        'offer',
-        payload: {'sdp': local.toMap()},
-      );
-    } catch (e) {
-      dlog('[CallSession] createOffer failed: $e');
-    }
-  }
-
-  /// Catat metrik connect (sekali per sesi): init→connected dan offer→connected.
-  /// Dipakai `PerfProbe.report` untuk membandingkan sebelum/sesudah optimasi.
-  /// Plus sampling RTT audio (3× tiap 5 dtk setelah connect) sebagai metrik
-  /// latency suara (`call.audioRttMs`, diambil nilai terburuk).
-  bool _connectedRecorded = false;
-  void _recordConnected(String source) {
-    if (_connectedRecorded) return;
-    _connectedRecorded = true;
-    final now = DateTime.now();
-    final start = _initStartedAt;
-    if (start != null) {
-      PerfProbe.record('call.initToConnected', now.difference(start));
-    }
-    final offerAt = _offerSentAt;
-    if (offerAt != null) {
-      PerfProbe.record('call.offerToConnected', now.difference(offerAt));
-    }
-    dlog('[PERF] call connected via $source');
-    unawaited(_sampleAudioRtt());
-  }
-
-  Future<void> _onSignal(Map<String, dynamic> msg) async {
-    final id = msg['id'] as String?;
-    if (id != null) {
-      if (_processedSignalIds.contains(id)) return;
-      _processedSignalIds.add(id);
-    }
-    dlog(
-      '[CallSession] onSignal type=${msg['type']} isCaller=$isCaller pc=${_pc != null}',
-    );
-    if (_closed) return;
-    if (_pc == null) {
-      _pendingSignals.add(msg);
-      return;
-    }
-    await _handleSignal(msg);
-  }
-
-  Future<void> _handleSignal(Map<String, dynamic> msg) async {
-    if (_closed) return;
-    if (_pc == null) {
-      // pc belum siap → kandidat ICE JANGAN dibuang; simpan untuk di-flush
-      // setelah remote description terpasang. Sinyal lain memang harus nunggu.
-      if (msg['type'] == 'candidate') {
-        final c = msg['candidate'] as Map<String, dynamic>?;
-        if (c != null) {
-          _pendingCandidates.add(c);
-          dlog('[ICE] queue candidate (pc not ready)');
-        }
-      }
-      return;
-    }
-    try {
-      switch (msg['type']) {
-        case 'offer':
-          final sdp = msg['sdp'] as Map<String, dynamic>?;
-          if (sdp == null) return;
-          final existing = await _pc!.getRemoteDescription();
-          if (existing != null) {
-            // Offer duplikat (realtime + sync polling) → abaikan; memproses
-            // ulang membuat negosiasi & fase UI kacau.
-            dlog('[ICE] duplicate offer ignored');
-            return;
-          }
-          final remoteSdpRaw = sdp['sdp'] as String? ?? '';
-          final remoteSdpMunged = applyOpusLowLatencyPrefs(remoteSdpRaw);
-          await _pc!.setRemoteDescription(
-            RTCSessionDescription(
-              remoteSdpMunged.isEmpty ? remoteSdpRaw : remoteSdpMunged,
-              sdp['type'],
-            ),
-          );
-          // Flush candidate yang sudah antri sebelum offer diproses
-          for (final cand in List<Map<String, dynamic>>.from(
-            _pendingCandidates,
-          )) {
-            try {
-              await _pc!.addCandidate(
-                RTCIceCandidate(
-                  cand['candidate'] ?? '',
-                  cand['sdpMid'],
-                  (cand['sdpMLineIndex'] as num?)?.toInt(),
-                ),
-              );
-            } catch (_) {}
-          }
-          _pendingCandidates.clear();
-          final answer = await _pc!.createAnswer();
-          final answerMunged =
-              applyOpusLowLatencyPrefs(answer.sdp ?? '');
-          final localAnswer = RTCSessionDescription(
-            answerMunged.isEmpty ? (answer.sdp ?? '') : answerMunged,
-            answer.type,
-          );
-          await _pc!.setLocalDescription(localAnswer);
-          await _service.sendSignal(
-            callId,
-            'answer',
-            payload: {'sdp': localAnswer.toMap()},
-          );
-          await _syncAll();
-        case 'answer':
-          final sdp = msg['sdp'] as Map<String, dynamic>?;
-          if (sdp == null) return;
-          final ansSdpRaw = sdp['sdp'] as String? ?? '';
-          final ansSdpMunged = applyOpusLowLatencyPrefs(ansSdpRaw);
-          await _pc!.setRemoteDescription(
-            RTCSessionDescription(
-              ansSdpMunged.isEmpty ? ansSdpRaw : ansSdpMunged,
-              sdp['type'],
-            ),
-          );
-          for (final cand in List<Map<String, dynamic>>.from(
-            _pendingCandidates,
-          )) {
-            try {
-              await _pc!.addCandidate(
-                RTCIceCandidate(
-                  cand['candidate'] ?? '',
-                  cand['sdpMid'],
-                  (cand['sdpMLineIndex'] as num?)?.toInt(),
-                ),
-              );
-            } catch (_) {}
-          }
-          _pendingCandidates.clear();
-          await _syncAll();
-        case 'candidate':
-          final c = msg['candidate'] as Map<String, dynamic>?;
-          if (c == null) return;
-          final rd = await _pc!.getRemoteDescription();
-          if (rd == null) {
-            _pendingCandidates.add(c);
-            dlog('[ICE] queue candidate (remoteDescription null)');
-            return;
-          }
-          try {
-            await _pc!.addCandidate(
-              RTCIceCandidate(
-                c['candidate'] ?? '',
-                c['sdpMid'],
-                (c['sdpMLineIndex'] as num?)?.toInt(),
-              ),
-            );
-          } catch (e) {
-            // Jika masih gagal karena belum siap, queue dan coba lagi setelah answer
-            if ((e.toString().contains('remoteDescription') ||
-                e.toString().contains('InvalidState'))) {
-              _pendingCandidates.add(c);
-              dlog('[ICE] queue candidate (add failed, will retry)');
-            } else {
-              rethrow;
-            }
-          }
-        case 'camera':
-          final en = msg['enabled'];
-          if (en is bool) {
-            _remoteCameraOn = en;
-            dlog('[CallSession] remoteCameraOn=$_remoteCameraOn');
-            notifyListeners();
-          }
-          break;
-        case 'bye':
-          _finish(CallEndReason.ended);
-        case 'watch_request':
-          await _handleWatchRequest(msg);
-        case 'watch_answer':
-          await _handleWatchAnswer(msg);
-        case 'watch_candidate':
-          await _handleWatchCandidate(msg);
-      }
-    } catch (e) {
-      dlog('[CallSession] signal error: $e');
-    }
-  }
-
   // ── Watcher: pantau call dari admin panel ────────────────────────────────
   // Admin membuat peer connection penerima (tanpa media lokal). Sisi user
   // yang memegang stream lokal: terima watch_request → buat pc kedua →
@@ -1009,229 +447,6 @@ class CallSession extends ChangeNotifier {
   /// cukup kirim ulang status mic/kamera. Dulu tiap `watch_request` yang
   /// lolos throttle 8 dtk menutup pc lama → audio peserta putus sesaat
   /// ("suara sempat hilang, muncul lagi"). Lihat `watch_policy.dart`.
-  Future<void> _handleWatchRequest(Map<String, dynamic> msg) async {
-    final watcher = msg['from'] as String?;
-    final me = _service.uid;
-    if (_closed || watcher == null || watcher.isEmpty || watcher == me) return;
-    // Bertarget: sinyal watch_request `to` peserta lain bukan untuk kita.
-    // (Sinyal lama tanpa `to` tetap diterima demi kompat.)
-    final to = msg['to'] as String?;
-    if (!isWatchRequestForMe(to: to, me: me)) return;
-    if (_localStream == null || _pc == null) {
-      // Media belum siap (admin membuka monitor di detik-detik awal call) →
-      // ANTRE, balas begitu siap. Dulu request dibuang → admin mengulang
-      // menunggu tick berikutnya (audio telat beberapa detik).
-      _pendingWatchRequests.add(watcher);
-      return;
-    }
-    // Throttle: request ulang <8s diabaikan agar pc tidak dibuat-ulang
-    // tiap polling; request setelah itu dianggap retry negosiasi mati.
-    final last = _lastWatchReply[watcher];
-    final repliedRecently =
-        last != null && DateTime.now().difference(last) < const Duration(seconds: 8);
-    // Kunci PENANDA SEBELUM await: dua request bersamaan (mis. realtime +
-    // catch-up SELECT) sama-sama mengecek throttle saat masih kosong → dulu
-    // dua-duanya lolos → pc/offer watch dobel → audio peserta putus-nyambung.
-    _lastWatchReply[watcher] = DateTime.now();
-    try {
-      final isAdmin = await (_watcherAdminChecks.putIfAbsent(
-        watcher,
-        () => _service.isAdminUid(watcher),
-      ));
-      final existing = _watchPcs[watcher];
-      final state = existing?.connectionState;
-      final connected =
-          state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
-      // Sehat = ada pc dan bukan failed/closed. Tapi pc yang BELUM connected
-      // dan sudah berumur > _watchPcStale dianggap mati (offer hilang / ICE
-      // nyangkut) → boleh rebuild supaya tidak deadlock.
-      final createdAt = _watchPcCreatedAt[watcher];
-      final stale = !connected &&
-          createdAt != null &&
-          DateTime.now().difference(createdAt) > _watchPcStale;
-      final healthy = existing != null &&
-          !stale &&
-          state != RTCPeerConnectionState.RTCPeerConnectionStateFailed &&
-          state != RTCPeerConnectionState.RTCPeerConnectionStateClosed;
-      final action = decideWatchReply(
-        isForMe: watcher != me,
-        hasLocalMedia: _localStream != null && _pc != null,
-        isAdminWatcher: isAdmin,
-        alreadyRepliedRecently: repliedRecently,
-        hasHealthyPc: healthy,
-      );
-      if (action == WatchReplyAction.ignore) return;
-      // pc sehat → cukup kabari status; negosiasi/media TIDAK disentuh.
-      if (action == WatchReplyAction.sendState) {
-        _sendWatchState(watcher);
-        dlog('[WATCH] pc healthy for watcher=$watcher → state only');
-        return;
-      }
-      final old = _watchPcs.remove(watcher);
-      if (old != null) {
-        try {
-          await old.close();
-        } catch (_) {}
-      }
-      _watchPendingCands.remove(watcher);
-      final pc = await createPeerConnection(await CallConfig.getPeerConfig());
-      _watchPcs[watcher] = pc;
-      _watchPcCreatedAt[watcher] = DateTime.now();
-      PerfProbe.buildCount('call.watchPc');
-      pc.onIceCandidate = (c) {
-        _service.sendSignal(
-          callId,
-          'watch_candidate',
-          payload: {'candidate': c.toMap(), 'to': watcher, 'from': me},
-        );
-      };
-      for (final track in _localStream!.getTracks()) {
-        await pc.addTrack(track, _localStream!);
-      }
-      final offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      await _service.sendSignal(
-        callId,
-        'watch_offer',
-        payload: {
-          'sdp': offer.toMap(),
-          'to': watcher,
-          'from': me,
-          'micOn': _micOn,
-          'cameraOn': callType == 'video' ? _cameraOn : false,
-        },
-      );
-      dlog('[WATCH] offer sent to watcher=$watcher');
-    } catch (e) {
-      dlog('[WATCH] handle watch_request failed: $e');
-      final broken = _watchPcs.remove(watcher);
-      _watchPcCreatedAt.remove(watcher);
-      try {
-        await broken?.close();
-      } catch (_) {}
-    }
-  }
-
-  /// Balas permintaan pantau yang diantre karena media lokal belum siap.
-  Future<void> _flushPendingWatchRequests() async {
-    if (_pendingWatchRequests.isEmpty) return;
-    final uids = _pendingWatchRequests.toList();
-    _pendingWatchRequests.clear();
-    for (final uid in uids) {
-      if (_closed) return;
-      await _handleWatchRequest({'from': uid});
-    }
-  }
-
-  /// Kirim ulang status mic/kamera ke satu watcher (tanpa rebuild pc).
-  void _sendWatchState(String watcher) {    _service.sendSignal(
-      callId,
-      'watch_state',
-      payload: {
-        'micOn': _micOn,
-        'cameraOn': callType == 'video' ? _cameraOn : false,
-        'to': watcher,
-        'from': _service.uid,
-      },
-    );
-  }
-
-  Future<void> _handleWatchAnswer(Map<String, dynamic> msg) async {
-    final watcher = msg['from'] as String?;
-    final me = _service.uid;
-    if (msg['to'] != me || watcher == null) return;
-    final pc = _watchPcs[watcher];
-    final sdp = msg['sdp'] as Map<String, dynamic>?;
-    if (pc == null || sdp == null) return;
-    try {
-      await pc.setRemoteDescription(
-        RTCSessionDescription(sdp['sdp'], sdp['type']),
-      );
-      for (final c in List<Map<String, dynamic>>.from(
-        _watchPendingCands[watcher] ?? const [],
-      )) {
-        try {
-          await pc.addCandidate(
-            RTCIceCandidate(
-              c['candidate'] ?? '',
-              c['sdpMid'],
-              (c['sdpMLineIndex'] as num?)?.toInt(),
-            ),
-          );
-        } catch (_) {}
-      }
-      _watchPendingCands.remove(watcher);
-    } catch (e) {
-      dlog('[WATCH] handle watch_answer failed: $e');
-    }
-  }
-
-  Future<void> _handleWatchCandidate(Map<String, dynamic> msg) async {
-    final me = _service.uid;
-    if (msg['to'] != me) return;
-    final watcher = msg['from'] as String?;
-    final c = msg['candidate'] as Map<String, dynamic>?;
-    if (watcher == null || c == null) return;
-    final pc = _watchPcs[watcher];
-    if (pc == null) return;
-    try {
-      final rd = await pc.getRemoteDescription();
-      if (rd == null) {
-        _watchPendingCands.putIfAbsent(watcher, () => []).add(c);
-        return;
-      }
-      await pc.addCandidate(
-        RTCIceCandidate(
-          c['candidate'] ?? '',
-          c['sdpMid'],
-          (c['sdpMLineIndex'] as num?)?.toInt(),
-        ),
-      );
-    } catch (e) {
-      dlog('[WATCH] candidate error: $e');
-    }
-  }
-
-  /// Kabari semua watcher status mic/kamera terbaru (overlay admin).
-  void _notifyWatchersState() {
-    final me = _service.uid;
-    if (me == null) return;
-    for (final watcher in _watchPcs.keys.toList()) {
-      _service.sendSignal(
-        callId,
-        'watch_state',
-        payload: {
-          'micOn': _micOn,
-          'cameraOn': callType == 'video' ? _cameraOn : false,
-          'to': watcher,
-          'from': me,
-        },
-      );
-    }
-  }
-
-  /// Re-fetch semua call_signals (offer/candidates) dari DB dan proses
-  /// yang belum diproses. Menjamin tidak ada kandidat yang terlewat akibat
-  /// race antara realtime broadcast dan catch-up SELECT.
-  /// Juga cek status call di DB sebagai fallback bila realtime statusSub miss.
-  DateTime? _lastTouch;
-
-  /// Heartbeat ke server — admin monitor pakai ini untuk membedakan call
-  /// yang masih hidup vs call zombie (app ditutup paksa di tengah call).
-  ///
-  /// Interval 25 dtk (dulu 15). Ambang zombie server (`admin_sweep_calls`)
-  /// = `last_seen_at` lebih tua dari 75 dtk. Dengan 25 dtk, worst-case
-  /// (satu tick terlewat karena jaringan) = 50 dtk < 75 dtk → margin 3×.
-  /// Untuk call panjang (30 mnt) ini memangkas ~40% write heartbeat
-  /// (120 → 72 update) tanpa memperbesar risiko call zombie.
-  void _touchHeartbeat() {
-    final now = DateTime.now();
-    if (_lastTouch != null && now.difference(_lastTouch!).inSeconds < 25) {
-      return;
-    }
-    _lastTouch = now;
-    _service.touchCall(callId);
-  }
 
   Future<void> _syncAll() async {
     if (_closed) return;
@@ -1242,7 +457,8 @@ class CallSession extends ChangeNotifier {
     _syncTick = (_syncTick + 1) % 3;
     final curStateEarly = _pc?.connectionState;
     final stableConnected =
-        curStateEarly == RTCPeerConnectionState.RTCPeerConnectionStateConnected &&
+        curStateEarly ==
+            RTCPeerConnectionState.RTCPeerConnectionStateConnected &&
         _phase == CallPhase.inCall;
     if (stableConnected && _syncTick != 0) return;
     try {
@@ -1343,9 +559,7 @@ class CallSession extends ChangeNotifier {
     _ringTimer?.cancel();
     // Fire-and-forget: kegagalan kirim tidak boleh menahan UI.
     unawaited(_service.sendSignal(callId, 'bye'));
-    unawaited(
-      _service.updateStatus(callId, wasRinging ? 'canceled' : 'ended'),
-    );
+    unawaited(_service.updateStatus(callId, wasRinging ? 'canceled' : 'ended'));
   }
 
   // ── Billing call ──
@@ -1399,9 +613,7 @@ class CallSession extends ChangeNotifier {
     if (callType != 'audio') return; // video: layar harus tetap hidup
     if (_proximityOn == on) return;
     _proximityOn = on;
-    unawaited(
-      _service.callUi.setProximity(on).catchError((_) {}),
-    );
+    unawaited(_service.callUi.setProximity(on).catchError((_) {}));
   }
 
   void _finish(CallEndReason reason) {
