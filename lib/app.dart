@@ -37,6 +37,7 @@ import 'screens/chats_screen.dart';
 import 'screens/post_composer_screen.dart';
 import 'widgets/anon_prompt_dialog.dart';
 import 'widgets/offline_banner.dart';
+import 'widgets/render_heartbeat.dart';
 import 'widgets/call_banner.dart';
 import 'widgets/skeleton_card.dart';
 import 'screens/register_screen.dart';
@@ -93,7 +94,11 @@ class _ChatYukAppState extends ConsumerState<ChatYukApp> {
                   navigatorObservers: [routeTracker],
                   // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
                   // tapi tetap menghormati preferensi aksesibilitas user.
-                  builder: (context, child) => WithForegroundTask(
+                  // RenderHeartbeat: saat foreground, kirim repaint murah tiap
+                  // ~32ms supaya panel MIUI tidak masuk DDIC idle (penyebab lag
+                  // "buka chat setelah background" — lihat render_heartbeat.dart).
+                  builder: (context, child) => RenderHeartbeat(
+                    child: WithForegroundTask(
                     // Pelapor aktivitas GLOBAL: setiap sentuhan di layar APAPUN
                     // (chat/room/profil/dialog/bottom-sheet) me-reset timer idle
                     // dan mengembalikan idle→online. Dulu hanya body _MainNav yang
@@ -126,6 +131,7 @@ class _ChatYukAppState extends ConsumerState<ChatYukApp> {
                         ),
                       ),
                     ),
+                  ),
                   ),
                   home: _AuthGate(),
                 ),
