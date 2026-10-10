@@ -118,6 +118,79 @@ class MainActivity : FlutterActivity() {
         if (!wasSecureAtPause) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
+        // ── Pin refresh rate (anti DDIC idle stall) ──────────────────────
+        // Bukti: setelah idle, MIUI/SDM mematikan panel
+        // ("isTpIdleScene, mAverageFrameRate is 0" → "isDdicIdleMode: 1" →
+        // "SDM: Idle Timeout 70000us" → tukar config panel) sehingga frame
+        // pertama tertahan ~180ms (framestats: ui_work=0ms, Vsync melompat).
+        //
+        // Android menyediakan API RESMI untuk menyatakan app butuh frame rate
+        // tertentu: `Surface.setFrameRate()` (API 30+). Framework memakainya
+        // untuk memilih refresh rate + memberi sinyal ke vendor (Qualcomm SDM)
+        // bahwa surface ini AKTIF, sehingga panel tidak masuk mode idle
+        // hemat-daya di tengah sesi. Terlihat di dumpsys SurfaceFlinger app
+        // lain memakai `requestedFrameRate` — chatyuk belum.
+        //
+        // Pin di RESUME saja (bukan saat onPause) supaya konsumsi daya saat
+        // benar-benar di background tidak naik.
+        pinFrameRate()
+    }
+
+    /**
+     * Minta surface ini berjalan pada frame rate tetap (60 Hz) memakai API
+     * resmi `Surface.setFrameRate`. No-op di API < 30 / bila surface belum
+     * siap / vendor menolak. Tidak pernah melempar (best-effort).
+     *
+     * Compatibility = FIXED_SOURCE: kita benar-benar menggambar pada rate itu
+     * (Flutter vsync 60), jadi framework boleh mengunci panel ke rate tsb dan
+     * menandai surface AKTIF — inilah yang mencegah panel idle.
+     */
+    private fun pinFrameRate(targetHz: Float = 60f) {
+        if (android.os.Build.VERSION.SDK_INT < 30) return
+        val v = window?.decorView ?: return
+        v.post {
+            try {
+                // SurfaceView milik Flutter engine berada di dalam decorView.
+                val surfaces = mutableListOf<android.view.SurfaceView>()
+                fun collect(view: android.view.View) {
+                    if (view is android.view.SurfaceView) surfaces.add(view)
+                    if (view is android.view.ViewGroup) {
+                        for (i in 0 until view.childCount) collect(view.getChildAt(i))
+                    }
+                }
+                collect(v)
+                var ok = false
+                for (sv in surfaces) {
+                    val holder = sv.holder ?: continue
+                    val surf = holder.surface ?: continue
+                    if (!surf.isValid) continue
+                    try {
+                        // API 31+: FIXED_SOURCE + ONLY_IF_SEAMLESS (terbukti
+                        // diterima: log "ok=true" + SurfaceFlinger mencatat
+                        // requestedFrameRate). CATATAN: EXACT (3) DITOLAK di
+                        // device ini ("ok=false") — jangan coba lagi.
+                        // Meski diterima, MIUI tetap membiarkan panel masuk
+                        // DDIC idle (625x "Received Idle Timeout"), jadi stall
+                        // ~165ms tetap ada — itu batas platform, bukan bug kita.
+                        if (android.os.Build.VERSION.SDK_INT >= 31) {
+                            surf.setFrameRate(
+                                targetHz,
+                                android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                                android.view.Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS,
+                            )
+                        } else {
+                            @Suppress("DEPRECATION")
+                            surf.setFrameRate(targetHz, android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+                        }
+                        ok = true
+                    } catch (_: Throwable) {
+                    }
+                }
+                android.util.Log.i("ChatYukWindow", "pinFrameRate ${targetHz}Hz surfaces=${surfaces.size} ok=$ok")
+            } catch (e: Throwable) {
+                android.util.Log.w("ChatYukWindow", "pinFrameRate gagal: $e")
+            }
+        }
     }
 
     /**

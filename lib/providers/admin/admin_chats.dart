@@ -473,11 +473,27 @@ mixin AdminChatsMx on AdminBase {
   /// RPC server saat buka pertama.
   /// Dedupe in-flight per chatId; tidak menyentuh `_chatMessages` (chat yang
   /// sedang tampil) — hanya mengisi map per-chat.
-  void prefetchChatMessages(String chatId) {
-    if (chatId.isEmpty) return;
-    if ((_chatMsgMem[chatId]?.isNotEmpty ?? false)) return;
-    if (!_chatMsgPrefetching.add(chatId)) return;
-    unawaited(() async {
+  /// Panaskan cache pesan monitor untuk [chatId].
+  ///
+  /// PENTING (menyamai chat USER): pemanggil di daftar chat bisa MENUNGGU
+  /// (`await`) sebelum push layar, supaya saat AdminChatViewScreen mount,
+  /// `peekChatMessages` PASTI hit → frame pertama langsung terisi (tanpa jeda
+  /// "kosong dulu" lalu isi). Chat user sudah begini sejak awal
+  /// (`prefetchPrivateChat` di-await) — itulah sebabnya chat user terasa
+  /// instan sementara monitor admin tidak.
+  ///
+  /// Aman dipanggil berkali-kali: kalau sudah ada di memori / sedang berjalan,
+  /// kembalikan future yang sama (tak menembak RPC dobel).
+  Future<void> prefetchChatMessages(String chatId) {
+    if (chatId.isEmpty) return Future<void>.value();
+    if ((_chatMsgMem[chatId]?.isNotEmpty ?? false)) return Future<void>.value();
+    final running = _chatMsgPrefetchFutures[chatId];
+    if (running != null) return running;
+    if (!_chatMsgPrefetching.add(chatId)) {
+      // Sudah ada yang jalan (jalur lama) — tunggu lewat map bila ada.
+      return _chatMsgPrefetchFutures[chatId] ?? Future<void>.value();
+    }
+    final fut = () async {
       try {
         final disk = await MessageCache.instance.loadRawList(
           AdminBase.adminChatMsgKey(chatId),
@@ -506,9 +522,14 @@ mixin AdminChatsMx on AdminBase {
         dlog('[ADMIN] prefetchChatMessages $chatId error: $e');
       } finally {
         _chatMsgPrefetching.remove(chatId);
+        _chatMsgPrefetchFutures.remove(chatId);
       }
-    }());
+    }();
+    _chatMsgPrefetchFutures[chatId] = fut;
+    return fut;
   }
+
+  final Map<String, Future<void>> _chatMsgPrefetchFutures = {};
 
   /// Pesan satu chat dari sumber per-chat (`_chatMsgMem` → `_chatMessages`
   /// untuk kompat; WAJIB memakai ini bila ada >1 layar monitor).
