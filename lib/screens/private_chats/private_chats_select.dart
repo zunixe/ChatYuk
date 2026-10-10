@@ -31,55 +31,27 @@ mixin _PcSelectMx on _PcBase {
     // Guard double-push (§18): tap 2× cepat menumpuk 2 route identik.
     final navKey = navKeyChat(chat.chatId);
     if (!tryClaimNav(navKey)) return;
-    // Prefetch pesan ke memori SEBELUM push — di-AWAIT (bukan fire-and-forget)
-    // supaya `MessageCache.peekMessages` pasti HIT saat screen mount → frame
-    // pertama chat LANGSUNG terisi (ala WhatsApp), bukan layar kosong dulu.
-    // SQLite (SQLCipher) terukur 1-3ms & RAM instan → delay tak terasa; ini
-    // menghapus jendela race "preload belum kelar, route sudah push".
-    await ProviderScope.containerOf(
+    // PUSH INSTAN (2026-10-11): prefetch dipindah ke PARALEL (fire-and-forget)
+    // — TIDAK lagi di-await sebelum push. Dulu di-await agar `peekMessages`
+    // pasti HIT saat mount, tapi efeknya transisi BARU MULAI setelah query
+    // SQLite selesai → tap terasa telat & tak konsisten (DB besar = makin
+    // lambat). Sekarang transisi langsung jalan; layar chat mengisi dari
+    // `peekMessages`/initialData (fallback sudah ada) atau skeleton sekilas.
+    unawaited(ProviderScope.containerOf(
       context,
       listen: false,
-    ).read(chatProvider.notifier).prefetchPrivateChat(chat.chatId);
-    if (!mounted) {
-      releaseNav(navKey);
-      return;
-    }
+    ).read(chatProvider.notifier).prefetchPrivateChat(chat.chatId));
     Navigator.push(
       context,
-      PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 150),
-        reverseTransitionDuration: const Duration(milliseconds: 120),
-        settings: RouteSettings(name: privateChatRoute(chat.chatId)),
-        pageBuilder: (_, __, ___) => PrivateChatScreen(
-          chatId: chat.chatId,
-          otherName: otherName,
-          otherUid: otherUid,
-          otherGender: chat.participantGenders[otherUid] ?? '',
-          otherCountry: chat.participantLocations[otherUid] ?? '',
-          otherAge: chat.participantAges[otherUid] ?? 0,
-          otherRegistered: chat.participantRegistered[otherUid] == true,
-          initialOtherDeleted: chat.otherDeleted,
-        ),
-        transitionsBuilder: (_, animation, __, child) {
-          final curved = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          );
-          // Slide + Fade: fade menutupi celah raster saat slide full-screen
-          // (di Skia-GL/Adreno transisi slide murni kadang terasa "berat").
-          // Kombinasi ini lebih halus dipersepsikan pada durasi sama.
-          return FadeTransition(
-            opacity: curved,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(1, 0),
-                end: Offset.zero,
-              ).animate(curved),
-              child: child,
-            ),
-          );
-        },
+      chatRoute(
+        chatId: chat.chatId,
+        otherName: otherName,
+        otherUid: otherUid,
+        otherGender: chat.participantGenders[otherUid] ?? '',
+        otherCountry: chat.participantLocations[otherUid] ?? '',
+        otherAge: chat.participantAges[otherUid] ?? 0,
+        otherRegistered: chat.participantRegistered[otherUid] == true,
+        initialOtherDeleted: chat.otherDeleted,
       ),
     ).then((_) => releaseNav(navKey));
   }

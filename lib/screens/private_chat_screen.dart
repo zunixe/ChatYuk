@@ -57,6 +57,8 @@ import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/message_reaction_provider.dart';
 import '../providers/riverpod/privacy_provider.dart';
 
+part 'private_chat/private_chat_open_timing.dart';
+
 /// Warna latar Scaffold private chat — WAJIB opaque (bukan transparent).
 ///
 /// Route transparan bocor ke halaman DI BAWAH private chat selama transisi
@@ -116,7 +118,8 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
         ChatOutboxMixin<PrivateChatScreen>,
         ChatSelectionMixin<PrivateChatScreen>,
         ChatPhotoSendMixin<PrivateChatScreen>,
-        ChatSendMixin<PrivateChatScreen> {
+        ChatSendMixin<PrivateChatScreen>,
+        _PcOpenTimingMx {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _inputFocus = FocusNode();
@@ -630,11 +633,8 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     _schedulePendingConfirmFallback();
   }
 
-  late Stream<List<MessageModel>> _msgsStream;
+  // T1c/T3a: stream+timing pindah ke private_chat_open_timing.dart (part).
   late Stream<List<chatRiverpod.PrivateChatInfo>> _chatInfoStream;
-  Future<void> Function() _loadOlder = () async {};
-  Future<void> Function(String messageId) _msgsHandleFetchImage = (_) async {};
-  Future<void> Function() _msgsHandleReload = () async {};
   bool _loadingOlder = false;
 
   // ── AUTO-LOAD image deferred ──
@@ -878,24 +878,19 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
       }
     }
 
-    final msgsHandle = chat.getPrivateChatMessages(widget.chatId);
-    _msgsStream = msgsHandle.stream;
-    _loadOlder = msgsHandle.loadOlder;
-    _msgsHandleFetchImage = msgsHandle.fetchImage;
-    _msgsHandleReload = msgsHandle.reload;
     // Scroll ke atas → load pesan lama (pagination)
     _scrollCtrl.addListener(_onScrollToLoadOlder);
+    // T1b/T1c: kerja berat (channel realtime+RPC) ditunda ke post-frame agar
+    // animasi transisi bebas I/O. Frame pertama dari snapshot+peekMessages.
     _chatInfoStream = chat.getMyPrivateChats(auth.uid ?? '');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _startMessagesStream();
+    });
 
     // Dedupe _pending: hapus satu per satu saat server konfirmasi — aman utk double-send text sama
-    _msgsSub = _msgsStream.listen((msgs) {
-      // Hangatkan cache file voice terbaru (sekali per buka chat) supaya tap
-      // play instan seperti foto — tanpa ini voice selalu unduh saat di-tap.
-      if (msgs.isNotEmpty) {
-        unawaited(VoicePrefetch.warmChat(widget.chatId, msgs));
-        // Poster video terbaru — sama pola (anti-blink cold start).
-        unawaited(VideoPrefetch.warmChat(widget.chatId, msgs));
-      }
+    _msgsSub = _msgsStreamCtrl.stream.listen((msgs) {
+      _scheduleWarmPrefetch(msgs); // T3a: warm voice/video ditunda 400ms.
       // Pesan BARU dari lawan yang masuk sementara chat terbuka → tandai baca
       // agar last_read_at lawan maju → centang 2 (read) pengirim langsung terisi.
       // Tanpa ini, centang 2 baru muncul setelah keluar-masuk chat.
@@ -1250,6 +1245,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
     _inputFocus.dispose();
     _searchCtrl.dispose();
     _searchFocus.dispose();
+    _msgsStreamCtrl.close();
     super.dispose();
   }
 
@@ -2412,7 +2408,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                       // hanya bubble typing (item index 0) yang di-drive
                       // ValueNotifier — list & bubble lain tak tersentuh.
                       StreamBuilder<List<MessageModel>>(
-                        stream: _msgsStream,
+                        stream: _msgsStreamCtrl.stream,
                         // FRAME PERTAMA LANGSUNG: data awal dari cache memori
                         // (sinkron) → pesan "nempel" sejak frame pertama
                         // (ala WhatsApp), bukan layar kosong lalu muncul.

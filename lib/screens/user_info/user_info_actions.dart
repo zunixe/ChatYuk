@@ -110,13 +110,11 @@ mixin _UiActionsMx on _UserInfoBase {
       if (callType == 'video') {
         Navigator.of(ctx)
             .push(
-              MaterialPageRoute(
-                settings: RouteSettings(name: privateChatRoute(chatId)),
-                builder: (_) => PrivateChatScreen(
-                  chatId: chatId,
-                  otherName: name,
-                  otherUid: widget.userId,
-                ),
+              chatRoute(
+                chatId: chatId,
+                otherName: name,
+                otherUid: widget.userId,
+                routeName: privateChatRoute(chatId),
               ),
             )
             .then((_) => releaseNav(navKey));
@@ -214,17 +212,14 @@ mixin _UiActionsMx on _UserInfoBase {
       if (!tryClaimNav(navKey)) return;
       await Navigator.of(context)
           .push(
-            MaterialPageRoute(
-              builder: (_) => PrivateChatScreen(
-                chatId: chatId,
-                otherName: name,
-                otherUid: widget.userId,
-                otherGender: profile?.gender ?? '',
-                otherCountry: profile?.country ?? '',
-                otherCity: profile?.city ?? '',
-                otherAge: profile?.age ?? 0,
-                otherRegistered: profile?.isRegistered ?? false,
-              ),
+            chatRoute(
+              chatId: chatId,
+              otherName: name,
+              otherUid: widget.userId,
+              otherGender: profile?.gender ?? '',
+              otherCountry: profile?.country ?? '',
+              otherAge: profile?.age ?? 0,
+              otherRegistered: profile?.isRegistered ?? false,
             ),
           )
           .then((_) => releaseNav(navKey));

@@ -18,7 +18,7 @@ import '../widgets/call_permission_dialog.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/person_avatar.dart';
 import 'call_screen.dart';
-import 'private_chat_screen.dart';
+import '../widgets/chat_route.dart';
 
 /// Halaman "Panggilan Terbaru" — riwayat call masuk/keluar ala WhatsApp,
 /// dibuka dari menu titik-3 di tab Pesan.
@@ -121,13 +121,11 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
       if (!mounted) return;
       await Navigator.push(
         context,
-        MaterialPageRoute(
-          settings: RouteSettings(name: privateChatRoute(chatId)),
-          builder: (_) => PrivateChatScreen(
-            chatId: chatId,
-            otherName: otherName,
-            otherUid: e.otherUid,
-          ),
+        chatRoute(
+          chatId: chatId,
+          otherName: otherName,
+          otherUid: e.otherUid,
+          routeName: privateChatRoute(chatId),
         ),
       );
     } catch (err) {
