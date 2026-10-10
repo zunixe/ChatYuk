@@ -661,6 +661,19 @@ class _UserInfoScreenState extends ConsumerState<UserInfoScreen> {
   static const _loadTimeout = Duration(seconds: 10);
 
   Future<void> _load() async {
+    // INSTAN dari cache SQLite (memori) → info teman/pengikut tampil di frame
+    // pertama, tanpa "keload dulu". Refresh server menyusul.
+    if (_profile == null) {
+      final cached = ProviderScope.containerOf(context, listen: false)
+          .read(authProvider.notifier)
+          .peekProfileCache(widget.userId);
+      if (cached != null && mounted) {
+        setState(() {
+          _profile = cached;
+          _loading = false;
+        });
+      }
+    }
     UserModel? p;
     // Retry sekali: timeout/gangguan jaringan sesaat tidak boleh langsung
     // memvonis gagal (kasus "tadi tidak, sekarang muncul").

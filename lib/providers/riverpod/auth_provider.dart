@@ -1090,6 +1090,13 @@ class AuthNotifier extends Notifier<AuthData> {
   /// Ambil profil user lain by UID.
   Future<UserModel?> getOtherProfile(String uid) => _auth.getProfileById(uid);
 
+  /// Profil user lain dari cache SQLite (SINKRON) — untuk frame pertama tanpa
+  /// "keload dulu". null bila belum pernah di-cache di sesi ini.
+  UserModel? peekProfileCache(String uid) => _auth.peekProfileCache(uid);
+
+  /// Preload cache profil user lain ke memori.
+  Future<void> preloadProfileCache(String uid) => _auth.preloadProfileCache(uid);
+
   /// Resolve PATH avatar → base64 (RAM → disk → network). Dipisah dari
   /// [getOtherProfile] supaya lambatnya/gagalnya avatar tidak menahan
   /// tampilnya profil.

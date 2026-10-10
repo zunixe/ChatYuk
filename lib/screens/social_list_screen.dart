@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
@@ -9,6 +11,7 @@ import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../widgets/social_counts_line.dart';
+import '../core/cache/message_cache.dart';
 
 /// Daftar sosial (followers / following / friends / subscribers).
 /// `kind` menentukan tipe; `userId` menentukan user yang diambil (diri sendiri
@@ -45,12 +48,28 @@ class _SocialListScreenState extends ConsumerState<SocialListScreen> {
       setState(() => _loading = false);
       return;
     }
+    final cacheKey = 'social_list:${widget.kind}:$uid';
+    // PERSISTEN (SQLite): tampilkan daftar dari cache DULU → tanpa "keload
+    // dulu". Refresh server menyusul di bawah.
+    if (_items.isEmpty) {
+      final cached = await MessageCache.instance.loadRawList(cacheKey);
+      if (mounted && cached.isNotEmpty) {
+        setState(() {
+          _items = cached;
+          _loading = false;
+        });
+      }
+    }
     final items = await _service.socialList(widget.kind, uid);
     if (!mounted) return;
     setState(() {
       _items = items;
       _loading = false;
     });
+    // Simpan ke cache SQLite (persisten lintas cold start).
+    if (items.isNotEmpty) {
+      unawaited(MessageCache.instance.saveRawList(cacheKey, items));
+    }
   }
 
   @override

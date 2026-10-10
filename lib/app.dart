@@ -464,6 +464,9 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
       ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).warmFuture,
       ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).warmup(),
       if (warmUid != null) MessageCache.instance.preloadRawList(warmUid),
+      // Preload cache PROFIL lawan-chat teratas → info teman/pengikut tampil
+      // INSTAN (peekProfileCache sinkron) saat buka profil, tanpa "keload dulu".
+      if (warmUid != null) MessageCache.instance.preloadObjPrefix('profile:'),
       // Preload semua cache bintang ke memori → bias tampil instan di cold
       // start tanpa menunggu disk per-chat (anti-glich).
       ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).preloadAllStarred(),
