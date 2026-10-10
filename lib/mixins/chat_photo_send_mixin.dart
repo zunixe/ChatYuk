@@ -17,7 +17,7 @@ import '../core/photo_quality_pref.dart';
 import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
 import '../widgets/chat_info_snack.dart';
-import '../widgets/private_chat_message.dart' show warmPhotoCacheForPath;
+import '../widgets/message/image_decode_core.dart' show warmPhotoCacheForPath;
 import 'chat_outbox_mixin.dart';
 
 /// Modul BERSAMA kirim foto & view-once (private ↔ room).

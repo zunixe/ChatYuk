@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/screens/private_chat_screen.dart';
-import 'package:chatyuk/widgets/private_chat_message.dart';
+import 'package:chatyuk/widgets/message/search_highlight.dart';
 
 /// Search dalam percakapan private chat (ala WhatsApp).
 MessageModel _msg(String id, String text, {bool deleted = false}) =>
