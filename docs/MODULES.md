@@ -82,3 +82,24 @@ Riwayat temuan (sudah diperbaiki, disimpan sebagai catatan):
 - Widget yang mungkin di-mount tanpa `ProviderScope` (unit test murni/preview)
   pakai `providers/riverpod/service_locator.dart` (`safeAvatar`/`safeStorage`/
   `safeReactions`/`safeRead`) — baca provider bila scope ada, fallback singleton.
+
+## Modul navigasi & timing buka chat (2026-10-11)
+
+- **`lib/widgets/chat_route.dart`** — SATU sumber transisi & route ke
+  `PrivateChatScreen`: `chatRoute(...)` (Slide+Fade 150/120ms). SEMUA jalur ke
+  chat WAJIB lewat sini (chat list, Online, Nearby, CallHistory, UserInfo,
+  RoomSheet, incoming_call, call_banner, notif deep-link). Halaman lain tetap
+  Slide murni (`AppSlidePageTransitionsBuilder`). Aturan: **jangan** bikin
+  `PageRouteBuilder`/`MaterialPageRoute` manual ke `PrivateChatScreen` lagi.
+- **`lib/screens/private_chat/private_chat_open_timing.dart`** (part) —
+  `_PcOpenTimingMx` mengatur WAKTU buka chat: stream pesan lewat
+  `_msgsStreamCtrl` (broadcast), `_startMessagesStream()` (mulai
+  ChatStreamSession) dipanggil **post-frame**, `_scheduleWarmPrefetch()`
+  (warm voice/video ditunda 400ms). Tujuan: frame transisi (150ms) bebas I/O.
+  Dipisah ke `part` agar `private_chat_screen.dart` tak tumbuh (ratchet).
+- **`chat_service_presence.dart`** — channel `getUserStatus` per-uid
+  **refcount** (`_statusChannels`/`_statusChannelRefs`): SATU channel per uid
+  dibagi semua penonton; `removeChannel` saat penonton terakhir lepas.
+
+Detail alasan & trade-off: `docs/PERFORMANCE.md` §2.19. JANGAN kembalikan
+`await prefetchPrivateChat` sebelum push, atau Fade global di theme.
