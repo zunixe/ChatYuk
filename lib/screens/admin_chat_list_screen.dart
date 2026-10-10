@@ -575,6 +575,14 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
                       }
                       final chat = visibleChats[i];
                       final chatId = '${chat['chat_id'] ?? ''}';
+                      // Panaskan cache monitor SEJAK KARTU DI-RENDER (bukan
+                      // hanya saat tap): baca disk `admin_chatmsg_<id>` ke
+                      // memori provider sementara user masih menelusuri daftar.
+                      // Tanpa ini, buka-pertama menunggu RPC (~1 dtk) dan baru
+                      // cepat pada buka berikutnya (keluhan "harus beberapa
+                      // kali baru cepet"). Debounce internal di provider →
+                      // hanya 1 baca per chat, tak mengulang tiap rebuild.
+                      admin.prefetchChatMessages(chatId);
                       // RepaintBoundary: kartu lain tidak ikut repaint saat
                       // satu kartu berubah (badge call/unread) — list monitor
                       // panjang jadi lebih hemat (konsisten dgn menu Online).
@@ -1101,16 +1109,22 @@ class _AdminChatCard extends StatelessWidget {
         // bulak-balik buka chat monitor.
         behavior: HitTestBehavior.opaque,
         onLongPress: onLongPressMenu,
-        onTap: () {
+        onTap: () async {
           final id = chat['chat_id'] as String? ?? '';
           // Tap 2× cepat menumpuk 2 route identik → 1× back terlihat mati.
           if (!tryClaimChatPush(id)) return;
-          // Panaskan cache pesan MONITOR (provider `_chatMsgMem` + disk
-          // `admin_chatmsg_<id>`) selagi animasi transisi jalan — layar
-          // membaca ini lebih dulu → frame pertama langsung terisi.
-          // (Dulu `preloadMessages` = cache stream user, bukan yang dipakai
-          // monitor → tetap RPC server saat buka.)
-          ProviderScope.containerOf(context, listen: false).read(adminProvider).prefetchChatMessages(id);
+          // Panaskan cache pesan MONITOR lalu TUNGGU (pola SAMA dengan chat
+          // user: `await prefetchPrivateChat` sebelum push). Dulu ini
+          // fire-and-forget → layar mount saat cache belum siap → satu jeda
+          // "kosong dulu" lalu terisi (keluhan "harus beberapa kali baru
+          // cepet"). Dengan await, `peekChatMessages` PASTI hit saat mount →
+          // frame pertama langsung terisi seperti chat user (ala WhatsApp).
+          // Baca disk/SQLite-monitor terukur sangat cepat (<10ms) — delay tak
+          // terasa, jauh lebih murah daripada menunggu layar render kosong.
+          await ProviderScope.containerOf(context, listen: false)
+              .read(adminProvider)
+              .prefetchChatMessages(id);
+          if (!context.mounted) return;
           Navigator.push(
             context,
             MaterialPageRoute(

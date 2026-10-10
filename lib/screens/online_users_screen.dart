@@ -167,6 +167,8 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   // ke `friends` (biar "Status kamu terlihat oleh" = Teman). Simpan nilai asli
   // (dari Kelola Privasi) di sini supaya channel "Semua" bisa mengembalikannya.
   static const _prefKeyPresenceOverrideBefore = 'channel_presence_before';
+  /// GPS hanya dijalankan SEKALI per install (lihat _requestGpsOnce).
+  static const _gpsRequestedKey = 'gps_requested_once';
   PrivacyVisibility? _presenceBeforeFriends;
   final ScrollController _scrollCtrl = ScrollController();
   final TextEditingController _searchCtrl = TextEditingController();
@@ -270,11 +272,27 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
 
   /// Minta izin GPS saat masuk menu pengguna online (dialog native muncul
   /// sekali; kalau ditolak, user tetap bisa aktifkan lewat "bagikan lokasi").
+  ///
+  /// PERF (terukur): GPS hanya dijalankan SEKALI per install, bukan tiap
+  /// layar dibuka. Alasan: menu Online adalah TAB DEFAULT → dipanggil tiap
+  /// app dibuka/resume. Setiap panggilan membuat
+  /// `GeolocatorLocationService` ter-BIND ke proses → MIUI menganggap app
+  /// "aktif terus" (proses tak pernah di-freeze, oom_score_adj=0) → panel
+  /// tidak masuk mode hemat → frame pertama setelah resume menunggu panel
+  /// bangun ~180ms (framestats: ui_work=0ms, Vsync melompat). App yang mulus
+  /// di HP ini (Shopee/WhatsApp) justru CACHED (oom 701).
+  /// Posisi sudah tersimpan server-side; Nearby memanggil updateMyLocation
+  /// sendiri saat dibuka (butuh akurasi saat itu juga).
   Future<void> _requestGpsOnce() async {
     final loc = ProviderScope.containerOf(context, listen: false).read(locationProvider).location;
-    final ok = await loc.requestPermission();
-    if (!ok) return;
-    await loc.updateMyLocation();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_gpsRequestedKey) ?? false) return;
+      final ok = await loc.requestPermission();
+      if (!ok) return;
+      await prefs.setBool(_gpsRequestedKey, true);
+      await loc.updateMyLocation();
+    } catch (_) {}
   }
 
   /// Bandingkan dua peta unread (uid→count) — supaya emit chat-list yang tidak

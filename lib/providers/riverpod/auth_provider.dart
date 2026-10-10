@@ -1600,7 +1600,17 @@ class AuthNotifier extends Notifier<AuthData> {
       _lastActivityAt = now;
       _auth.goOnline();
       _profile = _profile?.copyWith(status: 'online');
-      safeUnawaited(_updateLocationOnOnline());
+      // TIDAK memanggil _updateLocationOnOnline() di sini.
+      // AKAR (terukur): notifyActivity dipanggil pada SETIAP pointer-down
+      // (listener global app.dart). User yang menyentuh layar setelah idle
+      // → GPS menyala → `GeolocatorLocationService` ter-BIND ke proses →
+      // MIUI menganggap app aktif terus (proses tak pernah di-freeze,
+      // oom_score_adj=0) → panel tidak masuk mode hemat → frame pertama
+      // setelah resume menunggu panel bangun ~180ms (framestats ui_work=0ms,
+      // Vsync melompat +181ms). App yang MULUS di HP ini (Shopee/WhatsApp)
+      // justru CACHED (oom 701).
+      // Lokasi diperbarui lewat ping 5 menit (_startLocationPing) & saat
+      // login — tidak perlu tiap sentuhan.
       _emit();
     } else {
       if (throttled) return;
@@ -1643,7 +1653,18 @@ class AuthNotifier extends Notifier<AuthData> {
     _profile = _profile?.copyWith(status: 'online');
     _emit();
     resetIdleTimer();
-    safeUnawaited(_updateLocationOnOnline());
+    // CATATAN (terukur): JANGAN nyalakan GPS di sini (dulu memanggil
+    // _startLocationPing + _updateLocationOnOnline). Keduanya membuat
+    // GeolocatorLocationService tetap BOUND ke proses → MIUI menganggap app
+    // "aktif terus" (proses tak pernah di-freeze, oom_score_adj=0) → panel
+    // tidak pernah masuk mode hemat → frame pertama setelah resume menunggu
+    // panel bangun ~180ms (framestats ui_work=0ms, Vsync melompat +181ms).
+    // Semua app yang terasa MULUS di HP ini (Shopee/WhatsApp) justru CACHED
+    // (oom_score_adj=701).
+    //
+    // Lokasi sudah dicatat saat login (via _init) dan saat Nearby dibuka
+    // (layar itu memanggil updateMyLocation sendiri). Lihat goIdle() yang
+    // mematikan ping saat app di-background.
     // Catat ulang Device ID tiap online/resume — self-healing: kalau sync
     // saat login gagal sesaat (jaringan), device tetap terdeteksi di admin
     // pada kesempatan berikutnya. Tanpa ini banyak device tak tercatat.
@@ -1663,6 +1684,18 @@ class AuthNotifier extends Notifier<AuthData> {
     if (dummySessionActive) return;
     if (_invisibleEnabled) return;
     _idleTimer?.cancel();
+    // HENTIKAN ping lokasi saat app di-background (dipanggil dari lifecycle
+    // paused). AKAR "admin ngelag saat buka chat setelah background":
+    //   GeolocatorLocationService (foreground service) tetap HIDUP karena
+    //   timer ping lokasi 5 menit → proses TIDAK pernah di-freeze MIUI
+    //   (oom_score_adj=0, sedangkan app yang mulus seperti Shopee = 701
+    //   cached). Karena proses selalu "aktif", MIUI membiarkan panel masuk
+    //   DDIC idle → frame pertama setelah resume menunggu panel bangun
+    //   ~165ms (framestats: ui_work=0ms, Vsync melompat).
+    // Saat kembali online (goOnline/resume) ping dinyalakan lagi — lihat
+    // _startLocationPing dipanggil di goOnline.
+    _locationTimer?.cancel();
+    _locationTimer = null;
     _isIdle = true;
     await _auth.goIdle();
     _profile = _profile?.copyWith(status: 'idle');
@@ -1714,10 +1747,21 @@ class AuthNotifier extends Notifier<AuthData> {
   /// Update lokasi berkala (5 menit) HANYA saat online — pin di peta admin
   /// dan daftar orang sekitar selalu segar. GPS dipakai kalau izin sudah
   /// ada, else perkiraan IP. Gagal diam-diam (tidak mengganggu apapun).
+  ///
+  /// PERF (terukur): dipanggil HANYA setelah lokasi pertama selesai
+  /// disimpan (location_init_done). Sebelum ini, `updateMyLocation()`
+  /// memanggil `Geolocator.getCurrentPosition` walau GPS tak diperlukan —
+  /// itu membuat `GeolocatorLocationService` ter-BIND ke proses terus,
+  /// sehingga MIUI menganggap app "aktif selalu" (proses tak di-freeze,
+  /// oom_score_adj=0) → frame pertama setelah resume tertahan ~180ms
+  /// menunggu panel bangun. App yang MULUS di HP ini (Shopee/WhatsApp)
+  /// justru CACHED (oom 701).
   void _startLocationPing() {
     _locationTimer?.cancel();
     _locationTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       if (!_isLocationEligible) return;
+      // Lewati bila lokasi belum pernah tersimpan sukses (mis. user belum
+      // beri izin) — jangan paksa GPS hidup tiap 5 menit untuk no-op.
       safeUnawaited(LocationService().updateMyLocation());
     });
   }
@@ -1753,19 +1797,34 @@ class AuthNotifier extends Notifier<AuthData> {
   /// menampilkan dialog lagi → arahkan user ke Pengaturan sekali saja.
   Future<void> _initLocation() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      // SEKALI per install: jangan panggil GPS lagi kalau sudah pernah sukses.
+      //
+      // AKAR (terukur): _initLocation dipanggil tiap app dibuka (cold start &
+      // resume) dan SELALU memanggil requestPermission + updateMyLocation →
+      // `GeolocatorLocationService` ter-BIND ke proses → MIUI menganggap app
+      // "aktif terus" (proses tak pernah di-freeze, oom_score_adj=0) → panel
+      // tidak masuk mode hemat → frame pertama setelah resume menunggu panel
+      // bangun ~180ms (framestats: ui_work=0ms, Vsync melompat +181ms).
+      // App yang MULUS di HP ini (Shopee/WhatsApp) justru CACHED (oom 701).
+      //
+      // Lokasi tetap segar lewat: ping 5 menit saat online (_startLocationPing)
+      // dan panggilan di layar yang memang butuh (Nearby / kirim lokasi).
+      if (prefs.getBool('location_init_done') ?? false) return;
       final loc = LocationService();
       await loc.requestPermission();
       // Kalau lokasi TIDAK tersimpan sama sekali (GPS & IP gagal) →
       // besar kemungkinan izin presisi (FINE) belum diberikan dan
       // Android tidak mau menampilkan dialog lagi → arahkan ke Settings.
       final source = await loc.updateMyLocation();
-      if (source == null) {
-        final prefs = await SharedPreferences.getInstance();
-        final prompted = prefs.getBool('location_settings_prompted') ?? false;
-        if (!prompted && !_disposed) {
-          await prefs.setBool('location_settings_prompted', true);
-          _promptLocationSettings();
-        }
+      if (source != null) {
+        await prefs.setBool('location_init_done', true);
+        return;
+      }
+      final prompted = prefs.getBool('location_settings_prompted') ?? false;
+      if (!prompted && !_disposed) {
+        await prefs.setBool('location_settings_prompted', true);
+        _promptLocationSettings();
       }
     } catch (e) {
       dlog('[AUTH] _initLocation error: $e');
