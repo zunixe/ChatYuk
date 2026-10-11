@@ -1219,6 +1219,33 @@ keystroke).
 **Utang opsional (belum dikerjakan — risiko refactor tinggi/manfaat sedang):**
 refcount channel list-chat ke active-listener (P2c).
 
+### 2.21 Baterai: exemption + heartbeat adaptif (2026-10-11)
+
+**Akar baterai besar** (batterystats: `UID u0a1455 cpu=744` / 3j6m vs WhatsApp
+`u0a1448=363`, app lain=246) — dua penyebab:
+1. **Tanpa battery-exemption** → MIUI mengunci refresh 60Hz + throttle bg
+   (WhatsApp lolos karena di whitelist sistem). Fix: minta
+   `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (commit 10a1a69). Bukti: `activeModeId`
+   60Hz → 120Hz; whitelist `user,com.chatyuk.chatyuk` setara WA.
+2. **`RenderHeartbeat` repaint 56ms terus di semua tab** → engine selalu
+   bangun (main + raster ~7-26% CPU saat diam). Fix: interval ADAPTIF per-tab
+   (commit 1d25223): Online/Chat 56ms (anti DDIC-idle saat buka-chat), Timeline/
+   Profil **240ms** (hemat), background stop.
+
+**Ukur (batterystats delta, HP MIUI battery-saver):**
+| Skenario | Δ fg CPU |
+|---|---|
+| diam 90s di Profil (240ms) | 1.87 |
+| diam 90s di Chat (56ms) | 2.34 (+25% krn heartbeat cepat) |
+| diam 180s di Profil | 5.04 (~1.68/menit) |
+
+Main thread idle ~3.7% (heartbeat 240ms). `ddic_mode=2 @120Hz` tetap terjaga
+(anti-idle bekerja). **Heartbeat TIDAK bisa dimatikan** (DDIC timeout panel 70ms
+→ lag buka chat) — hanya boleh diperlambat di tab non-chat.
+
+**Diperiksa & aman:** `phone_verify` poll 3s self-limiting 2m; `points
+onlineTick` no-op/murah; presence fallback 30s coalesced; `camera:bg` historis.
+
 ### 8. Target tersisa
 
 **Tidak ada.** Semua item bagian 6 sudah tertutup:
