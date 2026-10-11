@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -132,6 +133,10 @@ class ChatVideoBubble extends StatefulWidget {
 
 class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   Uint8List? _poster;
+  // Bitmap poster siap-render (RawImage) = NOL decode di frame pertama.
+  // Diambil sinkron dari VideoPrefetch.posterImageSync (di-decode saat tap /
+  // pertama dibuka) → buka berulang & cold start LANGSUNG tampil seperti voice.
+  ui.Image? _posterImg;
   bool _loading = true;
   bool _failed = false;
   bool _opening = false;
@@ -175,11 +180,21 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     // bawah yang mengurus (tidak mengubah perilaku lazy).
     if (!_locked && widget.videoData.isNotEmpty) {
       try {
+        // Bitmap siap-render dulu (NOL decode) — pernah dibuka/di-precache.
+        final img = VideoPrefetch.posterImageSync(widget.videoData);
+        if (img != null) {
+          _posterImg = img;
+          _poster = VideoPrefetch.posterBytesStable(widget.videoData);
+          _loading = false;
+          return;
+        }
         final hit = VideoPrefetch.posterBytesStable(widget.videoData);
         if (hit != null && hit.isNotEmpty) {
           dlog('[VideoBubble] poster HIT-sync key=${_posterKey.hashCode} bytes=${hit.length}');
           _poster = hit;
           _loading = false;
+          // Decode bitmap di latar → render berikutnya pakai RawImage (instan).
+          unawaited(VideoPrefetch.decodePosterFor(widget.videoData, hit));
           return;
         }
         dlog('[VideoBubble] poster MISS-sync key=${_posterKey.hashCode} → async');
@@ -298,14 +313,20 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         dlog('[VideoBubble] poster HIT disk key=${_posterKey.hashCode} bytes=${cached.length}');
         if (!mounted) return;
         _stopSlow();
+        // Bitmap siap-render (nol decode) bila sudah di-decode sebelumnya.
+        final img = VideoPrefetch.posterImageSync(widget.videoData);
         if (_poster == null || _poster!.length != cached.length) {
           setState(() {
             _poster = cached;
+            if (img != null) _posterImg = img;
             _loading = false;
             _failed = false;
           });
         } else if (_loading && mounted) {
           setState(() => _loading = false);
+        }
+        if (img == null) {
+          unawaited(VideoPrefetch.decodePosterFor(widget.videoData, cached));
         }
         return;
       }
@@ -409,9 +430,15 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       return;
     }
     dlog('[VideoBubble] poster tulis disk key=${_posterKey.hashCode} bytes=${thumb.length}');
-    // Simpan juga ke mem-cache stabil (instance SAMA) supaya precache &
-    // render berikutnya memakai kunci image-cache yang konsisten.
+    // Simpan ke mem-cache stabil + decode bitmap (fire-and-forget di
+    // rememberPoster) → render berikutnya (bubble ini & cold start) pakai
+    // RawImage (nol decode). Set bitmap ke state ini bila siap.
     VideoPrefetch.rememberPoster(widget.videoData, thumb);
+    unawaited(VideoPrefetch.decodePosterFor(widget.videoData, thumb).then((_) {
+      if (!mounted) return;
+      final img = VideoPrefetch.posterImageSync(widget.videoData);
+      if (img != null && _posterImg == null) setState(() => _posterImg = img);
+    }));
     unawaited(MediaDiskCache.instance.write(_posterKey, thumb));
   }
 
@@ -548,7 +575,16 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
               // ada, pasang langsung di frame itu juga (fade hanya bila memang
               // baru di-generate, `_fadePoster`). AnimatedOpacity yg selalu
               // mulai dari 0 bikin 1 frame kosong = "blink/ngeload".
-              if (_poster != null)
+              //
+              // Prioritas: RawImage dari bitmap siap (_posterImg) = NOL decode
+              // (paling instan, kunci "buka ke-2 & cold start langsung tampil").
+              // Fallback: Image dari bytes (decode, dipakai saat baru generate).
+              if (_posterImg != null)
+                RawImage(
+                  image: _posterImg,
+                  fit: BoxFit.cover,
+                )
+              else if (_poster != null)
                 _fadePoster
                     ? AnimatedOpacity(
                         opacity: 1,
@@ -565,7 +601,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
                         fit: BoxFit.cover,
                         gaplessPlayback: true,
                       ),
-              if (_poster == null)
+              if (_poster == null && _posterImg == null)
                 Container(
                   color: Colors.black87,
                   alignment: Alignment.center,
