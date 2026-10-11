@@ -3,7 +3,7 @@ part of '../private_chat_screen.dart';
 // ignore_for_file: unused_element, unused_element_parameter
 
 mixin _PcMediaMx on _PrivateChatBase {
-void _openSearch() {
+  void _openSearch() {
     setState(() {
       _searching = true;
       _searchCtrl.clear();
@@ -14,7 +14,8 @@ void _openSearch() {
     });
     _searchFocus.requestFocus();
   }
-void _closeSearch() {
+
+  void _closeSearch() {
     _searchFocus.unfocus();
     setState(() {
       _searching = false;
@@ -25,7 +26,8 @@ void _closeSearch() {
       _searchKeys.clear();
     });
   }
-/// Scroll ke cocok aktif. dir=0: hanya bila sudah ter-render (lembut,
+
+  /// Scroll ke cocok aktif. dir=0: hanya bila sudah ter-render (lembut,
   /// untuk saat mengetik). dir!=0: lompat bertahap ke arahnya lalu coba
   /// lagi (maks 5x) sampai ketemu.
   void _scrollToMatch(int dir) {
@@ -48,32 +50,46 @@ void _closeSearch() {
     final pos = _scrollCtrl.position;
     // List reverse: offset 0 = paling baru (bawah). Hasil index naik =
     // makin lama = offset makin besar.
-    final target = (pos.pixels + dir * pos.viewportDimension * 0.8)
-        .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+    final target = (pos.pixels + dir * pos.viewportDimension * 0.8).clamp(
+      pos.minScrollExtent,
+      pos.maxScrollExtent,
+    );
     _scrollCtrl.jumpTo(target);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToMatch(dir));
   }
+
   // ── Kontrak ChatSelectionMixin ──
   @override
   String get chatKind => 'private';
-@override
-  AuthNotifier get chatAuth => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+  @override
+  AuthNotifier get chatAuth => ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(authProvider.notifier);
   // ── YukCoin v2 (berbayar) ──
   @override
-  bool get chatYukcoinV2Active => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).yukcoinV2Active;
-@override
+  bool get chatYukcoinV2Active => ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(pointsProvider.notifier).yukcoinV2Active;
+  @override
   Future<bool> chatChargeYukcoin(String feature, int cost, String ref) async {
     try {
-      await ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).spendYukcoin(feature, cost, ref: ref);
+      await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(pointsProvider.notifier).spendYukcoin(feature, cost, ref: ref);
       return true;
     } catch (e) {
       dlog('[PRIVATE] chargeYukcoin error: $e');
       return false;
     }
   }
-@override
-  Map<String, String> get chatReactionKnownNames =>
-      {widget.otherUid: widget.otherName};
+
+  @override
+  Map<String, String> get chatReactionKnownNames => {
+    widget.otherUid: widget.otherName,
+  };
   // ── Kontrak ChatPhotoSendMixin ──
   @override
   Future<String?> photoDispatch({
@@ -89,22 +105,25 @@ void _closeSearch() {
     int? viewOnceSecs,
     int? videoDurationMs,
   }) async {
-    return ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
-      chatId: widget.chatId,
-      senderId: senderId,
-      senderName: senderName,
-      senderGender: senderGender,
-      text: text,
-      type: type,
-      imageData: imageData,
-      // Video pakai durasi asli (bukan timer view-once).
-      durationMs: videoDurationMs ?? viewOnceSecs,
-      repliedToId: repliedToId,
-      repliedToText: repliedToText,
-      repliedToSenderName: repliedToSenderName,
-    );
+    return ProviderScope.containerOf(context, listen: false)
+        .read(chatRiverpod.chatProvider.notifier)
+        .sendPrivateMessage(
+          chatId: widget.chatId,
+          senderId: senderId,
+          senderName: senderName,
+          senderGender: senderGender,
+          text: text,
+          type: type,
+          imageData: imageData,
+          // Video pakai durasi asli (bukan timer view-once).
+          durationMs: videoDurationMs ?? viewOnceSecs,
+          repliedToId: repliedToId,
+          repliedToText: repliedToText,
+          repliedToSenderName: repliedToSenderName,
+        );
   }
-/// Izinkan → ambil posisi → sheet pilihan (lokasi saat ini / live / tempat
+
+  /// Izinkan → ambil posisi → sheet pilihan (lokasi saat ini / live / tempat
   /// sekitar) → LANGSUNG terkirim ke chat (tanpa preview/caption).
   Future<void> _sendLocation() async {
     setState(() => _showAttachRow = false);
@@ -115,20 +134,22 @@ void _closeSearch() {
     if (picked == null || !mounted) return;
     await sendLocationFromPreviewAt(picked);
   }
-@override
+
+  @override
   ChatLocation? get sendPendingLocation => _pendingLocation;
-@override
+  @override
   int? get photoViewTimerSecs => _viewTimerSecs;
-@override
+  @override
   void photoClearViewTimer() {
     _viewTimerSecs = null;
     if (mounted) setState(() => _pendingPhotoBase64 = null);
   }
-@override
+
+  @override
   MessageModel? get photoReplyingTo => sendReplyingTo;
-@override
+  @override
   String get photoSeed => widget.otherUid;
-@override
+  @override
   void videoClearPreview() {
     if (!mounted) return;
     setState(() {
@@ -138,55 +159,72 @@ void _closeSearch() {
       _pendingVideoOnce = false;
     });
   }
-@override
+
+  @override
   bool get sendIsSending => _isSending;
-@override
+  @override
   set sendEditingMessage(MessageModel? v) => editingMessage = v;
-@override
+  @override
   Future<void> sendDispatchText({
     required String text,
     required MessageModel? reply,
     required List<Mention> mentions,
   }) async {
-    await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
-      chatId: widget.chatId,
-      senderId: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid!,
-      senderName: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile!.nickname,
-      senderGender: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile!.gender,
-      text: text,
-      repliedToId: reply?.id,
-      repliedToText: reply?.text,
-      repliedToSenderName: reply?.senderName,
-      mentions: mentions,
-    );
+    await ProviderScope.containerOf(context, listen: false)
+        .read(chatRiverpod.chatProvider.notifier)
+        .sendPrivateMessage(
+          chatId: widget.chatId,
+          senderId: ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(authProvider.notifier).uid!,
+          senderName: ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(authProvider.notifier).profile!.nickname,
+          senderGender: ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(authProvider.notifier).profile!.gender,
+          text: text,
+          repliedToId: reply?.id,
+          repliedToText: reply?.text,
+          repliedToSenderName: reply?.senderName,
+          mentions: mentions,
+        );
   }
-/// Prime bintang secara SINKRON: ambil id pesan berbintang dari MEMORI
+
+  /// Prime bintang secara SINKRON: ambil id pesan berbintang dari MEMORI
   /// (tanpa await) sebelum frame pertama — jadi bintang langsung tampil saat
   /// chat dibuka, tidak menunggu satu hop async apa pun (anti-glich).
   /// Stream realtime + fallback `_loadCachedStarredAsync` menimpa sesudahnya.
   void _primeStarredFromCache() {
     try {
-      final cached = ProviderScope.containerOf(context, listen: false)
-          .read(messageReactionProvider)
-          .peekCachedStarred(widget.chatId);
+      final cached = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(messageReactionProvider).peekCachedStarred(widget.chatId);
       if (cached.isNotEmpty) starredIds = cached;
     } catch (_) {}
   }
-/// Baca last-read tersimpan (kv terenkripsi) — dipanggil di initState agar
+
+  /// Baca last-read tersimpan (kv terenkripsi) — dipanggil di initState agar
   /// centang-2 tampil instan. Hanya mengisi bila lebih baru dari state
   /// (read receipt monoton maju — tidak pernah mundur).
   Future<void> _loadCachedRead() async {
     try {
-      final obj = await MessageCache.instance
-          .loadRawObj('read:${widget.chatId}');
+      final obj = await MessageCache.instance.loadRawObj(
+        'read:${widget.chatId}',
+      );
       final t = ReadReceipt.parse(obj[widget.otherUid]);
-      final merged = ReadReceipt.merge(_otherLastRead, t);
-      if (t != null && mounted && merged != _otherLastRead) {
-        setState(() => _otherLastRead = merged);
+      final merged = ReadReceipt.merge(_hdr.otherLastRead, t);
+      if (t != null && mounted && merged != _hdr.otherLastRead) {
+        _patchHdr((h) => h.copyWith(otherLastRead: merged));
       }
     } catch (_) {}
   }
-/// Simpan last-read network (fire-and-forget) untuk cold start berikutnya.
+
+  /// Simpan last-read network (fire-and-forget) untuk cold start berikutnya.
   void _persistRead(DateTime t) {
     try {
       MessageCache.instance.saveRawObj('read:${widget.chatId}', {
@@ -194,7 +232,8 @@ void _closeSearch() {
       });
     } catch (_) {}
   }
-@override
+
+  @override
   void dispose() {
     hideActionBar();
     _reactionsSub?.cancel();
@@ -224,6 +263,7 @@ void _closeSearch() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (activeChatId.value == chatToClear) activeChatId.value = null;
     });
+    _lastReadNotifier.dispose();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     _inputFocus.dispose();
@@ -235,7 +275,8 @@ void _closeSearch() {
     _msgsStreamCtrl.close();
     super.dispose();
   }
-/// Matikan bubble typing/recording segera (tanpa menunggu timer 3 detik).
+
+  /// Matikan bubble typing/recording segera (tanpa menunggu timer 3 detik).
   /// Dipanggil saat pesan baru dari lawan bicara masuk — pesan = bukti
   /// otoritatif bahwa fase mengetik selesai (anti bubble nyangkut).
   void _hideTyping() {
@@ -243,7 +284,8 @@ void _closeSearch() {
     if (!mounted) return;
     if (_typingState.value != 0) _typingState.value = 0;
   }
-/// Jaring pengaman konfirmasi pending: kalau 3 detik setelah insert sukses
+
+  /// Jaring pengaman konfirmasi pending: kalau 3 detik setelah insert sukses
   /// bubble masih belum terkonfirmasi (event Realtime miss / channel drop),
   /// fetch ulang pesan dari server supaya tidak nyangkut sampai polling 30s.
   void _schedulePendingConfirmFallback() {
@@ -255,16 +297,21 @@ void _closeSearch() {
       } catch (_) {}
     });
   }
-@override
+
+  @override
   String get outboxUploadChatId => widget.chatId;
-@override
+  @override
   void outboxScrollToBottom() => _scrollToBottom();
-Future<void> voiceFinishRecording(String path, int recordedMs) async {
+  Future<void> voiceFinishRecording(String path, int recordedMs) async {
     final f = File(path);
     final bytes = await f.readAsBytes();
     final chatId = widget.chatId;
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    final uid = auth.uid; final profile = auth.profile;
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
+    final uid = auth.uid;
+    final profile = auth.profile;
     if (uid == null || profile == null) return;
     // Offline: bubble tetap tampil (centang-1) + antre, terkirim otomatis
     // saat koneksi pulih. Voice tidak pakai poin (pointsKind 'none').
@@ -283,7 +330,9 @@ Future<void> voiceFinishRecording(String path, int recordedMs) async {
       );
       setState(() => _pending.add(optimisticOffline));
       _scrollToBottom();
-      try { await f.delete(); } catch (_) {}
+      try {
+        await f.delete();
+      } catch (_) {}
       await queueOffline(
         pending: optimisticOffline,
         pointsKind: 'none',
@@ -295,7 +344,10 @@ Future<void> voiceFinishRecording(String path, int recordedMs) async {
       );
       return;
     }
-    final storagePath = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadVoice(chatId: chatId, bytes: bytes);
+    final storagePath = await ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(storageProvider).uploadVoice(chatId: chatId, bytes: bytes);
     if (storagePath == null || storagePath.isEmpty) {
       if (!outboxIsOnline) {
         final optimisticOffline = MessageModel(
@@ -312,7 +364,9 @@ Future<void> voiceFinishRecording(String path, int recordedMs) async {
         );
         setState(() => _pending.add(optimisticOffline));
         _scrollToBottom();
-        try { await f.delete(); } catch (_) {}
+        try {
+          await f.delete();
+        } catch (_) {}
         await queueOffline(
           pending: optimisticOffline,
           pointsKind: 'none',
@@ -324,7 +378,14 @@ Future<void> voiceFinishRecording(String path, int recordedMs) async {
         );
         return;
       }
-      if (mounted) showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errVoiceUploadFailed);
+      if (mounted)
+        showChatSnack(
+          context,
+          ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(localeProvider).s.errVoiceUploadFailed,
+        );
       return;
     }
     // Optimistic: tampilkan bubble voice langsung
@@ -343,8 +404,21 @@ Future<void> voiceFinishRecording(String path, int recordedMs) async {
     setState(() => _pending.add(optimistic));
     _scrollToBottom();
     try {
-      await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(chatId: chatId, senderId: uid, senderName: profile.nickname, senderGender: profile.gender, text: '', type: 'voice', imageData: storagePath, durationMs: recordedMs);
-      try { await f.delete(); } catch (_) {}
+      await ProviderScope.containerOf(context, listen: false)
+          .read(chatRiverpod.chatProvider.notifier)
+          .sendPrivateMessage(
+            chatId: chatId,
+            senderId: uid,
+            senderName: profile.nickname,
+            senderGender: profile.gender,
+            text: '',
+            type: 'voice',
+            imageData: storagePath,
+            durationMs: recordedMs,
+          );
+      try {
+        await f.delete();
+      } catch (_) {}
     } catch (e) {
       dlog('[Voice] send error: $e');
       if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
@@ -357,14 +431,30 @@ Future<void> voiceFinishRecording(String path, int recordedMs) async {
         );
       } else if (mounted) {
         setState(() => _pending.remove(optimistic));
-        showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errSendFailed);
+        showChatSnack(
+          context,
+          ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(localeProvider).s.errSendFailed,
+        );
       }
     }
   }
-Future<void> _sendGift(String giftId, String name, int coins) async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
-    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+
+  Future<void> _sendGift(String giftId, String name, int coins) async {
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    final chat = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chatRiverpod.chatProvider.notifier);
+    final points = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final res = await chat.sendGift(widget.chatId, widget.otherUid, giftId);
@@ -385,10 +475,14 @@ Future<void> _sendGift(String giftId, String name, int coins) async {
       showChatSnackVia(messenger, context, show);
     }
   }
-/// AppBar mode search (ala WhatsApp): tombol kembali + field cari +
+
+  /// AppBar mode search (ala WhatsApp): tombol kembali + field cari +
   /// penghitung hasil + panah atas/bawah.
   AppBar _buildSearchAppBar() {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     final total = _matchIds.length;
     final label = total == 0 ? '0/0' : '${_matchIndex + 1}/$total';
     return AppBar(
@@ -420,10 +514,7 @@ Future<void> _sendGift(String giftId, String name, int coins) async {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (_searchQuery.trim().isNotEmpty)
-              Text(
-                label,
-                style: AppText.label.copyWith(color: Colors.white),
-              ),
+              Text(label, style: AppText.label.copyWith(color: Colors.white)),
             SearchNavButton(
               icon: Icons.keyboard_arrow_up,
               enabled: total > 0,
@@ -440,7 +531,8 @@ Future<void> _sendGift(String giftId, String name, int coins) async {
       ],
     );
   }
-void _showReportDialog() {
+
+  void _showReportDialog() {
     showReportUserDialog(
       context,
       reportedId: widget.otherUid,
