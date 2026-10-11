@@ -246,6 +246,10 @@ yang ditambahkan orang/migrasi lain. Kasus nyata: `ai_presence_tick` di-replace
 - [ ] Kalau mengubah perilaku fitur: tambah/aktifkan test di
       `supabase/tests/` (pgTAP) dan `flutter test` tetap 100% hijau
 - [ ] Catat migrasi yang di-apply di `docs/MIGRATION_LOG.md`
+- [ ] **WAJIB baca `docs/PERFORMANCE_RULES.md`** — standar engineering performa
+      permanen (rendering/rebuild/animasi/memori/CPU/DB/network/navigasi).
+      Performa adalah requirement, bukan opsi. Sertakan laporan A–D (Perubahan,
+      Dampak Performa, Validasi, Status) untuk setiap tugas.
 - [ ] Kalau menyentuh performa (render/rebuild/animasi/prefetch): baca
       `docs/PERFORMANCE.md` DULU, ukur sebelum-sesudah, lalu catat perubahannya
       di sana. Jangan membalik optimasi yang sudah ada (mis. mengembalikan
