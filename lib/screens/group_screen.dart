@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/admin_gate.dart';
+import '../core/ui/dispose_after_dialog.dart';
 import '../core/perf/perf_probe.dart';
 import '../models/room_model.dart';
 import '../providers/riverpod/auth_provider.dart';
@@ -562,9 +563,7 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
       ),
     );
   } finally {
-    // R2: controller form buat-grup dilepas setelah dialog tutup.
-    nameCtrl.dispose();
-    pwCtrl.dispose();
+    disposeAfterDialogFrame([nameCtrl, pwCtrl]);
   }
 }
 

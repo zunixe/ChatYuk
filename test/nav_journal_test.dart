@@ -38,7 +38,17 @@ void main() {
       final content = await File('${dir.path}/nav_journal.txt').readAsString();
       expect(content, contains('push private-chat depth=1'));
       expect(content, isNot(contains('private-chat:u1 ')));
-      await dir.delete(recursive: true);
+      // Tulis serial (rantai Future) mungkin masih berjalan → beri waktu,
+      // lalu hapus toleran (dir bisa terisi lagi di antara cek & delete).
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      for (var i = 0; i < 5; i++) {
+        try {
+          await dir.delete(recursive: true);
+          break;
+        } catch (_) {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        }
+      }
     });
   });
 
@@ -67,7 +77,15 @@ void main() {
         expect(n, greaterThan(prev));
         prev = n;
       }
-      await dir.delete(recursive: true);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      for (var i = 0; i < 5; i++) {
+        try {
+          await dir.delete(recursive: true);
+          break;
+        } catch (_) {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        }
+      }
     });
   });
 

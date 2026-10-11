@@ -384,8 +384,7 @@ mixin _ProfileBuildMx on _ProfileBase {
         ),
       );
     } finally {
-      // R2: controller dialog harga dilepas setelah dialog tutup.
-      ctrl.dispose();
+      disposeAfterDialogFrame([ctrl]);
     }
     if (price == null || !mounted) return;
     final ok = await social.setSubscriptionPrice(price);

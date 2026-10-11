@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/theme.dart';
+import '../../core/ui/dispose_after_dialog.dart';
 import '../../core/admin_gate.dart';
 import '../../core/nav_guard.dart';
 import '../../models/room_model.dart';
@@ -133,8 +134,7 @@ class GroupCard extends ConsumerWidget {
         ),
       );
     } finally {
-      // R2: controller password join-room dilepas setelah dialog tutup.
-      pwCtrl.dispose();
+      disposeAfterDialogFrame([pwCtrl]);
     }
     if (confirmed != true) return;
 

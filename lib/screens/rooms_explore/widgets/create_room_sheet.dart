@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
+
+import '../../../core/ui/dispose_after_dialog.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../config/theme.dart';
 import '../../../providers/riverpod/auth_provider.dart';
@@ -350,7 +352,6 @@ Future<void> showCreateExploreRoomDialog(
       ),
     );
   } finally {
-    // R2: controller nama-room dilepas setelah dialog tutup.
-    nameCtrl.dispose();
+    disposeAfterDialogFrame([nameCtrl]);
   }
 }
