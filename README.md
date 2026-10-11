@@ -20,7 +20,9 @@ Aplikasi chat gratis, bebas iklan, dan aman untuk semua.
 - 📵 **Anti-screenshot** — kontrol admin untuk mengaktifkan/menonaktifkan screenshot
 - 🪙 **Koin & Gift** — kirim koin & hadiah sebagai digital goods
 - 💳 **Top Up YukCoin** — top up koin via Google Play Billing (hanya build flavor `play`; kebijakan Play untuk digital goods). Fitur finansial lama (KYC/withdraw/Midtrans/iPaymu) TIDAK dipakai di app
-- 🛡️ **Admin Panel** (build internal) — statistik, monitoring chat, peta user (termasuk layar penuh), perangkat, atribusi sumber user, kelola dummy & poin
+- 🤖 **AI Dummy** — akun dummy membalas chat otomatis (Edge Function + RPC claim), bisa proaktif & diatur jadwal/mood/persona
+- 📩 **Friend Requests** — tambah teman & notifikasi pertemanan
+- 🛡️ **Admin Panel** (build internal) — statistik, monitoring chat, peta user (termasuk layar penuh), perangkat, atribusi sumber user, kelola dummy & poin, marketing composer
 
 ## Tech Stack
 
@@ -28,31 +30,38 @@ Aplikasi chat gratis, bebas iklan, dan aman untuk semua.
 |-----------|----------------|
 | Flutter | Cross-platform UI |
 | Supabase | Database (PostgreSQL), Auth, Realtime, Edge Functions |
-| Firebase | Push notification (FCM) & Analytics |
+| Firebase | Push notification (FCM), Analytics & Crashlytics |
 | Google Sign-In | Autentikasi Google SSO |
 | in_app_purchase | Top up YukCoin via Google Play Billing (flavor `play`) |
-| Provider | State management |
+| flutter_riverpod | State management (migrasi Provider → Riverpod selesai) |
+| flutter_webrtc | Voice & video call 1:1 |
+| flutter_map / OSM | Nearby & peta user |
+| TikTok Business SDK | App Events tracking (install/login/register, native Android) |
 
 ## Struktur Project
 
 ```
 lib/
 ├── config/        # Theme, strings (i18n), supabase config, regions, app flavor
-├── core/          # Cache (SQLite terenkripsi), media, perf probe, nav guard
+├── core/          # Cache (SQLite terenkripsi), media, call, chat, perf probe, nav guard
 ├── models/        # Data models (User, Room, Message, dll)
-├── providers/     # State management (ChangeNotifier)
+├── providers/     # State management Riverpod (NotifierProvider) + admin/*
 ├── screens/       # UI screens (termasuk panel admin & widget-nya)
-└── services/      # Supabase API calls, geo, screen secure, topup
+├── services/      # Supabase API calls, geo, screen secure, topup
+├── mixins/        # Modul bersama chat (outbox, selection, send, voice)
+├── widgets/       # Widget bersama lintas screen (composer, bubble, dll)
+└── utils/         # Helper murni
 
 supabase/
-├── functions/     # Edge Functions (play-topup-verify, welcome-bonus, dll)
+├── functions/     # Edge Functions (send-push, ai-reply, fanout, outbox-worker,
+│                  #   play-topup-verify, turn-credentials, welcome-bonus, dll)
 └── migrations/    # Skema & RPC (SQL)
 ```
 
 ## Cara Menjalankan
 
 ### Prasyarat
-- Flutter SDK `^3.11.5`
+- Flutter stable `3.47.x` / Dart `3.13.x` (constraint `pubspec.yaml`: `sdk: ^3.11.5`)
 - Android SDK
 
 ### Setup
@@ -74,12 +83,17 @@ Midtrans/iPaymu) tidak diaktifkan; **top up YukCoin memakai Google Play
 Billing** dan hanya tampil di build flavor `play` (kebijakan Play untuk
 digital goods). Build `apkpure`/`admin` tidak menampilkan jalur top up.
 
+**WAJIB sertakan `--dart-define=TIKTOK_ACCESS_TOKEN=...` di SETIAP build
+rilis/profil** (nilai dari `.env`). Tanpa ini SDK TikTok tetap init tapi
+`token=false` → pelacakan iklan terbatas. Detail: [`docs/TIKTOK_SDK.md`](docs/TIKTOK_SDK.md).
+
 ### Flavor apkpureProd (default — APKPure & install HP; appId `com.chatyuk.chatyuk`)
 
 ```bash
 flutter clean
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
   flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
+  --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
   --obfuscate --split-debug-info=build/app/symbols
 # Output: build/app/outputs/flutter-apk/app-apkpureprod-release.apk
 ```
@@ -89,6 +103,7 @@ KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
 ```bash
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
   flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
+  --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
   --obfuscate --split-debug-info=build/app/symbols
 # Output: build/app/outputs/flutter-apk/app-playprod-release.aab
 ```
@@ -98,7 +113,8 @@ KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
 ```bash
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
   flutter build apk --release --flavor adminProd -t lib/main_admin.dart \
-  --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols
+  --dart-define=APP_FLAVOR=apkpure --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
+  --obfuscate --split-debug-info=build/app/symbols
 # Output: build/app/outputs/flutter-apk/app-adminprod-release.apk
 ```
 
@@ -119,6 +135,7 @@ APK="build/app/outputs/flutter-apk/app-apkpureprod-release.apk"
 
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
   flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
+  --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
   --obfuscate --split-debug-info=build/app/symbols
 
 cp "$APK" "$HOME/Downloads/chatyuk.apk"
@@ -148,6 +165,10 @@ Semua konfigurasi penting (Supabase, OAuth, keystore, Play Console) ada di [`CON
 - [`docs/FEATURE_MAP.md`](docs/FEATURE_MAP.md) — peta fitur → kode → SQL → test.
 - [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) — metodologi & hasil pengukuran performa.
 - [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) — audit keamanan (RLS, ACL, secret).
+- [`docs/TIKTOK_SDK.md`](docs/TIKTOK_SDK.md) — integrasi TikTok App Events (native Android + MethodChannel).
+- [`docs/MEMORY_BEST_PRACTICES.md`](docs/MEMORY_BEST_PRACTICES.md) — aturan gambar/cache agar tidak OOM.
+- [`docs/MARKETING_TEMPLATES.md`](docs/MARKETING_TEMPLATES.md) + [`docs/META_APP.md`](docs/META_APP.md) — template marketing & integrasi Meta App Events.
+- [`SUBMIT_GOOGLE_PLAY.md`](SUBMIT_GOOGLE_PLAY.md) + [`play_console_data_safety_guide.md`](play_console_data_safety_guide.md) — panduan rilis Play Store.
 
 ## Performa (PerfProbe)
 
@@ -173,7 +194,7 @@ gejalanya "app ngelag setelah didiamkan".
 
 ## Aturan Pengembangan
 
-Baca [`AGENTS.md`](AGENTS.md) untuk aturan coding — termasuk aturan wajib bahasa bilingual (Indonesia + English) untuk semua string UI, tipografi (token `AppText`/`AppGlyph`), dan aturan build & signing.
+Baca [`AGENTS.md`](AGENTS.md) untuk aturan coding — termasuk aturan wajib bahasa bilingual (Indonesia + English) untuk semua string UI, tipografi (token `AppText`/`AppGlyph`), boundary screen→provider (screen dilarang import `services/`), dan aturan SQL/migrasi (fungsi FROZEN, timestamp unik, penanda `-- SAFE:`).
 
 ## Lisensi
 
