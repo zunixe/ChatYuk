@@ -727,6 +727,9 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   unawaited(AttributionService.instance.readOnce());
   // Wiring downloader foto post (core/ tidak boleh import services/).
   PostPhotoCache.downloader = StoragePhotoService.instance.downloadBytes;
+  // Thumb server-side (transformasi) untuk timeline — hemat data vs unduh full.
+  PostPhotoCache.thumbDownloader = (path) =>
+      StoragePhotoService.instance.downloadThumbBytes(path, width: 1080, quality: 80);
   unawaited(MessageCache.instance.clearLegacyV1Only());
   unawaited(PhotoCache.instance.cleanOldPhotos());
   unawaited(PostPhotoCache.instance.cleanOldPhotos());
