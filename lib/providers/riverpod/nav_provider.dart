@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/nav_journal.dart';
+
 /// Kontrol tab navigasi utama (Riverpod) — dipakai screen lain untuk pindah
 /// tab (mis. arahkan user anon ke tab Profil).
 ///
@@ -11,6 +13,7 @@ class NavNotifier extends Notifier<int> {
 
   void goTo(int index) {
     if (index == state) return;
+    NavJournal.log('tab $state -> $index');
     state = index;
   }
 }
