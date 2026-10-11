@@ -104,6 +104,21 @@ void _put(String key, Uint8List bytes) {
 
 **Kalau menambah cache baru: beri batas + komentar alasannya + ukuran.**
 
+### 2a. Cache PESAN — JANGAN strip PATH storage (insiden "kedip cold start" 2026-10-11)
+
+`MessageCache.saveMessages` menyalin pesan ke SQLite. Aturan STRIP `imageData`:
+- **Path storage** (`chat/`, `voice/`, `gallery/`, `story/`, `posts/`,
+  `room-icons/` — cek `isStoragePathValue`) **WAJIB DIPERTAHANKAN.** Path
+  mungil (~100 char); bubble video/foto/voice HANYA tampil bila path terisi.
+  Kalau di-strip, cold start `imageData` kosong → bubble ambil dari SERVER
+  (~180ms) → **race** → poster/foto "ngeload"/kedip. Gejala khas: **buka ke-1
+  & ke-2 kedip, ke-3 baru enak**; cold start kedip lagi.
+- **Base64 besar** (foto/voice pending belum upload) **tetap di-strip** (hemat
+  disk) — gambar dibaca dari `PhotoCache`/`MediaDiskCache` by id/path.
+
+Konsekuensi: cache pesan menyimpan banyak path pendek (aman), bukan base64
+besar. JPEG/SQLCipher tak membengkak. (Insiden lengkap: `FEATURE_MAP.md` §3c-G.)
+
 ---
 
 ## 3. Pola widget yang benar

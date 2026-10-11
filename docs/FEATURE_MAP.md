@@ -225,16 +225,38 @@ async selalu menyisakan 1+ frame kosong. Solusi:
   (NOL decode = instan), fallback `Image` (bytes) saat baru generate.
 - Syarat kunci image-cache konsisten (poin A2) tetap berlaku untuk fallback.
 
-**CATATAN JUJUR:** `ui.Image` (bitmap) TIDAK persisten antar restart — cold
-start tetap decode sekali (JPEG poster ~30KB, cepat). Kalau suatu saat perlu
-benar-benar nol decode saat cold start, simpan bitmap ter-decode ke file
-(WebP/RGBA) di `core/cache/`. Verifikasi frame-diff (rekam + ffmpeg) menunjukkan
-konten video stabil di buka 1/2 & cold start.
+**G. AKAR SEBENARNYA "kedip/ngeload" cold start = PATH ter-strip dari cache
+pesan (2026-10-11, SELESAI).** `MessageCache.saveMessages` dulu men-strip
+`imageData` jadi `''` untuk SEMUA yang bukan voice. Akibatnya **path video
+(`chat/...mp4`) & foto TIDAK tersimpan** di cache pesan → cold start
+`imageData` kosong → bubble ambil path dari SERVER (fetch ~180ms) → **race**
+dgn render → poster/foto "ngeload" (gejala klasik: **buka ke-1 & ke-2 kedip,
+ke-3 baru enak**; cold start kedip lagi). `precachePosters` pun selalu gagal
+karena bytes poster dicari dari path yang belum ada (log: `len=0`).
+**PERBAIKAN:** `saveMessages` JANGAN strip **path storage**
+(`isStoragePathValue`: `chat/`, `voice/`, `gallery/`, `story/`, ...) — path
+mungil (~100 char) & bubble HANYA tampil bila path terisi. Base64 besar
+(pending) tetap di-strip. **JANGAN kembalikan strip untuk path storage.**
+
+**H. Bitmap poster PERSIST ke disk (nol decode cold start).** Setelah decode
+poster → `ui.Image`, `VideoPrefetch` menyimpan bitmap mentah (RGBA) ke
+`video_cache/poster_bmp_*.bmp` (`_persistBitmap`). Cold start memuatnya via
+`decodeImageFromPixels` (~0ms, nol decode JPEG). `pendingDecode()` mencegah
+race buka-1 (bubble menunggu decode yang sedang jalan). Ini yang membuat
+**cold start langsung tampil seperti voice**.
+
+**Verifikasi 2026-10-11 (HP, log + rekam layar + diff frame):** cold start →
+`[PRECACHE] bytes=8930/8874/2813` → `VID-INIT hasImg=true` → setelah transisi
+masuk chat, konten video STABIL (0 perubahan antar frame) = **nol kedip**.
 
 **Jebakan (jangan diulang):**
+- **Strip path storage (`chat/`, `voice/`) di `saveMessages`** → cold start
+  bubble ambil dari server → race → kedip (akar di poin G).
 - Menyimpan video bytes ke `MediaDiskCache` → evict kuota → poster hilang.
 - Menyimpan video bytes ke temp dir → dibersihkan OS → cold start reload.
 - Kunci poster berbeda antar penulis/pembaca → selalu MISS.
+- Kunci image-cache berbeda (`MemoryImage` dari `readSync` instance baru) →
+  decode ulang (poin A2).
 - `warmOne` selalu unduh ulang walau pengirim punya bytes+poster lokal.
 - `autoPoster=false` lalu SKIP baca cache (harus selalu baca cache sinkron).
 
