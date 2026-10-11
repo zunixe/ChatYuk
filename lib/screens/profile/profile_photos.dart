@@ -722,10 +722,8 @@ mixin _ProfilePhotosMx on _ProfileBase {
         },
       );
     } finally {
-      // R2: controller + FocusNode sheet edit profil dilepas setelah sheet
-      // tutup (dulu bocor: focus node menahan FocusManager tree).
-      ctrl.dispose();
-      focus.dispose();
+      // R2: lepas setelah animasi sheet tutup (lihat disposeAfterDialogFrame).
+      disposeAfterDialogFrame([ctrl, focus]);
     }
   }
 }

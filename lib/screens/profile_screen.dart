@@ -29,6 +29,7 @@ import 'settings_screen.dart';
 import 'contact_screen.dart';
 import 'donate_screen.dart';
 import '../core/admin_gate.dart';
+import '../core/ui/dispose_after_dialog.dart';
 import 'leaderboard_screen.dart';
 import 'point_history_screen.dart';
 import 'social_list_screen.dart';

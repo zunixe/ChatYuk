@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
+import '../core/ui/dispose_after_dialog.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/social_provider.dart';
@@ -482,11 +483,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         ),
       );
     } finally {
-      // R2: controller dialog LOKAL wajib dilepas setelah dialog tutup
-      // (dulu bocor: text input + listener hidup seumur halaman).
-      currentCtrl.dispose();
-      newCtrl.dispose();
-      confirmCtrl.dispose();
+      // R2: controller dialog LOKAL dilepas SETELAH animasi tutup selesai
+      // (frame berikutnya) — dispose langsung di sini memicu assert
+      // "controller used after disposed" selagi dialog masih dismiss.
+      disposeAfterDialogFrame([currentCtrl, newCtrl, confirmCtrl]);
     }
     if (ok == true && context.mounted) {
       ScaffoldMessenger.of(context)
@@ -806,8 +806,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         ),
       );
     } finally {
-      // R2: controller dialog hapus-akun dilepas setelah dialog tutup.
-      ctrl.dispose();
+      // R2: lepas setelah animasi tutup (lihat disposeAfterDialogFrame).
+      disposeAfterDialogFrame([ctrl]);
     }
     if (step2 != true || !mounted) return;
 
