@@ -31,16 +31,38 @@ mixin _PcSelectMx on _PcBase {
     // Guard double-push (§18): tap 2× cepat menumpuk 2 route identik.
     final navKey = navKeyChat(chat.chatId);
     if (!tryClaimNav(navKey)) return;
+    // SEED AVATAR (anti-kedip header): baca foto lawan dari cache (RAM lalu
+    // disk, sinkron, murah) — kartu list SUDAH menampilkan foto yang sama,
+    // jadi teruskan base64-nya agar header chat langsung foto, bukan
+    // inisial→foto. Kosong = header resolve seperti biasa.
+    String seedAvatar = '';
+    try {
+      final av = ProviderScope.containerOf(context, listen: false)
+          .read(avatarProvider);
+      seedAvatar = av.cachedSync(otherUid) ??
+          av.cachedSyncIncludeDisk(otherUid) ??
+          '';
+    } catch (_) {}
     // PUSH INSTAN (2026-10-11): prefetch dipindah ke PARALEL (fire-and-forget)
     // — TIDAK lagi di-await sebelum push. Dulu di-await agar `peekMessages`
     // pasti HIT saat mount, tapi efeknya transisi BARU MULAI setelah query
     // SQLite selesai → tap terasa telat & tak konsisten (DB besar = makin
     // lambat). Sekarang transisi langsung jalan; layar chat mengisi dari
     // `peekMessages`/initialData (fallback sudah ada) atau skeleton sekilas.
-    unawaited(ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatProvider.notifier).prefetchPrivateChat(chat.chatId));
+    // Pre-decode poster video juga paralel (setelah prefetch selesai): decode
+    // berjalan selama transisi → frame pertama langsung poster (anti pop-in
+    // decode pertama Image.memory — "kedip" cold start).
+    unawaited(() async {
+      await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(chatProvider.notifier).prefetchPrivateChat(chat.chatId);
+      if (!context.mounted) return;
+      final key = 'private_${chat.chatId}';
+      await VideoPrefetch.precachePosters(context, key);
+      if (!context.mounted) return;
+      await PhotoPrefetch.precacheThumbs(context, key);
+    }());
     Navigator.push(
       context,
       chatRoute(
@@ -52,6 +74,7 @@ mixin _PcSelectMx on _PcBase {
         otherAge: chat.participantAges[otherUid] ?? 0,
         otherRegistered: chat.participantRegistered[otherUid] == true,
         initialOtherDeleted: chat.otherDeleted,
+        otherAvatarB64: seedAvatar,
       ),
     ).then((_) => releaseNav(navKey));
   }

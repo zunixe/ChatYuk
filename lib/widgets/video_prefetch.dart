@@ -3,9 +3,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
+import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/cache/media_disk_cache.dart';
+import '../core/cache/message_cache.dart';
 import '../core/cache/video_file_cache.dart';
 import '../models/message_model.dart';
 
@@ -46,6 +49,52 @@ class VideoPrefetch {
   /// JANGAN bikin kunci serupa di tempat lain (kunci beda = selalu MISS =
   /// "card ngeload"). Format: `video_poster:<path>`.
   static String posterKeyFor(String videoPath) => 'video_poster:$videoPath';
+
+  /// Pre-decode poster video ke image cache SEBELUM layar chat tampil.
+  /// Dipanggil paralel saat TAP kartu chat (di list/online) — decode berjalan
+  /// selama transisi 150ms → frame pertama chat langsung poster (tanpa pop
+  /// 1-2 frame decode pertama `Image.memory`). Inilah yang membuat voice
+  /// "langsung kebuka": voice tak butuh decode; video butuh, jadi decode-nya
+  /// dimajukan ke momen tap.
+  ///
+  /// Aman dipanggil kapan pun: no-op bila disk belum siap / poster belum ada
+  /// / context sudah unmounted. Tidak melempar.
+  static Future<void> precachePosters(
+    BuildContext context,
+    String chatKey,
+  ) async {
+    try {
+      // Tunggu prewarm (maks 1 dtk) — tanpa ini readSync selalu null saat
+      // cold start cepat → precache gagal → pop-in tetap terjadi.
+      await MediaDiskCache.instance.waitReady();
+      if (!context.mounted) return;
+      final msgs =
+          MessageCache.instance.peekMessages(chatKey) ?? const <MessageModel>[];
+      var n = 0;
+      for (final m in msgs) {
+        if (n >= maxPerChat) break;
+        if (!_isVideoPath(m)) continue;
+        final p = MediaDiskCache.instance.readSync(posterKeyFor(m.imageData));
+        if (p == null || p.isEmpty) continue;
+        if (!context.mounted) return;
+        try {
+          await precacheImage(MemoryImage(p), context)
+              .timeout(const Duration(seconds: 2));
+          n++;
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  /// True bila pesan ini video path storage (bukan base64 pending).
+  static bool _isVideoPath(MessageModel m) =>
+      (m.type == 'video' ||
+          m.type == 'video_once' ||
+          m.type == 'video_once_expired') &&
+      m.imageData.isNotEmpty &&
+      !m.imageData.startsWith('data:') &&
+      !m.imageData.contains('\n') &&
+      m.imageData.contains('/');
 
   /// Tulis bytes ke file temp (untuk generate poster). Return file-nya.
   static Future<File?> _tempWrite(String name, Uint8List bytes) async {

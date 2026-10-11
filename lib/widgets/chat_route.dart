@@ -27,6 +27,8 @@ PageRoute<void> chatRoute({
   bool otherRegistered = false,
   bool initialOtherDeleted = false,
   String? routeName,
+  /// Seed avatar header (base64 dari list) — anti-kedip inisial→foto.
+  String otherAvatarB64 = '',
 }) {
   return PageRouteBuilder<void>(
     transitionDuration: kChatRouteDuration,
@@ -41,6 +43,7 @@ PageRoute<void> chatRoute({
       otherAge: otherAge,
       otherRegistered: otherRegistered,
       initialOtherDeleted: initialOtherDeleted,
+      initialAvatarB64: otherAvatarB64,
     ),
     transitionsBuilder: (_, animation, __, child) {
       final curved = CurvedAnimation(
