@@ -139,6 +139,16 @@ class SocialNotifier extends Notifier<SocialState> {
 
   void _listenRealtime() {
     _rtSub?.cancel();
+    // P0-style (2026-10-11): LEPAS channel lama sebelum buat baru — dulu
+    // `_rtChannel = channel` menimpa tanpa removeChannel → tiap event auth
+    // (login/logout/token) bikin channel Supabase BOCOR (socket hantu).
+    final old = _rtChannel;
+    _rtChannel = null;
+    if (old != null) {
+      try {
+        _sb.removeChannel(old);
+      } catch (_) {}
+    }
     final uid = _service.uid;
     if (uid == null) return;
     final channel = _sb.channel('social-rt-$uid');

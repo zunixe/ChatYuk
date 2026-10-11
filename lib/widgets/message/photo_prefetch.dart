@@ -75,6 +75,12 @@ class PhotoPrefetch {
         final dims = parseImageDimensions(bytes);
         if (dims == null) continue;
         final decoded = DecodedImage(bytes, dims.width, dims.height);
+        // Decode bitmap SEKARANG (saat tap, sebelum bubble render) → render
+        // bubble NOL decode via RawImage = foto secepat video. Ternyata ini
+        // yang bikin precache lambat → di-await hanya di sini (precache memang
+        // untuk menyiapkan; kalau codec lambat, timeout di attachDecodedImage
+        // mencegah gantung).
+        await attachDecodedImage(decoded, targetWidth: 1080);
         // Daftarkan ke BEBERAPA kunci yang mungkin dipakai MessageImage:
         // - hashCode(imageData/base64) saat base64 ada
         // - hashCode(path) saat path storage ada
@@ -107,7 +113,9 @@ class PhotoPrefetch {
       final bytes = base64Decode(thumbB64);
       final dims = parseImageDimensions(bytes);
       if (dims == null) return;
-      putDecodedCache(key, DecodedImage(bytes, dims.width, dims.height));
+      final decoded = DecodedImage(bytes, dims.width, dims.height);
+      await attachDecodedImage(decoded, targetWidth: 1080);
+      putDecodedCache(key, decoded);
     } catch (_) {}
   }
 }

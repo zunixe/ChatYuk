@@ -582,6 +582,9 @@ class CallNotifier extends Notifier<CallState> {
     _incomingSub = null;
     _authSub?.cancel();
     _authSub = null;
+    // Jangan biarkan timer sekali-jalan menembak setelah dispose (referensi basi).
+    _clearTimer?.cancel();
+    _clearTimer = null;
   }
 }
 

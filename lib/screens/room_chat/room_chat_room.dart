@@ -3,6 +3,14 @@ part of '../room_chat_screen.dart';
 // ignore_for_file: unused_element, unused_element_parameter
 
 mixin _RcRoomMx on _RoomChatBase {
+  /// Cap dedupe-id pesan terkonfirmasi (MEDIUM, 2026-10-11): dulu Set tumbuh
+  /// per foto/voice server seumur layar room dibuka → memori naik monoton.
+  /// FIFO buang id terlama (pola sama `_trimConfirmed` private chat).
+  void _trimConfirmed(Set<String> ids) {
+    while (ids.length > 200) {
+      ids.remove(ids.first);
+    }
+  }
   Future<void> _refreshGrant() async {
     try {
       final granted = await ProviderScope.containerOf(
@@ -81,6 +89,7 @@ mixin _RcRoomMx on _RoomChatBase {
                   m.type == 'view_once_expired') &&
               m.timestamp.isAfter(_openedAt) &&
               _confirmedPhotoIds.add(m.id)) {
+            _trimConfirmed(_confirmedPhotoIds);
             final idx = _pending.indexWhere(
               (p) =>
                   p.type == 'image' ||
@@ -99,6 +108,7 @@ mixin _RcRoomMx on _RoomChatBase {
               m.type == 'voice' &&
               m.timestamp.isAfter(_openedAt) &&
               _confirmedVoiceIds.add(m.id)) {
+            _trimConfirmed(_confirmedVoiceIds);
             final idx = _pending.indexWhere((p) => p.type == 'voice');
             if (idx != -1) {
               _queuedIds.remove(_pending[idx].id);
