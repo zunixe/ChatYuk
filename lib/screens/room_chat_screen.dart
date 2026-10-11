@@ -112,6 +112,7 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   // escape bila veto desync / handler melempar, supaya back tak pernah
   // mati permanen sampai restart.
   bool _backEscape = false;
+  final _backGuard = BackVetoGuard();
   // ── Room gift (live) ──
   final _giftFly = GiftFlyController();
   // Insertion-order terjaga — cap FIFO (skip terlama) tanpa clear().

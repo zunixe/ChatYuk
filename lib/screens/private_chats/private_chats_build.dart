@@ -79,17 +79,24 @@ mixin _PcBuildMx on _PcBase {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           NavJournal.log('back private-chats didPop (tutup layar)');
+          _backGuard.reset();
           return;
         }
-        // DESYNC: veto terpicu padahal mode seleksi sudah mati → paksa
-        // keluar SEKALI (tanpa ini back mati total sampai restart).
+        // Veto BASI (seleksi sudah bersih karena clear konkuren) → niat
+        // user SUDAH terpenuhi → NO-OP. Force-pop SALAH: malah keluar app
+        // (insiden 2026-10-11). Escape hanya bila basi yang SAMA berulang.
         if (!_selectionMode) {
-          debugPrint('[NAV] back escape private-chats (desync, paksa pop)');
-          NavJournal.log('back private-chats ESCAPE desync (paksa pop)');
-          _backEscape = true;
-          Navigator.of(context).pop();
+          if (_backGuard.shouldEscape('pcl:clean')) {
+            debugPrint('[NAV] back escape private-chats (macet, paksa pop)');
+            NavJournal.log('back private-chats ESCAPE macet (paksa pop)');
+            _backEscape = true;
+            BackVetoGuard.safePop(context);
+          } else {
+            NavJournal.log('back private-chats veto basi, abaikan');
+          }
           return;
         }
+        _backGuard.reset();
         debugPrint(
           '[NAV] back veto private-chats selection=${_selected.length}',
         );
@@ -98,12 +105,12 @@ mixin _PcBuildMx on _PcBase {
         try {
           _clearSelection();
         } catch (e) {
-          // Jangan telan exception diam-diam (canPop macet false =
-          // user terkunci): paksa keluar.
+          // Handler melempar + route masih ada & tertahan → escape sekali.
           debugPrint('[NAV] back handler error private-chats: $e');
+          if (!mounted) return;
           NavJournal.log('back private-chats ESCAPE error (paksa pop)');
           _backEscape = true;
-          Navigator.of(context).pop();
+          BackVetoGuard.safePop(context);
         }
       },
       child: Scaffold(

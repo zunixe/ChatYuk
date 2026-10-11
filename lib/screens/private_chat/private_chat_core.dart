@@ -108,18 +108,26 @@ mixin _PcCoreMx on _PrivateChatBase {
           // transisi pop (dulu tombol back "kadang ngelag dikit").
           FocusManager.instance.primaryFocus?.unfocus();
           NavJournal.log('back private-chat didPop (tutup layar)');
+          _backGuard.reset();
           return;
         }
-        // DESYNC: veto terpicu padahal tak ada yang menahan (search sudah
-        // tutup & seleksi kosong tapi flag macet) → paksa keluar SEKALI.
-        // Tanpa ini back mati total sampai app restart.
+        // Veto BASI (search sudah tutup & seleksi kosong — dibersihkan
+        // konkuren antara evaluasi canPop & callback, mis. rebuild stream)
+        // → niat user SUDAH terpenuhi → NO-OP. Force-pop di sini SALAH
+        // (insiden 2026-10-11: escape menembus sampai launcher).
+        // Escape hanya bila basi yang SAMA berulang (macet beneran).
         if (!_searching && !inSelection) {
-          debugPrint('[NAV] back escape private-chat (desync, paksa pop)');
-          NavJournal.log('back private-chat ESCAPE desync (paksa pop)');
-          _backEscape = true;
-          Navigator.of(context).pop();
+          if (_backGuard.shouldEscape('pc:clean')) {
+            debugPrint('[NAV] back escape private-chat (macet, paksa pop)');
+            NavJournal.log('back private-chat ESCAPE macet (paksa pop)');
+            _backEscape = true;
+            BackVetoGuard.safePop(context);
+          } else {
+            NavJournal.log('back private-chat veto basi, abaikan');
+          }
           return;
         }
+        _backGuard.reset();
         // Jejak diagnosa "back mati": catat kenapa back di-veto.
         debugPrint(
             '[NAV] back veto private-chat searching=$_searching selection=${selectedIds.length}');
@@ -132,13 +140,13 @@ mixin _PcCoreMx on _PrivateChatBase {
             clearSelection();
           }
         } catch (e) {
-          // Handler back TIDAK BOLEH menelan exception diam-diam — itu yang
-          // bikin back mati permanen (canPop tetap false, user terkunci):
-          // paksa keluar, jangan macet di sini.
+          // Handler melempar + route masih ada & tertahan → escape sekali.
+          // Route sudah unmount → tak ada yang perlu dilakukan.
           debugPrint('[NAV] back handler error private-chat: $e');
+          if (!mounted) return;
           NavJournal.log('back private-chat ESCAPE error (paksa pop)');
           _backEscape = true;
-          Navigator.of(context).pop();
+          BackVetoGuard.safePop(context);
         }
       },
       child: Scaffold(

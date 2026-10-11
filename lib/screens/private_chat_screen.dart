@@ -145,6 +145,7 @@ bool _showAttachRow = false;
   // handler melempar, flag ini dibuka lalu pop() dipanggil — tanpa flag,
   // PopScope juga mem-veto pop programatik → back mati permanen.
   bool _backEscape = false;
+  final _backGuard = BackVetoGuard();
 final _searchCtrl = TextEditingController();
 final _searchFocus = FocusNode();
 String _searchQuery = '';

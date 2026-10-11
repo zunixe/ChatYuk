@@ -77,6 +77,7 @@ abstract class _PcBase extends ConsumerState<PrivateChatsScreen> {
   // private_chats_build): escape bila veto desync / handler melempar.
   // Tanpa ini 1 state macet = back mati permanen sampai restart.
   bool _backEscape = false;
+  final _backGuard = BackVetoGuard();
   // Tampilan arsip (gaya WhatsApp): list hanya chat terarsip.
   bool _showArchived = false;
   int _archivedCount = 0;

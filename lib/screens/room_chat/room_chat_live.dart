@@ -346,26 +346,34 @@ mixin _RcLiveMx on _RoomChatBase {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           NavJournal.log('back room-chat didPop (tutup layar)');
+          _backGuard.reset();
           return;
         }
-        // DESYNC: veto terpicu padahal seleksi kosong → paksa keluar SEKALI.
+        // Veto BASI (seleksi sudah bersih konkuren) → NO-OP. Escape hanya
+        // bila basi yang SAMA berulang (macet beneran).
         if (!inSelection) {
-          debugPrint('[NAV] back escape room-chat (desync, paksa pop)');
-          NavJournal.log('back room-chat ESCAPE desync (paksa pop)');
-          _backEscape = true;
-          Navigator.of(context).pop();
+          if (_backGuard.shouldEscape('rc:clean')) {
+            debugPrint('[NAV] back escape room-chat (macet, paksa pop)');
+            NavJournal.log('back room-chat ESCAPE macet (paksa pop)');
+            _backEscape = true;
+            BackVetoGuard.safePop(context);
+          } else {
+            NavJournal.log('back room-chat veto basi, abaikan');
+          }
           return;
         }
+        _backGuard.reset();
         debugPrint('[NAV] back veto room-chat selection=${selectedIds.length}');
         NavJournal.log('back room-chat veto selection=${selectedIds.length}');
         try {
           if (inSelection) clearSelection();
         } catch (e) {
-          // Jangan telan exception diam-diam (user terkunci): paksa keluar.
+          // Handler melempar + route masih ada & tertahan → escape sekali.
           debugPrint('[NAV] back handler error room-chat: $e');
+          if (!mounted) return;
           NavJournal.log('back room-chat ESCAPE error (paksa pop)');
           _backEscape = true;
-          Navigator.of(context).pop();
+          BackVetoGuard.safePop(context);
         }
       },
       child: Scaffold(
