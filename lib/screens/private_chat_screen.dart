@@ -301,7 +301,7 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
   bool _bonusToastScheduled = false;
 
   // Kontrak lintas-mixin.
-  Widget _buildBottomBar(BuildContext context, S s, bool pointsEnabled);
+  Widget _buildBottomBar(BuildContext context, S s);
   AppBar _buildSearchAppBar();
   void _drainImageQueue();
   Future<void> _fetchImageQueued(String id);
