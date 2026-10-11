@@ -45,8 +45,10 @@ class GroupCard extends ConsumerWidget {
       final navKey = navKeyRoom(room.id);
       if (!tryClaimNav(navKey)) return;
       try {
-        await PhotoPrefetch.precacheAll(context, 'room_${room.id}')
-            .timeout(const Duration(milliseconds: 450));
+        await PhotoPrefetch.precacheAll(
+          context,
+          'room_${room.id}',
+        ).timeout(const Duration(milliseconds: 450));
       } catch (_) {}
       if (!context.mounted) {
         releaseNav(navKey);
@@ -72,57 +74,68 @@ class GroupCard extends ConsumerWidget {
 
     // Belum member → dialog konfirmasi (+ password bila perlu)
     final pwCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        title: Text(s.joinRoomTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${room.icon} ${room.name}', style: AppText.bodyStrong),
-            SizedBox(height: 8),
-            // Biaya join + saldo koin — sembunyikan saat sistem poin OFF (gratis diam-diam)
-            if (points.enabled) ...[
-              Text(
-                s.paidOrBonus(joinPaid, joinBonus),
-                style: AppText.body.copyWith(color: AppTheme.primary),
-              ),
-              Text(
-                '${s.labelYourCoins}: ${points.points}',
-                style: AppText.bodySmall.copyWith(
-                  color: AppTheme.textSecondary,
+    final bool? confirmed;
+    try {
+      confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.bgCard,
+          title: Text(s.joinRoomTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${room.icon} ${room.name}', style: AppText.bodyStrong),
+              SizedBox(height: 8),
+              // Biaya join + saldo koin — sembunyikan saat sistem poin OFF (gratis diam-diam)
+              if (points.enabled) ...[
+                Text(
+                  s.paidOrBonus(joinPaid, joinBonus),
+                  style: AppText.body.copyWith(color: AppTheme.primary),
                 ),
-              ),
-            ],
-            if (room.hasPassword) ...[
-              SizedBox(height: 12),
-              TextField(
-                controller: pwCtrl,
-                obscureText: true,
-                style: TextStyle(color: AppTheme.textPrimary),
-                decoration: InputDecoration(
-                  labelText: s.enterPassword,
-                  labelStyle: TextStyle(color: AppTheme.textSecondary),
+                Text(
+                  '${s.labelYourCoins}: ${points.points}',
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
-              ),
+              ],
+              if (room.hasPassword) ...[
+                SizedBox(height: 12),
+                TextField(
+                  controller: pwCtrl,
+                  obscureText: true,
+                  style: TextStyle(color: AppTheme.textPrimary),
+                  decoration: InputDecoration(
+                    labelText: s.enterPassword,
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                ),
+              ],
             ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(s.btnCancel),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(
+                s.btnJoin,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(s.btnCancel),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s.btnJoin, style: const TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      // R2: controller password join-room dilepas setelah dialog tutup.
+      pwCtrl.dispose();
+    }
     if (confirmed != true) return;
 
     if (points.enabled &&
@@ -147,8 +160,10 @@ class GroupCard extends ConsumerWidget {
           final navKey = navKeyRoom(room.id);
           if (tryClaimNav(navKey)) {
             try {
-              await PhotoPrefetch.precacheAll(context, 'room_${room.id}')
-                  .timeout(const Duration(milliseconds: 450));
+              await PhotoPrefetch.precacheAll(
+                context,
+                'room_${room.id}',
+              ).timeout(const Duration(milliseconds: 450));
             } catch (_) {}
             if (context.mounted) {
               Navigator.push(
