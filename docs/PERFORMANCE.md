@@ -3732,3 +3732,45 @@ DALAM layar chat.
 
 **Status:** perubahan struktur terverifikasi via `flutter analyze lib/`=0,
 `flutter test` hijau, guard file-size OK. **Tidak** diklaim bebas lag (§11).
+
+---
+
+## §45. ROOT CAUSE: lag mengetik private chat = textCapitalization (2026-10-11)
+
+**Metode:** simpleperf (build profile, HP Xiaomi 24129PN74G) saat user mengetik
+cepat 15 dtk di private chat. 26.054 sampel, 0 lost.
+
+**Bukti (callgraph UI thread):**
+```
+io.flutter.plugin.editing.TextEditingDelta.<init>      (50% subtree)
+  android.view.inputmethod.CursorAnchorInfo$Builder.build (87%)
+    android.graphics.text.MeasuredText$Builder.build      (60%)
+      minikin::LayoutCache::getOrCreate<BoundsComposer>
+```
+UI thread didominasi **allocator scudo (~15.8%)** — bukan rendering (raster
+total hanya ~4.3%), bukan kode Dart kita, bukan Riverpod, bukan rebuild
+(PerfProbe `Composer`/`PrivateChat` nyaris nol saat ketik).
+
+**AKAR TERBUKTI:** `textCapitalization: TextCapitalization.sentences` di
+TextField composer memaksa platform melakukan auto-capitalize + re-measure teks
++ bangun `CursorAnchorInfo` **tiap keystroke** → alokasi objek masif di UI
+thread → jank.
+
+**Eksperimen (1 variabel):** hapus `textCapitalization` → allocator share UI
+thread **15.79% → 2.26%** (−86%). `scudo::allocate` hilang dari top-10.
+
+**Eliminasi (dengan bukti):**
+- Rebuild/widget kita: `build Composer` ≈ 0 saat ketik (PerfProbe).
+- Riverpod state global: tak ada watch besar di jalur ketik.
+- Raster/GPU: total ~4.3% (ringan).
+- `deduct_chat_point` (poin dipotong sebelum kirim): akun uji poin OFF → tak
+  relevan di sini (tetap kandidat di akun berpoin — belum diuji).
+
+**Fix (1 baris):** hapus `textCapitalization: TextCapitalization.sentences` di
+`lib/widgets/chat_composer_input.dart`. Kapital huruf pertama TETAP saat kirim
+(`capitalizeFirst` di `chat_send_mixin.dart:123`) → perilaku akhir tidak
+berubah.
+
+**Verifikasi:** analyzer 0 · guard OK · test chat/mixins hijau · allocator UI
+thread turun terukur. **Belum diukur:** frame p95 spesifik & "ngetik barengan
+lawan" (dugaan akar sama, perlu sesi 2-device).
