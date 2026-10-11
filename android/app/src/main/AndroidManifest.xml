@@ -34,6 +34,10 @@
     <!-- Foreground service: call tetap jalan walau app di-swipe (gaya WhatsApp) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- FGS panggilan/live (WebRTC) — tipe `phoneCall`/`mediaPlayback` wajib
+         permission ini di Android 14+ (API 34). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <!-- USE_FULL_SCREEN_INTENT DIHAPUS: ditolak Google Play (kebijakan hanya
          untuk app alarm/telepon). Notifikasi call tetap heads-up + lockscreen. -->
     <!-- Rekam panggilan (folder publik ChatYuk Admin/Record) -->
@@ -138,9 +142,15 @@
              (rahasia) di-set runtime dari BuildConfig/Dart. AutoInit tetap
              dipanggil eksplisit dari Dart lewat MethodChannel. -->
         <!-- Jangan ubah nama service ini (syarat flutter_foreground_task) -->
+        <!-- foregroundServiceType: dipakai untuk PANGGILAN (WebRTC audio/video)
+             + LIVE broadcast. `phoneCall|mediaPlayback` lebih tepat semantik
+             dari `dataSync` (bukan sinkronisasi data). `phoneCall` aman di API
+             34+ bila FGS dimulai saat app foreground (panggilan masuk → user
+             sudah berinteraksi notif). `camera|microphone` implisit via runtime
+             permission WebRTC. -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="phoneCall|mediaPlayback|dataSync"
             android:exported="false" />
         <!-- Panggilan sistem (ConnectionService SELF_MANAGED) — lihat
              call/CallConnectionService.kt. Media tetap WebRTC di Dart. -->
