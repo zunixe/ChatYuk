@@ -50,6 +50,49 @@ class VideoPrefetch {
   /// "card ngeload"). Format: `video_poster:<path>`.
   static String posterKeyFor(String videoPath) => 'video_poster:$videoPath';
 
+  /// Lebar decode poster (px) — SATU sumber. Dipakai [posterProvider] (bubble)
+  /// DAN precache → kunci image-cache IDENTIK (kalau beda: precache sia-sia,
+  /// decode ulang saat bubble mount = kedip).
+  static const int posterDecodeWidth = 400;
+
+  /// ImageProvider poster — SATU sumber agar kunci cache konsisten antara
+  /// precache (saat tap) dan render bubble.
+  ///
+  /// PENTING: `MemoryImage` memakai `hashCode(Uint8List)` sebagai kunci
+  /// equality image-cache. `MediaDiskCache.readSync` mengembalikan instance
+  /// BARU tiap panggilan → kalau provider dibentuk dari bytes berbeda, kunci
+  /// BEDA → precache sia-sia & decode ulang (kedip). Karena itu bytes poster
+  /// di-cache DI MEMORI per path ([_posterBytesMem]) sehingga instance SAMA
+  /// dipakai precache & bubble → kunci identik.
+  static final Map<String, Uint8List> _posterBytesMem = {};
+
+  /// Bytes poster stabil (instance sama) untuk [videoPath]; null bila belum ada
+  /// di disk. Instance di-cache memori agar kunci image-cache konsisten.
+  static Uint8List? posterBytesStable(String videoPath) {
+    final cached = _posterBytesMem[videoPath];
+    if (cached != null) return cached;
+    final p = MediaDiskCache.instance.readSync(posterKeyFor(videoPath));
+    if (p == null || p.isEmpty) return null;
+    if (_posterBytesMem.length > 64) _posterBytesMem.clear();
+    _posterBytesMem[videoPath] = p;
+    return p;
+  }
+
+  /// Kosongkan cache bytes poster di memori (logout / uji).
+  static void clearPosterMem() => _posterBytesMem.clear();
+
+  /// Simpan bytes poster ke mem-cache stabil (instance SAMA) — dipanggil bubble
+  /// setelah generate, supaya render/precache berikutnya memakai kunci
+  /// image-cache identik (cegah decode ulang = kedip).
+  static void rememberPoster(String videoPath, Uint8List bytes) {
+    if (videoPath.isEmpty || bytes.isEmpty) return;
+    if (_posterBytesMem.length > 64) _posterBytesMem.clear();
+    _posterBytesMem[videoPath] = bytes;
+  }
+
+  static ImageProvider posterProvider(Uint8List posterBytes) =>
+      ResizeImage(MemoryImage(posterBytes), width: posterDecodeWidth);
+
   /// Pre-decode poster video ke image cache SEBELUM layar chat tampil.
   /// Dipanggil paralel saat TAP kartu chat (di list/online) — decode berjalan
   /// selama transisi 150ms → frame pertama chat langsung poster (tanpa pop
@@ -74,11 +117,16 @@ class VideoPrefetch {
       for (final m in msgs) {
         if (n >= maxPerChat) break;
         if (!_isVideoPath(m)) continue;
-        final p = MediaDiskCache.instance.readSync(posterKeyFor(m.imageData));
+        final p = posterBytesStable(m.imageData);
         if (p == null || p.isEmpty) continue;
         if (!context.mounted) return;
         try {
-          await precacheImage(MemoryImage(p), context)
+          // KUNCI image-cache HARUS SAMA dengan yang dipakai ChatVideoBubble:
+          // pakai posterProvider() bersama (ResizeImage width sama) supaya
+          // kunci identik. Kalau precache pakai provider berbeda, kuncinya
+          // BEDA → precache tak berguna → decode lagi saat bubble mount =
+          // kedip (pola "buka ke-1/2 kedip, ke-3 diam").
+          await precacheImage(posterProvider(p), context)
               .timeout(const Duration(seconds: 2));
           n++;
         } catch (_) {}
