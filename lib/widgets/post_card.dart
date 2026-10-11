@@ -732,6 +732,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   Widget _photoGrid() => PostPhotoGrid(
     thumbs: _imageThumbs,
     aspects: _imageAspect,
+    paths: _imagePaths(),
     onOpenViewer: _openViewer,
   );
 

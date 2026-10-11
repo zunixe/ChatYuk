@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import '../../utils.dart';
 import 'package:path_provider/path_provider.dart';
 import '../media/native_image.dart';
@@ -48,6 +49,15 @@ class PostPhotoCache {
   static const _memMaxBytes = 30 * 1024 * 1024;
   int _memBytes = 0;
 
+  // ImageProvider STABIL per-path (anti "load ulang saat scroll") — pola §3.2
+  // MEMORY_BEST_PRACTICES. Saat kartu ke-remount, `thumbSync` bisa membaca
+  // ULANG dari disk → `Uint8List` instance BARU → `MemoryImage` identity beda
+  // → ImageCache MISS → DECODE ULANG (terasa "ngeloop load" saat scroll).
+  // Menyimpan satu `ImageProvider` per-path membuat ImageCache selalu HIT
+  // walau bytes di-reload. Cap entri agar map sendiri tak tumbuh tanpa batas.
+  final Map<String, ImageProvider> _providerByPath = {};
+  static const _providerMaxEntries = 400;
+
   // Job yang sedang berjalan per path — penelepon kedua MENUNGGU hasil yang
   // sama, bukan "dilewati lalu dianggap gagal". Dulu pakai Set<String> +
   // `return null` untuk path in-flight → saat dua kartu/rebuild meminta path
@@ -62,10 +72,28 @@ class PostPhotoCache {
     while (lruShouldEvict(_memBytes, _memMaxBytes) && _mem.isNotEmpty) {
       final oldest = _mem.keys.first;
       _memBytes -= _mem.remove(oldest)!.length;
+      // Bytes di-evict → provider-nya untuk path itu juga dibuang supaya
+      // konsisten (provider tetap valid via ImageCache, tapi hindari map
+      // menahan provider yang bytes-nya sudah kebuang).
+      _providerByPath.remove(oldest);
     }
   }
 
   Uint8List? _memGet(String path) => _mem[path];
+
+  /// `ImageProvider` STABIL untuk [bytes] pada [path] — instance yang sama
+  /// dipakai ulang tiap remount sehingga `ImageCache` selalu HIT (anti decode
+  /// ulang saat scroll). Di-cap FIFO agar map tak tumbuh tanpa batas.
+  ImageProvider imageProviderFor(String path, Uint8List bytes) {
+    final existing = _providerByPath[path];
+    if (existing != null) return existing;
+    if (_providerByPath.length >= _providerMaxEntries) {
+      _providerByPath.remove(_providerByPath.keys.first);
+    }
+    final p = ResizeImage(MemoryImage(bytes), width: 1080);
+    _providerByPath[path] = p;
+    return p;
+  }
 
   /// Buang SEMUA thumbnail dari RAM saja (file disk tetap). Dipakai saat OS
   /// memberi sinyal memory-pressure: thumbnail timeline bisa menahan 30MB
@@ -74,6 +102,17 @@ class PostPhotoCache {
   void trimMemCache() {
     _mem.clear();
     _memBytes = 0;
+    _evictProviders();
+  }
+
+  /// Lepas provider + imageCache global (bebaskan bitmap di memori Flutter).
+  void _evictProviders() {
+    try {
+      for (final p in _providerByPath.values) {
+        PaintingBinding.instance.imageCache.evict(p);
+      }
+    } catch (_) {}
+    _providerByPath.clear();
   }
 
   Future<Directory> _folder() async {
@@ -261,6 +300,7 @@ class PostPhotoCache {
   Future<void> clearAll() async {
     _mem.clear();
     _memBytes = 0;
+    _evictProviders();
     try {
       final folder = await _folder();
       if (await folder.exists()) {

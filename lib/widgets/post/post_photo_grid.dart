@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../config/theme.dart';
+import '../../core/cache/post_photo_cache.dart';
 
 /// Faktor lebar foto tunggal (fraksi area konten).
 const double kSingleWidthFactor = 1.0;
@@ -29,6 +30,9 @@ class PostPhotoGrid extends StatelessWidget {
   final List<Uint8List?> thumbs;
   final List<double?> aspects;
   final double radius;
+  /// Path storage sejajar `thumbs` — untuk kunci `ImageProvider` stabil
+  /// (ImageCache hit → nol decode ulang saat scroll). Opsional.
+  final List<String> paths;
   final void Function(int index) onOpenViewer;
 
   const PostPhotoGrid({
@@ -36,6 +40,7 @@ class PostPhotoGrid extends StatelessWidget {
     required this.thumbs,
     required this.aspects,
     required this.onOpenViewer,
+    this.paths = const [],
     this.radius = kPhotoRadius,
   });
 
@@ -101,20 +106,29 @@ class PostPhotoGrid extends StatelessWidget {
             ),
           );
         }
-        Widget photo(int i) => GestureDetector(
-          onTap: () => onOpenViewer(loaded[i].$2),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(radius),
-            child: Image.memory(
-              loaded[i].$1,
-              fit: BoxFit.cover,
-              cacheWidth: 1080,
-              gaplessPlayback: true,
-              width: double.infinity,
-              height: double.infinity,
+        Widget photo(int i) {
+          final bytes = loaded[i].$1;
+          final srcIndex = loaded[i].$2;
+          final path = srcIndex < paths.length ? paths[srcIndex] : '';
+          // Provider STABIL per-path → ImageCache HIT walau bytes di-reload
+          // saat kartu remount (anti "load ulang saat scroll").
+          final provider = path.isNotEmpty
+              ? PostPhotoCache.instance.imageProviderFor(path, bytes)
+              : ResizeImage(MemoryImage(bytes), width: 1080);
+          return GestureDetector(
+            onTap: () => onOpenViewer(srcIndex),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(radius),
+              child: Image(
+                image: provider,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                width: double.infinity,
+                height: double.infinity,
+              ),
             ),
-          ),
-        );
+          );
+        }
         if (loaded.length == 1) {
           final a = _aspectOf(loaded[0].$2);
           final box = a != null && a > 0
