@@ -19,8 +19,6 @@ LIMIT=1000
 
 # Format: "<path>:<max_baris>"  (max = ukuran SAAT PENDAFTARAN; hanya boleh turun)
 ALLOWLIST=(
-  "lib/config/strings.dart:4167"
-  "lib/config/strings_admin.dart:1519"
   "lib/screens/private_chat_screen.dart:3073"
   "lib/screens/room_chat_screen.dart:2938"
   "lib/app.dart:1637"
