@@ -21,7 +21,6 @@ LIMIT=1000
 ALLOWLIST=(
   "lib/screens/private_chat_screen.dart:3073"
   "lib/screens/room_chat_screen.dart:2938"
-  "lib/main.dart:1761"
 )
 
 fail=0
