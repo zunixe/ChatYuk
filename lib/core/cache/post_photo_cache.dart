@@ -42,6 +42,12 @@ class PostPhotoCache {
   /// Wired di main.dart: `PostPhotoCache.downloader = StoragePhotoService.instance.downloadBytes`.
   static PostPhotoDownloader? downloader;
 
+  /// Downloader THUMB server-side (transformasi resize di Storage) — jauh
+  /// lebih hemat data/CPU dari unduh full lalu downscale. Bila null / gagal,
+  /// jatuh ke [downloader] (perilaku lama). Wired di main.dart ke
+  /// `StoragePhotoService.downloadThumbBytes`.
+  static PostPhotoDownloader? thumbDownloader;
+
   static const _folderName = 'post_photos_v2';
 
   // In-memory thumbnail (path → bytes JPEG). LRU sederhana, cap 30MB.
@@ -80,6 +86,29 @@ class PostPhotoCache {
   }
 
   Uint8List? _memGet(String path) => _mem[path];
+
+  // ── Instrumentasi ringan (uji/regresi) — hitung sumber thumb ──
+  // Verifikasi "scroll balik TIDAK unduh ulang" (net==0) & "tak decode ulang"
+  // (decode==0). Lihat test/post_photo_cache_stats_test.dart.
+  @visibleForTesting
+  static int statRam = 0;
+  @visibleForTesting
+  static int statDisk = 0;
+  @visibleForTesting
+  static int statNetwork = 0;
+  @visibleForTesting
+  static int statDecode = 0;
+
+  /// Reset + kembalikan label delta (ram/disk/net/decode) sejak reset terakhir.
+  @visibleForTesting
+  static String statsAndReset() {
+    final l = 'ram=$statRam disk=$statDisk net=$statNetwork decode=$statDecode';
+    statRam = 0;
+    statDisk = 0;
+    statNetwork = 0;
+    statDecode = 0;
+    return l;
+  }
 
   /// `ImageProvider` STABIL untuk [bytes] pada [path] — instance yang sama
   /// dipakai ulang tiap remount sehingga `ImageCache` selalu HIT (anti decode
@@ -146,7 +175,10 @@ class PostPhotoCache {
   Uint8List? thumbSync(String path) {
     if (path.isEmpty) return null;
     final mem = _memGet(path);
-    if (mem != null) return mem;
+    if (mem != null) {
+      statRam++;
+      return mem;
+    }
     final docs = _docs;
     if (docs == null) return null;
     try {
@@ -154,6 +186,7 @@ class PostPhotoCache {
       if (!f.existsSync()) return null;
       final bytes = f.readAsBytesSync();
       if (bytes.isEmpty) return null;
+      statDisk++;
       _memPut(path, bytes);
       return bytes;
     } catch (_) {
@@ -191,14 +224,26 @@ class PostPhotoCache {
       final f = _fileFor(folder, path);
       if (await f.exists()) {
         final bytes = await f.readAsBytes();
+        statDisk++;
         _memPut(path, bytes);
         return bytes;
+      }
+      statNetwork++;
+      // PRIORITAS: thumb server-side (kecil). Fallback full+downscale bila
+      // transform tak didukung server (null).
+      final serverThumb = await (thumbDownloader?.call(path) ??
+          Future<Uint8List?>.value());
+      if (serverThumb != null && serverThumb.isNotEmpty) {
+        _memPut(path, serverThumb);
+        _writeFileAsync(folder, f, serverThumb);
+        return serverThumb;
       }
       final full = await (downloader?.call(path) ?? Future<Uint8List?>.value());
       if (full == null) return null;
       // Decode+downscale via Skia (targetWidth) — TIDAK di compute isolate:
       // ui.instantiateImageCodec butuh root isolate engine. Downscale saat
       // decode = alokasi RGBA ~3.7MB, bukan full-res ~48MB.
+      statDecode++;
       final thumb = await genPostThumb(full);
       if (thumb != null) {
         _memPut(path, thumb);
@@ -275,7 +320,9 @@ class PostPhotoCache {
     Future(() async {
       try {
         await f.writeAsBytes(bytes, flush: true);
-      } catch (_) {}
+      } catch (e) {
+        dlog('[PPC] write FAIL ${f.path}: $e');
+      }
     });
   }
 
