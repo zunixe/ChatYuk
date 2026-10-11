@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/strings_admin.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
+import '../config/strings.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../core/chat/chat_location.dart';
 import '../widgets/location_bubble.dart';
@@ -127,11 +128,21 @@ class MessageBubble extends StatelessWidget {
     this.onTapBadge,
     this.highlightMentionAll = false,
     this.searchQuery = '',
+    this.s,
   });
+
+  /// B1 (2026-10-11): string lokalisasi di-pass SCALAR dari parent supaya
+  /// tiap bubble tak `ProviderScope.containerOf(...).read(localeProvider)`
+  /// (mahal: × N bubble tiap rebuild list). Null → fallback baca provider
+  /// (backward-compat admin). Bubble TIDAK lagi depend localeProvider.
+  final S? s;
 
   @override
   Widget build(BuildContext context) {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = this.s ??
+        ProviderScope.containerOf(context, listen: false)
+            .read(localeProvider)
+            .s;
     final timeStr = formatBubbleTime(msg.timestamp);
     // Pesan yang dihapus (soft delete).
     // - Chat biasa: cukup teks redup "Pesan ini telah dihapus".
@@ -566,7 +577,7 @@ class MessageBubble extends StatelessWidget {
                       else if (msg.type == 'coin')
                         Builder(
                           builder: (context) {
-                            final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+                            final s = this.s ?? ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
                             final amount = int.tryParse(msg.text) ?? 0;
                             return Row(
                               mainAxisSize: MainAxisSize.min,
@@ -601,7 +612,7 @@ class MessageBubble extends StatelessWidget {
                       else if (msg.type == 'gift')
                         Builder(
                           builder: (context) {
-                            final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+                            final s = this.s ?? ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
                             final g = giftById(msg.text);
                             final emoji = g?.emoji ?? '🎁';
                             final name = g == null

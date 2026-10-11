@@ -131,107 +131,85 @@ mixin _PcChatMx on _PrivateChatBase {
       if (_pending.isEmpty || !mounted) return;
       final mySenderIds = _pending.map((p) => p.senderId).toSet();
       var changed = false;
-      // Teks: cocokkan via consumeConfirmedText (recency + sekali pakai +
-      // FIFO). JANGAN cocokkan mentah via isi (pesan lama yang sama isinya
-      // membuang pending baru → "kirim lalu hilang, muncul telat").
+      // A2 (2026-10-11): SATU pass atas `msgs` (dulu 6 loop penuh terpisah).
+      // Semantik SAMA — tiap jenis diklasifikasi via switch, aksi per-jenis
+      // dijalankan inline. Bounded N≤100, tapi dari 6×O(N) → 1×O(N)/emit.
       for (final m in msgs) {
         if (!mySenderIds.contains(m.senderId)) continue;
-        final idx = consumeConfirmedText(
-          server: m,
-          openedAt: _openedAt,
-          consumedIds: _confirmedTextIds,
-          pendings: _pending,
-        );
-        _trimConfirmed(_confirmedTextIds);
-        if (idx != -1) {
-          _queuedIds.remove(_pending[idx].id);
-          _pending.removeAt(idx);
-          changed = true;
-        }
-      }
-      // Call (Call ended dll) — optimistic: hapus pending-call tertua saat
-      // pesan call terkonfirmasi tiba (durasi bisa beda 1 detik, jadi FIFO).
-      for (final m in msgs) {
-        if (mySenderIds.contains(m.senderId) &&
-            m.type == 'call' &&
-            m.timestamp.isAfter(_openedAt)) {
-          final idx = _pending.indexWhere((p) => p.type == 'call');
-          if (idx != -1) {
-            _pending.removeAt(idx);
-            changed = true;
+        switch (m.type) {
+          case 'call':
+            if (m.timestamp.isAfter(_openedAt)) {
+              final idx = _pending.indexWhere((p) => p.type == 'call');
+              if (idx != -1) {
+                _pending.removeAt(idx);
+                changed = true;
+              }
+            }
             break;
-          }
-        }
-      }
-      // Foto & view-once: FIFO via id pesan server. ImageData di stream berupa
-      // THUMBNAIL (bukan base64 penuh seperti pending), jadi tidak bisa
-      // cocokkan konten — setiap pesan foto terkonfirmasi menghapus satu
-      // pending foto tertua (urutan kirim). Hanya pesan yang tiba setelah
-      // screen dibuka yang diproses (history lama di-skip via _openedAt).
-      //
-      // PENTING: sertakan 'view_once_expired' — foto sekali-lihat yang sudah
-      // dilihat penerima ditandai server jadi type ini. Pending optimistik
-      // dibuat dengan type 'view_once'; bila versi server datang sebagai
-      // 'view_once_expired' dan TIDAK dicocokkan, pending tidak pernah dibuang
-      // → muncul DUA bubble (bug "foto sekali lihat dobel"). Video sudah
-      // menangani 'video_once_expired'; foto kini disamakan.
-      for (final m in msgs) {
-        if (mySenderIds.contains(m.senderId) &&
-            (m.type == 'image' ||
-                m.type == 'view_once' ||
-                m.type == 'view_once_expired') &&
-            m.timestamp.isAfter(_openedAt) &&
-            _confirmedPhotoIds.add(m.id)) {
-          _trimConfirmed(_confirmedPhotoIds);
-          final idx = _pending.indexWhere(
-            (p) =>
-                (p.type == 'image' ||
+          case 'image':
+          case 'view_once':
+          case 'view_once_expired':
+            if (m.timestamp.isAfter(_openedAt) &&
+                _confirmedPhotoIds.add(m.id)) {
+              _trimConfirmed(_confirmedPhotoIds);
+              final idx = _pending.indexWhere(
+                (p) =>
+                    p.type == 'image' ||
                     p.type == 'view_once' ||
-                    p.type == 'view_once_expired'),
-          );
-          if (idx != -1) {
-            _pending.removeAt(idx);
-            changed = true;
-          }
-        }
-      }
-      // Voice: FIFO sama seperti foto — tiap voice terkonfirmasi menghapus
-      // satu pending voice tertua supaya tidak dobel & urutan tetap benar.
-      for (final m in msgs) {
-        if (mySenderIds.contains(m.senderId) &&
-            m.type == 'voice' &&
-            m.timestamp.isAfter(_openedAt) &&
-            _confirmedVoiceIds.add(m.id)) {
-          _trimConfirmed(_confirmedVoiceIds);
-          final idx = _pending.indexWhere((p) => p.type == 'voice');
-          if (idx != -1) {
-            _pending.removeAt(idx);
-            changed = true;
-          }
-        }
-      }
-      // Video (biasa / sekali lihat): FIFO seperti foto — pending berisi
-      // base64, versi server berisi PATH, jadi dicocokkan via FIFO bukan isi.
-      // Tanpa cabang ini bubble pending TIDAK pernah dibuang → tetap kotak
-      // (dan balapan dengan versi server yang sudah tampil).
-      for (final m in msgs) {
-        if (mySenderIds.contains(m.senderId) &&
-            (m.type == 'video' ||
-                m.type == 'video_once' ||
-                m.type == 'video_once_expired') &&
-            m.timestamp.isAfter(_openedAt) &&
-            _confirmedVideoIds.add(m.id)) {
-          _trimConfirmed(_confirmedVideoIds);
-          final idx = _pending.indexWhere(
-            (p) =>
-                p.type == 'video' ||
-                p.type == 'video_once' ||
-                p.type == 'video_once_expired',
-          );
-          if (idx != -1) {
-            _pending.removeAt(idx);
-            changed = true;
-          }
+                    p.type == 'view_once_expired',
+              );
+              if (idx != -1) {
+                _pending.removeAt(idx);
+                changed = true;
+              }
+            }
+            break;
+          case 'voice':
+            if (m.timestamp.isAfter(_openedAt) &&
+                _confirmedVoiceIds.add(m.id)) {
+              _trimConfirmed(_confirmedVoiceIds);
+              final idx = _pending.indexWhere((p) => p.type == 'voice');
+              if (idx != -1) {
+                _pending.removeAt(idx);
+                changed = true;
+              }
+            }
+            break;
+          case 'video':
+          case 'video_once':
+          case 'video_once_expired':
+            if (m.timestamp.isAfter(_openedAt) &&
+                _confirmedVideoIds.add(m.id)) {
+              _trimConfirmed(_confirmedVideoIds);
+              final idx = _pending.indexWhere(
+                (p) =>
+                    p.type == 'video' ||
+                    p.type == 'video_once' ||
+                    p.type == 'video_once_expired',
+              );
+              if (idx != -1) {
+                _pending.removeAt(idx);
+                changed = true;
+              }
+            }
+            break;
+          default:
+            // Teks: cocokkan via consumeConfirmedText (recency + sekali pakai
+            // + FIFO). JANGAN cocokkan mentah via isi.
+            {
+              final idx = consumeConfirmedText(
+                server: m,
+                openedAt: _openedAt,
+                consumedIds: _confirmedTextIds,
+                pendings: _pending,
+              );
+              _trimConfirmed(_confirmedTextIds);
+              if (idx != -1) {
+                _queuedIds.remove(_pending[idx].id);
+                _pending.removeAt(idx);
+                changed = true;
+              }
+            }
         }
       }
       if (changed && mounted) setState(() {});

@@ -237,8 +237,10 @@ late final DateTime _openedAt;
   // hit → O(1).
   List<ChatItem> _cachedItems = const [];
 Set<String> _cachedDeletedIds = const {};
-List<MessageModel>? _cacheItemsMsgsSrc;
 int _cacheItemsPendingLen = -1;
+  // A1: revisi isi pesan (dari ChatStreamSession) — kunci cache stabil,
+  // ganti `identical(msgsSrc)` yang selalu miss (stream emit list baru).
+  int _cacheItemsRevision = -2;
 String _cacheItemsLocale = '';
 DateTime? _cacheItemsDay;
 CallPhase? _prevCallPhase;
