@@ -43,26 +43,25 @@ mixin _PcSelectMx on _PcBase {
           av.cachedSyncIncludeDisk(otherUid) ??
           '';
     } catch (_) {}
-    // PUSH INSTAN (2026-10-11): prefetch dipindah ke PARALEL (fire-and-forget)
-    // — TIDAK lagi di-await sebelum push. Dulu di-await agar `peekMessages`
-    // pasti HIT saat mount, tapi efeknya transisi BARU MULAI setelah query
-    // SQLite selesai → tap terasa telat & tak konsisten (DB besar = makin
-    // lambat). Sekarang transisi langsung jalan; layar chat mengisi dari
-    // `peekMessages`/initialData (fallback sudah ada) atau skeleton sekilas.
-    // Pre-decode poster video juga paralel (setelah prefetch selesai): decode
-    // berjalan selama transisi → frame pertama langsung poster (anti pop-in
-    // decode pertama Image.memory — "kedip" cold start).
-    unawaited(() async {
-      await ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(chatProvider.notifier).prefetchPrivateChat(chat.chatId);
-      if (!context.mounted) return;
-      final key = 'private_${chat.chatId}';
-      await VideoPrefetch.precachePosters(context, key);
-      if (!context.mounted) return;
-      await PhotoPrefetch.precacheThumbs(context, key);
-    }());
+    // PUSH: tunggu SEBENTAR precache poster video (decode bitmap) supaya frame
+    // pertama chat SUDAH poster (nol 'ngeload' di buka ke-1 juga) — dibatasi
+    // timeout pendek (≤450ms) agar tap tetap responsif; foto diprecache paralel
+    // (tak ditunggu). Video = kebutuhan "langsung tampil seperti voice".
+    unawaited(PhotoPrefetch.precacheThumbs(context, 'private_${chat.chatId}'));
+    try {
+      await ProviderScope.containerOf(context, listen: false)
+          .read(chatProvider.notifier)
+          .prefetchPrivateChat(chat.chatId)
+          .timeout(const Duration(milliseconds: 300));
+      if (context.mounted) {
+        await VideoPrefetch.precachePosters(context, 'private_${chat.chatId}')
+            .timeout(const Duration(milliseconds: 450));
+      }
+    } catch (_) {}
+    if (!mounted) {
+      releaseNav(navKey);
+      return;
+    }
     Navigator.push(
       context,
       chatRoute(

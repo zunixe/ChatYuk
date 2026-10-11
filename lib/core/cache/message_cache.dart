@@ -5,6 +5,7 @@ import '../../utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/message_model.dart';
+import '../storage_paths.dart';
 import 'crypto_native.dart';
 import 'message_store.dart';
 
@@ -114,19 +115,17 @@ class MessageCache {
     _memCacheUpdate(chatKey, messages);
     // Salin ringan (strip imageData) SEKARANG (di frame pemanggil), lalu
     // tulis disk di microtask agar tidak berebut dengan transisi.
-    // KECUALI path storage voice (`voice/...`, ~60 char): bubble voice
-    // HANYA tampil bila imageData terisi — kalau ikut di-strip, cold start
-    // menampilkan baris jam kecil dulu, card voice baru muncul saat RPC
-    // segar tiba (berkedip). Path mungil aman disimpan; base64 besar
-    // (foto/voice pending) tetap di-strip seperti semula.
+    // KECUALI PATH STORAGE (voice `voice/...`, video `chat/...mp4`, foto
+    // `chat/...jpg`): bubble-nya HANYA tampil bila `imageData` (path) terisi —
+    // kalau di-strip, cold start menampilkan placeholder dulu, card baru
+    // muncul saat RPC segar tiba (berkedip). Path mungil (~100 char) aman
+    // disimpan; base64 besar (foto/voice pending) tetap di-strip.
     final rows = messages
         .map((m) {
           final map = m.toMap();
           final img = map['imageData'];
-          final keepVoicePath = m.type == 'voice' &&
-              img is String &&
-              img.startsWith('voice/');
-          if (!keepVoicePath) map['imageData'] = '';
+          final keepPath = img is String && isStoragePathValue(img);
+          if (!keepPath) map['imageData'] = '';
           return MessageModel.fromMap(m.id, map);
         })
         .toList();
