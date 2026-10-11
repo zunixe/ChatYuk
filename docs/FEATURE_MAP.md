@@ -245,11 +245,28 @@ poster → `ui.Image`, `VideoPrefetch` menyimpan bitmap mentah (RGBA) ke
 race buka-1 (bubble menunggu decode yang sedang jalan). Ini yang membuat
 **cold start langsung tampil seperti voice**.
 
+**I. FOTO kiriman — precache thumb BY MESSAGEID (cold start, 2026-10-11).**
+Berbeda dari video: **base64 foto SENGAJA di-strip dari cache pesan** (hemat
+disk, lihat §2a MEMORY_BEST_PRACTICES) → cold start `imageData` **KOSONG**.
+Kalau precache mensyaratkan `imageData.isNotEmpty`, ia dapat 0 foto (`photos=0`)
+→ bubble "ngeload" dulu. **ATURAN:**
+- `PhotoPrefetch.precacheThumbs` JANGAN syaratkan `imageData` — ambil **thumb
+  by `messageId`** dari `PhotoCache` untuk SEMUA pesan `type` image/view_once.
+  Daftarkan ke kunci **`'thumb:<id>'`** (plus `hashCode(imageData)` bila base64
+  ada).
+- `MessageImage.initState` cek kunci `'thumb:<id>'` sebagai **fallback** saat
+  `imageData` kosong → frame pertama chat langsung foto (nol decode).
+- `_openChat` **await** `precacheThumbs` (bukan paralel) sebelum push.
+- Helper `PhotoPrefetch.precacheAll()` (video+foto) dipakai juga di 4 jalur
+  masuk ROOM (`room_<id>`).
+
 **Verifikasi 2026-10-11 (HP, log + rekam layar + diff frame):** cold start →
-`[PRECACHE] bytes=8930/8874/2813` → `VID-INIT hasImg=true` → setelah transisi
-masuk chat, konten video STABIL (0 perubahan antar frame) = **nol kedip**.
+`[PHOTOPC] photos=1` → `[IMG-INIT] cacheHit=true` → setelah transisi masuk
+chat, konten (foto & video) STABIL = **nol kedip**.
 
 **Jebakan (jangan diulang):**
+- **Precache foto mensyaratkan `imageData.isNotEmpty`** → 0 foto saat cold
+  start (base64 di-strip) → ngeload (akar poin I).
 - **Strip path storage (`chat/`, `voice/`) di `saveMessages`** → cold start
   bubble ambil dari server → race → kedip (akar di poin G).
 - Menyimpan video bytes ke `MediaDiskCache` → evict kuota → poster hilang.
