@@ -3589,3 +3589,46 @@ seleksi (sebagai spacer tinggi) supaya list tidak reflow. Animasi
 `AnimatedOpacity`+`AnimatedSlide` (bukan `AnimatedSize`/`jumpTo`).
 
 **File:** `lib/screens/private_chats_screen.dart` (`body` → Stack; `_selectionBar({overlay})`).
+
+---
+
+## §43. Audit MEMORY MANAGEMENT (2026-10-11) — 16 patch R2/R4/R6/R7/R10
+
+Audit `lib/` (453 file) terhadap 10 Aturan Memory Management
+(`docs/PERFORMANCE_RULES.md` §4). Hasil: **R1/R3/R8/R9 SESUAI** (lifecycle,
+cancel sub/timer, tanpa GC manual rutin, verifikasi via profiling bukan asumsi);
+R2/R4/R6/R7/R10 punya temuan → 16 commit perbaikan.
+
+### Patch (masing-masing commit terpisah)
+
+| R | File | Perbaikan |
+|---|---|---|
+| R6 | `core/media/link_preview_service.dart` | cache per-URL cap 50 FIFO (`_put`) |
+| R6 | `providers/admin/admin_rooms.dart` | `_roomMembersCache` cap 20 FIFO |
+| R6/R7 | `core/cache/video_file_cache.dart` | `_maxIndexEntries=2000` (index, non-byte) |
+| R10 | `widgets/message/image_decode_core.dart` | `DecodedImage.safeDispose()` idempoten + dispose saat replace kunci-sama + guard render (`!disposed`) |
+| R4/R6 | `widgets/message/view_once_state.dart` | `viewOnceStates` cap 100 FIFO (`putViewOnceState`) |
+| R6 | `providers/admin/admin_base.dart` | `_seenDeviceIds`/`_seenCallIds` cap 500 FIFO (`_boundedAdd`) |
+| R6 | `providers/riverpod/story_provider.dart` | `_slidesByAuthor` cap 60 FIFO (`_rememberSlides`) |
+| R6/R7 | `core/admin_trim_registry.dart` + `app.dart` | trim cache admin saat `didHaveMemoryPressure` via registry (tanpa memaksa provider) |
+| R6 | `core/nav_guard.dart` | prune klaim kadaluarsa `_navClaim` |
+| R2 | `screens/account_screen.dart` (×2), `profile/profile_photos.dart`, `profile/profile_build.dart`, `group_screen.dart`, `group/group_widgets.dart`, `rooms_explore/widgets/create_room_sheet.dart` | dispose controller/FocusNode dialog via `core/ui/dispose_after_dialog.dart` |
+
+### Guard penting (JANGAN dibalik)
+1. **`disposeAfterDialogFrame([...])`** (post-frame) — dispose TEPAT setelah
+   `await showDialog` memicu *"A TextEditingController was used after being
+   disposed"* (dialog masih dismiss). Selalu lepas di frame berikutnya.
+2. **`DecodedImage.safeDispose`** hanya di jalur **replace kunci-sama** — evict
+   LRU SENGAJA tidak di-dispose (bisa masih dirender). Render WAJIB cek
+   `disposed` sebelum `RawImage`.
+3. **`AdminTrimRegistry`** — trim panel admin TANPA `ref.read(adminProvider)`
+   (cegah instance dibuat sia-sia). Daftar di ctor, lepas di dispose.
+
+### Bukti terukur (Xiaomi 24129PN74G, build profile)
+- `am send-trim-memory COMPLETE` (latihan jalur memory pressure):
+  **Native Heap 391MB → 49MB**, **TOTAL PSS 717MB → 385MB** (malloc_trim +
+  cache trim termasuk hook admin §C14).
+- GC eksplisit: **0**; `flutter analyze lib/`: **0**; full `flutter test`:
+  **1872 lulus, 0 gagal**; guard file-size: OK.
+- **Catatan (R9):** angka PSS ini bukan bukti "tidak ada leak" — hanya
+  memastikan trim responsif. Audit TIDAK mengklaim bebas lag.
