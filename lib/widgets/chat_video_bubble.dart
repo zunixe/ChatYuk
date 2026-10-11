@@ -160,6 +160,14 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   // 2 bersamaan: cukup cepat, sisa antri — jaga puncak memori tetap rendah.
   static final _posterGate = _PosterGate(2);
 
+  /// Single-flight per kunci poster: bila generate untuk video ini SEDANG
+  /// berjalan (dipicu bubble lain / remount / tap), pemicu lain IKUT menunggu
+  /// future yang SAMA — bukan download + generate ulang. Regresi terukur
+  /// 2026-10-11: 1 video di-generate 3× dalam 5 dtk (mount + update + tap) →
+  /// 3× unduh video penuh + 3× generate frame. Gate di atas hanya membatasi
+  /// paralel, tidak mendedupe kunci sama.
+  static final Map<String, Future<void>> _posterInflight = {};
+
   // Terkunci: video sekali-lihat sudah ditonton & milik lawan. Admin monitor
   // DILARANG dikunci (harus bisa melihat semua).
   bool get _locked =>
@@ -334,7 +342,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         }
         return;
       }
-      dlog('[VideoBubble] poster MISS disk key=${_posterKey.hashCode} → generate');
+      dlog('[VideoBubble] poster MISS disk key=${_posterKey.hashCode}');
     } catch (_) {}
     if (!mounted) return;
     // ZERO-JANK (keputusan produk 2026-10-11): video lawan TIDAK diunduh
@@ -344,6 +352,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     // + warmChat mengunduh 6 video → buka chat video = belasan MB otomatis.
     // Pesan SENDIRI (base64 lokal, tanpa unduh) tetap generate otomatis.
     if (!_isPendingBase64 && !fromTap) {
+      dlog('[VideoBubble] poster placeholder (tap memuat) key=${_posterKey.hashCode}');
       if (mounted && _loading) setState(() => _loading = false);
       return;
     }
@@ -355,7 +364,41 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     // Bungkus bagian yang MENGUNDUH video + generate frame dengan gate
     // (bukan cache disk read di atas yang instan). Poster lalu disimpan ke
     // disk — pemanggilan berikutnya tidak lewat gate lagi.
-    await _posterGate.run(() => _generatePoster());
+    // Single-flight: ikut future yang sedang berjalan untuk kunci SAMA.
+    final key = _posterKey;
+    final running = _posterInflight[key];
+    if (running != null) {
+      dlog('[VideoBubble] poster single-flight IKUT key=${key.hashCode}');
+      await running;
+      if (!mounted) return;
+      // Pemenang sudah menulis poster ke disk + state-nya sendiri; ambil
+      // hasilnya untuk state ini (remount / bubble kedua video sama).
+      if (_poster == null) {
+        try {
+          final got =
+              VideoPrefetch.posterBytesStable(widget.videoData) ??
+              await MediaDiskCache.instance.read(key);
+          if (got != null && got.isNotEmpty && mounted) {
+            setState(() {
+              _poster = got;
+              _posterImg ??= VideoPrefetch.posterImageSync(widget.videoData);
+              _loading = false;
+              _failed = false;
+            });
+          }
+        } catch (_) {}
+      }
+      _stopSlow();
+      return;
+    }
+    final fut = _posterGate.run(() => _generatePoster());
+    dlog('[VideoBubble] poster generate-SENDIRI key=${key.hashCode}');
+    _posterInflight[key] = fut;
+    try {
+      await fut;
+    } finally {
+      _posterInflight.remove(key);
+    }
     _stopSlow();
   }
 
