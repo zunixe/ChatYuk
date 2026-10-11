@@ -18,7 +18,15 @@ class SocialCountsNotifier extends Notifier<Map<String, ({int friends, int follo
   DateTime? _fetchedAt;
 
   @override
-  Map<String, ({int friends, int followers})> build() => const {};
+  Map<String, ({int friends, int followers})> build() {
+    // Batalkan timer batch saat provider dispose (cegah tembak RPC setelah
+    // dispose — LOW, 2026-10-11).
+    ref.onDispose(() {
+      _batchTimer?.cancel();
+      _batchTimer = null;
+    });
+    return const {};
+  }
 
   /// Uid yang menunggu di-fetch dalam batch berikutnya.
   final Set<String> _batchQueue = {};

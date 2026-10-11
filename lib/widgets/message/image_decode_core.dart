@@ -1,13 +1,36 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import '../../core/media/image_cache_hygiene.dart';
 
 // Hasil decode: bytes + dimensi asli agar tampilan proporsional.
+/// [image]: bitmap SIAP-RENDER (`ui.Image`) — kalau ada, bubble render via
+/// `RawImage` = **nol decode** (contek video). Kalau null, fallback
+/// `Image.memory(bytes)` (decode saat render). Diisi oleh [attachDecodedImage].
 class DecodedImage {
   final Uint8List bytes;
   final int width;
   final int height;
-  const DecodedImage(this.bytes, this.width, this.height);
+  ui.Image? image;
+  DecodedImage(this.bytes, this.width, this.height, [this.image]);
+}
+
+/// Decode [bytes] → `ui.Image` (target lebar) lalu pasang ke [di]. Menjadikan
+/// render bubble NOL-decode (bitmap sudah siap) — foto secepat video.
+///
+/// TANPA timeout (timeout = `Timer` yang membuat test widget gagal / bisa
+/// menahan). `instantiateImageCodec` dengan bytes JPEG valid tak menggantung;
+/// bila gagal, `di.image` tetap null → fallback `Image.memory(bytes)`.
+Future<void> attachDecodedImage(DecodedImage di, {int? targetWidth}) async {
+  if (di.image != null) return;
+  try {
+    final codec = await ui.instantiateImageCodec(
+      di.bytes,
+      targetWidth: targetWidth,
+    );
+    final frame = await codec.getNextFrame();
+    di.image = frame.image;
+  } catch (_) {}
 }
 
 // Cache decode agar scroll-back tidak resize (glitch). Key = hash imageData.

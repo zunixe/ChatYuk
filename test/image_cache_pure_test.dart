@@ -105,14 +105,14 @@ void main() {
       );
     });
 
-    test('mediaCacheFileName: format 8 digit hex', () {
+    test('mediaCacheFileName: format 16 digit hex (64-bit)', () {
       final n = mediaCacheFileName('posts/uid/123.jpg');
-      expect(n.length, 8);
-      expect(RegExp(r'^[0-9a-f]{8}$').hasMatch(n), isTrue);
+      expect(n.length, 16);
+      expect(RegExp(r'^[0-9a-f]{16}$').hasMatch(n), isTrue);
     });
 
     test('mediaCacheFileName: path kosong tetap valid', () {
-      expect(mediaCacheFileName('').length, 8);
+      expect(mediaCacheFileName('').length, 16);
     });
 
     test('mediaCacheFileName: tidak tabrakan untuk 500 path mirip', () {
@@ -120,8 +120,18 @@ void main() {
       for (var i = 0; i < 500; i++) {
         seen.add(mediaCacheFileName('posts/uid_$i/photo_$i.jpg'));
       }
-      // Sangat tinggi kemungkinan unik; toleransi bentrok hash minimal.
-      expect(seen.length, greaterThan(495));
+      // 64-bit: harus 100% unik untuk 500 path.
+      expect(seen.length, 500);
+    });
+
+    test('mediaCacheFileName: 64-bit jauh lebih tahan tabrakan (regresi)', () {
+      // 50.000 path versioned — dengan 32-bit dulu ~0,3 tabrakan diharapkan;
+      // 64-bit harus NOL.
+      final seen = <String>{};
+      for (var i = 0; i < 50000; i++) {
+        seen.add(mediaCacheFileName('avatars/user$i/1699${i}00000.jpg'));
+      }
+      expect(seen.length, 50000);
     });
 
     test('mediaQuotaExceeded: di batas → tidak, lewat → ya', () {

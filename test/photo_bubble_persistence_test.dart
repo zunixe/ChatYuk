@@ -200,7 +200,12 @@ void main() {
       );
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
-      expect(find.byType(Image), findsOneWidget);
+      // Bisa Image (fallback bytes) atau RawImage (bitmap siap = nol decode).
+      expect(
+        find.byType(Image).evaluate().isNotEmpty ||
+            find.byType(RawImage).evaluate().isNotEmpty,
+        isTrue,
+      );
       expect(t.getSize(find.byType(MessageImage)), const Size(200, 100));
     });
 
@@ -218,7 +223,12 @@ void main() {
       );
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
-      expect(find.byType(Image), findsOneWidget);
+      // Bisa Image (fallback bytes) atau RawImage (bitmap siap = nol decode).
+      expect(
+        find.byType(Image).evaluate().isNotEmpty ||
+            find.byType(RawImage).evaluate().isNotEmpty,
+        isTrue,
+      );
       expect(t.getSize(find.byType(MessageImage)), first);
     });
   });

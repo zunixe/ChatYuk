@@ -128,7 +128,15 @@ abstract class _AdminBase extends ConsumerState<AdminChatViewScreen>
 
   final _scrollCtrl = ScrollController();
   final Map<String, LayerLink> _msgLinks = {};
-  LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
+  LayerLink _linkFor(String id) {
+    // Cap FIFO 500 (MEDIUM, 2026-10-11): dulu tumbuh per pesan yang dirender
+    // monitor admin — sesi panjang = tumbuh tanpa batas. LayerLink lama yang
+    // dibuang tetap valid (widget-nya sudah off-screen).
+    if (!_msgLinks.containsKey(id) && _msgLinks.length >= 500) {
+      _msgLinks.remove(_msgLinks.keys.first);
+    }
+    return _msgLinks.putIfAbsent(id, () => LayerLink());
+  }
 
   // ── Pantau call aktif di chat ini ──
   // WatchSession hidup hanya selama layar ini terbuka; dispose → stop()

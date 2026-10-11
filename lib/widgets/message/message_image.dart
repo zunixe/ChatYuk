@@ -229,6 +229,10 @@ class _MessageImageState extends State<MessageImage> {
               thumbDims.height,
             );
             putDecodedCache(key, td);
+            // Bitmap thumb di latar → RawImage pada render berikutnya.
+            unawaited(attachDecodedImage(td, targetWidth: 1080).then((_) {
+              if (mounted && gen == _gen && td.image != null) setState(() {});
+            }));
             _fadeNext = true;
             setState(() {
               _decoded = td;
@@ -297,6 +301,12 @@ class _MessageImageState extends State<MessageImage> {
     }
     putDecodedCache(data.hashCode, decoded);
     putDecodedCache(key, decoded);
+    // Set state SEKARANG (fallback Image.memory render instan), lalu decode
+    // bitmap di latar → begitu siap, RawImage dipakai (nol decode) pada render
+    // berikutnya. TIDAK menunggu (agar tak gantung bila codec lambat/gagal).
+    unawaited(attachDecodedImage(decoded, targetWidth: 1080).then((_) {
+      if (mounted && gen == _gen && decoded.image != null) setState(() {});
+    }));
     if (!mounted || gen != _gen) return;
     setState(() {
       _decoded = decoded;
@@ -435,6 +445,18 @@ class _MessageImageState extends State<MessageImage> {
     double height,
     S s,
   ) {
+    // CEPAT (contek video): bila bitmap siap (ui.Image), render via RawImage
+    // = NOL decode saat render (foto secepat video). Fallback Image.memory
+    // bila bitmap belum di-decode.
+    final img = decoded.image;
+    if (img != null) {
+      return RawImage(
+        image: img,
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+      );
+    }
     return Image.memory(
       decoded.bytes,
       width: width,
