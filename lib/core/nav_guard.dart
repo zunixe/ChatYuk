@@ -34,6 +34,12 @@ bool tryClaimNav(
 }) {
   if (key.isEmpty) return true;
   final at = (now ?? DateTime.now()).toUtc();
+  // Prune klaim kadaluarsa (R6) — dulu entry hanya lepas via releaseNav;
+  // bila push gagal / tak pernah pop, entry nyangkut selamanya (kecil tapi
+  // tumbuh). Buang yang sudah lewat [window] sebelum menyimpan.
+  if (_navClaim.length > 32) {
+    _navClaim.removeWhere((_, t) => at.difference(t) >= window);
+  }
   final prev = _navClaim[key];
   if (prev != null && at.difference(prev) < window) {
     return false;
