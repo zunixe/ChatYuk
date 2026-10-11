@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
@@ -78,6 +79,36 @@ class VideoPrefetch {
     return p;
   }
 
+  /// BITMAP poster siap-pakai (sudah di-decode) per path. Render via [RawImage]
+  /// = NOL decode di frame pertama → benar-benar langsung tampil seperti voice.
+  /// Diisi saat tap (precachePosters) & saat bubble pertama generate.
+  static final Map<String, ui.Image> _posterImages = {};
+
+  /// Ambil bitmap poster siap-render (sinkron). null bila belum di-decode.
+  static ui.Image? posterImageSync(String videoPath) => _posterImages[videoPath];
+
+  /// Decode poster → [ui.Image] (target lebar [posterDecodeWidth]) & simpan.
+  /// Sinkron dari sisi pemanggil berikutnya (posterImageSync) = nol decode.
+  /// Decode poster → [ui.Image] (target lebar [posterDecodeWidth]) & simpan.
+  /// Sinkron dari sisi pemanggil berikutnya (posterImageSync) = nol decode.
+  static Future<void> decodePosterFor(String videoPath, Uint8List bytes) =>
+      _decodePosterImage(videoPath, bytes);
+
+  static Future<void> _decodePosterImage(String videoPath, Uint8List bytes) async {
+    if (_posterImages.containsKey(videoPath)) return;
+    try {
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: posterDecodeWidth,
+      );
+      final frame = await codec.getNextFrame();
+      if (_posterImages.length > 64) _posterImages.clear();
+      _posterImages[videoPath] = frame.image;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[VideoPrefetch] decode poster err: $e');
+    }
+  }
+
   /// Kosongkan cache bytes poster di memori (logout / uji).
   static void clearPosterMem() => _posterBytesMem.clear();
 
@@ -88,6 +119,9 @@ class VideoPrefetch {
     if (videoPath.isEmpty || bytes.isEmpty) return;
     if (_posterBytesMem.length > 64) _posterBytesMem.clear();
     _posterBytesMem[videoPath] = bytes;
+    // Decode ke bitmap siap-render (fire-and-forget) → render berikutnya nol
+    // decode (RawImage).
+    unawaited(_decodePosterImage(videoPath, bytes));
   }
 
   static ImageProvider posterProvider(Uint8List posterBytes) =>
@@ -120,16 +154,11 @@ class VideoPrefetch {
         final p = posterBytesStable(m.imageData);
         if (p == null || p.isEmpty) continue;
         if (!context.mounted) return;
-        try {
-          // KUNCI image-cache HARUS SAMA dengan yang dipakai ChatVideoBubble:
-          // pakai posterProvider() bersama (ResizeImage width sama) supaya
-          // kunci identik. Kalau precache pakai provider berbeda, kuncinya
-          // BEDA → precache tak berguna → decode lagi saat bubble mount =
-          // kedip (pola "buka ke-1/2 kedip, ke-3 diam").
-          await precacheImage(posterProvider(p), context)
-              .timeout(const Duration(seconds: 2));
-          n++;
-        } catch (_) {}
+        // Decode ke bitmap siap-render (RawImage) — INI yang bikin poster
+        // tampil NOL-decode saat bubble mount (seperti voice). "precacheImage"
+        // lama tak cukup: bubble tetap decode via Image widget.
+        await _decodePosterImage(m.imageData, p);
+        n++;
       }
     } catch (_) {}
   }
