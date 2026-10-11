@@ -175,7 +175,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     // bawah yang mengurus (tidak mengubah perilaku lazy).
     if (!_locked && widget.videoData.isNotEmpty) {
       try {
-        final hit = MediaDiskCache.instance.readSync(_posterKey);
+        final hit = VideoPrefetch.posterBytesStable(widget.videoData);
         if (hit != null && hit.isNotEmpty) {
           dlog('[VideoBubble] poster HIT-sync key=${_posterKey.hashCode} bytes=${hit.length}');
           _poster = hit;
@@ -215,7 +215,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       } else {
         // Deferred: coba cache disk sinkron saja; sisanya saat tap.
         try {
-          final hit = MediaDiskCache.instance.readSync(_posterKey);
+          final hit = VideoPrefetch.posterBytesStable(widget.videoData);
           if (hit != null && hit.isNotEmpty && mounted) {
             setState(() {
               _poster = hit;
@@ -292,7 +292,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     //    saat readSync di initState kelewat karena prewarm race).
     try {
       final cached =
-          MediaDiskCache.instance.readSync(_posterKey) ??
+          VideoPrefetch.posterBytesStable(widget.videoData) ??
           await MediaDiskCache.instance.read(_posterKey);
       if (cached != null && cached.isNotEmpty) {
         dlog('[VideoBubble] poster HIT disk key=${_posterKey.hashCode} bytes=${cached.length}');
@@ -409,6 +409,9 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       return;
     }
     dlog('[VideoBubble] poster tulis disk key=${_posterKey.hashCode} bytes=${thumb.length}');
+    // Simpan juga ke mem-cache stabil (instance SAMA) supaya precache &
+    // render berikutnya memakai kunci image-cache yang konsisten.
+    VideoPrefetch.rememberPoster(widget.videoData, thumb);
     unawaited(MediaDiskCache.instance.write(_posterKey, thumb));
   }
 
@@ -551,17 +554,15 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
                         opacity: 1,
                         duration: const Duration(milliseconds: 180),
                         curve: Curves.easeOut,
-                        child: Image.memory(
-                          _poster!,
+                        child: Image(
+                          image: VideoPrefetch.posterProvider(_poster!),
                           fit: BoxFit.cover,
-                          cacheWidth: 400,
                           gaplessPlayback: true,
                         ),
                       )
-                    : Image.memory(
-                        _poster!,
+                    : Image(
+                        image: VideoPrefetch.posterProvider(_poster!),
                         fit: BoxFit.cover,
-                        cacheWidth: 400,
                         gaplessPlayback: true,
                       ),
               if (_poster == null)
