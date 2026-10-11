@@ -22,6 +22,9 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
   // RealtimeChannel + Timer.periodic(30s) + list _current BOCOR tiap
   // buka-tutup chat = "makin lama makin lambat" (pulih setelah restart).
   StreamSubscription<List<MessageModel>>? _msgsRealSub;
+  // A1: revisi isi pesan dari ChatStreamSession (naik tiap isi berubah) —
+  // kunci cache stabil untuk `_deriveItems` (dipakai di private_chat_core).
+  int _msgsRevision = -1;
   // Handler stream pesan — diisi oleh `_startMessagesStream`.
   Future<void> Function() _loadOlder = () async {};
   Future<void> Function(String messageId) _msgsHandleFetchImage = (_) async {};
@@ -45,8 +48,14 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
     _loadOlder = handle.loadOlder;
     _msgsHandleFetchImage = handle.fetchImage;
     _msgsHandleReload = handle.reload;
+    _msgsRevision = handle.revision.value;
     // Simpan subscription ASLI → bisa di-cancel saat dispose (lihat _msgsRealSub).
-    _msgsRealSub = handle.stream.listen(_msgsStreamCtrl.add, onError: (e) {
+    // A1: update revisi SETIAP emit (revisi naik tiap isi berubah) SEBELUM
+    // forward ke controller → `_deriveItems` tahu kapan harus recompute.
+    _msgsRealSub = handle.stream.listen((msgs) {
+      _msgsRevision = handle.revision.value;
+      if (!_msgsStreamCtrl.isClosed) _msgsStreamCtrl.add(msgs);
+    }, onError: (e) {
       debugPrint('[NAV] msgs stream error: $e');
     });
   }
@@ -82,8 +91,9 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
         unawaited(VideoPrefetch.warmChat(widget.chatId, target));
       });
     }
-    // Video baru (belum di-warm) → hangatkan poster segera. Gunakan set
-    // id agar tak mengulang video yang sama tiap emit.
+    // Video baru (belum di-warm) → hangatkan poster segera. Set id agar tak
+    // mengulang video yang sama tiap emit. A3 (2026-10-11): cap set FIFO
+    // (dulu tumbuh tanpa batas sepanjang sesi).
     for (final m in msgs) {
       if (!_isVideoMsg(m)) continue;
       final path = m.imageData;
@@ -91,6 +101,10 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
         continue;
       }
       if (!_warmedVideoPaths.add(path)) continue;
+      // Cap FIFO ~200 path (cukup untuk sesi; cegah tumbuh seiring waktu).
+      while (_warmedVideoPaths.length > 200) {
+        _warmedVideoPaths.remove(_warmedVideoPaths.first);
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         unawaited(VideoPrefetch.warmOne(path));

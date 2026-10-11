@@ -139,7 +139,12 @@ void _drainImageQueue() {
     required DateTime day,
   }) {
     final locale = s.isId ? 'id' : 'en';
-    if (identical(_cacheItemsMsgsSrc, msgsSrc) &&
+    // A1: kunci cache = REVISI isi pesan (bukan `identical(msgsSrc)`).
+    // Stream emit list BARU tiap event → `identical` selalu false → dulu
+    // recompute O(N) tiap emit (makin banyak pesan = makin lag). Revisi naik
+    // HANYA saat isi berubah → derive dilewati saat rebuild non-isi
+    // (ngetik/status/reaksi).
+    if (_cacheItemsRevision == _msgsRevision &&
         _cacheItemsPendingLen == _pending.length &&
         _cacheItemsLocale == locale &&
         _cacheItemsDay == day) {
@@ -160,7 +165,7 @@ void _drainImageQueue() {
       prevDateKey = dateKey;
       items.add(ChatItem.message(m));
     }
-    _cacheItemsMsgsSrc = msgsSrc;
+    _cacheItemsRevision = _msgsRevision;
     _cacheItemsPendingLen = _pending.length;
     _cacheItemsLocale = locale;
     _cacheItemsDay = day;

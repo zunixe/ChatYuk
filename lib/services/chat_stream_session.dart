@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show ValueNotifier, ValueListenable;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
 import '../utils.dart';
@@ -49,11 +50,16 @@ class ChatMessageStream {
   /// Fetch ulang pesan terbaru dari server — jaring pengaman kalau event
   /// Realtime miss (channel drop) supaya bubble pending tidak nyangkut.
   final Future<void> Function() reload;
+
+  /// A1: revisi isi (naik tiap isi pesan berubah) — kunci cache stabil untuk
+  /// `_deriveItems` (hindari recompute O(N) tiap emit stream).
+  final ValueListenable<int> revision;
   const ChatMessageStream({
     required this.stream,
     required this.loadOlder,
     required this.fetchImage,
     required this.reload,
+    required this.revision,
   });
 }
 
@@ -167,6 +173,19 @@ class ChatStreamSession {
       // scroll di bawah. Karena dipangkas dari atas, `_hasMore` dibiarkan
       // (masih ada yang lebih lama di server).
       _current = _current.sublist(_current.length - _maxMessages);
+    }
+
+    // A1 (2026-10-11): REVISI isi — naik tiap kali isi pesan berubah.
+    // `controller.add` di bawah SELALU lewat `_emit()` yang menaikkan ini.
+    // Dipakai UI (`_deriveItems`) sebagai kunci cache STABIL: dulu cache
+    // pakai `identical(list)` → stream emit list BARU tiap event → selalu
+    // miss → O(N) recompute tiap emit (makin banyak pesan = makin lag).
+    // Dengan revisi: derive HANYA saat isi benar-benar berubah.
+    final revision = ValueNotifier<int>(0);
+    void _emit() {
+      if (controller.isClosed) return;
+      revision.value = revision.value + 1;
+      controller.add(List.unmodifiable(_current));
     }
 
     // Private chat: cutoff waktu delete — pesan lama (<= cutoff) tidak
@@ -283,7 +302,7 @@ class ChatStreamSession {
                 _current[idx] = _current[idx].copyWith(
                   imageData: thumb ?? data,
                 );
-                controller.add(List.unmodifiable(_current));
+                _emit();
                 scheduleCacheSave();
               }
             }
@@ -353,7 +372,7 @@ class ChatStreamSession {
           final idx = _current.indexWhere((x) => x.id == m.id);
           if (idx >= 0 && _needsPhotoFill(_current[idx])) {
             _current[idx] = _current[idx].copyWith(imageData: data);
-            controller.add(List.unmodifiable(_current));
+            _emit();
             scheduleCacheSave();
           }
         }
@@ -450,7 +469,7 @@ class ChatStreamSession {
           final mem = MessageCache.instance.peekMessages(cacheKey);
           if (mem != null && mem.isNotEmpty && !controller.isClosed) {
             _current = mem;
-            controller.add(List.unmodifiable(_current));
+            _emit();
             loadPhotosAsync(mem);
           }
         }
@@ -464,7 +483,7 @@ class ChatStreamSession {
         final cached = await cacheF;
         if (cached.isNotEmpty && !controller.isClosed) {
           _current = cached;
-          controller.add(List.unmodifiable(_current));
+          _emit();
           loadPhotosAsync(cached);
         }
         _hiddenCutoff = await cutoffF;
@@ -475,7 +494,7 @@ class ChatStreamSession {
               .toList();
           if (filtered.length != _current.length) {
             _current = filtered;
-            controller.add(List.unmodifiable(_current));
+            _emit();
           }
         }
         final swServer = Stopwatch()..start();
@@ -517,7 +536,7 @@ class ChatStreamSession {
               ? first
               : _oldestFetchedTs;
         }
-        controller.add(List.unmodifiable(_current));
+        _emit();
         scheduleCacheSave();
         // Foto di-load background — teks tidak menunggu decrypt foto.
         loadPhotosAsync(_current);
@@ -536,7 +555,7 @@ class ChatStreamSession {
             }
             if (list.isEmpty) return;
             _current = list;
-            controller.add(List.unmodifiable(_current));
+            _emit();
             loadPhotosAsync(list);
           }
         });
@@ -633,7 +652,7 @@ class ChatStreamSession {
               msg.type == 'video_once_expired') {
             dlog('[PHOTO-DBG] rt-insert ${msg.id} type=${msg.type} imgLen=${msg.imageData.length} head=${msg.imageData.isEmpty ? '' : msg.imageData.substring(0, msg.imageData.length > 30 ? 30 : msg.imageData.length)}');
           }
-          controller.add(List.unmodifiable(_current));
+          _emit();
           scheduleCacheSave();
         } catch (_) {
           scheduleReload();
@@ -658,7 +677,7 @@ class ChatStreamSession {
             return;
           }
           _current = next;
-          controller.add(List.unmodifiable(_current));
+          _emit();
           scheduleCacheSave();
         } catch (_) {
           scheduleReload();
@@ -709,7 +728,7 @@ class ChatStreamSession {
         var idx = _current.indexWhere((m) => m.timestamp.isAfter(msg.timestamp));
         if (idx < 0) { _current.add(msg); } else { _current.insert(idx, msg); }
         _trim();
-        controller.add(List.unmodifiable(_current));
+        _emit();
         scheduleCacheSave();
       } catch (_) {}
     });
@@ -761,7 +780,7 @@ class ChatStreamSession {
             _oldestFetchedTs = _oldestFetchedTs == null || first.isBefore(_oldestFetchedTs!)
                 ? first
                 : _oldestFetchedTs;
-            controller.add(List.unmodifiable(_current));
+            _emit();
             scheduleCacheSave();
           }
         }
@@ -805,7 +824,7 @@ class ChatStreamSession {
         if (controller.isClosed) return;
         if (data != null && data.isNotEmpty) {
           _current[idx] = _current[idx].copyWith(imageData: data);
-          controller.add(List.unmodifiable(_current));
+          _emit();
           scheduleCacheSave();
         }
       } catch (e) {
@@ -818,7 +837,7 @@ class ChatStreamSession {
     // _current saat listener pertama datang supaya frame pertama instan.
     controller.onListen = () {
       if (_current.isNotEmpty && !controller.isClosed) {
-        controller.add(List.unmodifiable(_current));
+        _emit();
       }
     };
 
@@ -858,6 +877,7 @@ class ChatStreamSession {
       loadOlder: loadOlder,
       fetchImage: fetchImage,
       reload: reload,
+      revision: revision,
     );
   }
 }

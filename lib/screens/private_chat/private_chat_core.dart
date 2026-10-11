@@ -721,6 +721,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                                 key: searchKey ?? ValueKey(msg.id),
                                 link: linkFor(msg.id),
                                 msg: msg,
+                                s: s,
                                 searchQuery: searching
                                     ? _searchQuery.trim()
                                     : '',
