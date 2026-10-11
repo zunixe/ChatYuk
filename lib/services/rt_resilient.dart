@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import '../core/app_foreground.dart';
 import '../utils.dart';
 
 /// Bungkus `Stream.listen` realtime dengan auto-resubscribe saat error.
@@ -43,6 +44,8 @@ class _ResilientSubscription<T> implements StreamSubscription<T> {
   bool _cancelled = false;
   int _attempt = 0;
   Timer? _retryTimer;
+  // P2a: retry tertunda karena app di background (di-resume saat foreground).
+  bool _pendingBackgroundRetry = false;
   Completer<void>? _cancelCompleter;
 
   static const _delays = [2, 4, 8, 16, 32, 60];
@@ -58,6 +61,19 @@ class _ResilientSubscription<T> implements StreamSubscription<T> {
         _isDisposed = isDisposed,
         _onError = onError,
         _onRecovered = onRecovered {
+    // P2a: saat app kembali foreground, jalankan retry yang tertunda karena bg.
+    AppForeground.isForeground.addListener(_onForegroundChanged);
+    _subscribe();
+  }
+
+  void _onForegroundChanged() {
+    if (!AppForeground.now || !_pendingBackgroundRetry) return;
+    if (_cancelled || _isDisposed()) return;
+    _pendingBackgroundRetry = false;
+    _attempt = 0; // reset backoff — kita baru bangun, coba segera.
+    try {
+      _onRecovered?.call();
+    } catch (_) {}
     _subscribe();
   }
 
@@ -116,6 +132,15 @@ class _ResilientSubscription<T> implements StreamSubscription<T> {
         _cancelCompleter?.complete();
         return;
       }
+      // P2a (baterai): saat app di background/layar mati, TUNDA reconnect —
+      // jangan bangun proses tiap ~60s selamanya saat device offline.
+      // Reconnect dijadwalkan ulang saat kembali foreground (lihat
+      // resumeReconnectIfNeeded). Realtime balik → onRecovered → sync.
+      if (!AppForeground.now) {
+        _reconnecting = false;
+        _pendingBackgroundRetry = true;
+        return;
+      }
       try {
         _onRecovered?.call();
       } catch (_) {}
@@ -128,6 +153,7 @@ class _ResilientSubscription<T> implements StreamSubscription<T> {
   Future<void> cancel() {
     _cancelled = true;
     _retryTimer?.cancel();
+    AppForeground.isForeground.removeListener(_onForegroundChanged);
     final c = _current;
     _current = null;
     if (c == null) {

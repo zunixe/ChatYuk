@@ -47,6 +47,10 @@ void _onSearchChanged(String v) {
         t.cancel();
         return;
       }
+      // P1b (baterai 2026-10-11): JANGAN nyalakan GPS + update DB saat app
+      // di background/layar mati (boros baterai; lokasi terakhir tetap
+      // tersimpan). Resume di foreground → update berikutnya menyusul.
+      if (!AppForeground.now) return;
       final pos = await lp.precisePosition();
       if (pos == null) return;
       if (!mounted) return;

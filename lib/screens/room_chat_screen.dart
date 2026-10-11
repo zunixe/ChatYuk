@@ -1,3 +1,4 @@
+import '../core/app_foreground.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';

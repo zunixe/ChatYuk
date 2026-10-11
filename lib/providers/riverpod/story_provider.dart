@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/app_foreground.dart';
 import '../../core/cache/media_disk_cache.dart';
 import '../../core/cache/message_cache.dart';
 import '../../models/story_model.dart';
@@ -72,6 +73,16 @@ class StoryNotifier extends Notifier<StoryState> {
   @override
   StoryState build() {
     ref.onDispose(_disposeAll);
+    _startRealtime();
+    // P1c (baterai): lepas `stories-realtime` + `story-views-realtime` saat bg
+    // (event story seluruh jaringan tak perlu bangunkan proses).
+    AppForeground.isForeground.addListener(_onForegroundChanged);
+    _fgWas = AppForeground.now;
+    return const StoryState();
+  }
+
+  bool _fgWas = true;
+  void _startRealtime() {
     _storiesSub = listenResilient<String>(
       () => _service.watchStories(),
       (_) => _scheduleRefresh(),
@@ -84,7 +95,20 @@ class StoryNotifier extends Notifier<StoryState> {
       isDisposed: () => false,
       onError: (e) => dlog('[StoryProvider] views stream error: $e'),
     );
-    return const StoryState();
+  }
+
+  void _onForegroundChanged() {
+    final now = AppForeground.now;
+    if (now == _fgWas) return;
+    _fgWas = now;
+    if (now) {
+      _startRealtime();
+    } else {
+      _storiesSub?.cancel();
+      _storiesSub = null;
+      _viewsSub?.cancel();
+      _viewsSub = null;
+    }
   }
 
   void _emit() {
@@ -479,6 +503,7 @@ class StoryNotifier extends Notifier<StoryState> {
   }
 
   void _disposeAll() {
+    AppForeground.isForeground.removeListener(_onForegroundChanged);
     _refreshDebounce?.cancel();
     _storiesSub?.cancel();
     _viewsSub?.cancel();

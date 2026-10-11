@@ -569,6 +569,9 @@ mixin ChatServicePresenceMx on ChatBase {
     // presence/profile) — fallback hanya untuk socket mati (tak ada event
     // = tak ada sync = tick tetap jalan tiap ~60 dtk).
     final fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      // P1a (baterai 2026-10-11): jangan RPC saat app di background/layar
+      // mati (list tak terlihat). Realtime tetap jaga; sync saat resume.
+      if (!AppForeground.now) return;
       if (lastSyncAt != null &&
           DateTime.now().difference(lastSyncAt!).inSeconds < 45) {
         return; // baru sync — hemat 1 RPC.

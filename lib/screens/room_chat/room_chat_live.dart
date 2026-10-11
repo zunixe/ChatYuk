@@ -181,6 +181,8 @@ mixin _RcLiveMx on _RoomChatBase {
         t.cancel();
         return;
       }
+      // P1b: jangan GPS + update DB saat background/layar mati.
+      if (!AppForeground.now) return;
       final pos = await lp.precisePosition();
       if (pos == null || !mounted) return;
       final updated = initial.copyWith(lat: pos.$1, lng: pos.$2);
