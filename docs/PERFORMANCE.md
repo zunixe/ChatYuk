@@ -3841,3 +3841,33 @@ retry in 1s/2s` saat background = **reconnect loop realtime** (belum sepenuhnya
 di-defer; ada `_pendingBackgroundRetry` setengah jalan di `rt_resilient.dart`).
 Prioritas baterai berikutnya: pastikan reconnect realtime **ditunda penuh**
 saat background (event-driven resume, backoff+jitter).
+
+### §46b. Verifikasi baterai lanjutan + uji notifikasi/sync (2026-10-11)
+
+**Uji #1 — CPU background 10 menit** (`dumpsys batterystats`, app di Home):
+- `cpu:bg` 1348ms → 7567ms = **+6.2 dtk / 10 mnt** (mayoritas `screen off`).
+- Analisis: **0 log Flutter** dari app user (gate bekerja); sisa CPU =
+  `FlutterFirebaseMessagingBackgroundService` (FCM, WAJAR & wajib untuk
+  terima pesan) + WiFi-multicast wakelock. Proses app **dibunuh sistem** saat
+  bg (ruang `ps` kosong) → hemat.
+- **Kesimpulan:** tidak ada lagi timer app yang bangunkan CPU; sisanya FCM
+  (tak boleh dimatikan — andalan notifikasi).
+
+**Uji #2 — pesan masuk saat app background:** insert server-side ke
+`private_messages` → FCM **sampai**: `Notification(channel=chatyuk_chat,
+category=msg, vis=PUBLIC)` uid user + `FlutterFirebaseMessagingBackgroundService`
+terpicu + aksi cepat Balas/Tandai-dibaca. **Notifikasi andal** (gate timer TIDAK
+mengganggu).
+
+**Temuan lanjutan (PRE-EXISTING, bukan regresi — belum diperbaiki):**
+1. **JWT expired saat background panjang** → `InvalidJWTToken: Token has expired
+   144s` → stream realtime error beruntun → `[RT-RESILIENT] retry` + refresh
+   token → **`Choreographer: Skipped 89 frames`** saat resume (1 jank besar).
+   Akar: token GoTrue tak di-refresh sebelum stream reconnect saat resume.
+   Rekomendasi: refresh session **saat resume SEBELUM** reconnect realtime
+   (panggil `refreshSession()` di lifecycle resumed, sebelum `_subscribe`).
+2. Sync resume bekerja: `[CACHE-TIME] sqlite=11ms n=65` (pesan dari disk).
+
+**Status:** notifikasi TERVERIFIKASI andal; gate timer TERVERIFIKASI (0 log bg);
+jangka-panjang mAh belum diukur penuh (butuh 30–60 mnt ideal). Tidak diklaim
+"hemat X%" tanpa data penuh.
