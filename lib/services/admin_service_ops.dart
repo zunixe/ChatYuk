@@ -281,6 +281,42 @@ mixin _AdminOpsMx on _AdminBase {
     }
   }
 
+  // ── TIMELINE (tab admin) ───────────────────────────────────────────
+
+  /// Semua post lintas user (moderasi, TANPA batas RLS). [filter] ∈
+  /// `all|public|followers|subscribers`. Urut terbaru di atas (server).
+  Future<List<Map<String, dynamic>>> adminTimelineAll({
+    String filter = 'all',
+    int limit = 100,
+  }) async {
+    final res = await _rpc(
+      'admin_timeline_all',
+      params: {'p_limit': limit, 'p_filter': filter},
+    ).timeout(_openTimeout);
+    if (res is List) {
+      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return const [];
+  }
+
+  /// Ubah visibilitas satu post. [visibility] ∈
+  /// `public|followers|subscribers`. Return true bila sukses.
+  Future<bool> adminSetPostVisibility(
+    String postId,
+    String visibility,
+  ) async {
+    try {
+      final res = await _rpc(
+        'admin_set_post_visibility',
+        params: {'p_post_id': postId, 'p_visibility': visibility},
+      ).timeout(_openTimeout);
+      return res is Map && res['ok'] == true;
+    } catch (e) {
+      dlog('[AdminService] adminSetPostVisibility error: $e');
+      return false;
+    }
+  }
+
   // ── Email Marketing ──────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> emailCampaignsPage({

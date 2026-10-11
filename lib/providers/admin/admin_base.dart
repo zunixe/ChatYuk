@@ -112,6 +112,7 @@ abstract class AdminBase extends ChangeNotifier {
   int _revStories = 0;
   int _revMarketing = 0;
   int _revRooms = 0;
+  int _revPosts = 0;
 
   int get revStats => _revStats;
   int get revDevices => _revDevices;
@@ -124,6 +125,7 @@ abstract class AdminBase extends ChangeNotifier {
   int get revStories => _revStories;
   int get revMarketing => _revMarketing;
   int get revRooms => _revRooms;
+  int get revPosts => _revPosts;
 
   /// Bump counter domain + notify. `domain` dipilih dari helper di bawah.
   void _bumpAndNotify(void Function() bump) {
@@ -143,4 +145,5 @@ abstract class AdminBase extends ChangeNotifier {
   void _notifyStories() => _bumpAndNotify(() => _revStories++);
   void _notifyMarketing() => _bumpAndNotify(() => _revMarketing++);
   void _notifyRooms() => _bumpAndNotify(() => _revRooms++);
+  void _notifyPosts() => _bumpAndNotify(() => _revPosts++);
 }

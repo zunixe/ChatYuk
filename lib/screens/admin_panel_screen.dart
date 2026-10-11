@@ -24,6 +24,7 @@ import 'admin_dummy_tab.dart';
 import 'admin_global_setting_tab.dart';
 import 'admin_attribution_tab.dart';
 import 'admin_story_tab.dart';
+import 'admin_timeline_tab.dart';
 import 'admin_docs_tab.dart';
 import 'admin_marketing_tab.dart';
 import 'admin_panel/widgets/usermap_card.dart';
@@ -118,7 +119,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _tabCtrl = TabController(length: 13, vsync: this);
+    _tabCtrl = TabController(length: 14, vsync: this);
     _tabCtrl.addListener(_onTabChanged);
     final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(() => admin.fetchStats());
@@ -375,6 +376,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
             Tab(text: s.adminDeletedTab),
             Tab(text: s.adminAttributionTab),
             Tab(text: s.adminStoryTab),
+            Tab(text: s.adminTimelineTab),
             Tab(text: s.adminDocsTab),
             Tab(text: s.adminMarketingTab),
           ],
@@ -445,6 +447,10 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
             const SizedBox.shrink(),
           if (_visitedTabs.contains(12))
             const AdminMarketingTab()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(13))
+            const AdminTimelineTab()
           else
             const SizedBox.shrink(),
         ],

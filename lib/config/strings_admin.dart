@@ -804,9 +804,34 @@ extension SAdminExcludeX on S {
     AdminErrKind.unknown => '',
   };
 
+  // ── Tab Timeline (kelola SEMUA post: lihat lintas user + ubah visibilitas) ──
+  String get adminTimelineTab => isId ? 'Timeline' : 'Timeline';
+  String get adminTimelineSubtitle => isId
+      ? 'Semua postingan user (public & non-public). Ubah visibilitas.'
+      : 'All user posts (public & non-public). Change visibility.';
+  String get adminTimelineFilterAll => isId ? 'Semua' : 'All';
+  String get adminTimelineFilterPublic => isId ? 'Public' : 'Public';
+  String get adminTimelineFilterFollowers => isId ? 'Pengikut' : 'Followers';
+  String get adminTimelineFilterSubscribers => isId ? 'Subscriber' : 'Subscribers';
+  String get adminTimelineEmpty => isId ? 'Belum ada postingan' : 'No posts yet';
+  String get adminTimelineVisibilityUpdated =>
+      isId ? 'Visibilitas diperbarui' : 'Visibility updated';
+  String get adminTimelineSetVisibility =>
+      isId ? 'Ubah visibilitas' : 'Change visibility';
+  /// Label state visibilitas post (public/followers/subscribers).
+  String adminTimelineVisLabel(String state) {
+    switch (state) {
+      case 'followers':
+        return isId ? 'Pengikut' : 'Followers';
+      case 'subscribers':
+        return isId ? 'Subscriber' : 'Subscribers';
+      default:
+        return isId ? 'Public' : 'Public';
+    }
+  }
+
   // ── Tab Story (kelola story user: lihat semua, atur visibilitas, hapus) ──
-  String get adminStoryTab => isId ? 'Story' : 'Stories';
-  String get adminStorySubtitle => isId
+  String get adminStoryTab => isId ? 'Story' : 'Stories';  String get adminStorySubtitle => isId
       ? 'Semua story user. Atur visibilitas atau hapus.'
       : 'All user stories. Set visibility or delete.';
   String get adminStoryFilterAll => isId ? 'Semua' : 'All';
