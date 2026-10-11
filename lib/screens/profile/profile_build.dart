@@ -320,60 +320,73 @@ mixin _ProfileBuildMx on _ProfileBase {
         ).read(authProvider.notifier).profile?.subscriptionPrice ??
         0;
     final ctrl = TextEditingController(text: current > 0 ? '$current' : '');
-    final price = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        title: Row(
-          children: [
-            Icon(Icons.star_rounded, color: Color(0xFFB8860B)),
-            SizedBox(width: 8),
-            Expanded(child: Text(s.setSubPriceTitle)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              s.subscribeCreatorHint,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+    final int? price;
+    try {
+      price = await showDialog<int>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.bgCard,
+          title: Row(
+            children: [
+              Icon(Icons.star_rounded, color: Color(0xFFB8860B)),
+              SizedBox(width: 8),
+              Expanded(child: Text(s.setSubPriceTitle)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                s.subscribeCreatorHint,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                style: TextStyle(color: AppTheme.textPrimary),
+                decoration: InputDecoration(
+                  labelText: s.setSubPriceTitle,
+                  hintText: s.setSubPriceHint,
+                  suffixText: s.subscribePriceSuffix,
+                ),
+              ),
+              SizedBox(height: 10),
+              Text(
+                s.setSubPriceExplain,
+                style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(s.btnCancel),
             ),
-            SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              style: TextStyle(color: AppTheme.textPrimary),
-              decoration: InputDecoration(
-                labelText: s.setSubPriceTitle,
-                hintText: s.setSubPriceHint,
-                suffixText: s.subscribePriceSuffix,
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+              ),
+              onPressed: () {
+                final v = int.tryParse(ctrl.text.trim()) ?? 0;
+                Navigator.pop(ctx, v);
+              },
+              child: Text(
+                s.btnSave,
+                style: const TextStyle(color: Colors.white),
               ),
             ),
-            SizedBox(height: 10),
-            Text(
-              s.setSubPriceExplain,
-              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s.btnCancel),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
-            onPressed: () {
-              final v = int.tryParse(ctrl.text.trim()) ?? 0;
-              Navigator.pop(ctx, v);
-            },
-            child: Text(s.btnSave, style: const TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      // R2: controller dialog harga dilepas setelah dialog tutup.
+      ctrl.dispose();
+    }
     if (price == null || !mounted) return;
     final ok = await social.setSubscriptionPrice(price);
     if (!mounted) return;
