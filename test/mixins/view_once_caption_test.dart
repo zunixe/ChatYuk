@@ -133,6 +133,7 @@ class ViewOnceHostState extends State<ViewOnceHost>
     int? videoDurationMs,
   }) async {
     dispatched.add((type, text));
+    return null;
   }
 
   @override
