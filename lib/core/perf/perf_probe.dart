@@ -225,6 +225,14 @@ class PerfProbe {
     if (!measuring) return;
     _log('[PERF] ── $label ──');
     _log('[PERF] ${frameSummary()}');
+    // Ringkasan ImageCache — verifikasi hit-rate avatar/foto (audit §47).
+    // (Flutter tak mengekspos hits/misses publik; pakai ukuran live + bytes.)
+    try {
+      final ic = PaintingBinding.instance.imageCache;
+      _log('[PERF] imageCache live=${ic.currentSize} '
+          'bytes=${ic.currentSizeBytes} '
+          'refs=${ic.liveImageCount}');
+    } catch (_) {}
     for (int i = 0; i < 4; i++) {
       final list = _tabFramesUs[i];
       if (list == null || list.isEmpty) continue;

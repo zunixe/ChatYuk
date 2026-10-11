@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
 import '../providers/riverpod/avatar_provider.dart';
+import 'user_avatar.dart' show avatarImageProviderFor;
 
 /// Avatar baris penonton story.
 ///
@@ -36,6 +37,8 @@ class StoryViewerAvatar extends StatefulWidget {
 
 class _StoryViewerAvatarState extends State<StoryViewerAvatar> {
   Uint8List? _bytes;
+  /// Provider STABIL per viewer (anti decode ulang saat rebuild).
+  ImageProvider? _provider;
 
   @override
   void initState() {
@@ -51,18 +54,27 @@ class _StoryViewerAvatarState extends State<StoryViewerAvatar> {
     }
   }
 
+  void _setBytes(Uint8List? b) {
+    _bytes = b;
+    _provider = (b != null && widget.viewerId.isNotEmpty)
+        ? avatarImageProviderFor(widget.viewerId, b)
+        : (b != null
+            ? ResizeImage(MemoryImage(b), width: (widget.radius * 4).round())
+            : null);
+  }
+
   void _resolve() {
     final a = widget.avatar;
     // base64 siap pakai → decode langsung (sinkron, tanpa RPC).
     if (a.isNotEmpty) {
       try {
-        _bytes = base64Decode(a);
+        _setBytes(base64Decode(a));
         return;
       } catch (_) {
         // bukan base64 → path storage, lanjut ke provider.
       }
     }
-    _bytes = null;
+    _setBytes(null);
     if (widget.viewerId.isEmpty) return;
     // Path/kosong → ambil via AvatarProvider (fetch + download + cache).
     final prov = ProviderScope.containerOf(context, listen: false).read(avatarProvider);
@@ -71,7 +83,7 @@ class _StoryViewerAvatarState extends State<StoryViewerAvatar> {
         .then((b64) {
           if (!mounted || b64.isEmpty) return;
           try {
-            setState(() => _bytes = base64Decode(b64));
+            if (mounted) setState(() => _setBytes(base64Decode(b64)));
           } catch (_) {}
         })
         .catchError((_) {});
@@ -80,13 +92,10 @@ class _StoryViewerAvatarState extends State<StoryViewerAvatar> {
   @override
   Widget build(BuildContext context) {
     final bytes = _bytes;
-    final cap = (widget.radius * 4).round();
     return CircleAvatar(
       radius: widget.radius,
       backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
-      backgroundImage: bytes != null
-          ? ResizeImage(MemoryImage(bytes), width: cap)
-          : null,
+      backgroundImage: _provider,
       child: bytes != null
           ? null
           : Text(
