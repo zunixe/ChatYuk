@@ -18,9 +18,7 @@ cd "$(dirname "$0")/.."
 LIMIT=1000
 
 # Format: "<path>:<max_baris>"  (max = ukuran SAAT PENDAFTARAN; hanya boleh turun)
-ALLOWLIST=(
-  "lib/screens/private_chat_screen.dart:3073"
-)
+ALLOWLIST=()  # KOSONG: seluruh lib/ sudah < LIMIT 🎉
 
 fail=0
 # 1) File > LIMIT yang TIDAK ada di allowlist = penambahan baru → tolak.
@@ -29,7 +27,7 @@ while IFS= read -r line; do
   f=$(echo "$line" | awk '{print $2}')
   [ "$n" -gt "$LIMIT" ] || continue
   found=0
-  for entry in "${ALLOWLIST[@]}"; do
+  for entry in "${ALLOWLIST[@]+"${ALLOWLIST[@]}"}"; do
     if [ "${entry%%:*}" = "$f" ]; then found=1; break; fi
   done
   if [ "$found" -eq 0 ]; then
@@ -41,7 +39,7 @@ while IFS= read -r line; do
 done < <(find lib -name '*.dart' | xargs wc -l | awk '$2!="total"{print $1" "$2}')
 
 # 2) File allowlist yang MELEBIHI batas terdaftar = regresi (tumbuh) → tolak.
-for entry in "${ALLOWLIST[@]}"; do
+for entry in "${ALLOWLIST[@]+"${ALLOWLIST[@]}"}"; do
   f="${entry%%:*}"
   max="${entry##*:}"
   if [ -f "$f" ]; then
