@@ -286,6 +286,10 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     if (!mounted) return;
     // 1) Cache DISK dulu (instan, tanpa unduh video) — kunci anti-blink
     //    saat cold start / scroll ulang / keluar-masuk chat.
+    //    ANTI-KEDIP: HIT di sini tampil INSTAN tanpa fade dan TANPA menyentuh
+    //    `_loading` lebih dulu (dulu: setState loading=true → overlay play
+    //    hilang sesaat + fade 220ms replay = terlihat "kedip" tiap cold start
+    //    saat readSync di initState kelewat karena prewarm race).
     try {
       final cached =
           MediaDiskCache.instance.readSync(_posterKey) ??
@@ -294,16 +298,20 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         dlog('[VideoBubble] poster HIT disk key=${_posterKey.hashCode} bytes=${cached.length}');
         if (!mounted) return;
         _stopSlow();
-        setState(() {
-          _poster = cached;
-          _fadePoster = true;
-          _loading = false;
-          _failed = false;
-        });
+        if (_poster == null || _poster!.length != cached.length) {
+          setState(() {
+            _poster = cached;
+            _loading = false;
+            _failed = false;
+          });
+        } else if (_loading && mounted) {
+          setState(() => _loading = false);
+        }
         return;
       }
       dlog('[VideoBubble] poster MISS disk key=${_posterKey.hashCode} → generate');
     } catch (_) {}
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _failed = false;
