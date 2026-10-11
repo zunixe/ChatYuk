@@ -53,11 +53,6 @@ class _MessageImageState extends State<MessageImage> {
   // / pergantian gambar). Scroll-back (cache hit di initState) langsung
   // tampil tanpa animasi ulang — daftar foto tetap persistence.
   bool _fadeNext = false;
-  // Zoom inline di dalam bubble — gambar tetap kecil di chat, tapi bisa
-  // di-pinch 2 jari / ketuk 2x per kotak (mis. baca teks diagram).
-  final TransformationController _trans = TransformationController();
-  double _scale = 1.0;
-  Offset _doubleTapPos = Offset.zero;
   // Lebar terakhir yang dilaporkan ke parent (hindari callback berulang).
   double _reportedWidth = -1;
 
@@ -93,31 +88,7 @@ class _MessageImageState extends State<MessageImage> {
 
   @override
   void dispose() {
-    _trans.dispose();
     super.dispose();
-  }
-
-  void _resetZoom() {
-    if (_scale <= 1.01) return;
-    _trans.value = Matrix4.identity();
-    _scale = 1.0;
-  }
-
-  void _toggleZoom() {
-    if (!mounted) return;
-    if (_scale > 1.01) {
-      _trans.value = Matrix4.identity();
-      setState(() => _scale = 1.0);
-    } else {
-      const s = 2.5;
-      _trans.value = Matrix4.diagonal3Values(s, s, 1)
-        ..setTranslationRaw(
-          -_doubleTapPos.dx * (s - 1),
-          -_doubleTapPos.dy * (s - 1),
-          0,
-        );
-      setState(() => _scale = s);
-    }
   }
 
   @override
@@ -126,7 +97,6 @@ class _MessageImageState extends State<MessageImage> {
     // imageData berubah (fetch awal kosong → photo download selesai) → re-decode
     if (widget.imageData != oldWidget.imageData &&
         widget.imageData.isNotEmpty) {
-      _resetZoom();
       // Cadangkan aspek baru segera (sinkron) bila base64; path → ukuran lama
       // dipertahankan (gapless) sampai download memberi aspek sebenarnya.
       _reservePlaceholder(widget.imageData);
@@ -393,46 +363,25 @@ class _MessageImageState extends State<MessageImage> {
     _reportWidth(width);
     return GestureDetector(
       onTap: () => _openFullscreen(),
-      onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
-      onDoubleTap: _toggleZoom,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: InteractiveViewer(
-          transformationController: _trans,
-          clipBehavior: Clip.hardEdge,
-          boundaryMargin: const EdgeInsets.all(double.infinity),
-          minScale: 1.0,
-          maxScale: 6.0,
-          // Pan satu jari hanya saat sudah zoom — kalau skala 1.0, drag
-          // tetap untuk scroll chat (pola sama seperti post_photo_viewer).
-          panEnabled: _scale > 1.01,
-          scaleEnabled: true,
-          onInteractionUpdate: (_) {
-            _scale = _trans.value.getMaxScaleOnAxis();
-          },
-          onInteractionEnd: (_) => setState(
-            () => _scale = _trans.value.getMaxScaleOnAxis(),
-          ),
-          child: _fadeNext
-              // Fade-in tiap KONTEN baru. Scroll-back / cache hit di initState
-              // (_fadeNext=false) langsung tampil — tidak animasi ulang.
-              ? TweenAnimationBuilder<double>(
-                  key: ValueKey(decoded),
-                  tween: Tween(begin: 0, end: 1),
-                  duration: const Duration(milliseconds: 180),
-                  onEnd: () => _fadeNext = false,
-                  builder: (_, opacity, child) =>
-                      Opacity(opacity: opacity, child: child),
-                  child: _bubbleImage(
-                    context,
-                    decoded,
-                    width,
-                    height,
-                    s,
-                  ),
-                )
-              : _bubbleImage(context, decoded, width, height, s),
-        ),
+        // THUMBNAIL TIDAK BISA zoom/geser (2026-10-11): dulu pakai
+        // InteractiveViewer + onDoubleTap zoom → foto di bubble bisa membesar
+        // & digeser padahal hanya thumbnail. Zoom/geser HANYA di fullscreen
+        // viewer (PhotoViewerScreen). Di sini cukup tap → buka fullscreen.
+        child: _fadeNext
+            // Fade-in tiap KONTEN baru. Scroll-back / cache hit di initState
+            // (_fadeNext=false) langsung tampil — tidak animasi ulang.
+            ? TweenAnimationBuilder<double>(
+                key: ValueKey(decoded),
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 180),
+                onEnd: () => _fadeNext = false,
+                builder: (_, opacity, child) =>
+                    Opacity(opacity: opacity, child: child),
+                child: _bubbleImage(context, decoded, width, height, s),
+              )
+            : _bubbleImage(context, decoded, width, height, s),
       ),
     );
   }
