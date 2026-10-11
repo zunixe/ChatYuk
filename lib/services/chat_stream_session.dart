@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show ValueNotifier, ValueListenable;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
 import '../utils.dart';
+import '../core/app_foreground.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/photo_cache.dart';
 import 'storage_photo_service.dart';
@@ -741,6 +742,10 @@ class ChatStreamSession {
     // Saat realtime sehat (tangkap INSERT/UPDATE/DELETE), tidak ada
     // fetch redundant tiap 30 detik.
     final pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      // BATERAI (P2): JANGAN poll saat app di-background (layar mati/tidak
+      // dilihat). Dulu timer 30s hidup terus → wake + query DB saat diam.
+      // Pesan saat background tetap andal via FCM; sinkron saat resume.
+      if (!AppForeground.now) return;
       if (DateTime.now().difference(lastRealtime).inSeconds < 25) return;
       reload();
     });
