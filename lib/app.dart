@@ -600,6 +600,17 @@ class _MainNavState extends ConsumerState<_MainNav>
         return;
       }
     }
+    // PERF (2026-10-11): coalesce tap tab beruntun. Klik cepat-per-klik
+    // (user "banyak klik menu") memicu rebuild `_MainNav` + flip TickerMode
+    // + layout tiap tap → terukur 1 frame jank (~82ms) per transisi. Abaikan
+    // tap dalam <200ms (di bawah persepsi tap ganda) supaya transisi mulus;
+    // tap tab SAMA sudah di-guard `goTo`.
+    final now = DateTime.now();
+    if (_lastNavTapAt != null &&
+        now.difference(_lastNavTapAt!) < const Duration(milliseconds: 200)) {
+      return;
+    }
+    _lastNavTapAt = now;
     PerfProbe.tabStart(i);
     // Pindah tab = pemicu utama bloat arena native → tandai interaksi supaya
     // trim foreground-idle menunggu user benar-benar diam.
@@ -611,6 +622,8 @@ class _MainNavState extends ConsumerState<_MainNav>
       });
     }
   }
+
+  DateTime? _lastNavTapAt;
 
   @override
   Widget build(BuildContext context) {
