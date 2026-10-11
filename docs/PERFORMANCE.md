@@ -3695,10 +3695,13 @@ DALAM layar chat.
 - Baseline & sesudah **tidak comparable** (sesi beda panjang: 650 vs 1548
   frame) → tidak diklaim sebagai perbaikan terukur. Yang tercatat:
   `build[p50=0.3ms p90=2.8ms]` · janky(build)=1/1548 · `PrivateChat=12` build.
-- **Temuan baru (belum diperbaiki, di luar scope):** `rpc.mark_chat_read`
-  terpanggil beruntun (4–8× per sesi <30 dtk) walau throttle 2500ms di
-  `ChatService.markAsRead` — perlu investigasi terpisah (kandidat: beberapa
-  jalur memanggil dengan instance/uid berbeda).
+- **Temuan baru → SUDAH DIPERBAIKI (commit 5b18797):** `rpc.mark_chat_read`
+  terpanggil beruntun 4–8× walau window 2500ms. Akar: throttle map
+  PER-INSTANCE, padahal ChatService dibuat beberapa kali (chatProvider,
+  roomProvider, onlineUsersProvider, main_notifications) → window tak terbagi.
+  Fix: map throttle top-level GLOBAL (satu kebijakan per chatId lintas
+  instance). Test `mark_read_throttle_test` membuktikan instance B tak RPC
+  untuk chatId sama dalam window.
 
 **Status:** perubahan struktur terverifikasi via `flutter analyze lib/`=0,
 `flutter test` hijau, guard file-size OK. **Tidak** diklaim bebas lag (§11).
