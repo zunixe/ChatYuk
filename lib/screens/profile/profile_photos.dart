@@ -481,235 +481,251 @@ mixin _ProfilePhotosMx on _ProfileBase {
     String? error;
     bool loading = false;
 
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.bgCard,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      isScrollControlled: true,
-      builder: (sheetCtx) {
-        // Compact: sheet menempel bawah seperti dulu, tapi konten tetap
-        // di atas menu Android (nav/gesture bar) & keyboard.
-        final bottom =
-            MediaQuery.viewInsetsOf(sheetCtx).bottom +
-            MediaQuery.viewPaddingOf(sheetCtx).bottom;
-        return Padding(
-          padding: EdgeInsets.only(bottom: bottom),
-          child: StatefulBuilder(
-            builder: (sheetCtx, setSheet) => SingleChildScrollView(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.divider,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Text(s.btnEditProfile, style: AppText.title),
-                  SizedBox(height: 4),
-                  Text(
-                    s.msgUsernameOldReleased,
-                    style: AppText.bodySmall.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  TextField(
-                    controller: ctrl,
-                    focusNode: focus,
-                    style: TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: s.labelUsername,
-                      hintText: s.hintNickname,
-                      errorText: error,
-                      prefixIcon: const Icon(Icons.alternate_email, size: 20),
-                      suffixIcon:
-                          error == null &&
-                              ctrl.text.isNotEmpty &&
-                              ctrl.text != currentNick
-                          ? const Icon(Icons.check_circle, color: Colors.green)
-                          : null,
-                    ),
-                    onChanged: (v) => setSheet(() => error = null),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: gender,
-                    hint: Text(
-                      profile.gender == 'female'
-                          ? s.labelGenderFemale
-                          : s.labelGenderMale,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: s.labelGenderFilter,
-                      prefixIcon: const Icon(Icons.wc_outlined, size: 20),
-                    ),
-                    items: [
-                      DropdownMenuItem(
-                        value: 'male',
-                        child: Text(s.labelGenderMale),
+    try {
+      await showModalBottomSheet(
+        context: context,
+        backgroundColor: AppTheme.bgCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        isScrollControlled: true,
+        builder: (sheetCtx) {
+          // Compact: sheet menempel bawah seperti dulu, tapi konten tetap
+          // di atas menu Android (nav/gesture bar) & keyboard.
+          final bottom =
+              MediaQuery.viewInsetsOf(sheetCtx).bottom +
+              MediaQuery.viewPaddingOf(sheetCtx).bottom;
+          return Padding(
+            padding: EdgeInsets.only(bottom: bottom),
+            child: StatefulBuilder(
+              builder: (sheetCtx, setSheet) => SingleChildScrollView(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppTheme.divider,
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      DropdownMenuItem(
-                        value: 'female',
-                        child: Text(s.labelGenderFemale),
+                    ),
+                    SizedBox(height: 16),
+                    Text(s.btnEditProfile, style: AppText.title),
+                    SizedBox(height: 4),
+                    Text(
+                      s.msgUsernameOldReleased,
+                      style: AppText.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
                       ),
-                    ],
-                    onChanged: (v) => setSheet(() => gender = v),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    initialValue: age,
-                    decoration: InputDecoration(
-                      labelText: s.labelAge,
-                      prefixIcon: const Icon(Icons.cake_outlined, size: 20),
                     ),
-                    items: [
-                      for (int i = 18; i <= 60; i++)
-                        DropdownMenuItem(value: i, child: Text('$i')),
-                    ],
-                    onChanged: (v) => setSheet(() => age = v ?? age),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: negara,
-                    decoration: InputDecoration(
-                      labelText: s.labelCountry,
-                      prefixIcon: const Icon(Icons.public, size: 20),
+                    SizedBox(height: 16),
+                    TextField(
+                      controller: ctrl,
+                      focusNode: focus,
+                      style: TextStyle(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: s.labelUsername,
+                        hintText: s.hintNickname,
+                        errorText: error,
+                        prefixIcon: const Icon(Icons.alternate_email, size: 20),
+                        suffixIcon:
+                            error == null &&
+                                ctrl.text.isNotEmpty &&
+                                ctrl.text != currentNick
+                            ? const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                              )
+                            : null,
+                      ),
+                      onChanged: (v) => setSheet(() => error = null),
                     ),
-                    items: [
-                      for (final n in kotaByNegara.keys)
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: gender,
+                      hint: Text(
+                        profile.gender == 'female'
+                            ? s.labelGenderFemale
+                            : s.labelGenderMale,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: s.labelGenderFilter,
+                        prefixIcon: const Icon(Icons.wc_outlined, size: 20),
+                      ),
+                      items: [
                         DropdownMenuItem(
-                          value: n,
-                          child: Text(negaraLabel(n, s.isId)),
+                          value: 'male',
+                          child: Text(s.labelGenderMale),
                         ),
-                    ],
-                    onChanged: (v) => setSheet(() {
-                      if (v == null) return;
-                      negara = v;
-                      kota = kotaByNegara[v]!.first;
-                    }),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: kota,
-                    decoration: InputDecoration(
-                      labelText: s.labelCity,
-                      prefixIcon: const Icon(Icons.location_city, size: 20),
+                        DropdownMenuItem(
+                          value: 'female',
+                          child: Text(s.labelGenderFemale),
+                        ),
+                      ],
+                      onChanged: (v) => setSheet(() => gender = v),
                     ),
-                    items: [
-                      for (final k in kotaByNegara[negara]!)
-                        DropdownMenuItem(value: k, child: Text(k)),
-                    ],
-                    onChanged: (v) => setSheet(() => kota = v ?? kota),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: loading
-                          ? null
-                          : () async {
-                              final nick = ctrl.text.trim();
-                              final nickChanged = nick != currentNick;
-                              if (nickChanged) {
-                                if (nick.length < 3) {
-                                  setSheet(() => error = s.errNicknameShort);
-                                  focus.requestFocus();
-                                  return;
-                                }
-                                if (nick.length > 20) {
-                                  setSheet(() => error = s.errNicknameLong);
-                                  focus.requestFocus();
-                                  return;
-                                }
-                                if (!isValidNickname(nick)) {
-                                  setSheet(() => error = s.errNicknameInvalid);
-                                  focus.requestFocus();
-                                  return;
-                                }
-                                if (isBannedNickname(nick) &&
-                                    !ProviderScope.containerOf(
-                                      context,
-                                      listen: false,
-                                    ).read(authProvider.notifier).isRealAdmin) {
-                                  setSheet(() => error = s.errNicknameBanned);
-                                  focus.requestFocus();
-                                  return;
-                                }
-                                final available =
-                                    await ProviderScope.containerOf(
-                                          context,
-                                          listen: false,
-                                        )
-                                        .read(authProvider.notifier)
-                                        .isNicknameAvailable(nick);
-                                if (!available) {
-                                  setSheet(() => error = s.errNicknameTaken);
-                                  focus.requestFocus();
-                                  return;
-                                }
-                              }
-                              setSheet(() => loading = true);
-                              try {
-                                await ProviderScope.containerOf(
-                                      context,
-                                      listen: false,
-                                    )
-                                    .read(authProvider.notifier)
-                                    .updateProfile(
-                                      nickname: nickChanged ? nick : null,
-                                      age: age,
-                                      country: negara,
-                                      city: kota,
-                                      gender: gender,
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<int>(
+                      initialValue: age,
+                      decoration: InputDecoration(
+                        labelText: s.labelAge,
+                        prefixIcon: const Icon(Icons.cake_outlined, size: 20),
+                      ),
+                      items: [
+                        for (int i = 18; i <= 60; i++)
+                          DropdownMenuItem(value: i, child: Text('$i')),
+                      ],
+                      onChanged: (v) => setSheet(() => age = v ?? age),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: negara,
+                      decoration: InputDecoration(
+                        labelText: s.labelCountry,
+                        prefixIcon: const Icon(Icons.public, size: 20),
+                      ),
+                      items: [
+                        for (final n in kotaByNegara.keys)
+                          DropdownMenuItem(
+                            value: n,
+                            child: Text(negaraLabel(n, s.isId)),
+                          ),
+                      ],
+                      onChanged: (v) => setSheet(() {
+                        if (v == null) return;
+                        negara = v;
+                        kota = kotaByNegara[v]!.first;
+                      }),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: kota,
+                      decoration: InputDecoration(
+                        labelText: s.labelCity,
+                        prefixIcon: const Icon(Icons.location_city, size: 20),
+                      ),
+                      items: [
+                        for (final k in kotaByNegara[negara]!)
+                          DropdownMenuItem(value: k, child: Text(k)),
+                      ],
+                      onChanged: (v) => setSheet(() => kota = v ?? kota),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: loading
+                            ? null
+                            : () async {
+                                final nick = ctrl.text.trim();
+                                final nickChanged = nick != currentNick;
+                                if (nickChanged) {
+                                  if (nick.length < 3) {
+                                    setSheet(() => error = s.errNicknameShort);
+                                    focus.requestFocus();
+                                    return;
+                                  }
+                                  if (nick.length > 20) {
+                                    setSheet(() => error = s.errNicknameLong);
+                                    focus.requestFocus();
+                                    return;
+                                  }
+                                  if (!isValidNickname(nick)) {
+                                    setSheet(
+                                      () => error = s.errNicknameInvalid,
                                     );
-                                if (sheetCtx.mounted) Navigator.pop(sheetCtx);
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(s.msgProfileSaved)),
-                                  );
-                                  // Bonus profil DIHAPUS (tidak ada poin gratis).
+                                    focus.requestFocus();
+                                    return;
+                                  }
+                                  if (isBannedNickname(nick) &&
+                                      !ProviderScope.containerOf(
+                                            context,
+                                            listen: false,
+                                          )
+                                          .read(authProvider.notifier)
+                                          .isRealAdmin) {
+                                    setSheet(() => error = s.errNicknameBanned);
+                                    focus.requestFocus();
+                                    return;
+                                  }
+                                  final available =
+                                      await ProviderScope.containerOf(
+                                            context,
+                                            listen: false,
+                                          )
+                                          .read(authProvider.notifier)
+                                          .isNicknameAvailable(nick);
+                                  if (!available) {
+                                    setSheet(() => error = s.errNicknameTaken);
+                                    focus.requestFocus();
+                                    return;
+                                  }
                                 }
-                              } catch (e) {
-                                if (sheetCtx.mounted) {
-                                  final msg = e.toString().toLowerCase();
-                                  setSheet(() {
-                                    loading = false;
-                                    error =
-                                        (msg.contains('nickname_banned') ||
-                                            msg.contains('banned'))
-                                        ? s.errNicknameBanned
-                                        : s.errGeneric;
-                                    dlog(e.toString(), tag: 'PROFILE');
-                                  });
+                                setSheet(() => loading = true);
+                                try {
+                                  await ProviderScope.containerOf(
+                                        context,
+                                        listen: false,
+                                      )
+                                      .read(authProvider.notifier)
+                                      .updateProfile(
+                                        nickname: nickChanged ? nick : null,
+                                        age: age,
+                                        country: negara,
+                                        city: kota,
+                                        gender: gender,
+                                      );
+                                  if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(s.msgProfileSaved),
+                                      ),
+                                    );
+                                    // Bonus profil DIHAPUS (tidak ada poin gratis).
+                                  }
+                                } catch (e) {
+                                  if (sheetCtx.mounted) {
+                                    final msg = e.toString().toLowerCase();
+                                    setSheet(() {
+                                      loading = false;
+                                      error =
+                                          (msg.contains('nickname_banned') ||
+                                              msg.contains('banned'))
+                                          ? s.errNicknameBanned
+                                          : s.errGeneric;
+                                      dlog(e.toString(), tag: 'PROFILE');
+                                    });
+                                  }
                                 }
-                              }
-                            },
-                      child: loading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(s.btnSave, style: AppText.button),
+                              },
+                        child: loading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(s.btnSave, style: AppText.button),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    } finally {
+      // R2: controller + FocusNode sheet edit profil dilepas setelah sheet
+      // tutup (dulu bocor: focus node menahan FocusManager tree).
+      ctrl.dispose();
+      focus.dispose();
+    }
   }
 }
