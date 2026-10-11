@@ -356,6 +356,7 @@ class MessageBubble extends StatelessWidget {
                               isMe: isMe,
                               isAdminView: isAdminView,
                               autoPoster: autoVideoPoster,
+                              posterPath: msg.videoPoster,
                               timeStr: timeStr,
                               showChecks: isMe || showChecksBothSides,
                               isPending: isPending,
@@ -404,6 +405,7 @@ class MessageBubble extends StatelessWidget {
                               isMe: isMe,
                               isAdminView: isAdminView,
                               autoPoster: autoVideoPoster,
+                              posterPath: msg.videoPoster,
                             ),
                             // Caption + jam SEBARIS ala chat teks (nempel, hemat
                             // tinggi): caption pendek → jam nempel di ujung

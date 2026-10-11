@@ -560,8 +560,13 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // terutama di HP yang memorinya ketat (free RAM kecil → halaman ter-swap →
   // ngetik terasa freeze saat page ter-swap di-fault balik).
   // Kalau ada laporan "foto kedip saat scroll", naikkan bertahap 72/36.
-  PaintingBinding.instance.imageCache.maximumSize = 60;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 24 << 20;
+  // NAIK 2026-10-11 (laporan nyata): "scroll cepat = card dulu baru foto".
+  // 60/24MB → 120/40MB: saat scroll cepat, lebih banyak thumb tetap di-decode
+  // cache → kartu masuk viewport langsung gambar (bukan placeholder). Tetap
+  // BOUNDED (bukan unbounded) supaya memori tak membengkak; thumb post ~135KB
+  // → 120 entry ≈ 16MB bitmap, aman bersama cap lain.
+  PaintingBinding.instance.imageCache.maximumSize = 120;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 40 << 20;
   kFirebaseOptionsOverride = firebaseOptions;
   // Crashlytics butuh Firebase ter-init dulu — aktifkan pasca-init di bawah.
   // Handler di sini hanya dlog; setelah FlutterError.crashlytics disambung,
@@ -584,6 +589,7 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   VoicePrefetch.downloader = StoragePhotoService.instance.downloadBytes;
   VideoPrefetch.downloader = StoragePhotoService.instance.downloadBytes;
   VideoPrefetch.posterGenerator = StoragePhotoService.instance.storyVideoPoster;
+  VideoPrefetch.posterDownloader = StoragePhotoService.instance.downloadBytes;
   //
   // Setiap anggota DIBATASI timeout: satu init yang menggantung (Keystore /
   // SQLite / Firebase) tidak boleh menahan first-frame selamanya → gejala

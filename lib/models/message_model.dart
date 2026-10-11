@@ -10,8 +10,7 @@ class MessageModel {
   final String text;
   final String type;
   final String imageData;
-  final DateTime timestamp;
-  final bool edited;
+  final DateTime timestamp;  final bool edited;
   final bool isDeleted;
   final String? repliedToId;
   final String? repliedToText;
@@ -19,6 +18,11 @@ class MessageModel {
   final int? durationMs;
   final bool isForwarded;
   final List<Mention> mentions;
+
+  /// Path storage poster/thumbnail video (JPEG, bucket chat-photos). Diunggah
+  /// pengirim saat kirim video → penerima tampil preview (bukan kotak hitam)
+  /// tanpa mengunduh video penuh. Kosong = video lama / belum ada poster.
+  final String videoPoster;
 
   MessageModel({
     required this.id,
@@ -38,6 +42,7 @@ class MessageModel {
     this.durationMs,
     this.isForwarded = false,
     this.mentions = const [],
+    this.videoPoster = '',
   });
 
   factory MessageModel.fromMap(String id, Map<String, dynamic> map) {
@@ -68,6 +73,9 @@ class MessageModel {
       durationMs: (map['durationMs'] ?? map['duration_ms'] ?? map['duration']) is num ? (map['durationMs'] ?? map['duration_ms'] ?? map['duration'] as num).toInt() : null,
       isForwarded: map['isForwarded'] == true || map['is_forwarded'] == true,
       mentions: deleted ? const [] : Mention.listFrom(map['mentions']),
+      videoPoster: deleted
+          ? ''
+          : (map['videoPoster'] ?? map['video_poster'] ?? ''),
     );
   }
 
@@ -98,6 +106,7 @@ class MessageModel {
       'durationMs': durationMs,
       'isForwarded': isForwarded,
       'mentions': isDeleted ? const [] : Mention.listTo(mentions),
+      'videoPoster': isDeleted ? '' : videoPoster,
     };
   }
 
@@ -113,6 +122,7 @@ class MessageModel {
     int? durationMs,
     bool? isForwarded,
     List<Mention>? mentions,
+    String? videoPoster,
   }) {
     final newDeleted = isDeleted ?? this.isDeleted;
     // PRIVASI: begitu berstatus terhapus, konten dikosongkan — update
@@ -135,6 +145,7 @@ class MessageModel {
       durationMs: durationMs ?? this.durationMs,
       isForwarded: isForwarded ?? this.isForwarded,
       mentions: newDeleted ? const [] : (mentions ?? this.mentions),
+      videoPoster: newDeleted ? '' : (videoPoster ?? this.videoPoster),
     );
   }
 }

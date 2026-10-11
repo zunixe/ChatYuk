@@ -131,6 +131,7 @@ class ViewOnceHostState extends State<ViewOnceHost>
     String? repliedToSenderName,
     int? viewOnceSecs,
     int? videoDurationMs,
+    String videoPoster = '',
   }) async {
     dispatched.add((type, text));
     return null;

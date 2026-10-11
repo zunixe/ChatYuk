@@ -109,6 +109,11 @@ class ChatVideoBubble extends StatefulWidget {
   /// tidak berubah perilaku.
   final bool autoPoster;
 
+  /// Path storage poster/thumbnail video (JPEG, bucket chat-photos) yang
+  /// diunggah pengirim → PENERIMA & cold-start tampil preview (ala WhatsApp)
+  /// tanpa unduh video penuh. Kosong = video lama / tanpa poster.
+  final String posterPath;
+
   const ChatVideoBubble({
     super.key,
     required this.videoData,
@@ -125,6 +130,7 @@ class ChatVideoBubble extends StatefulWidget {
     this.isQueued = false,
     this.isRead = false,
     this.autoPoster = true,
+    this.posterPath = '',
   });
 
   @override
@@ -211,6 +217,14 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         }
         dlog('[VideoBubble] poster MISS-sync key=${_posterKey.hashCode} → async');
       } catch (_) {}
+      // PREVIEW DARI SERVER (ala WhatsApp): poster cache lokal miss tapi
+      // pesan membawa `posterPath` (JPEG kecil di storage) → unduh KECIL
+      // (puluhan KB, bukan video) untuk tampil thumbnail. Video penuh tetap
+      // hanya saat tap. Jalur ini yang bikin penerima/cold-start lihat
+      // capture video, bukan kotak hitam.
+      if (widget.posterPath.isNotEmpty) {
+        unawaited(_loadRemotePoster());
+      }
       // DEFERRED (pesan lama): idle placeholder — tap yang memuat. Jangan
       // unduh video puluhan MB otomatis (hemat kuota + jank).
       if (!widget.autoPoster) {
@@ -309,8 +323,52 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
 
   /// Poster: base64 kecil dari payload (bubble sendiri) atau generate
   /// frame dari video (pesan lawan; 1× lalu simpan memori + DISK).
+  /// Unduh poster KECIL dari storage (path di pesan) → simpan ke mem-cache
+  /// stabil + MediaDiskCache → render instan. Non-fatal bila gagal.
+  /// Single-flight lewat [_posterInflight] (kunci sama) agar tak dobel unduh.
+  Future<void> _loadRemotePoster() async {
+    if (!mounted || widget.posterPath.isEmpty) return;
+    final key = _posterKey;
+    if (_posterInflight.containsKey(key)) return;
+    final fut = () async {
+      try {
+        final dl = VideoPrefetch.posterDownloader;
+        if (dl == null) return;
+        final bytes = await dl(widget.posterPath);
+        if (bytes == null || bytes.isEmpty) return;
+        VideoPrefetch.rememberPoster(widget.videoData, bytes);
+        await MediaDiskCache.instance.write(key, bytes);
+        if (!mounted) return;
+        await VideoPrefetch.decodePosterFor(widget.videoData, bytes);
+        if (!mounted) return;
+        final img = VideoPrefetch.posterImageSync(widget.videoData);
+        setState(() {
+          _poster = bytes;
+          if (img != null) _posterImg = img;
+          _loading = false;
+          _failed = false;
+        });
+      } catch (_) {}
+    }();
+    _posterInflight[key] = fut;
+    try {
+      await fut;
+    } finally {
+      _posterInflight.remove(key);
+    }
+  }
+
   Future<void> _loadPoster({bool fromTap = false}) async {
     if (!mounted) return;
+    // 0) PREVIEW SERVER dulu (poster=JPEG kecil dari pesan): kalau ada
+    //    `posterPath` dan poster lokal belum ada, unduh poster KECIL — jauh
+    //    lebih murah dari generate frame via video penuh. Cocok untuk tap
+    //    play (bubble belum punya poster) → preview cepat tanpa unduh video.
+    if (widget.posterPath.isNotEmpty && _poster == null) {
+      await _loadRemotePoster();
+      if (!mounted) return;
+      if (_poster != null) return;
+    }
     // 1) Cache DISK dulu (instan, tanpa unduh video) — kunci anti-blink
     //    saat cold start / scroll ulang / keluar-masuk chat.
     //    ANTI-KEDIP: HIT di sini tampil INSTAN tanpa fade dan TANPA menyentuh

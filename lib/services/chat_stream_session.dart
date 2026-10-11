@@ -222,9 +222,9 @@ class ChatStreamSession {
     // Kolom tanpa image_data — foto diambil terpisah (PhotoCache / download
     // lazy) supaya buka chat tetap cepat walau ada ratusan foto.
     const privateCols =
-        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,is_forwarded,mentions';
+        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,is_forwarded,mentions,video_poster';
     const roomCols =
-        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,replied_to_id,replied_to_text,replied_to_sender_name,is_forwarded,mentions';
+        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,replied_to_id,replied_to_text,replied_to_sender_name,is_forwarded,mentions,video_poster';
     const replyCols = 'replied_to_id,replied_to_text,replied_to_sender_name';
     final cols = isPrivate ? '$privateCols,$replyCols' : roomCols;
 

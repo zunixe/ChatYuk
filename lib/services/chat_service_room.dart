@@ -22,6 +22,7 @@ mixin ChatServiceRoomMx on ChatBase {
     String? repliedToSenderName,
     bool isForwarded = false,
     List<Mention> mentions = const [],
+    String videoPoster = '',
   }) async {
     // Validasi tipe pesan
     if (![
@@ -73,6 +74,11 @@ mixin ChatServiceRoomMx on ChatBase {
               type == 'video_once_expired') &&
           imageData.isNotEmpty)
         'image_path': imageData,
+      if ((type == 'video' ||
+              type == 'video_once' ||
+              type == 'video_once_expired') &&
+          videoPoster.isNotEmpty)
+        'video_poster': videoPoster,
       if (repliedToId != null) 'replied_to_id': repliedToId,
       if (repliedToText != null) 'replied_to_text': repliedToText,
       if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,

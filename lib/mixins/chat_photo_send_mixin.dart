@@ -63,6 +63,8 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     int? viewOnceSecs,
     /// Durasi VIDEO (ms) untuk bubble + validasi server. Null = bukan video.
     int? videoDurationMs,
+    /// Path storage poster video (JPEG) — preview penerima. '' = tanpa poster.
+    String videoPoster = '',
   });
 
   /// Timer view-once yang dipilih di preview (detik; null = foto normal).
@@ -544,6 +546,18 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       unawaited(
         VideoPrefetch.warmOne(path, videoBytes: bytes, posterBytes: posterBytes),
       );
+      // PREVIEW PENERIMA (ala WhatsApp): unggah poster (JPEG kecil) ke Storage
+      // → penerima tampilkan thumbnail tanpa unduh video penuh. Gagal upload
+      // poster TIDAK menggagalkan kirim (video tetap terkirim; penerima lihat
+      // placeholder + tap). Karena itu unawaited-ish: kita tunggu hasilnya
+      // untuk disertakan di baris pesan, tapi null = lanjut tanpa poster.
+      String posterPath = '';
+      if (posterBytes != null && posterBytes.isNotEmpty) {
+        posterPath = await ProviderScope.containerOf(context, listen: false)
+                .read(storageProvider)
+                .uploadChatVideoPoster(chatId: photoUploadChatId, bytes: posterBytes) ??
+            '';
+      }
       await photoDispatch(
         imageData: path,
         type: videoSendType(isOnce),
@@ -556,6 +570,8 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         repliedToSenderName: reply?.senderName,
         // Durasi video (panjang playback) — SELALU dikirim.
         videoDurationMs: durationMs,
+        // Path poster untuk preview penerima ('' = tanpa poster).
+        videoPoster: posterPath,
       );
       photoFirstBonus(pp);
       photoOnSent(isOnce ? 'video_once' : 'video');
