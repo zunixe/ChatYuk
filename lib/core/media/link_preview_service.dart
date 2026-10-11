@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class LinkPreviewData {
@@ -13,7 +14,24 @@ class LinkPreviewData {
 class LinkPreviewService {
   LinkPreviewService._();
   static final instance = LinkPreviewService._();
+
+  // BOUNDED (R6): preview per URL unik. Dulu tumbuh tanpa batas seumur
+  // proses (tiap link baru di chat menambah entri). Cap FIFO 50 — link lama
+  // dibuang; bila dibuka lagi cukup fetch ulang (5s, murah). LRU tak perlu:
+  // preview kecil & tak sering dibuka ulang.
+  static const int _maxEntries = 50;
   final _cache = <String, LinkPreviewData>{};
+
+  /// Jumlah entri cache (uji batas).
+  @visibleForTesting
+  int get cacheLength => _cache.length;
+
+  void _put(String url, LinkPreviewData data) {
+    if (_cache.length >= _maxEntries && !_cache.containsKey(url)) {
+      _cache.remove(_cache.keys.first);
+    }
+    _cache[url] = data;
+  }
 
   static final _urlRegex = RegExp(r'https?:\/\/[^\s]+', caseSensitive: false);
 
@@ -50,12 +68,12 @@ class LinkPreviewService {
       final img = getMeta('og:image');
       final site = getMeta('og:site_name');
       final data = LinkPreviewData(url: url, title: title, description: desc, image: img, siteName: site.isNotEmpty ? site : Uri.tryParse(url)?.host ?? '');
-      _cache[url] = data;
+      _put(url, data);
       return data;
     } catch (_) {
       final host = Uri.tryParse(url)?.host ?? url;
       final fallback = LinkPreviewData(url: url, title: host, siteName: host);
-      _cache[url] = fallback;
+      _put(url, fallback);
       return fallback;
     }
   }
