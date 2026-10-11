@@ -82,17 +82,25 @@ mixin _PcBuildMx on _PcBase {
           _backGuard.reset();
           return;
         }
-        // Veto BASI (seleksi sudah bersih karena clear konkuren) → niat
-        // user SUDAH terpenuhi → NO-OP. Force-pop SALAH: malah keluar app
-        // (insiden 2026-10-11). Escape hanya bila basi yang SAMA berulang.
+        // TAK SELEKSI → jangan telan & jangan pop sendiri! Screen ini hidup
+        // di DALAM route root (tab Pesan via ChatsScreen, bahkan embedded)
+        // berdampingan PopScope root (tab!=0 → goTo Online). Pop di sini
+        // MENEMBUS ke launcher melewati goTo(0) (insiden 2026-10-11).
+        // - Dipush sebagai route (bukan isFirst) → pop normal.
+        // - Konten tab (isFirst) → teruskan kebijakan root (ke Online).
+        // Veto basi (clear konkuren) otomatis jatuh ke cabang teruskan —
+        // tak perlu logika desync terpisah.
         if (!_selectionMode) {
-          if (_backGuard.shouldEscape('pcl:clean')) {
-            debugPrint('[NAV] back escape private-chats (macet, paksa pop)');
-            NavJournal.log('back private-chats ESCAPE macet (paksa pop)');
+          final isFirst = ModalRoute.of(context)?.isFirst ?? true;
+          if (!isFirst) {
+            NavJournal.log('back private-chats didPop (tutup route)');
             _backEscape = true;
             BackVetoGuard.safePop(context);
           } else {
-            NavJournal.log('back private-chats veto basi, abaikan');
+            NavJournal.log('back private-chats teruskan root (ke Online)');
+            try {
+              ref.read(navProvider.notifier).goTo(0);
+            } catch (_) {}
           }
           return;
         }

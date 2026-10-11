@@ -31,6 +31,12 @@ class NavJournal {
   static Future<Directory>? _dirFuture;
   static Directory? _testDir;
 
+  /// Rantai tulis SERIAL (insiden 2026-10-11): append fire-and-forget yang
+  /// konkuren saling menimpa di file (kepala baris hilang, ekor yatim)
+  /// sehingga urutan/pasangan push-pop tak bisa direkonstruksi. Semua tulis
+  /// antre di rantai ini — urutan file = urutan log, tak pernah interleave.
+  static Future<void> _chain = Future<void>.value();
+
   /// Hook unit test: arahkan tulis file ke direktori sementara.
   @visibleForTesting
   static void testSetDir(Directory d) => _testDir = d;
@@ -60,7 +66,10 @@ class NavJournal {
   }
 
   static void _appendFile(String line) {
-    () async {
+    // Masuk antrean serial (lihat _chain) — tak pernah blok pemanggil,
+    // tak pernah interleave walau log() dipanggil beruntun dari
+    // push/pop/back yang rapat (repro cepat open-tutup chat).
+    _chain = _chain.then((_) async {
       try {
         // Jangan sentuh MethodChannel bila direktori test di-set (unit test
         // tanpa binding) — probe channel hanya di runtime sungguhan.
@@ -80,7 +89,7 @@ class NavJournal {
         _writesSinceSizeCheck++;
         await f.writeAsString('$line\n', mode: FileMode.append);
       } catch (_) {}
-    }();
+    });
   }
 }
 

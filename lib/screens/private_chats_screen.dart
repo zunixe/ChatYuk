@@ -21,6 +21,7 @@ import '../widgets/app_gesture.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 import '../core/nav_journal.dart';
+import '../../providers/riverpod/nav_provider.dart';
 import '../core/chat/chat_filter.dart';
 import '../core/chat/chat_location.dart';
 import '../widgets/filter_chip_pill.dart';
