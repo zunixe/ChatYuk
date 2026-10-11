@@ -314,6 +314,29 @@ LRU sejati; `VideoFileCache` LRU O(N); `ui.Image` di-dispose saat dibuang.
 **Akumulasi:** Set/Map per-aksi WAJIB cap FIFO (`_readRoomIds` 500,
 `_seenSignalIds` 2000, `_diskAvatars` 800).
 
+### 9c. Perf buka chat + arsitektur (2026-10-11)
+
+**Buka chat — delay tap:**
+- `_openChat` (`private_chats_select.dart`): 3 precache **Future.wait** satu
+  deadline 400ms (dulu 3 await berurutan 300+450+450=**1200ms** → tap freeze).
+  Terukur: delay tap→transisi turun ke ~430ms.
+- `_scheduleRebuild` (`private_chat_chat2.dart`): **koalesensi window 80ms**
+  (dulu per-frame) → gelombang ~6 sumber rebuild saat buka = 2-3 setState.
+  Timer 220/280ms TETAP terpisah (JANGAN digabung).
+- Bitmap poster/thumb: `readAsBytes` (async, bukan `readAsBytesSync`) +
+  `targetWidth` 720 (bubble tak butuh 1080).
+
+**Arsitektur:**
+- `lib/core/nav_gate.dart` (baru, pola AdminGate): provider butuh navigasi/dialog
+  UI → inject callback (`incomingCallBuilder`, `topupSheet`) di main.dart.
+  **provider DILARANG import `screens/`** (gate baru di check_screen_boundary).
+- Widget buka channel realtime lewat provider (mis. `comments_list` →
+  `timelineProvider.watchPostComments`), bukan `Supabase.instance.channel`
+  langsung.
+- Boundary sadar (dicatat, bukan bug): channel realtime yang lifecycle-nya
+  di-manage screen (room_chat_core, usermap_card, admin_room_view,
+  admin_chat_view_data) tetap buka `.channel()` di screen.
+
 
 
 ---
