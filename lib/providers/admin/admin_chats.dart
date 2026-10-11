@@ -541,6 +541,34 @@ mixin AdminChatsMx on AdminBase {
     return fut;
   }
 
+  /// Pemanasan LOKAL saja (disk → memori), TANPA fallback server.
+  /// Dipakai itemBuilder daftar monitor: tiap kartu visible = 1 baca disk,
+  /// TANPA 1 RPC. Dulu itemBuilder memakai `prefetchChatMessages` yang jatuh
+  /// ke `getChatMessages` bila disk kosong → buka daftar = belasan RPC
+  /// bersamaan → server antre → tap ikut nunggu antrean itu (keluhan "klik
+  /// tampil datanya lama"). Server tetap diambil LAZY (1 RPC) saat chat
+  /// dibuka — lihat `prefetchChatMessages` (tap) + `_fetch` (view).
+  void warmChatMessagesLocal(String chatId) {
+    if (chatId.isEmpty) return;
+    if ((_chatMsgMem[chatId]?.isNotEmpty ?? false)) return;
+    if (_chatMsgPrefetchFutures.containsKey(chatId)) return;
+    if (!_chatMsgPrefetching.add(chatId)) return;
+    unawaited(() async {
+      try {
+        final disk = await MessageCache.instance.loadRawList(
+          AdminBase.adminChatMsgKey(chatId),
+        );
+        if (disk.isNotEmpty) {
+          _chatMsgMemPut(chatId, disk);
+          _chatMsgHasMore[chatId] = disk.length >= messagePageSize;
+        }
+      } catch (_) {
+      } finally {
+        _chatMsgPrefetching.remove(chatId);
+      }
+    }());
+  }
+
   final Map<String, Future<void>> _chatMsgPrefetchFutures = {};
 
   /// Pesan satu chat dari sumber per-chat (`_chatMsgMem` → `_chatMessages`

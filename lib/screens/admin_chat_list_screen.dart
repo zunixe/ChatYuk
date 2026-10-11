@@ -593,11 +593,13 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
                             // Panaskan cache monitor SEJAK KARTU DI-RENDER (bukan
                             // hanya saat tap): baca disk `admin_chatmsg_<id>` ke
                             // memori provider sementara user masih menelusuri daftar.
-                            // Tanpa ini, buka-pertama menunggu RPC (~1 dtk) dan baru
-                            // cepat pada buka berikutnya (keluhan "harus beberapa
-                            // kali baru cepet"). Debounce internal di provider →
-                            // hanya 1 baca per chat, tak mengulang tiap rebuild.
-                            admin.prefetchChatMessages(chatId);
+                            // HANYA lokal (tanpa RPC) — dulu memakai
+                            // `prefetchChatMessages` yang jatuh ke server bila disk
+                            // kosong → buka daftar = belasan RPC bersamaan →
+                            // server antre → tap ikut nunggu (keluhan "klik tampil
+                            // datanya lama"). Server diambil lazy 1× saat dibuka.
+                            // Debounce internal di provider → 1 baca per chat.
+                            admin.warmChatMessagesLocal(chatId);
                             // RepaintBoundary: kartu lain tidak ikut repaint saat
                             // satu kartu berubah (badge call/unread) — list monitor
                             // panjang jadi lebih hemat (konsisten dgn menu Online).

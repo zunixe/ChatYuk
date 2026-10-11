@@ -162,6 +162,11 @@ mixin _AcDataMx on _AdminBase {
     //    cepat, tanpa await: frame pertama langsung terisi seperti private
     //    chat. Dulu jalur ini tak ada (hanya cache stream `private_<id>`
     //    yang beda dari yang dipakai monitor) → selalu spinner → RPC.
+    //    Benih dari konstruktor (snapshot saat tap, push TANPA await) dipakai
+    //    dulu — prefetch background mungkin belum selesai saat mount.
+    if (widget.initialMessages.isNotEmpty && _msgs.isEmpty) {
+      _applyRawMessages(widget.initialMessages);
+    }
     final adminMem = admin.peekChatMessages(widget.chatId);
     if (adminMem.isNotEmpty && _msgs.isEmpty) {
       _applyRawMessages(adminMem);
