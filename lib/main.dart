@@ -41,6 +41,7 @@ import 'services/chat_service.dart';
 import 'utils.dart';
 import 'core/cache/message_cache.dart';
 import 'core/cache/media_disk_cache.dart';
+import 'core/cache/video_file_cache.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/chat_background.dart';
@@ -1508,14 +1509,10 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // prewarmDb di sini (bukan setelah init) supaya antrean Keystore tidak
   // menunggu auth selesai. Hemat 0.5-2s di Xiaomi cold start.
   //
-  // Boundary: core/cache/message_cache tidak boleh import services/ —
-  // predikat path storage DIINJEKSI di sini (composition root).
+  // Boundary: inject di composition root (core/widgets dilarang import services/).
   MessageCache.isStoragePath = StoragePhotoService.instance.isPath;
   MessageCache.isStorageVoicePath = StoragePhotoService.instance.isVoicePath;
-  // Boundary: widgets/voice_bubble prefetch butuh downloader tanpa import
-  // services/ — inject di composition root.
   VoicePrefetch.downloader = StoragePhotoService.instance.downloadBytes;
-  // Prefetch POSTER video (anti-blink cold start, pola sama voice).
   VideoPrefetch.downloader = StoragePhotoService.instance.downloadBytes;
   VideoPrefetch.posterGenerator = StoragePhotoService.instance.storyVideoPoster;
   //
@@ -1539,7 +1536,10 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
     guard('msgdb', MessageCache.instance.prewarmDb, 15),
     // Index disk media siap sebelum frame pertama — readSync avatar
     // (Online/Chat/Timeline) langsung hit, tanpa prewarm race.
-    guard('mediadisk', MediaDiskCache.instance.prewarm, 15),
+    guard('mediadisk', () async {
+      await MediaDiskCache.instance.prewarm();
+      await VideoFileCache.instance.prewarm(); // video persisten (spt voice).
+    }, 15),
     guard('firebase', () async {
       try {
         // Flavor dev (Supabase local): Firebase dev belum dikonfigurasi —

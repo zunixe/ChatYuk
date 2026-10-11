@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
+import '../core/cache/video_file_cache.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../core/storage_paths.dart';
@@ -244,7 +245,9 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   bool get _isPendingBase64 =>
       !_isPath && widget.videoData.isNotEmpty;
 
-  /// File video lokal siap putar: unduh path → file cache disk (sekali).
+  /// File video lokal siap putar: baca dari cache PERSISTEN dulu, unduh bila
+  /// miss lalu simpan (seperti voice) → sekali dibuka, cold start berikutnya
+  /// langsung kebuka tanpa unduh ulang.
   Future<File?> _ensureLocalFile() async {
     // Base64 (bubble sendiri, belum ter-upload) → tulis ke temp.
     if (!_isPath) {
@@ -264,24 +267,17 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         return null;
       }
     }
-    // File temp STABIL per path — dipakai sebagai cache playback (bukan
-    // MediaDiskCache). KENAPA: video bisa puluhan MB; menyimpannya di
-    // MediaDiskCache (kuota 250MB bersama foto/avatar/voice) meng-evict LRU
-    // → poster/foto lain hilang → "cold start reload lagi". File temp ini
-    // di-manage OS (bukan kuota media).
-    final dir = await getTemporaryDirectory();
-    final target = File(
-      '${dir.path}/chat_vid_${widget.videoData.hashCode.abs()}.mp4',
-    );
-    if (await target.exists() && await target.length() > 0) {
-      return target; // sudah ada dari sesi/putar sebelumnya → play instan.
-    }
+    // PERSISTEN (seperti voice): file video tersimpan di VideoFileCache
+    // (documents, kuota 1GB sendiri + LRU) — BUKAN temp dir (bisa dibersihkan
+    // OS) dan BUKAN MediaDiskCache (kuota 250MB bersama foto/avatar/voice →
+    // video besar akan meng-evict LRU = "cold start reload lagi").
+    final hit = await VideoFileCache.instance.fileFor(widget.videoData);
+    if (hit != null) return hit; // pernah dibuka → play instan.
     final bytes = await safeStorage(context).downloadBytes(
       widget.videoData,
     );
     if (bytes == null || bytes.isEmpty) return null;
-    await target.writeAsBytes(bytes, flush: true);
-    return target;
+    return VideoFileCache.instance.put(widget.videoData, bytes);
   }
 
   /// Poster: base64 kecil dari payload (bubble sendiri) atau generate
