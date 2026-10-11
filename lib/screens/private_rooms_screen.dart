@@ -16,6 +16,7 @@ import '../providers/riverpod/theme_provider.dart';
 import 'room_chat_screen.dart';
 import 'room_members_sheet.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/message/photo_prefetch.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 /// Daftar private room milik/diikuti + buat room baru (QR join).
@@ -145,6 +146,14 @@ class _PrivateRoomsScreenState extends ConsumerState<PrivateRoomsScreen> {
   Future<void> _openRoom(BuildContext context, Map<String, dynamic> room) async {
     final navKey = navKeyRoom('${room['id']}');
     if (!tryClaimNav(navKey)) return;
+    try {
+      await PhotoPrefetch.precacheAll(context, 'room_${room['id']}')
+          .timeout(const Duration(milliseconds: 450));
+    } catch (_) {}
+    if (!mounted) {
+      releaseNav(navKey);
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) =>

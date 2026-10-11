@@ -11,6 +11,7 @@ import '../../providers/riverpod/points_provider.dart';
 import '../../providers/riverpod/room_provider.dart';
 import '../../widgets/room_icon.dart';
 import '../room_chat_screen.dart';
+import '../../widgets/message/photo_prefetch.dart';
 
 class GroupCard extends ConsumerWidget {
   final RoomModel room;
@@ -43,6 +44,14 @@ class GroupCard extends ConsumerWidget {
     if (isMember) {
       final navKey = navKeyRoom(room.id);
       if (!tryClaimNav(navKey)) return;
+      try {
+        await PhotoPrefetch.precacheAll(context, 'room_${room.id}')
+            .timeout(const Duration(milliseconds: 450));
+      } catch (_) {}
+      if (!context.mounted) {
+        releaseNav(navKey);
+        return;
+      }
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
@@ -137,10 +146,18 @@ class GroupCard extends ConsumerWidget {
         if (context.mounted) {
           final navKey = navKeyRoom(room.id);
           if (tryClaimNav(navKey)) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
-            ).then((_) => releaseNav(navKey));
+            try {
+              await PhotoPrefetch.precacheAll(context, 'room_${room.id}')
+                  .timeout(const Duration(milliseconds: 450));
+            } catch (_) {}
+            if (context.mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
+              ).then((_) => releaseNav(navKey));
+            } else {
+              releaseNav(navKey);
+            }
           }
         }
       }
