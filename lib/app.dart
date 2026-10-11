@@ -19,6 +19,7 @@ import 'providers/riverpod/locale_provider.dart';
 import 'core/cache/message_cache.dart';
 import 'core/nav_journal.dart';
 import 'core/nav_visibility.dart';
+import 'core/app_foreground.dart';
 import 'core/admin_trim_registry.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
@@ -419,6 +420,8 @@ class _MainNavState extends ConsumerState<_MainNav>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // BATERAI: satu sumber kebenaran foreground → gate timer/poll latar.
+    AppForeground.set(state);
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (state == AppLifecycleState.paused) {
       _pausedAt = DateTime.now();
