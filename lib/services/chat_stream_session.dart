@@ -706,30 +706,30 @@ class ChatStreamSession {
       try {
         final data = payload;
         if (data['chat_id']?.toString() != filterVal && data['room_id']?.toString() != filterVal) return;
-        var msg = MessageModel.fromMap(data['id']?.toString() ?? 'bc-${DateTime.now().microsecondsSinceEpoch}', snakeToCamel(data));
+        final msg = MessageModel.fromMap(data['id']?.toString() ?? 'bc-${DateTime.now().microsecondsSinceEpoch}', snakeToCamel(data));
         if (_current.any((m) => m.id == msg.id)) return;
-        // Video: JANGAN proses sebagai image (poster diurus ChatVideoBubble).
+        // P1a (2026-10-11): EMIT DULU (placeholder), foto di latar — JANGAN
+        // tunggu download+save SEBELUM emit (dulu event broadcast tertahan
+        // saat foto besar → pesan masuk terasa lambat + event berikut mengantre).
+        // Sama seperti jalur INSERT postgres di atas.
         final bcIsVideo = msg.type == 'video' ||
             msg.type == 'video_once' ||
             msg.type == 'video_once_expired';
-        if (msg.imageData.isNotEmpty && msg.type != 'voice' && !bcIsVideo) {
-          try {
-            var d = msg.imageData;
-            if (StoragePhotoService.instance.isPath(d) || StoragePhotoService.instance.isVoicePath(d)) {
-              d = await StoragePhotoService.instance.download(d) ?? '';
-            }
-            if (d.isNotEmpty) {
-              final thumb = await PhotoCache.instance.save(cacheKey, msg.id, d);
-              if (!controller.isClosed && thumb != null && thumb.isNotEmpty) msg = msg.copyWith(imageData: thumb);
-            }
-          } catch (_) {}
-        }
+        final bcNeedsPhoto = msg.imageData.isNotEmpty &&
+            msg.type != 'voice' &&
+            !bcIsVideo;
         // Sisipkan kronologis
         var idx = _current.indexWhere((m) => m.timestamp.isAfter(msg.timestamp));
         if (idx < 0) { _current.add(msg); } else { _current.insert(idx, msg); }
         _trim();
         _emit();
         scheduleCacheSave();
+        // Foto/voice di latar SETELAH emit.
+        if (bcNeedsPhoto) {
+          queuePhotoDownload(msg);
+        } else if (msg.type == 'voice' && msg.imageData.isNotEmpty) {
+          unawaited(_downloadVoiceToCache(cacheKey, msg));
+        }
       } catch (_) {}
     });
     channel.subscribe((status, err) {

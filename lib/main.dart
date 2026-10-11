@@ -71,6 +71,7 @@ FirebaseOptions? kFirebaseOptionsOverride;
 
 final ValueNotifier<String?> activeChatId = ValueNotifier(null);
 
+
 bool _firebaseReady = false;
 
 final lpn.FlutterLocalNotificationsPlugin localNotifications =

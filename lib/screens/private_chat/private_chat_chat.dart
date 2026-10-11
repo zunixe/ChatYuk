@@ -223,6 +223,24 @@ mixin _PcChatMx on _PrivateChatBase {
     // (list pesan) tidak tertahan — ala WhatsApp: pesan tampil dulu,
     // status/typing/centang-2 menyusul di frame berikutnya.
     _wasBlocked = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid);
+  /// P1b: banding reaksi (map pesan→emoji→count) — skip rebuild bila emit
+  /// realtime tak mengubah isi (heartbeat/re-emit).
+  bool _sameReactions(
+    Map<String, Map<String, int>> a,
+    Map<String, Map<String, int>> b,
+  ) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (final e in a.entries) {
+      final other = b[e.key];
+      if (other == null || other.length != e.value.length) return false;
+      for (final ee in e.value.entries) {
+        if (other[ee.key] != ee.value) return false;
+      }
+    }
+    return true;
+  }
+
     _chatInfoSub = _chatInfoStream.listen((chats) {
       final info = chats.cast<chatRiverpod.PrivateChatInfo?>().firstWhere(
         (c) => c?.chatId == widget.chatId,
@@ -279,8 +297,11 @@ mixin _PcChatMx on _PrivateChatBase {
         _reactionsSub = ProviderScope.containerOf(context, listen: false).read(messageReactionProvider)
             .watchReactions(widget.chatId)
             .listen((m) {
+          // P1b: rebuild HANYA bila reaksi benar-benar berubah (emit sama =
+          // heartbeat → jangan rebuild layar penuh).
+          final changed = !_sameReactions(reactions, m);
           reactions = m;
-          _scheduleRebuild();
+          if (changed) _scheduleRebuild();
           ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).saveCachedReactions(widget.chatId, m);
         }, onError: (e) {
           debugPrint('[NAV] reactions stream error: $e');
@@ -288,8 +309,9 @@ mixin _PcChatMx on _PrivateChatBase {
         _starredSub = ProviderScope.containerOf(context, listen: false).read(messageReactionProvider)
             .watchStarred(widget.chatId)
             .listen((m) {
+          final changed = !setEquals(starredIds, m);
           starredIds = m;
-          _scheduleRebuild();
+          if (changed) _scheduleRebuild();
           ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).saveCachedStarred(
             widget.chatId,
             m,

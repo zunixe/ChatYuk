@@ -220,7 +220,6 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   void _onGroupMenu(String v);
   Future<void> _openMembersSheet();
   Future<void> _onStartBroadcastTap();
-  void _onRoomScroll();
   Future<void> _openRoomGiftPanel();
 }
 
