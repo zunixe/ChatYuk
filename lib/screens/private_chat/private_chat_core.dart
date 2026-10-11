@@ -176,7 +176,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                         ? hdr.otherCountry
                         : widget.otherCountry;
                     final subtitle = [
-                      if (effAge > 0) '\$effAge',
+                      if (effAge > 0) '$effAge',
                       if (cityPart.isNotEmpty && cityPart != countryPart)
                         cityPart,
                       if (countryPart.isNotEmpty) countryPart,
