@@ -18,6 +18,7 @@ import 'core/admin_gate.dart';
 import 'providers/riverpod/locale_provider.dart';
 import 'core/cache/message_cache.dart';
 import 'core/nav_journal.dart';
+import 'core/admin_trim_registry.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/image_cache_hygiene.dart';
@@ -580,6 +581,9 @@ class _MainNavState extends ConsumerState<_MainNav>
     // ke OS via JNI malloc_trim (docs/PERFORMANCE.md §39). No-op bila lib
     // native tak ada.
     unawaited(NativeImage.trim());
+    // Cache RAM panel admin (post/room/chat) — hanya bila panel pernah
+    // dibuka (registry kosong = no-op, TIDAK memaksa provider dibuat).
+    AdminTrimRegistry.run();
   }
 
   /// Pindah tab utama (juga dipanggil NavProvider dari screen lain).

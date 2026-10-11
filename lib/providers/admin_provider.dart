@@ -12,6 +12,7 @@ export '../services/admin_call_watch_service.dart'
 import '../core/cache/message_cache.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/admin_err.dart';
+import '../core/admin_trim_registry.dart';
 import '../services/storage_photo_service.dart';
 
 part 'admin/admin_base.dart';
@@ -62,6 +63,26 @@ class AdminProvider extends AdminBase
     // supaya chip kategori siap walau layar monitor belum sempat initState
     // (TabBarView bisa membuang/membangun ulang layar).
     loadChatOrg();
+    // Daftarkan trim cache panel admin ke registry GLOBAL (R6/R7): app.dart
+    // memanggil AdminTrimRegistry.run() saat memory pressure TANPA memaksa
+    // provider ini dibuat (registry hanya ada callback bila panel dibuka).
+    AdminTrimRegistry.register(trimMemCache);
+  }
+
+  /// Buang cache RAM panel admin (post/room/chat monitor) saat memory
+  /// pressure. Aman: tak menyentuh state persist (disk), hanya membebaskan
+  /// memori; layar admin memuat ulang saat dibuka.
+  void trimMemCache() {
+    _adminPosts = const [];
+    _postsLoaded = false;
+    _roomMembersCache.clear();
+    _roomMsgMem.clear();
+    _roomMsgHasMore.clear();
+    _chatMsgMem.clear();
+    _chatMsgHasMore.clear();
+    _chatMsgPrefetching.clear();
+    _chatMsgPrefetchFutures.clear();
+    if (!_disposed) notifyListeners();
   }
 
   /// Hapus SEMUA cache data admin di perangkat ini (tombol di tab Global
@@ -90,6 +111,7 @@ class AdminProvider extends AdminBase
   @override
   void dispose() {
     _disposed = true;
+    AdminTrimRegistry.unregister(trimMemCache);
     _callRealtimeDebounce?.cancel();
     try {
       _callChannel?.unsubscribe();
