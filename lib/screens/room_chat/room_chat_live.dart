@@ -344,20 +344,26 @@ mixin _RcLiveMx on _RoomChatBase {
       // `_backEscape` = katup sekali-pakai anti "back mati permanen".
       canPop: !inSelection || _backEscape,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
+        if (didPop) {
+          NavJournal.log('back room-chat didPop (tutup layar)');
+          return;
+        }
         // DESYNC: veto terpicu padahal seleksi kosong → paksa keluar SEKALI.
         if (!inSelection) {
           debugPrint('[NAV] back escape room-chat (desync, paksa pop)');
+          NavJournal.log('back room-chat ESCAPE desync (paksa pop)');
           _backEscape = true;
           Navigator.of(context).pop();
           return;
         }
         debugPrint('[NAV] back veto room-chat selection=${selectedIds.length}');
+        NavJournal.log('back room-chat veto selection=${selectedIds.length}');
         try {
           if (inSelection) clearSelection();
         } catch (e) {
           // Jangan telan exception diam-diam (user terkunci): paksa keluar.
           debugPrint('[NAV] back handler error room-chat: $e');
+          NavJournal.log('back room-chat ESCAPE error (paksa pop)');
           _backEscape = true;
           Navigator.of(context).pop();
         }

@@ -22,6 +22,7 @@ import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/location_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/cache/message_cache.dart';
+import '../core/nav_journal.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/admin_gate.dart';
 import '../utils.dart';

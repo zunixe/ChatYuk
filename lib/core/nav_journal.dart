@@ -1,0 +1,85 @@
+/// Jurnal navigasi PERSISTEN untuk diagnosa berulang "back mati / blank".
+///
+/// Masalah yang dipecahkan: logcat HyperOS memblokir stdout app sehingga
+/// `debugPrint` ([RouteTracker], handler back) TAK terlihat di HP user.
+/// Tanpa jejak, tiap laporan "blank" harus ditebak ulang dari nol.
+///
+/// Jurnal ini mencatat setiap push/pop/replace/back ke file app-private
+/// (`nav_journal.txt`, CAP 200KB, nama rute DIREDact dari id) — bisa ditarik
+/// BERULANG kali tanpa interaksi user:
+///   adb shell run-as com.chatyuk.chatyuk cat app_flutter/nav_journal.txt
+/// (butuh build debuggable = `--profile`; di release run-as ditolak).
+///
+/// Semua tulis fire-and-forget: tak pernah memblokir UI/back handler.
+library;
+
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+
+class NavJournal {
+  NavJournal._();
+
+  static const _fileName = 'nav_journal.txt';
+  static const _maxFileBytes = 200 * 1024;
+  static const _ringCap = 300;
+
+  static final List<String> _ring = [];
+  static int _writesSinceSizeCheck = 0;
+  static Future<Directory>? _dirFuture;
+  static Directory? _testDir;
+
+  /// Hook unit test: arahkan tulis file ke direktori sementara.
+  @visibleForTesting
+  static void testSetDir(Directory d) => _testDir = d;
+
+  /// Isi ring buffer (baca-saja, untuk test).
+  @visibleForTesting
+  static List<String> get ringForTest => List.unmodifiable(_ring);
+
+  /// Samarkan id sensitif dari nama rute:
+  /// 'private-chat:abc123' → 'private-chat'. Id chat/uid user JANGAN
+  /// bocor ke file (walau app-private, prinsipnya minimal).
+  @visibleForTesting
+  static String redact(String s) => s.replaceAllMapped(
+        RegExp(r'(private-chat|room|user|chat):[^,\]\s]+'),
+        (m) => '${m[1]}',
+      );
+
+  /// Catat satu event navigasi. Tak pernah melempar.
+  static void log(String event) {
+    try {
+      final line = '${DateTime.now().toIso8601String()} ${redact(event)}';
+      _ring.add(line);
+      while (_ring.length > _ringCap) {
+        _ring.removeAt(0);
+      }
+      _appendFile(line);
+    } catch (_) {}
+  }
+
+  static void _appendFile(String line) {
+    () async {
+      try {
+        // Jangan sentuh MethodChannel bila direktori test di-set (unit test
+        // tanpa binding) — probe channel hanya di runtime sungguhan.
+        if (_testDir == null) {
+          _dirFuture ??= getApplicationDocumentsDirectory();
+        }
+        final dir = _testDir ?? await _dirFuture!;
+        final f = File('${dir.path}/$_fileName');
+        if (_writesSinceSizeCheck >= 20) {
+          _writesSinceSizeCheck = 0;
+          try {
+            if (await f.exists() && await f.length() > _maxFileBytes) {
+              await f.writeAsString('', mode: FileMode.write);
+            }
+          } catch (_) {}
+        }
+        _writesSinceSizeCheck++;
+        await f.writeAsString('$line\n', mode: FileMode.append);
+      } catch (_) {}
+    }();
+  }
+}

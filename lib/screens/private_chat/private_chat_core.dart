@@ -107,6 +107,7 @@ mixin _PcCoreMx on _PrivateChatBase {
           // supaya animasi tutup keyboard tidak berebut frame dengan
           // transisi pop (dulu tombol back "kadang ngelag dikit").
           FocusManager.instance.primaryFocus?.unfocus();
+          NavJournal.log('back private-chat didPop (tutup layar)');
           return;
         }
         // DESYNC: veto terpicu padahal tak ada yang menahan (search sudah
@@ -114,6 +115,7 @@ mixin _PcCoreMx on _PrivateChatBase {
         // Tanpa ini back mati total sampai app restart.
         if (!_searching && !inSelection) {
           debugPrint('[NAV] back escape private-chat (desync, paksa pop)');
+          NavJournal.log('back private-chat ESCAPE desync (paksa pop)');
           _backEscape = true;
           Navigator.of(context).pop();
           return;
@@ -121,6 +123,8 @@ mixin _PcCoreMx on _PrivateChatBase {
         // Jejak diagnosa "back mati": catat kenapa back di-veto.
         debugPrint(
             '[NAV] back veto private-chat searching=$_searching selection=${selectedIds.length}');
+        NavJournal.log(
+            'back private-chat veto searching=$_searching selection=${selectedIds.length}');
         try {
           if (_searching) {
             _closeSearch();
@@ -132,6 +136,7 @@ mixin _PcCoreMx on _PrivateChatBase {
           // bikin back mati permanen (canPop tetap false, user terkunci):
           // paksa keluar, jangan macet di sini.
           debugPrint('[NAV] back handler error private-chat: $e');
+          NavJournal.log('back private-chat ESCAPE error (paksa pop)');
           _backEscape = true;
           Navigator.of(context).pop();
         }

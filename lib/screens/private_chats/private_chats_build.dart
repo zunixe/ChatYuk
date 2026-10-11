@@ -77,11 +77,15 @@ mixin _PcBuildMx on _PcBase {
       // `_backEscape` = katup sekali-pakai anti "back mati permanen".
       canPop: !_selectionMode || _backEscape,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
+        if (didPop) {
+          NavJournal.log('back private-chats didPop (tutup layar)');
+          return;
+        }
         // DESYNC: veto terpicu padahal mode seleksi sudah mati → paksa
         // keluar SEKALI (tanpa ini back mati total sampai restart).
         if (!_selectionMode) {
           debugPrint('[NAV] back escape private-chats (desync, paksa pop)');
+          NavJournal.log('back private-chats ESCAPE desync (paksa pop)');
           _backEscape = true;
           Navigator.of(context).pop();
           return;
@@ -89,12 +93,15 @@ mixin _PcBuildMx on _PcBase {
         debugPrint(
           '[NAV] back veto private-chats selection=${_selected.length}',
         );
+        NavJournal.log(
+            'back private-chats veto selection=${_selected.length}');
         try {
           _clearSelection();
         } catch (e) {
           // Jangan telan exception diam-diam (canPop macet false =
           // user terkunci): paksa keluar.
           debugPrint('[NAV] back handler error private-chats: $e');
+          NavJournal.log('back private-chats ESCAPE error (paksa pop)');
           _backEscape = true;
           Navigator.of(context).pop();
         }

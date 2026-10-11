@@ -25,6 +25,7 @@ import '../core/cache/offline_outbox.dart';
 import '../core/chat/read_receipt.dart';
 import '../core/chat/pending_confirm.dart';
 import '../core/nav_guard.dart';
+import '../core/nav_journal.dart';
 import '../core/chat/chat_location.dart';
 import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
