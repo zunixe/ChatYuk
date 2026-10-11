@@ -256,9 +256,39 @@ adb shell dumpsys SurfaceFlinger --latency '<nama-layer>'
 | 2026-09-26 | celah bitmap sisa | 4 `Image.memory` tanpa cap | cap + hygiene logout (§14) |
 | 2026-10-02 | lag pindah tab, spike 765MB | avatar list online full-res (40px decode 1080px) | `ResizeImage` 96 + trim background (§23) |
 | 2026-10-02 | audit menyeluruh (23 file) | 1 titik: story neighbor tanpa cap | `cacheWidth: 720` (§24); admin bersih |
+| 2026-10-11 | kedip cold start (foto & video) | path/base64 di-strip dari cache pesan → ambil server (race) | simpan path storage + precache by id (§2a, FEATURE_MAP §3c-G/I) |
+| 2026-10-11 | kedip Timeline/galeri/media grup | thumb tanpa cache disk / baca async post-frame | `thumbSync`/`readSync` sinkron + persist (§-media) |
 
 **Pola berulang:** `Image.memory` tanpa cap di permukaan persisten. Kalau
 menemukan lagi, langsung cap sesuai ukuran tampil.
+
+### 9a. Aturan media anti-kedip (2026-10-11) — WAJIB untuk gambar PERSISTEN
+
+Setiap permukaan yang menampilkan gambar berulang (chat, timeline, galeri,
+media grup, story, avatar) WAJIB:
+1. **Punya cache DISK** (bukan RAM-only) — kalau RAM-only, cold start/buka
+   ulang = decode ulang (atau download ulang) = kedip.
+2. **Baca SINKRON dulu** di `initState` (`readSync`/`thumbSync`/`cachedSync`)
+   → frame pertama langsung gambar; fetch/decode async hanya bila belum ada.
+3. Persist hasil setelah ada (jangan biarkan cache hanya hidup di sesi ini).
+
+Status per jalur (audit 2026-10-11):
+
+| Jalur | Cache disk | Baca sinkron | Fix |
+|---|---|---|---|
+| Chat foto/video/voice | ✅ | ✅ (`PhotoPrefetch`/`VideoPrefetch`) | §2a + §3c |
+| Room media | ✅ | ✅ (`PhotoPrefetch` by id) | — |
+| Story viewer/tray | ✅ | ✅ (`readSync`/`warmThumb`) | — |
+| Avatar (user/profile/person) | ✅ | ✅ (`cachedSync`) | — |
+| **Post/timeline** | ✅ | ✅ (`thumbSync`, 2026-10-11) | commit 8686261 |
+| **Galeri media grup** | ✅ | ✅ (`readSync 'thumb:<path>'`) | commit 8686261 (dulu re-download) |
+| **Galeri profil (async_photo)** | ✅ | ✅ (`readSync 'galb64:<hash>'`) | commit 8686261 |
+| **user_info galeri** | ✅ (persist) | ✅ (decode sinkron) | commit 8686261 |
+| **Admin avatar/story** | ✅ | ✅ (`cachedSync`/`thumbCached`) | commit 8686261 |
+
+**JANGAN** bikin permukaan gambar baru dengan RAM-only cache atau fetch
+post-frame tanpa baca sinkron dulu.
+
 
 ---
 
