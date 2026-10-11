@@ -165,6 +165,18 @@ class _ViewerBodyState extends ConsumerState<_ViewerBody> {
                               fit: BoxFit.cover,
                               cacheWidth: 128,
                               gaplessPlayback: true,
+                              // Gagal decode (bytes korup) → ikon, bukan
+                              // kotak hitam misterius di strip thumbnail.
+                              errorBuilder: (_, _, _) => const ColoredBox(
+                                color: Colors.white10,
+                                child: Center(
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 20,
+                                    color: Colors.white54,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -242,6 +254,15 @@ class _ViewerPageState extends State<_ViewerPage> {
       // Cap 1600px seperti PhotoViewerScreen: full-res 12MP = ~48MB bitmap
       // native; 1600px cukup tajam untuk layar HP + zoom.
       cacheWidth: 1600,
+      // Gagal decode → ikon rusak yang JELAS, bukan layar hitam polos
+      // (laporan "blank hitam" yang tak bisa didiagnosa).
+      errorBuilder: (_, _, _) => const Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          size: 64,
+          color: Colors.white54,
+        ),
+      ),
     );
     // Rasio thumbnail diketahui → batasi area gambar supaya proporsi saat
     // dibuka = proporsi yang dilihat di feed (tidak "melebar" di layar).

@@ -43,12 +43,31 @@ class NativeImage {
     return _available!;
   }
 
+  /// Kapan trim native terakhir jalan (throttle anti-spiral, lihat bawah).
+  static DateTime? _lastTrimAt;
+
+  /// Jeda minimum antar trim non-force. Trim = evict SEMUA cache gambar +
+  /// purge arena: mahal (decode ulang setelahnya). Tanpa throttle, sinyal
+  /// pressure OS yang datang beruntun + timer idle + resume bisa menumpuk →
+  /// evict→decode→bengkak→pressure lagi = spiral lag + GC storm (2026-10-11).
+  static const Duration _trimMinGap = Duration(seconds: 60);
+
   /// Lepaskan cache byte native + minta allocator mengembalikan arena ke OS.
   ///
   /// Dipanggil saat app di-background: arena native (jemalloc/scudo) membengkak
   /// karena alokasi byte gambar besar berulang dan TIDAK menyusut sendiri
   /// (terukur reserved ~542MB / used ~57MB). No-op bila channel tak ada.
-  static Future<void> trim() async {
+  ///
+  /// [force] = true melewati throttle (untuk resume setelah background LAMA,
+  /// saat commit buffer render ~500MB harus segera di-purge).
+  static Future<void> trim({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force &&
+        _lastTrimAt != null &&
+        now.difference(_lastTrimAt!) < _trimMinGap) {
+      return;
+    }
+    _lastTrimAt = now;
     try {
       await _ch.invokeMethod<dynamic>('trim', const {});
     } catch (_) {
