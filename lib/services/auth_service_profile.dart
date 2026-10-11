@@ -432,6 +432,17 @@ mixin AuthServiceProfileMx on AuthBase {
   Future<void> goOnline() async {
     final id = uid;
     if (id == null) return;
+    // BATERAI/resume (2026-10-11): segarkan SESI dulu. Auto-refresh token
+    // supabase tidak berjalan saat app di-throttle/background panjang →
+    // token expired → stream realtime error ("InvalidJWTToken: Token has
+    // expired 144s") → reconnect storm + jank resume (Skipped 89 frames).
+    // refreshSession() proaktif di sini membuat reconnect memakai token segar.
+    try {
+      await _sb.auth.refreshSession();
+    } catch (e) {
+      // Gagal refresh (offline) → biarkan; SDK akan coba lagi saat request.
+      dlog('[AUTH] refreshSession on resume gagal: $e');
+    }
     try {
       await _sb
           .from('profiles')
