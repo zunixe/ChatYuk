@@ -210,6 +210,7 @@ mixin _VoiceSignalMx on _VoiceBase {
     final sid = ((sig['id'] ?? 0) as num).toInt();
     if (sid > 0) {
       if (!_seenSignalIds.add(sid)) return;
+      _trimSeenSignals();
       _lastSignalId = max(_lastSignalId, sid);
     }
     final ca = DateTime.tryParse('${sig['created_at'] ?? ''}');

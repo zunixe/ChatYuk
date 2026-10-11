@@ -84,6 +84,17 @@ class VideoPrefetch {
   /// Diisi saat tap (precachePosters) & saat bubble pertama generate.
   static final Map<String, ui.Image> _posterImages = {};
 
+  /// Buang semua bitmap poster + DISPOSE tiap ui.Image (P2e) — ui.Image
+  /// memegang memori native/GPU; tanpa dispose → retensi saat cache dibuang.
+  static void _clearPosterImages() {
+    for (final img in _posterImages.values) {
+      try {
+        img.dispose();
+      } catch (_) {}
+    }
+    _posterImages.clear();
+  }
+
   /// Ambil bitmap poster siap-render (sinkron). null bila belum di-decode.
   static ui.Image? posterImageSync(String videoPath) => _posterImages[videoPath];
 
@@ -124,7 +135,7 @@ class VideoPrefetch {
       // decodeImageFromPixels ~0ms (nol decode JPEG) → cold start langsung.
       final persisted = await _loadPersistedBitmap(videoPath);
       if (persisted != null) {
-        if (_posterImages.length > 64) _posterImages.clear();
+        if (_posterImages.length > 64) _clearPosterImages();
         _posterImages[videoPath] = persisted;
         return;
       }
@@ -133,7 +144,7 @@ class VideoPrefetch {
         targetWidth: posterDecodeWidth,
       );
       final frame = await codec.getNextFrame();
-      if (_posterImages.length > 64) _posterImages.clear();
+      if (_posterImages.length > 64) _clearPosterImages();
       _posterImages[videoPath] = frame.image;
       // Simpan bitmap mentah ke disk → cold start berikutnya nol decode.
       unawaited(_persistBitmap(videoPath, frame.image));
@@ -144,7 +155,7 @@ class VideoPrefetch {
 
   /// Ukuran bitmap tersimpan per path (bytes) → file di direktori VideoFileCache
   /// (persisten). Format: [4 byte W][4 byte H][RGBA...] agar muat cepat.
-  static String _bitmapKey(String videoPath) => 'poster_bmp_${videoPath.hashCode}';
+  static String _bitmapKey(String videoPath) => 'poster_bmp_${hashKey64(videoPath)}';
 
   static Future<ui.Image?> _loadPersistedBitmap(String videoPath) async {
     try {
@@ -189,7 +200,10 @@ class VideoPrefetch {
   }
 
   /// Kosongkan cache bytes poster di memori (logout / uji).
-  static void clearPosterMem() => _posterBytesMem.clear();
+  static void clearPosterMem() {
+    _posterBytesMem.clear();
+    _clearPosterImages();
+  }
 
   /// Simpan bytes poster ke mem-cache stabil (instance SAMA) — dipanggil bubble
   /// setelah generate, supaya render/precache berikutnya memakai kunci

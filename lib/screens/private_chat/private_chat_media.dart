@@ -229,6 +229,9 @@ void _closeSearch() {
     _inputFocus.dispose();
     _searchCtrl.dispose();
     _searchFocus.dispose();
+    // P0: lepas subscription stream ASLI dulu (memicu ChatStreamSession
+    // onCancel → removeChannel + pollTimer.cancel), baru tutup controller.
+    disposeMessagesStream();
     _msgsStreamCtrl.close();
     super.dispose();
   }

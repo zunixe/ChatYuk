@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../utils.dart';
 import 'package:path_provider/path_provider.dart';
 import '../media/native_image.dart';
+import 'media_disk_cache.dart';
 
 // Thumbnail JPEG (~1024px) dari bytes asli — kini di NATIVE
 // (`NativeImage.downscaleBytes`, fallback Dart) supaya decode+encode tidak
@@ -110,7 +111,7 @@ class PostPhotoCache {
     final docs = _docs;
     if (docs == null) return null;
     try {
-      final f = File('$docs/$_folderName/${path.hashCode}.jpg');
+      final f = File('$docs/$_folderName/${hashKey64(path)}.jpg');
       if (!f.existsSync()) return null;
       final bytes = f.readAsBytesSync();
       if (bytes.isEmpty) return null;
@@ -122,12 +123,12 @@ class PostPhotoCache {
   }
 
   File _fileFor(Directory folder, String path) =>
-      File('${folder.path}/${path.hashCode}.jpg');
+      File('${folder.path}/${hashKey64(path)}.jpg');
 
   // Full-res disimpan terpisah (suffix .full) supaya thumbnail & full bisa
   // punya umur berbeda dan tidak saling menimpa.
   File _fullFileFor(Directory folder, String path) =>
-      File('${folder.path}/${path.hashCode}.full.jpg');
+      File('${folder.path}/${hashKey64(path)}.full.jpg');
 
   /// Ambil thumbnail foto post. [path] adalah path storage (mis. `posts/uid/ts.jpg`).
   /// Penelepon paralel untuk path sama menunggu job yang sama (bukan gagal).

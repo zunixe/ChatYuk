@@ -845,6 +845,11 @@ class ChatStreamSession {
         try {
           _sb.removeChannel(ch);
         } catch (_) {}
+        // P0b DIBATALKAN: JANGAN `controller.close()` di sini — stream ini
+        // `broadcast` & bisa di-subscribe ULANG (`handle.stream.first` → cancel
+        // → subscribe lagi). Menutup di onCancel merusak pemakaian berulang
+        // ("Bad state: No element" saat loadOlder). Pelepasan `_current` cukup
+        // lewat GC setelah tanpa listener.
       });
     };
 

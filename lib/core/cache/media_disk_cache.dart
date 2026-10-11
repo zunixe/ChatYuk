@@ -7,17 +7,32 @@ import 'package:flutter/foundation.dart';
 import '../../utils.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Nama file cache = hash FNV-1a (32-bit) dari serverPath, hex 8 digit.
-/// Murni & top-level: dipakai `MediaDiskCache` dan `VideoFileCache`
-/// (keduanya butuh nama file stabil lintas restart), plus unit-test.
+/// Nama file cache = hash FNV-1a **64-bit** dari serverPath, hex 16 digit.
+///
+/// P1 (2026-10-11): dulu 32-bit → tabrakan mengikuti birthday paradox
+/// (terukur ~10 tabrakan / 300k key). Karena path storage Supabase versioned
+/// per-upload (jumlah file terus tumbuh), ini bisa membuat MEDIA TERTUKAR
+/// (avatar A tampil sebagai B). 64-bit → tabrakan praktis nol.
+///
+/// Pakai BigInt agar aritmetika 64-bit tak overflow (Dart int = 64-bit,
+/// FNV-1a butuh wrap 2^64; perkalian 64-bit penuh melampaui itu).
+/// Murni & top-level: dipakai `MediaDiskCache`, `VideoFileCache`, `VideoPrefetch`.
 String mediaCacheFileName(String serverPath) {
-  var h = 0x811c9dc5;
+  final mask = (BigInt.one << 64) - BigInt.one;
+  var h = BigInt.parse('cbf29ce484222325', radix: 16); // offset basis 64-bit
+  final prime = BigInt.parse('100000001b3', radix: 16);
   for (final c in serverPath.codeUnits) {
-    h ^= c;
-    h = (h * 0x01000193) & 0xFFFFFFFF;
+    h = h ^ BigInt.from(c);
+    h = (h * prime) & mask;
   }
-  return h.toRadixString(16).padLeft(8, '0');
+  return h.toRadixString(16).padLeft(16, '0');
 }
+
+/// Hash FNV-1a 64-bit (hex 16 digit) dari string apa pun — untuk kunci
+/// turunan (mis. `galb64:` dari base64, `poster_bmp_` dari path) TANPA
+/// "hash atas hash" (dulu `'galb64:${base64.hashCode}'` → hash 32-bit yang
+/// sudah bisa tabrakan, lalu di-hash lagi = ruang tabrakan makin besar).
+String hashKey64(String s) => mediaCacheFileName(s);
 
 /// Apakah kuota terlampaui (perlu buang LRU)? Murni & testable. Dipakai
 /// `MediaDiskCache` dan `VideoFileCache`.
@@ -44,6 +59,8 @@ class MediaDiskCache {
   static const _indexName = 'index.json';
   /// Kuota 250MB — cukup galeri + voice tanpa memenuhi storage.
   static const int maxBytes = 250 * 1024 * 1024;
+  /// P3b: batas jumlah entri index (cegah index.json membengkak).
+  static const int _maxIndexEntries = 5000;
 
   final Map<String, DateTime> _index = {};
   bool _indexLoaded = false;
@@ -174,6 +191,24 @@ class MediaDiskCache {
     }
   }
 
+  /// Baca BANYAK path PARALEL (async, non-blocking) — untuk daftar panjang
+  /// (mis. 200 thumb galeri grup). Dulu loop `readSync` = 200 stat + 200 baca
+  /// file di UI thread → stall. Ini pakai `read()` async → tak blok frame.
+  /// Return map serverPath → bytes (hanya yang HIT disk).
+  Future<Map<String, Uint8List>> readManyAsync(List<String> paths) async {
+    final out = <String, Uint8List>{};
+    if (paths.isEmpty) return out;
+    final results = await Future.wait(paths.map((p) async {
+      final b = await read(p);
+      return MapEntry(p, b);
+    }));
+    for (final e in results) {
+      final b = e.value;
+      if (b != null && b.isNotEmpty) out[e.key] = b;
+    }
+    return out;
+  }
+
   /// File lokal untuk suatu serverPath (null jika belum ter-cache) —
   /// dipakai pemutar audio yang butuh DeviceFileSource.
   Future<File?> fileFor(String serverPath) async {
@@ -188,19 +223,56 @@ class MediaDiskCache {
     try {
       await _dir();
       await _loadIndex();
-      await _enforceQuota(bytes.length);
+      // P2b (2026-10-11): `_enforceQuota` TIDAK tiap write — dulu d.list()
+      // SELURUH direktori (bisa ribuan file) tiap menulis 1 file → makin
+      // lambat seiring cache membesar. Sekarang: throttle (min 30 dtk antar
+      // audit) ATAU jadwalkan bila total terlacak mendekati kuota. _totalBytes
+      // dipelihara agar tak perlu list tiap kali.
+      await _maybeEnforceQuota(bytes.length);
       final f = File(_pathFor(serverPath));
       await f.writeAsBytes(bytes, flush: true);
       _index[serverPath] = DateTime.now();
       _fileNameToPath[_fileName(serverPath)] = serverPath;
+      _totalBytes += bytes.length;
+      // P3b: cap JUMLAH entri index (bukan byte) → `index.json` tak membengkak
+      // (path versioned per-upload menumpuk). Buang entri terlama dari INDEX
+      // saja; file-nya dibersihkan oleh LRU byte (_enforceQuota).
+      if (_index.length > _maxIndexEntries) {
+        final removeCount = _index.length - _maxIndexEntries;
+        final oldest = _index.entries.toList()
+          ..sort((a, b) => a.value.compareTo(b.value));
+        for (var i = 0; i < removeCount; i++) {
+          final k = oldest[i].key;
+          _index.remove(k);
+          _fileNameToPath.remove(_fileName(k));
+        }
+      }
       _scheduleSaveIndex();
     } catch (e) {
       dlog('[MediaDisk] write error: $e');
     }
   }
 
+  // ── P2b: throttle audit kuota ──
+  int _totalBytes = 0;
+  DateTime? _lastQuotaCheck;
+  static const Duration _quotaInterval = Duration(seconds: 30);
+
+  /// Audit kuota ter-throttle: jalan bila (a) belum pernah, (b) sudah lewat
+  /// [_quotaInterval], atau (c) total terlacak + incoming > kuota (urgen).
+  Future<void> _maybeEnforceQuota(int incoming) async {
+    final now = DateTime.now();
+    final urgent = _totalBytes + incoming > maxBytes;
+    final stale = _lastQuotaCheck == null ||
+        now.difference(_lastQuotaCheck!) >= _quotaInterval;
+    if (!urgent && !stale) return;
+    _lastQuotaCheck = now;
+    _totalBytes = await _enforceQuota(incoming);
+  }
+
   /// LRU: hapus file dengan akses terlama sampai ada ruang untuk [incoming].
-  Future<void> _enforceQuota(int incoming) async {
+  /// Return total bytes tersisa (untuk pelacakan `_totalBytes`).
+  Future<int> _enforceQuota(int incoming) async {
     try {
       final d = Directory('$_docs/$_dirName');
       var total = 0;
@@ -213,7 +285,7 @@ class MediaDiskCache {
         total += len;
         files.add((f, len));
       }
-      if (!mediaQuotaExceeded(total, incoming, maxBytes)) return;
+      if (!mediaQuotaExceeded(total, incoming, maxBytes)) return total;
       final byName = {
         for (final (f, len) in files) f.uri.pathSegments.last: (f, len),
       };
@@ -233,8 +305,10 @@ class MediaDiskCache {
       _index.removeWhere((k, v) => !existing.contains(_fileName(k)));
       _fileNameToPath.removeWhere((name, path) => !existing.contains(name));
       _scheduleSaveIndex();
+      return total;
     } catch (e) {
       dlog('[MediaDisk] quota error: $e');
+      return 0;
     }
   }
 
