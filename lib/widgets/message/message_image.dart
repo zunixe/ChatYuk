@@ -201,7 +201,12 @@ class _MessageImageState extends State<MessageImage> {
             putDecodedCache(key, td);
             // Bitmap thumb di latar → RawImage pada render berikutnya.
             unawaited(attachDecodedImage(td, targetWidth: 720).then((_) {
-              if (mounted && gen == _gen && td.image != null) setState(() {});
+              if (mounted &&
+                  gen == _gen &&
+                  !td.disposed &&
+                  td.image != null) {
+                setState(() {});
+              }
             }));
             _fadeNext = true;
             setState(() {
@@ -275,7 +280,12 @@ class _MessageImageState extends State<MessageImage> {
     // bitmap di latar → begitu siap, RawImage dipakai (nol decode) pada render
     // berikutnya. TIDAK menunggu (agar tak gantung bila codec lambat/gagal).
     unawaited(attachDecodedImage(decoded, targetWidth: 720).then((_) {
-      if (mounted && gen == _gen && decoded.image != null) setState(() {});
+      if (mounted &&
+          gen == _gen &&
+          !decoded.disposed &&
+          decoded.image != null) {
+        setState(() {});
+      }
     }));
     if (!mounted || gen != _gen) return;
     setState(() {
@@ -397,7 +407,9 @@ class _MessageImageState extends State<MessageImage> {
     // CEPAT (contek video): bila bitmap siap (ui.Image), render via RawImage
     // = NOL decode saat render (foto secepat video). Fallback Image.memory
     // bila bitmap belum di-decode.
-    final img = decoded.image;
+    // GUARD (R10): `decoded.disposed` → bitmap sudah dilepas → JANGAN render
+    // RawImage (crash "disposed image"); jatuh ke Image.memory(bytes).
+    final img = decoded.disposed ? null : decoded.image;
     if (img != null) {
       return RawImage(
         image: img,
