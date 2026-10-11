@@ -43,6 +43,19 @@ abstract class AdminBase extends ChangeNotifier {
   bool _seedDone = false;
   static const String _kSeenDevicesKey = 'admin_seen_device_ids';
 
+  // BOUNDED (R6): Set penanda "sudah dinotifikasi" tumbuh per device/call
+  // baru. Prefs pasangannya dibatasi 500, tapi Set-nya TIDAK → sesi admin
+  // lama menumpuk id (device/call tak terbatas). Cap FIFO 500 (samakan prefs).
+  static const int _seenMax = 500;
+
+  /// Tambah id ke Set penanda dengan cap FIFO — buang yang tertua saat penuh.
+  static void _boundedAdd(Set<String> set, String id) {
+    if (id.isEmpty || !set.add(id)) return;
+    while (set.length > _seenMax) {
+      set.remove(set.first);
+    }
+  }
+
   void _emit(String msg) {
     if (_disposed) return;
     try {
@@ -146,4 +159,12 @@ abstract class AdminBase extends ChangeNotifier {
   void _notifyMarketing() => _bumpAndNotify(() => _revMarketing++);
   void _notifyRooms() => _bumpAndNotify(() => _revRooms++);
   void _notifyPosts() => _bumpAndNotify(() => _revPosts++);
+}
+
+/// Hook uji untuk `AdminBase._boundedAdd`/`_seenMax` (privat). Lihat
+/// test/admin_seen_cap_test.dart.
+class AdminBaseTestHook {
+  static int get seenMax => AdminBase._seenMax;
+  static void boundedAdd(Set<String> set, String id) =>
+      AdminBase._boundedAdd(set, id);
 }

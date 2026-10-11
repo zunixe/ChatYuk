@@ -303,7 +303,7 @@ mixin AdminChatsMx on AdminBase {
   void _detectNewCalls(List<ActiveCallInfo> calls) {
     for (final c in calls) {
       if (_seenCallIds.contains(c.id)) continue;
-      _seenCallIds.add(c.id);
+      AdminBase._boundedAdd(_seenCallIds, c.id);
       if (!_notifArmed) continue;
       if (c.status == 'ringing' || c.status == 'answered') {
         _emit('Video call: ${c.callerName} ↔ ${c.calleeName}');
