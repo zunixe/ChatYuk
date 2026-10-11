@@ -747,7 +747,13 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                                   minLines: 1,
                                   maxLines: null,
                                   keyboardType: TextInputType.multiline,
-                                  textCapitalization: TextCapitalization.sentences,
+                                  // PERF (2026-10-11, simpleperf): JANGAN
+                                  // textCapitalization: sentences. Terbukti
+                                  // memaksa platform re-measure + CursorAnchorInfo
+                                  // tiap keystroke -> scudo alloc 15.8% -> 2.3%
+                                  // UI thread. Kapital huruf pertama TETAP
+                                  // dilakukan saat kirim (capitalizeFirst di
+                                  // chat_send_mixin) -> perilaku akhir sama.
                                 ),
                               ),
                               ChatIconButton(
