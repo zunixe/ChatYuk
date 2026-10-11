@@ -391,6 +391,10 @@ mixin _UiActionsMx on _UserInfoBase {
         _galleryBytes.remove(_galleryBytes.keys.first);
       }
       _galleryBytes[photo.id] = b;
+      // Persist thumb ke disk (kunci hash base64) → kunjungan berikutnya
+      // bisa dibaca sinkron tanpa decode ulang (anti-kedip/jank cold start).
+      unawaited(MediaDiskCache.instance.write('galb64:${photo.photo.hashCode}', b)
+          .then((_) {}));
       return b;
     } catch (_) {
       return null;

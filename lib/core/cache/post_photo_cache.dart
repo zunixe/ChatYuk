@@ -84,6 +84,43 @@ class PostPhotoCache {
     return folder;
   }
 
+  String? _docs;
+  bool get isReady => _docs != null;
+
+  /// Warm-up SEBELUM frame pertama — simpan documents path supaya [thumbSync]
+  /// (sinkron) bisa dipakai. Dipanggil di `main.dart` (composition root).
+  Future<void> prewarm() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      _docs = dir.path;
+      final folder = Directory('${_docs}/$_folderName');
+      if (!folder.existsSync()) folder.createSync(recursive: true);
+    } catch (e) {
+      dlog('[PostPhotoCache] prewarm error: $e');
+    }
+  }
+
+  /// Thumb SINKRON (RAM → disk) — dipakai `PostCard` di initState supaya frame
+  /// pertama Timeline sudah foto (nol kedip), bukan placeholder lalu thumb
+  /// menyusul. null bila belum ada (fallback jalur async `thumb()`).
+  Uint8List? thumbSync(String path) {
+    if (path.isEmpty) return null;
+    final mem = _memGet(path);
+    if (mem != null) return mem;
+    final docs = _docs;
+    if (docs == null) return null;
+    try {
+      final f = File('$docs/$_folderName/${path.hashCode}.jpg');
+      if (!f.existsSync()) return null;
+      final bytes = f.readAsBytesSync();
+      if (bytes.isEmpty) return null;
+      _memPut(path, bytes);
+      return bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
   File _fileFor(Directory folder, String path) =>
       File('${folder.path}/${path.hashCode}.jpg');
 

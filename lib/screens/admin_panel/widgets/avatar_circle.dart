@@ -36,11 +36,23 @@ class AdminAvatarCircleState extends State<AdminAvatarCircle> {
   @override
   void initState() {
     super.initState();
+    // ANTI-KEDIP: baca cache RAM sinkron dulu (frame pertama langsung avatar),
+    // baru resolve async bila belum ada (pola ProfileAvatar).
+    try {
+      final sync = ProviderScope.containerOf(context, listen: false)
+          .read(avatarProvider)
+          .cachedSync(widget.uid);
+      if (sync != null && sync.isNotEmpty) {
+        _src = sync;
+        _loaded = true;
+      }
+    } catch (_) {}
     _load();
   }
 
   Future<void> _load() async {
     if (widget.uid.isEmpty) return;
+    if (_loaded && _src.isNotEmpty) return; // sudah dari cache sinkron.
     try {
       final b64 = await ProviderScope.containerOf(context, listen: false).read(avatarProvider).get(widget.uid);
       if (!mounted) return;

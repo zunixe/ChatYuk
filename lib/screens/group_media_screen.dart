@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../config/strings_admin.dart';
+import '../core/cache/media_disk_cache.dart';
 import '../models/room_model.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
@@ -51,17 +53,32 @@ class _GroupMediaScreenState extends ConsumerState<GroupMediaScreen> {
         _paths = paths;
         _loading = false;
       });
-      // Unduh thumbnail dengan batas concurrency 6 + setState per-batch —
-      // dulu fire-all 200 request + setState PER file (200 rebuild beruntun).
+      // 1) Baca thumb dari CACHE DISK dulu (SINKRON, anti-kedip/re-download).
+      //    Kunci cache thumb = 'thumb:<path>'.
+      final needDownload = <String>[];
+      for (final p in paths) {
+        final cached = MediaDiskCache.instance.readSync('thumb:$p');
+        if (cached != null && cached.isNotEmpty) {
+          _thumbs[p] = cached;
+        } else {
+          needDownload.add(p);
+        }
+      }
+      if (needDownload.isNotEmpty && mounted) setState(() {});
+      // 2) Unduh yang BELUM ada di cache (batas concurrency 6 + setState per
+      //    batch) → simpan ke MediaDiskCache agar buka berikutnya instan.
       const concurrency = 6;
-      for (var i = 0; i < paths.length; i += concurrency) {
+      for (var i = 0; i < needDownload.length; i += concurrency) {
         if (!mounted) return;
-        final batch = paths.sublist(
+        final batch = needDownload.sublist(
           i,
-          (i + concurrency) > paths.length ? paths.length : i + concurrency,
+          (i + concurrency) > needDownload.length
+              ? needDownload.length
+              : i + concurrency,
         );
         final results = await Future.wait(
-          batch.map((p) => ProviderScope.containerOf(context, listen: false).read(storageProvider)
+          batch.map((p) => ProviderScope.containerOf(context, listen: false)
+              .read(storageProvider)
               .downloadThumbBytes(p)
               .then((b) => MapEntry(p, b))),
         );
@@ -69,7 +86,10 @@ class _GroupMediaScreenState extends ConsumerState<GroupMediaScreen> {
         setState(() {
           for (final e in results) {
             final b = e.value;
-            if (b != null && b.isNotEmpty) _thumbs[e.key] = b;
+            if (b != null && b.isNotEmpty) {
+              _thumbs[e.key] = b;
+              unawaited(MediaDiskCache.instance.write('thumb:${e.key}', b));
+            }
           }
         });
       }

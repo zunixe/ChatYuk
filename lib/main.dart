@@ -1539,6 +1539,7 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
     guard('mediadisk', () async {
       await MediaDiskCache.instance.prewarm();
       await VideoFileCache.instance.prewarm(); // video persisten (spt voice).
+      await PostPhotoCache.instance.prewarm(); // thumb post (anti-kedip TL).
     }, 15),
     guard('firebase', () async {
       try {
