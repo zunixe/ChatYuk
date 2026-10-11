@@ -3774,3 +3774,37 @@ berubah.
 **Verifikasi:** analyzer 0 · guard OK · test chat/mixins hijau · allocator UI
 thread turun terukur. **Belum diukur:** frame p95 spesifik & "ngetik barengan
 lawan" (dugaan akar sama, perlu sesi 2-device).
+
+---
+
+## §46. Audit & optimasi baterai — gate timer background (2026-10-11)
+
+**Baseline (dumpsys batterystats, Xiaomi):** ChatYuk = pemakai baterai
+**tertinggi (78.3 mAh)**, pecahan `cached CPU: 3.17 mAh` (saat app tak dilihat).
+
+**Akar (bukti kode):** beberapa `Timer.periodic` hidup walau app di background
+— gate lama hanya pada TAB (`visibleMainTab`), tab tetap "current" saat bg.
+
+| Timer | Sebelum | Sesudah |
+|---|---|---|
+| Heartbeat 240s (`auth_provider_actions`) | hidup saat bg (RPC last_seen/4 mnt) | **stop di `goIdle`**, restart di `goOnline` |
+| Poll pesan 30s (`chat_stream_session`) | hidup saat bg | gate `AppForeground` |
+| Poll list chat 30s (`chat_service_private_chatlist`) | gate-tab saja | + gate `AppForeground` |
+| Connectivity recheck 20s (`connectivity_provider`) | hidup saat bg (platform channel) | gate `AppForeground` |
+| Global-settings poll 20s (`auth_service_settings`) | RPC tiap 20s seumur app | gate `AppForeground` |
+
+**Sumber kebenaran baru:** `lib/core/app_foreground.dart` (`AppForeground`,
+ValueNotifier) di-set dari `didChangeAppLifecycleState` di `app.dart`.
+
+**Verifikasi (HP fisik):** app di background (Home) → **0 baris log Flutter
+dari PID app user selama 90 dtk** (sebelumnya `[SETTINGS]`/20s + `[ONLINE-EMIT]`
+/30s). Analyzer 0; full `flutter test` 1875 hijau; guard OK.
+
+**Belum terverifikasi:** angka mAh turun (butuh siklus background 30–60 mnt
+penuh + batterystats reset ber-izin). Tidak diklaim "hemat X%" (§ tanpa data).
+
+**Temuan lanjutan (BELUM diperbaiki — WIP sesi lain):** `[RT-RESILIENT] error,
+retry in 1s/2s` saat background = **reconnect loop realtime** (belum sepenuhnya
+di-defer; ada `_pendingBackgroundRetry` setengah jalan di `rt_resilient.dart`).
+Prioritas baterai berikutnya: pastikan reconnect realtime **ditunda penuh**
+saat background (event-driven resume, backoff+jitter).
