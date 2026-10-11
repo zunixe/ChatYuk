@@ -890,7 +890,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
     // Dedupe _pending: hapus satu per satu saat server konfirmasi — aman utk double-send text sama
     _msgsSub = _msgsStreamCtrl.stream.listen((msgs) {
-      _scheduleWarmPrefetch(msgs); // T3a: warm voice/video ditunda 400ms.
+      _scheduleWarmPrefetch(msgs); // hangatkan voice + poster video (post-frame).
       // Pesan BARU dari lawan yang masuk sementara chat terbuka → tandai baca
       // agar last_read_at lawan maju → centang 2 (read) pengirim langsung terisi.
       // Tanpa ini, centang 2 baru muncul setelah keluar-masuk chat.

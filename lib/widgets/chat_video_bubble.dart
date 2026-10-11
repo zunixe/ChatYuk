@@ -557,26 +557,42 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
                 Container(
                   color: Colors.black87,
                   alignment: Alignment.center,
-                  // Spinner hanya bila TERBUKTI lambat (_slow). Baca disk
-                  // yang selesai <300ms tidak pernah mem-flash spinner.
-                  child: _loading
-                      ? (_slow
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.4,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const SizedBox())
-                      : Icon(
-                          _failed
-                              ? Icons.refresh_rounded
-                              : Icons.videocam_rounded,
-                          color: Colors.white54,
-                          size: 30,
+                  // INSTAN-TERISI (seperti voice): walau poster belum siap,
+                  // card JANGAN kotak hitam kosong — tampilkan ikon play besar
+                  // + durasi segera, spinner kecil di bawah kalau unduh lama.
+                  // Ini menghilangkan kesan "card ngeload" saat poster MISS.
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _failed
+                            ? Icons.refresh_rounded
+                            : Icons.play_circle_fill_rounded,
+                        color: Colors.white54,
+                        size: 44,
+                      ),
+                      if (widget.durationMs > 0) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          formatVideoDuration(widget.durationMs),
+                          style: AppText.chatTime.copyWith(
+                            color: Colors.white70,
+                          ),
                         ),
+                      ],
+                      if (_loading && _slow) ...[
+                        const SizedBox(height: 8),
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white38,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               // Overlay play (selalu tampil saat siap).
               if (!_loading)
