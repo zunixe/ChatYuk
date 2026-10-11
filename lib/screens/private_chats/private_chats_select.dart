@@ -43,18 +43,21 @@ mixin _PcSelectMx on _PcBase {
           av.cachedSyncIncludeDisk(otherUid) ??
           '';
     } catch (_) {}
-    // PUSH: tunggu SEBENTAR precache poster video (decode bitmap) supaya frame
-    // pertama chat SUDAH poster (nol 'ngeload' di buka ke-1 juga) — dibatasi
-    // timeout pendek (≤450ms) agar tap tetap responsif; foto diprecache paralel
-    // (tak ditunggu). Video = kebutuhan "langsung tampil seperti voice".
-    unawaited(PhotoPrefetch.precacheThumbs(context, 'private_${chat.chatId}'));
+    // PUSH: tunggu SEBENTAR precache poster video + thumb foto supaya frame
+    // pertama chat SUDAH gambar (nol 'ngeload' di buka ke-1 juga) — dibatasi
+    // timeout pendek agar tap tetap responsif.
+    final pcKey = 'private_${chat.chatId}';
     try {
       await ProviderScope.containerOf(context, listen: false)
           .read(chatProvider.notifier)
           .prefetchPrivateChat(chat.chatId)
           .timeout(const Duration(milliseconds: 300));
       if (context.mounted) {
-        await VideoPrefetch.precachePosters(context, 'private_${chat.chatId}')
+        await VideoPrefetch.precachePosters(context, pcKey)
+            .timeout(const Duration(milliseconds: 450));
+      }
+      if (context.mounted) {
+        await PhotoPrefetch.precacheThumbs(context, pcKey)
             .timeout(const Duration(milliseconds: 450));
       }
     } catch (_) {}
