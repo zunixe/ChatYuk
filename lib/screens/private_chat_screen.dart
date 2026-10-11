@@ -58,6 +58,7 @@ import '../providers/riverpod/message_reaction_provider.dart';
 import '../providers/riverpod/privacy_provider.dart';
 
 part 'private_chat/private_chat_open_timing.dart';
+part 'private_chat/private_chat_layout_widgets.dart';
 
 /// Warna latar Scaffold private chat — WAJIB opaque (bukan transparent).
 ///
@@ -1893,12 +1894,12 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                 label,
                 style: AppText.label.copyWith(color: Colors.white),
               ),
-            _SearchNavButton(
+            SearchNavButton(
               icon: Icons.keyboard_arrow_up,
               enabled: total > 0,
               onTap: () => _gotoMatch(-1),
             ),
-            _SearchNavButton(
+            SearchNavButton(
               icon: Icons.keyboard_arrow_down,
               enabled: total > 0,
               onTap: () => _gotoMatch(1),
@@ -2823,7 +2824,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
                         // sebagai depend → tiap IME frame MIUI (puluhan/detik)
                         // rebuild SELURUH layar. `_KeyboardInset` membacanya di
                         // element kecil sendiri → hanya composer yang rebuild.
-                        _KeyboardInset(
+                        KeyboardInset(
                           child: ChatComposerInput(
                           controller: _msgCtrl,
                           focusNode: _inputFocus,
@@ -3070,51 +3071,3 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
 
 }
 
-/// Tombol panah navigasi hasil search — rapat tanpa jeda atas-bawah
-/// (InkWell 32x32, tanpa padding IconButton bawaan).
-class _SearchNavButton extends StatelessWidget {
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-  const _SearchNavButton({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: enabled ? onTap : null,
-      child: SizedBox(
-        width: 32,
-        height: 32,
-        child: Icon(
-          icon,
-          color: enabled ? Colors.white : Colors.white38,
-          size: 24,
-        ),
-      ),
-    );
-  }
-}
-
-
-
-
-/// Padding bawah = tinggi keyboard (viewInsets). Dibuat widget TERPISAH
-/// supaya `MediaQuery.viewInsetsOf` hanya mendaftarkan element INI sebagai
-/// depend — bukan element `PrivateChatScreen`. Tanpa ini, IME frame MIUI yang
-/// redundan (puluhan/detik) me-rebuild SELURUH layar chat.
-class _KeyboardInset extends StatelessWidget {
-  final Widget child;
-  const _KeyboardInset({required this.child});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: child,
-    );
-  }
-}
