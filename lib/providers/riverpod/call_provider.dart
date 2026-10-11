@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/supabase_config.dart';
+import '../../core/nav_journal.dart';
 import '../../main.dart';
 import '../../screens/incoming_call_screen.dart';
 import '../../services/call_service.dart';
@@ -43,12 +44,14 @@ class RouteTracker extends NavigatorObserver {
     final n = route.settings.name;
     if (n != null && n.isNotEmpty) active.add(n);
     debugPrint('[NAV] push ${_label(route)} stack=${active.toList()}');
+    NavJournal.log('push ${_label(route)} depth=${active.length}');
   }
 
   void _remove(Route<dynamic> route) {
     final n = route.settings.name;
     if (n != null && n.isNotEmpty) active.remove(n);
     debugPrint('[NAV] pop ${_label(route)} stack=${active.toList()}');
+    NavJournal.log('pop ${_label(route)} depth=${active.length}');
   }
 
   @override
@@ -69,6 +72,8 @@ class RouteTracker extends NavigatorObserver {
     if (newRoute != null) _add(newRoute);
     debugPrint(
         '[NAV] replace ${_label(oldRoute)} -> ${_label(newRoute)} stack=${active.toList()}');
+    NavJournal.log(
+        'replace ${_label(oldRoute)} -> ${_label(newRoute)} depth=${active.length}');
   }
 }
 

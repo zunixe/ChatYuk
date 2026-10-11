@@ -17,6 +17,7 @@ import 'providers/riverpod/online_users_provider.dart';
 import 'core/admin_gate.dart';
 import 'providers/riverpod/locale_provider.dart';
 import 'core/cache/message_cache.dart';
+import 'core/nav_journal.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/image_cache_hygiene.dart';
@@ -636,6 +637,7 @@ class _MainNavState extends ConsumerState<_MainNav>
         canPop: tab == 0,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
+          NavJournal.log('back root tab=$tab -> goTo(0)');
           ref.read(navProvider.notifier).goTo(0);
         },
         child: Scaffold(
