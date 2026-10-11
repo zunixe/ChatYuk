@@ -182,10 +182,21 @@ class StoryNotifier extends Notifier<StoryState> {
     }
     final slides = await _service.fetchSlides(authorId);
     if (slides.isNotEmpty) {
-      _slidesByAuthor[authorId] = slides;
+      _rememberSlides(authorId, slides);
       return slides;
     }
     return cached ?? slides;
+  }
+
+  /// Simpan slide per-author dengan cap FIFO (R6) — dulu tumbuh tanpa batas
+  /// seiring bertambahnya author yang dilihat (pola sama `_thumbByPath`).
+  static const int _maxAuthors = 60;
+  void _rememberSlides(String authorId, List<StorySlide> slides) {
+    if (_slidesByAuthor.length >= _maxAuthors &&
+        !_slidesByAuthor.containsKey(authorId)) {
+      _slidesByAuthor.remove(_slidesByAuthor.keys.first);
+    }
+    _slidesByAuthor[authorId] = slides;
   }
 
   Uint8List? thumbCached(String thumbPath) {
