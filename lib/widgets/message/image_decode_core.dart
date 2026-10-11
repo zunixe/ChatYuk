@@ -12,7 +12,28 @@ class DecodedImage {
   final int width;
   final int height;
   ui.Image? image;
+
+  /// True setelah [safeDispose] dijalankan — bitmap GPU sudah dilepas.
+  /// RENDER WAJIB cek ini: memakai `image` yang sudah di-dispose = crash
+  /// "Cannot draw a disposed image". Bila true, jatuh ke `Image.memory(bytes)`.
+  bool disposed = false;
+
   DecodedImage(this.bytes, this.width, this.height, [this.image]);
+
+  /// Lepas bitmap GPU (`ui.Image`) dengan AMAN & idempoten.
+  ///
+  /// Guard berlapis (R10): (1) idempoten via [disposed]; (2) `image` di-null-kan
+  /// SEBELUM dispose agar render berikutnya tak menyentuh handle mati;
+  /// (3) try/catch — dispose ganda / race TIDAK boleh melempar ke UI.
+  void safeDispose() {
+    if (disposed) return;
+    disposed = true;
+    final img = image;
+    image = null;
+    try {
+      img?.dispose();
+    } catch (_) {}
+  }
 }
 
 /// Decode [bytes] → `ui.Image` (target lebar) lalu pasang ke [di]. Menjadikan
@@ -22,13 +43,20 @@ class DecodedImage {
 /// menahan). `instantiateImageCodec` dengan bytes JPEG valid tak menggantung;
 /// bila gagal, `di.image` tetap null → fallback `Image.memory(bytes)`.
 Future<void> attachDecodedImage(DecodedImage di, {int? targetWidth}) async {
-  if (di.image != null) return;
+  if (di.disposed || di.image != null) return;
   try {
     final codec = await ui.instantiateImageCodec(
       di.bytes,
       targetWidth: targetWidth,
     );
     final frame = await codec.getNextFrame();
+    // Race: bisa ter-dispose selama await → jangan pasang handle mati.
+    if (di.disposed) {
+      try {
+        frame.image.dispose();
+      } catch (_) {}
+      return;
+    }
     di.image = frame.image;
   } catch (_) {}
 }
@@ -49,8 +77,15 @@ void _putDecodedCache(int key, DecodedImage img) {
     _hygieneRegistered = true;
     ImageCacheHygiene.registerAppCache(decodedImageCache.clear);
   }
-  // LRU: hapus dulu (kalau ada) lalu masukkan ulang → posisi jadi "terbaru".
-  decodedImageCache.remove(key);
+  // LRU: hapus dulu (kalau ada). Bila entri lama untuk kunci SAMA digantikan
+  // objek BARU → bitmap lama tak dipakai lagi → lepas (R10). HANYA di jalur
+  // replace kunci-sama (aman: tak ada widget lain memegang referensi objek
+  // yang baru saja digantikan dari cache). Entri yang dibuang karena evict LRU
+  // (keys.first) SENGAJA TIDAK di-dispose — bisa masih dirender widget lain.
+  final removed = decodedImageCache.remove(key);
+  if (removed != null && !identical(removed, img)) {
+    removed.safeDispose();
+  }
   while (decodedImageCache.length >= _decodedCacheMax) {
     decodedImageCache.remove(decodedImageCache.keys.first);
   }
