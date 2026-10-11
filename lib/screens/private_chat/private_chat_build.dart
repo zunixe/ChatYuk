@@ -3,9 +3,12 @@ part of '../private_chat_screen.dart';
 // ignore_for_file: unused_element, unused_element_parameter
 
 mixin _PcBuildMx on _PrivateChatBase {
-@override
+  @override
   Future<bool> chatDeleteMessage(String id) async {
-    final ok = await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).deletePrivateMessage(id);
+    final ok = await ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chatRiverpod.chatProvider.notifier).deletePrivateMessage(id);
     // Optimistic lokal: tandai terhapus SEGERA supaya UI tidak menunggu
     // realtime/refetch. DB sudah menyimpan semua id, tapi tampilan bisa
     // tertinggal (gejala "pilih beberapa, hanya 1 yang kelihatan terhapus").
@@ -14,21 +17,30 @@ mixin _PcBuildMx on _PrivateChatBase {
     }
     return ok;
   }
-@override
+
+  @override
   Future<bool> chatUndeleteMessage(String id) async {
-    final ok = await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).undeletePrivateMessage(id);
+    final ok = await ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chatRiverpod.chatProvider.notifier).undeletePrivateMessage(id);
     if (ok && mounted) {
       setState(() => _localDeletedIds.remove(id));
     }
     return ok;
   }
-@override
+
+  @override
   Future<Map<String, dynamic>> chatUndoMessage(String id) async {
     final n = int.tryParse(id);
     if (n == null) return {};
-    return ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).undoMessage(n);
+    return ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier).undoMessage(n);
   }
-/// Tombol kamera → layar kamera in-app (SAMA seperti Story): preview live +
+
+  /// Tombol kamera → layar kamera in-app (SAMA seperti Story): preview live +
   /// toggle Foto/Video DI DALAM kamera. Foto → preview composer; video
   /// (maks 60 dtk) → kompres → preview.
   ///
@@ -56,13 +68,17 @@ mixin _PcBuildMx on _PrivateChatBase {
       await photoFromFileToPreview(bytes);
     }
   }
-@override
+
+  @override
   Future<void> sendLocationFromPreviewAt(
     ChatLocation loc, {
     String text = '',
     MessageModel? reply,
   }) async {
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -80,20 +96,28 @@ mixin _PcBuildMx on _PrivateChatBase {
     );
     String? sentId;
     try {
-      sentId = await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
-        chatId: widget.chatId,
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        text: payload.encode(),
-        type: 'location',
-        repliedToId: reply?.id,
-        repliedToText: reply?.text,
-        repliedToSenderName: reply?.senderName,
-      );
+      sentId = await ProviderScope.containerOf(context, listen: false)
+          .read(chatRiverpod.chatProvider.notifier)
+          .sendPrivateMessage(
+            chatId: widget.chatId,
+            senderId: uid,
+            senderName: profile.nickname,
+            senderGender: profile.gender,
+            text: payload.encode(),
+            type: 'location',
+            repliedToId: reply?.id,
+            repliedToText: reply?.text,
+            repliedToSenderName: reply?.senderName,
+          );
     } catch (_) {
       if (!mounted) return;
-      showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errSendFailed);
+      showChatSnack(
+        context,
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(localeProvider).s.errSendFailed,
+      );
       return;
     }
     if (mounted) {
@@ -105,13 +129,14 @@ mixin _PcBuildMx on _PrivateChatBase {
       _startLiveLocationUpdates(sentId, payload);
     }
   }
-@override
+
+  @override
   String get photoUploadChatId => widget.chatId;
-@override
+  @override
   void photoFirstBonus(PointsNotifier pp) {
     // Bonus "first photo" DIHAPUS (overhaul coin: tidak ada poin gratis).
   }
-@override
+  @override
   void photoSetPreview(String base64) {
     setState(() {
       _pendingPhotoBase64 = base64;
@@ -126,37 +151,48 @@ mixin _PcBuildMx on _PrivateChatBase {
     });
     _scrollToBottom();
   }
+
   // ── Kontrak video (private) ──
   @override
   bool get videoSendEnabled => true;
-@override
+  @override
   int get pendingVideoMs => _pendingVideoMs;
-@override
+  @override
   MessageModel? get sendEditingMessage => editingMessage;
-@override
+  @override
   MessageModel? get sendReplyingTo => replyingTo;
-@override
+  @override
   set sendPendingPhotoBase64(String? v) => _pendingPhotoBase64 = v;
-@override
+  @override
   Future<bool> sendPreCheck() async {
-    if (ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid)) {
+    if (ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid)) {
       if (mounted) {
-        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+        final s = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(localeProvider).s;
         showChatSnack(context, s.msgBlocked);
       }
       return false;
     }
     return true;
   }
-@override
+
+  @override
   Future<bool> sendEditPersist(MessageModel editing, String raw) =>
-      ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).editPrivateMessage(editing.id, raw);
-@override
+      ProviderScope.containerOf(context, listen: false)
+          .read(chatRiverpod.chatProvider.notifier)
+          .editPrivateMessage(editing.id, raw);
+  @override
   void sendOnSentText() {
     _maybeNewChatBonus();
     _schedulePendingConfirmFallback();
   }
-Future<void> _fetchImageQueued(String id) async {
+
+  Future<void> _fetchImageQueued(String id) async {
     try {
       await _msgsHandleFetchImage(id);
     } catch (_) {
@@ -166,22 +202,29 @@ Future<void> _fetchImageQueued(String id) async {
       _drainImageQueue();
     }
   }
-void _trimConfirmed(Set<String> ids) {
+
+  void _trimConfirmed(Set<String> ids) {
     while (ids.length > _confirmedCap) {
       ids.remove(ids.first);
     }
   }
-/// Baca last-read lawan SECARA SINKRON sebelum frame pertama, dari DUA
+
+  /// Baca last-read lawan SECARA SINKRON sebelum frame pertama, dari DUA
   /// sumber memori (diambil yang terbaru): snapshot live `_privateChatsLast`
   /// (ter-fresh — update tiap event realtime) + `peekRawList` (hasil preload
   /// bootstrap). Tidak ada await → centang-2 tampil instan sejak buka chat.
   void _primeReadFromCache() {
     try {
-      final myUid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
+      final myUid = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(authProvider.notifier).uid;
       if (myUid == null) return;
       final candidates = <DateTime?>[];
       // 1) Snapshot live — paling fresh di sesi ini.
-      final snap = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).lastPrivateChatsSnapshot(myUid);
+      final snap = ProviderScope.containerOf(context, listen: false)
+          .read(chatRiverpod.chatProvider.notifier)
+          .lastPrivateChatsSnapshot(myUid);
       if (snap != null) {
         for (final c in snap) {
           if (c.chatId != widget.chatId) continue;
@@ -198,15 +241,20 @@ void _trimConfirmed(Set<String> ids) {
         break;
       }
       final best = ReadReceipt.best(candidates);
-      if (best != null) _otherLastRead = best;
+      if (best != null) _patchHdr((h) => h.copyWith(otherLastRead: best));
     } catch (_) {}
   }
-/// Slider ukuran font chat berubah → rebuild bubble & composer langsung.
+
+  /// Slider ukuran font chat berubah → rebuild bubble & composer langsung.
   void _onFontScaleChanged() {
     if (mounted) setState(() {});
   }
-void _onCallChanged() {
-    final sess = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).activeSession;
+
+  void _onCallChanged() {
+    final sess = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(callProvider.notifier).activeSession;
     // Signature state call yang RELEVAN untuk layar ini: overlay hidup/mati
     // ditentukan oleh (ada sesi? uid lawan? phase?). Dulu cukup `sess == null
     // || remoteUid==other` → setState SELALU saat chat biasa (sess==null
@@ -214,9 +262,7 @@ void _onCallChanged() {
     // Kini setState hanya bila signature benar-benar berubah.
     final relevantForThisChat =
         sess != null && sess.remoteUid == widget.otherUid;
-    final sig = relevantForThisChat
-        ? '${sess.callId}|${sess.phase}'
-        : '_none';
+    final sig = relevantForThisChat ? '${sess.callId}|${sess.phase}' : '_none';
     // Call baru berakhir di chat ini → tampilkan bubble "Call ended" INSTAN
     // (optimistic) agar tidak nunggu Realtime 1-2 detik. Nanti saat pesan
     // server tiba, dedup di _msgsSub akan hapus pending.
@@ -224,7 +270,10 @@ void _onCallChanged() {
         sess.remoteUid == widget.otherUid &&
         sess.phase == CallPhase.ended &&
         _prevCallPhase != CallPhase.ended) {
-      final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+      final auth = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(authProvider.notifier);
       final uid = auth.uid;
       final profile = auth.profile;
       if (uid != null && profile != null) {
@@ -273,11 +322,15 @@ void _onCallChanged() {
       }
     }
   }
-Future<void> _expandCall() async {
+
+  Future<void> _expandCall() async {
     // Guard anti tap-ganda: dua push beruntun membuat stack kacau &
     // `_callExpanded` salah reset → tombol perbesar terasa "tidak jalan".
     if (_expandingCall) return;
-    final sess = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).activeSession;
+    final sess = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(callProvider.notifier).activeSession;
     if (sess == null) return;
     _expandingCall = true;
     setState(() => _callExpanded = true);
@@ -303,51 +356,53 @@ Future<void> _expandCall() async {
       if (mounted) setState(() => _callExpanded = false);
     }
   }
-void _subscribeStatus() {
+
+  void _subscribeStatus() {
     _statusSub?.cancel();
     _statusSub = ProviderScope.containerOf(context, listen: false)
         .read(chatRiverpod.chatProvider.notifier)
         .getUserStatus(widget.otherUid)
-        .listen((status) {
-          if (!mounted) return;
-          // Fetch last_seen saat status TIDAK online agar bisa tampilkan
-          // "terakhir dilihat" di header; saat online tidak perlu (null).
-          // Throttle 30 dtk — status flapping tidak memicu N+1 query.
-          if (status == 'online') {
-            if (_otherStatus != status || _otherLastSeen != null) {
-              _otherStatus = status;
-              _otherLastSeen = null;
-              _scheduleRebuild();
+        .listen(
+          (status) {
+            if (!mounted) return;
+            // Fetch last_seen saat status TIDAK online agar bisa tampilkan
+            // "terakhir dilihat" di header; saat online tidak perlu (null).
+            // Throttle 30 dtk — status flapping tidak memicu N+1 query.
+            if (status == 'online') {
+              if (_hdr.otherStatus != status || _hdr.otherLastSeen != null) {
+                _patchHdr(
+                  (h) => h.copyWith(otherStatus: status, clearLastSeen: true),
+                );
+              }
+            } else {
+              final now = DateTime.now();
+              final lastFetch = _lastSeenFetchedAt;
+              // Guard perubahan: stream status bisa emit nilai SAMA berulang
+              // (heartbeat presence). `ChatHeader` value-equal → patch no-op
+              // bila tak berubah (nol rebuild, lebih kuat dari guard manual).
+              _patchHdr((h) => h.copyWith(otherStatus: status));
+              if (lastFetch != null &&
+                  now.difference(lastFetch).inSeconds < 30) {
+                return;
+              }
+              _lastSeenFetchedAt = now;
+              ProviderScope.containerOf(context, listen: false)
+                  .read(chatRiverpod.chatProvider.notifier)
+                  .getUserLastSeen(widget.otherUid)
+                  .then((t) {
+                    if (!mounted || t == null) return;
+                    _patchHdr((h) => h.copyWith(otherLastSeen: t));
+                  });
             }
-          } else {
-            final now = DateTime.now();
-            final lastFetch = _lastSeenFetchedAt;
-            // Guard perubahan: stream status bisa emit nilai SAMA berulang
-            // (heartbeat presence). Tanpa guard ini, `_scheduleRebuild()`
-            // tiap emit → storm rebuild ~tiap frame (jank saat ngetik).
-            final statusChanged = _otherStatus != status;
-            _otherStatus = status;
-            if (statusChanged) _scheduleRebuild();
-            if (lastFetch != null &&
-                now.difference(lastFetch).inSeconds < 30) {
-              return;
-            }
-            _lastSeenFetchedAt = now;
-            ProviderScope.containerOf(context, listen: false)
-                .read(chatRiverpod.chatProvider.notifier)
-                .getUserLastSeen(widget.otherUid)
-                .then((t) {
-              if (!mounted || t == null) return;
-              _otherLastSeen = t;
-              _scheduleRebuild();
-            });
-          }
-        }, onError: (e) {
-          // OFFLINE: stream status realtime error → jangan tak tertangkap.
-          debugPrint('[NAV] status stream error private-chat: $e');
-        });
+          },
+          onError: (e) {
+            // OFFLINE: stream status realtime error → jangan tak tertangkap.
+            debugPrint('[NAV] status stream error private-chat: $e');
+          },
+        );
   }
-void _scrollToBottom() {
+
+  void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
         // reverse: true → offset 0 = paling bawah (pesan terbaru)
@@ -355,6 +410,7 @@ void _scrollToBottom() {
       }
     });
   }
+
   // Scroll ke atas (reverse list, offset menuju maxScrollExtent = pesan lama)
   // → trigger load pesan lama dari server.
   void _onScrollToLoadOlder() {
@@ -367,22 +423,33 @@ void _scrollToBottom() {
       _loadOlder().whenComplete(() => _loadingOlder = false);
     }
   }
-@override
+
+  @override
   String get outboxKind => 'private';
-@override
+  @override
   List<MessageModel> get outboxPending => _pending;
-@override
+  @override
   set outboxIsFlushing(bool v) => _flushingOutbox = v;
-void _toggleAttachRow() {
+  void _toggleAttachRow() {
     if (!_showAttachRow) {
       FocusScope.of(context).unfocus(); // tutup keyboard saat buka menu
     }
     setState(() => _showAttachRow = !_showAttachRow);
   }
-Future<void> _showSendCoinDialog() async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+
+  Future<void> _showSendCoinDialog() async {
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
+    final points = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier);
 
     if (!auth.canUsePaid) {
       showChatSnack(
@@ -402,10 +469,20 @@ Future<void> _showSendCoinDialog() async {
     if (amount == null || !mounted) return;
     await _sendCoins(amount);
   }
-Future<void> _showGiftPicker() async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+
+  Future<void> _showGiftPicker() async {
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    final points = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
 
     if (!auth.canUsePaid) {
       showChatSnack(
@@ -432,238 +509,216 @@ Future<void> _showGiftPicker() async {
 
   Widget _buildBottomBar(BuildContext context, S s, bool pointsEnabled) {
     return Container(
-  padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
-  decoration: BoxDecoration(
-    color: Colors.transparent,
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withValues(alpha: 0.05),
-        blurRadius: 4,
-        offset: Offset(0, -1),
-      ),
-    ],
-  ),
-  child: SafeArea(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Lawan sudah hapus akun → ganti composer dengan
-        // banner info. Tidak bisa kirim apa pun lagi.
-        if (_otherDeleted)
-          Padding(
-            padding:
-                const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.person_off_outlined,
-                  size: 18,
-                  color: AppTheme.textSecondary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    s.accountDeletedHint,
-                    style: AppText.bodySmall.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )
-        else ...[
-        if (_queuedIds.isNotEmpty)
-          Padding(
-            padding:
-                const EdgeInsets.fromLTRB(12, 6, 12, 2),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.done,
-                  size: 14,
-                  color: AppTheme.textSecondary,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    s.msgQueuedCount(_queuedIds.length),
-                    style: AppText.caption.copyWith(
-                      color: AppTheme.textSecondary,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: Offset(0, -1),
           ),
-        if (replyingTo != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.reply,
-                  size: 16,
-                  color: AppTheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s.replyingTo,
-                        style: AppText.chatCaption.copyWith(
-                          color: AppTheme.primary,
+        ],
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Lawan sudah hapus akun → ganti composer dengan
+            // banner info. Tidak bisa kirim apa pun lagi.
+            if (_hdr.otherDeleted)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.person_off_outlined,
+                      size: 18,
+                      color: AppTheme.textSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        s.accountDeletedHint,
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
                         ),
                       ),
-                      Text(
-                        replyingTo!.text,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.chatBodySmall.copyWith(
-                          color: AppTheme.textSecondary,
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              if (_queuedIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+                  child: Row(
+                    children: [
+                      Icon(Icons.done, size: 14, color: AppTheme.textSecondary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          s.msgQueuedCount(_queuedIds.length),
+                          style: AppText.caption.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: Icon(
-                    Icons.close,
-                    size: 18,
-                    color: AppTheme.textSecondary,
+              if (replyingTo != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                  child: Row(
+                    children: [
+                      Icon(Icons.reply, size: 16, color: AppTheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s.replyingTo,
+                              style: AppText.chatCaption.copyWith(
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                            Text(
+                              replyingTo!.text,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.chatBodySmall.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          size: 18,
+                          color: AppTheme.textSecondary,
+                        ),
+                        onPressed: cancelReply,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ),
-                  onPressed: cancelReply,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
                 ),
-              ],
-            ),
-          ),
-        if (editingMessage != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.edit,
-                  size: 16,
-                  color: AppTheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    s.editingMessage,
-                    style: AppText.chatBodySmall.copyWith(
-                      color: AppTheme.primary,
-                    ),
+              if (editingMessage != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 16, color: AppTheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          s.editingMessage,
+                          style: AppText.chatBodySmall.copyWith(
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          size: 18,
+                          color: AppTheme.textSecondary,
+                        ),
+                        onPressed: cancelEdit,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ),
                 ),
-                IconButton(
-                  icon: Icon(
-                    Icons.close,
-                    size: 18,
-                    color: AppTheme.textSecondary,
-                  ),
-                  onPressed: cancelEdit,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+              // Insets keyboard HANYA di composer. PENTING:
+              // `MediaQuery.viewInsetsOf` JANGAN dibaca di build
+              // PrivateChatScreen — itu mendaftarkan ELEMENT layar
+              // sebagai depend → tiap IME frame MIUI (puluhan/detik)
+              // rebuild SELURUH layar. `_KeyboardInset` membacanya di
+              // element kecil sendiri → hanya composer yang rebuild.
+              KeyboardInset(
+                child: ChatComposerInput(
+                  controller: _msgCtrl,
+                  focusNode: _inputFocus,
+                  onSend: sendMessage,
+                  showAttachRow: _showAttachRow,
+                  onToggleAttach: _toggleAttachRow,
+                  onTakePhoto: () {
+                    setState(() => _showAttachRow = false);
+                    _openCameraCapture();
+                  },
+                  onSendPhoto: () {
+                    setState(() => _showAttachRow = false);
+                    photoPickFromGalleryToPreview();
+                  },
+                  onSendViewOnce: () {
+                    setState(() => _showAttachRow = false);
+                    sendViewOnceFromPicker();
+                  },
+                  onSendVoice: (path, ms) => voiceFinishRecording(path, ms),
+                  onRecordingSignal: _sendRecordingSignal,
+                  onTyping: _sendTypingSignal,
+                  // Koin & hadiah hanya bila sistem koin aktif —
+                  // hilang total saat dimatikan admin.
+                  onSendCoin: pointsEnabled ? _showSendCoinDialog : null,
+                  onSendLocation: _sendLocation,
+                  pendingLocation: _pendingLocation,
+                  onCancelLocation: _pendingLocation != null
+                      ? () => setState(() => _pendingLocation = null)
+                      : null,
+                  onOpenGiftPanel: pointsEnabled ? _showGiftPicker : null,
+                  pendingPhotoBase64: _pendingPhotoBase64,
+                  onCancelPhoto: _pendingPhotoBase64 != null
+                      ? () => setState(() {
+                          _pendingPhotoBase64 = null;
+                          _viewTimerSecs = null;
+                          photoClearPreviewState();
+                        })
+                      : null,
+                  photoHd: photoHd,
+                  onHdChanged: _pendingPhotoBase64 != null
+                      ? (v) => setState(() => photoHd = v)
+                      : null,
+                  viewTimerSecs: _viewTimerSecs,
+                  onViewTimerChanged: _pendingPhotoBase64 != null
+                      ? (v) => setState(() => _viewTimerSecs = v)
+                      : null,
+                  // ── Video (private) ──
+                  onSendVideo: () {
+                    if (mounted) {
+                      setState(() => _showAttachRow = false);
+                    }
+                    unawaited(videoPickToPreview());
+                  },
+                  pendingVideoPoster: _pendingVideoPoster,
+                  pendingVideoPath: _pendingVideoPath,
+                  pendingVideoMs: _pendingVideoMs,
+                  videoOnce: _pendingVideoOnce,
+                  onVideoOnceChanged: (v) =>
+                      setState(() => _pendingVideoOnce = v),
+                  videoCompressing: videoCompressProgress,
+                  onCancelVideo: () {
+                    if (mounted) {
+                      setState(() => _showAttachRow = false);
+                    }
+                    videoClearPreview();
+                  },
+                  mentionCandidates: _mentionCandidates,
+                  mentionAllowAll: false,
                 ),
-              ],
-            ),
-          ),
-        // Insets keyboard HANYA di composer. PENTING:
-        // `MediaQuery.viewInsetsOf` JANGAN dibaca di build
-        // PrivateChatScreen — itu mendaftarkan ELEMENT layar
-        // sebagai depend → tiap IME frame MIUI (puluhan/detik)
-        // rebuild SELURUH layar. `_KeyboardInset` membacanya di
-        // element kecil sendiri → hanya composer yang rebuild.
-        KeyboardInset(
-          child: ChatComposerInput(
-          controller: _msgCtrl,
-          focusNode: _inputFocus,
-          onSend: sendMessage,
-          showAttachRow: _showAttachRow,
-          onToggleAttach: _toggleAttachRow,
-          onTakePhoto: () {
-            setState(() => _showAttachRow = false);
-            _openCameraCapture();
-          },
-          onSendPhoto: () {
-            setState(() => _showAttachRow = false);
-            photoPickFromGalleryToPreview();
-          },
-          onSendViewOnce: () {
-            setState(() => _showAttachRow = false);
-            sendViewOnceFromPicker();
-          },
-          onSendVoice: (path, ms) => voiceFinishRecording(path, ms),
-          onRecordingSignal: _sendRecordingSignal,
-          onTyping: _sendTypingSignal,
-          // Koin & hadiah hanya bila sistem koin aktif —
-          // hilang total saat dimatikan admin.
-          onSendCoin: pointsEnabled
-              ? _showSendCoinDialog
-              : null,
-          onSendLocation: _sendLocation,
-          pendingLocation: _pendingLocation,
-          onCancelLocation: _pendingLocation != null
-              ? () => setState(() => _pendingLocation = null)
-              : null,
-          onOpenGiftPanel: pointsEnabled
-              ? _showGiftPicker
-              : null,
-          pendingPhotoBase64: _pendingPhotoBase64,
-          onCancelPhoto: _pendingPhotoBase64 != null
-              ? () => setState(() {
-                    _pendingPhotoBase64 = null;
-                    _viewTimerSecs = null;
-                    photoClearPreviewState();
-                  })
-              : null,
-          photoHd: photoHd,
-          onHdChanged: _pendingPhotoBase64 != null
-              ? (v) => setState(() => photoHd = v)
-              : null,
-          viewTimerSecs: _viewTimerSecs,
-          onViewTimerChanged: _pendingPhotoBase64 != null
-              ? (v) =>
-                  setState(() => _viewTimerSecs = v)
-              : null,
-          // ── Video (private) ──
-          onSendVideo: () {
-            if (mounted) {
-              setState(() => _showAttachRow = false);
-            }
-            unawaited(videoPickToPreview());
-          },
-          pendingVideoPoster: _pendingVideoPoster,
-          pendingVideoPath: _pendingVideoPath,
-          pendingVideoMs: _pendingVideoMs,
-          videoOnce: _pendingVideoOnce,
-          onVideoOnceChanged: (v) =>
-              setState(() => _pendingVideoOnce = v),
-          videoCompressing: videoCompressProgress,
-          onCancelVideo: () {
-            if (mounted) {
-              setState(() => _showAttachRow = false);
-            }
-            videoClearPreview();
-          },
-          mentionCandidates: _mentionCandidates,
-          mentionAllowAll: false,
-        )
+              ),
+            ],
+          ],
         ),
-        ],
-       ],
-     ),
-   ),
- )
-  ;
+      ),
+    );
   }
-
 }
