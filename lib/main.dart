@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'core/admin_gate.dart';
+import 'core/battery_optimization_service.dart';
 import 'core/nav_gate.dart';
 import 'app.dart';
 import 'models/room_model.dart';
@@ -679,6 +680,22 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   } catch (_) {}
   // Fire-and-forget yang tidak block TTI
   unawaited(AdminGate.postInit?.call());
+  // Battery Saver exemption (gaya WhatsApp): minta SEKALI saat app pernah
+  // dibuka (ditunda 2s agar tak ganggu boot). Tanpa ini UI lag saat battery
+  // saver ON (refresh dikunci 60Hz + bg di-throttle, khusus MIUI).
+  unawaited(() async {
+    await Future<void>.delayed(const Duration(seconds: 2));
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final asked = sp.getBool('battery_opt_asked') ?? false;
+      if (await BatteryOptimizationService.isIgnoring()) return;
+      if (asked) return; // sudah pernah minta sekali — jangan nagging.
+      await BatteryOptimizationService.requestIgnore();
+      await sp.setBool('battery_opt_asked', true);
+    } catch (e) {
+      dlog('[BATTERY] prompt error: $e');
+    }
+  }());
   // NavGate: jembatan navigasi/dialog UI (provider dilarang import screens/).
   NavGate.incomingCallBuilder = ({
     required String callId,

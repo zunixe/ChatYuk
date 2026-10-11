@@ -21,6 +21,13 @@
          boleh mendaftarkan panggilan sendiri ke Telecom (UI panggilan di
          layar kunci/headset/Bluetooth, gaya WhatsApp). -->
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS"/>
+    <!-- Battery Saver (gaya WhatsApp): minta dikecualikan dari optimasi baterai
+         Doze/App-Standby. TANPA ini, saat battery saver ON (khususnya MIUI),
+         app di-throttle — refresh dikunci 60Hz + bg network dibatasi → UI
+         terasa lag, sedangkan WhatsApp (ada di whitelist sistem MIUI BCBC)
+         tetap lancar. Prompt diminta saat pertama via BatteryOptimizationService
+         (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- Lokasi: hanya FINE supaya dialog izin TIDAK menawarkan opsi
          "kira-kira" (approximate) — user langsung pilih presisi. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
