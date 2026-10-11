@@ -79,6 +79,8 @@ class PrivateChatScreen extends ConsumerStatefulWidget {
   final int otherAge;
   final bool otherRegistered;
   final bool initialOtherDeleted;
+  /// Seed avatar header (base64 dari list) — anti-kedip inisial→foto.
+  final String initialAvatarB64;
   const PrivateChatScreen({
     super.key,
     required this.chatId,
@@ -90,6 +92,7 @@ class PrivateChatScreen extends ConsumerStatefulWidget {
     this.otherAge = 0,
     this.otherRegistered = false,
     this.initialOtherDeleted = false,
+    this.initialAvatarB64 = '',
   });
 
   @override
@@ -2064,6 +2067,7 @@ class _PrivateChatScreenState extends ConsumerState<PrivateChatScreen>
               // Badge: titik presence (atau ikon blokir bila diblokir).
               child: PersonAvatar(
                 uid: widget.otherUid,
+                avatarB64: widget.initialAvatarB64,
                 name: widget.otherName,
                 gender: effGender,
                 size: 40,

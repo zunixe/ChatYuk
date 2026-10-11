@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../config/strings.dart';
 import '../providers/riverpod/auth_provider.dart';
+import '../providers/riverpod/avatar_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
@@ -22,6 +23,8 @@ import '../core/nav_guard.dart';
 import '../core/chat/chat_filter.dart';
 import '../core/chat/chat_location.dart';
 import '../widgets/filter_chip_pill.dart';
+import '../widgets/video_prefetch.dart';
+import '../widgets/message/photo_prefetch.dart';
 import '../config/theme.dart';
 import 'private_chats/private_chats_widgets.dart';
 
