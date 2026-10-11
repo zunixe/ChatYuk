@@ -280,6 +280,16 @@ class MainActivity : FlutterActivity() {
                     // Dart memakai fallback ANDROID_ID.
                     result.success(mediaDrmDeviceId())
                 }
+                "isIgnoringBatteryOptimizations" -> {
+                    // Battery Saver (gaya WA): apakah app sudah dikecualikan
+                    // dari optimasi baterai (Doze/App-Standby)?
+                    result.success(isIgnoringBatteryOptimizations())
+                }
+                "requestIgnoreBatteryOptimizations" -> {
+                    // Buka dialog sistem "izinkan app berjalan tanpa batas".
+                    requestIgnoreBatteryOptimizations()
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -387,6 +397,49 @@ class MainActivity : FlutterActivity() {
             ""
         } finally {
             try { drm?.close() } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Battery Saver (gaya WhatsApp): apakah app dikecualikan dari optimasi
+     * baterai (Doze / App Standby)? Bila true, sistem tak membatasi jaringan
+     * latar & refresh → UI tetap lancar walau battery saver ON.
+     */
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        return try {
+            val pm = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+            pm.isIgnoringBatteryOptimizations(packageName)
+        } catch (e: Exception) {
+            android.util.Log.w("ChatYukBattery", "isIgnoring gagal: $e")
+            false
+        }
+    }
+
+    /**
+     * Buka dialog sistem "Izinkan app berjalan tanpa batas?" (ACTION_REQUEST_
+     * IGNORE_BATTERY_OPTIMIZATIONS). Best-effort: bila ROM menolak intent ini,
+     * jatuh ke layar daftar battery optimization agar user bisa whitelist
+     * manual (khususnya MIUI: auto-start + no restrictions).
+     */
+    private fun requestIgnoreBatteryOptimizations() {
+        try {
+            if (isIgnoringBatteryOptimizations()) return
+            val intent = Intent(
+                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                android.net.Uri.parse("package:$packageName"),
+            )
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback: layar daftar optimasi baterai (user whitelist manual).
+            try {
+                val fallback = Intent(
+                    android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(fallback)
+            } catch (e2: Exception) {
+                android.util.Log.w("ChatYukBattery", "requestIgnore gagal: $e2")
+            }
         }
     }
 
