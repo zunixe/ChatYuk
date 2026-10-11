@@ -99,13 +99,23 @@ mixin _PcCoreMx on _PrivateChatBase {
 
     return PopScope(
       // Back menutup search dulu, lalu mode seleksi, baru keluar layar.
-      canPop: !inSelection && !_searching,
+      // `_backEscape` = katup sekali-pakai anti "back mati permanen".
+      canPop: (!inSelection && !_searching) || _backEscape,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           // Back benar-benar menutup layar: lepas fokus keyboard SEGERA
           // supaya animasi tutup keyboard tidak berebut frame dengan
           // transisi pop (dulu tombol back "kadang ngelag dikit").
           FocusManager.instance.primaryFocus?.unfocus();
+          return;
+        }
+        // DESYNC: veto terpicu padahal tak ada yang menahan (search sudah
+        // tutup & seleksi kosong tapi flag macet) → paksa keluar SEKALI.
+        // Tanpa ini back mati total sampai app restart.
+        if (!_searching && !inSelection) {
+          debugPrint('[NAV] back escape private-chat (desync, paksa pop)');
+          _backEscape = true;
+          Navigator.of(context).pop();
           return;
         }
         // Jejak diagnosa "back mati": catat kenapa back di-veto.
@@ -118,9 +128,12 @@ mixin _PcCoreMx on _PrivateChatBase {
             clearSelection();
           }
         } catch (e) {
-          // Handler back TIDAK BOLEH melempar — exception di sini merusak
-          // dispatcher back (back mati permanen sampai restart).
+          // Handler back TIDAK BOLEH menelan exception diam-diam — itu yang
+          // bikin back mati permanen (canPop tetap false, user terkunci):
+          // paksa keluar, jangan macet di sini.
           debugPrint('[NAV] back handler error private-chat: $e');
+          _backEscape = true;
+          Navigator.of(context).pop();
         }
       },
       child: Scaffold(

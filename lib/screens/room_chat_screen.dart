@@ -107,6 +107,10 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   late final DateTime _openedAt;
   bool _connOnline = true;
   bool _flushingOutbox = false;
+  // Katup pengaman back SEKALI-PAKAI (lihat PopScope di room_chat_live):
+  // escape bila veto desync / handler melempar, supaya back tak pernah
+  // mati permanen sampai restart.
+  bool _backEscape = false;
   // ── Room gift (live) ──
   final _giftFly = GiftFlyController();
   // Insertion-order terjaga — cap FIFO (skip terlama) tanpa clear().
@@ -220,4 +224,13 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
 
 class _RoomChatScreenState extends _RoomChatBase
     with _RcCoreMx, _RcRoomMx, _RcLiveMx, _RcBuildMx {
+  @override
+  void dispose() {
+    // Reaction-bar seleksi adalah OverlayEntry full-screen di Overlay root
+    // (TIDAK ikut terbuang saat rute di-pop). Kalau user keluar saat bar
+    // masih tampil tanpa lewat clearSelection, overlay YATIM menutupi layar
+    // di bawahnya → tap tertelan. Cabut di sini (private chat sudah).
+    hideActionBar();
+    super.dispose();
+  }
 }
