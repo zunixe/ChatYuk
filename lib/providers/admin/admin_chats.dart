@@ -81,6 +81,18 @@ mixin AdminChatsMx on AdminBase {
   AdminErrKind? get chatsError => _chatsError;
 
   Future<void> fetchChats() async {
+    // INSTAN (2026-10-11): baca cache disk SINKRON dulu → daftar chat admin
+    // langsung tampil di frame pertama (tanpa spinner "lama tampil"). Dulu
+    // cache dibaca ASYNC setelah `_chatsLoading=true` → UI sempat spinner.
+    if (_chats.isEmpty) {
+      try {
+        final peek = MessageCache.instance.peekRawList(AdminBase.kAdminChatsKey);
+        if (peek.isNotEmpty && _chats.isEmpty) {
+          _chats = peek;
+          _chatsTotal = peek.length;
+        }
+      } catch (_) {}
+    }
     _chatsLoading = true;
     _chatsError = null;
     _notifyChats();

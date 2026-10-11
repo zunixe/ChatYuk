@@ -11,12 +11,16 @@
 // Build rilis (APKPure/Play/Uptodown) memakai entry default
 // lib/main.dart — tanpa flag -t apa pun.
 // ============================================================
+import 'dart:async';
+
 import '../utils.dart';
 import 'package:flutter/widgets.dart';
 
 import 'admin/admin_wiring.dart';
+import 'core/cache/message_cache.dart';
 import 'firebase_options_admin.dart';
 import 'main.dart' show bootstrap;
+import 'providers/admin_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,4 +31,7 @@ Future<void> main() async {
     rethrow;
   }
   await bootstrap(firebaseOptions: DefaultFirebaseOptionsAdmin.currentPlatform);
+  // Setelah DB cache siap → preload daftar chat admin ke MEMORI supaya monitor
+  // chat tampil INSTAN (peekRawList sinkron) saat dibuka.
+  unawaited(MessageCache.instance.preloadRawList(AdminBase.kAdminChatsKey));
 }
