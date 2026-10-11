@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,8 +17,12 @@ import '../../providers/riverpod/locale_provider.dart';
 import 'image_decode_core.dart';
 import 'photo_viewer_screen.dart';
 
-class MessageImage extends StatefulWidget {
-  final String imageData;
+/// base64→bytes di isolate (lihat [_decode]: fallback dims). Top-level agar
+/// bisa dipakai `compute` (spawn isolate per panggilan — hanya jalur fallback
+/// saat parse header gagal, bukan jalur utama).
+Uint8List _b64Decode(String b64) => base64Decode(b64);
+
+class MessageImage extends StatefulWidget {  final String imageData;
   final String chatKey;
   final String messageId;
   /// Lapor lebar render foto (200 atau `tinggi*aspect` bila tinggi dibatasi
@@ -247,9 +252,12 @@ class _MessageImageState extends State<MessageImage> {
     // Aspek sudah bisa dicadangkan dari data yang baru diunduh (sebelum
     // decode penuh) — placeholder menyesuaikan sekali ke bentuk benar,
     // piksel menyusul fade-in tanpa lompatan lagi.
+    // ZERO-JANK: fallback base64Decode FULL di-isolate (compute) — dulu di
+    // main isolate → CPU berat di UI thread untuk foto besar tepat saat
+    // bubble tampil. Header prefix (kecil) tetap sync di sini (murah).
     try {
       var dims = parseImageDimensions(_decodeHeaderPrefix(data));
-      dims ??= parseImageDimensions(base64Decode(data));
+      dims ??= parseImageDimensions(await compute(_b64Decode, data));
       if (dims != null && mounted && gen == _gen) {
         final s = photoViewSize(dims.width, dims.height);
         setState(() {

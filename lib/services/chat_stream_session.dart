@@ -364,6 +364,9 @@ class ChatStreamSession {
         final chunk = head.map((m) => m.id).toList();
         final map = await PhotoCache.instance.loadMany(cacheKey, chunk);
         if (controller.isClosed) return;
+        // ZERO-JANK: SATU emit setelah batch (dulu _emit per foto → s.d. 12
+        // rebuild ListView berurutan saat foto head tiba bersamaan).
+        var changed = false;
         for (final m in head) {
           final data = map[m.id];
           if (data == null || data.isEmpty) {
@@ -373,9 +376,12 @@ class ChatStreamSession {
           final idx = _current.indexWhere((x) => x.id == m.id);
           if (idx >= 0 && _needsPhotoFill(_current[idx])) {
             _current[idx] = _current[idx].copyWith(imageData: data);
-            _emit();
-            scheduleCacheSave();
+            changed = true;
           }
+        }
+        if (changed) {
+          _emit();
+          scheduleCacheSave();
         }
       });
     }
@@ -477,7 +483,12 @@ class ChatStreamSession {
 
         // Emit cache lokal (SQLite) tanpa tunggu cutoff network — frame
         // pertama tetap cepat bila memori miss. Cutoff & server menyusul.
+        // ZERO-JANK: server fetch jalan PARALEL dengan cutoff (dulu serial:
+        // cutoff di-await dulu → +1 round-trip sebelum 100 pesan diambil).
+        // Filter cutoff diterapkan setelah keduanya tiba (di bawah).
         final cutoffF = fetchHiddenCutoff();
+        final serverF = fetchServer(limit: 100);
+        final swServer = Stopwatch()..start();
         final cacheF = _current.isEmpty
             ? MessageCache.instance.loadMessages(cacheKey)
             : Future<List<MessageModel>>.value(const <MessageModel>[]);
@@ -498,8 +509,7 @@ class ChatStreamSession {
             _emit();
           }
         }
-        final swServer = Stopwatch()..start();
-        final server = await fetchServer(limit: 100);
+        final server = await serverF;
         dlog(
           '[CACHE-TIME] $cacheKey server=${swServer.elapsedMilliseconds}ms n=${server.length}',
         );

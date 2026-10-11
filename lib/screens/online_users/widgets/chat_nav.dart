@@ -48,15 +48,15 @@ Future<void> startPrivateChatFromOnline(
   unawaited(ProviderScope.containerOf(context, listen: false)
       .read(chatProvider.notifier)
       .prefetchPrivateChat(chatId));
-  // PARITAS jalur list (anti-kedip foto, insiden 2026-10-11): precache thumb
-  // foto ke decoded-mem-cache SEBELUM push (max 300ms, disk lokal — jauh
-  // lebih murah dari RPC yang dulu bikin tap berat). Tanpa ini bubble foto
-  // cold-start SELALU ngeblink walau sudah pernah dibuka (disk tak terbaca
-  // sinkron di initState). Timeout pendek menjaga tap tetap responsif.
-  try {
-    await PhotoPrefetch.precacheThumbs(context, 'private_$chatId')
-        .timeout(const Duration(milliseconds: 300));
-  } catch (_) {}
+  // ZERO-JANK: precache thumb juga fire-and-forget — dulu di-await 300ms
+  // SEBELUM push (decode codec bitmap di tap path) → tap tertahan. Layar
+  // terisi dari cache sinkron + thumb disk, precache menyusul.
+  unawaited(
+    PhotoPrefetch.precacheThumbs(context, 'private_$chatId').timeout(
+      const Duration(milliseconds: 300),
+      onTimeout: () {},
+    ),
+  );
   if (!context.mounted) {
     releaseNav(navKey);
     return;
