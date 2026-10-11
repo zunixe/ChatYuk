@@ -291,6 +291,32 @@ class StoragePhotoService {
     }
   }
 
+  /// Path poster video chat (JPEG). Sama pola [chatVideoPath] tapi `.jpg` —
+  /// dibaca penerima sebagai thumbnail (kecil) tanpa unduh video penuh.
+  String chatVideoPosterPath(String chatId) =>
+      'chat/$chatId/${_stamp()}_poster.jpg';
+
+  /// Upload poster/thumbnail video (JPEG kecil) → Storage. Return path/null.
+  /// Penerima mengunduh ini (puluhan KB) untuk preview kartu video.
+  Future<String?> uploadChatVideoPoster({
+    required String chatId,
+    required Uint8List bytes,
+  }) async {
+    try {
+      if (bytes.isEmpty) return null;
+      final path = chatVideoPosterPath(chatId);
+      await _sb.storage.from(_bucket).uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(contentType: 'image/jpeg'),
+          );
+      return path;
+    } catch (e) {
+      dlog('[StoragePhoto] uploadChatVideoPoster error: $e');
+      return null;
+    }
+  }
+
   /// Kompres video chat → 480p hemat (target ±1 Mbps, ±7 MB per 60 dtk).
   /// Return file hasil atau null bila gagal. Gagal kompres = tolak
   /// (jangan upload mentah — boros kuota + bisa lewat batas 20 MB guard).

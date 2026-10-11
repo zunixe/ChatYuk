@@ -73,6 +73,13 @@ class StorageNotifier {
   String chatVideoPath(String chatId) => service.chatVideoPath(chatId);
   bool isChatVideoPath(String v) => service.isChatVideoPath(v);
 
+  /// Unggah poster/thumbnail video (JPEG kecil) → path storage atau null.
+  Future<String?> uploadChatVideoPoster({
+    required String chatId,
+    required Uint8List bytes,
+  }) =>
+      service.uploadChatVideoPoster(chatId: chatId, bytes: bytes);
+
   Future<File?> compressChatVideo(
     String srcPath, {
     void Function(double progress01)? onProgress,

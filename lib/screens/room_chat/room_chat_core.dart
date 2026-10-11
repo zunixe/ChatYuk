@@ -52,6 +52,7 @@ mixin _RcCoreMx on _RoomChatBase {
     // Video belum aktif di room (videoSendEnabled=false) — parameter
     // tetap diterima demi kontrak mixin bersama.
     int? videoDurationMs,
+    String videoPoster = '',
   }) async {
     return _chat.sendRoomMessage(
       roomId: widget.room.id,
@@ -65,6 +66,7 @@ mixin _RcCoreMx on _RoomChatBase {
       repliedToId: repliedToId,
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
+      videoPoster: videoPoster,
     );
   }
 

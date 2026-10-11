@@ -44,6 +44,11 @@ class VideoPrefetch {
   /// Di-inject dari StoragePhotoService.storyVideoPoster.
   static Future<Uint8List?> Function(String videoFilePath)? posterGenerator;
 
+  /// Downloader byte POSTER dari storage (path JPEG → bytes). Sama seperti
+  /// [downloader] tapi diperuntukkan poster kecil dari pesan (`video_poster`).
+  /// Di-inject dari StoragePhotoService.downloadBytes.
+  static Future<Uint8List?> Function(String path)? posterDownloader;
+
   static String _posterKey(String videoPath) => posterKeyFor(videoPath);
 
   /// Kunci cache poster — SATU sumber untuk [VideoPrefetch] & [ChatVideoBubble].
