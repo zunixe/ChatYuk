@@ -31,18 +31,13 @@ class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
   }
 
   Future<void> _load() async {
-    // Cache disk dulu (instan, tahan offline) sebelum server.
+    // Cache disk (tahan offline) — FIRE-AND-FORGET, TIDAK di-await di jalur
+    // kritis. Jalur ini pernah memblok selamanya saat Keystore/secure-storage
+    // menggantung (mis. unit test / Keystore belum siap) → layar macet
+    // spinner. Sekarang: server/override yang menentukan `_loading=false`;
+    // cache hanya mengisi cepat kalau sudah ada di memori.
     if (_inbox.isEmpty && _outbox.isEmpty) {
-      try {
-        final ci = await MessageCache.instance.loadRawList('friend_req_inbox');
-        final co = await MessageCache.instance.loadRawList('friend_req_outbox');
-        if (mounted && (ci.isNotEmpty || co.isNotEmpty)) {
-          setState(() {
-            _inbox = ci;
-            _outbox = co;
-          });
-        }
-      } catch (_) {}
+      _hydrateFromDiskCache();
     }
     final inbox = await _service.friendRequestInbox();
     final outbox = await _service.friendRequestOutbox();
@@ -57,6 +52,21 @@ class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
     }
     if (outbox.isNotEmpty) {
       MessageCache.instance.saveRawList('friend_req_outbox', outbox);
+    }
+  }
+
+  /// Isi cepat dari cache disk bila ada (tanpa memblok `_load`). Untuk jalur
+  /// offline: layar sudah menampilkan data terakhir sebelum server menjawab.
+  void _hydrateFromDiskCache() {
+    final ci = MessageCache.instance.peekRawList('friend_req_inbox');
+    final co = MessageCache.instance.peekRawList('friend_req_outbox');
+    if (ci.isNotEmpty || co.isNotEmpty) {
+      if (!mounted) return;
+      setState(() {
+        if (ci.isNotEmpty) _inbox = ci;
+        if (co.isNotEmpty) _outbox = co;
+        _loading = false;
+      });
     }
   }
 

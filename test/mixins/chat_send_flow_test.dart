@@ -150,7 +150,7 @@ class SendHostState extends State<SendHost>
     String? repliedToSenderName,
     int? viewOnceSecs,
     int? videoDurationMs,
-  }) async {}
+  }) async => null;
   @override
   String get photoUploadChatId => 'c1';
   @override
