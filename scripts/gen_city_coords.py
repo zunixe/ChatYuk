@@ -136,20 +136,48 @@ def main():
             else:
                 missing.append(key)
 
+    # Data dipecah 3 `part` (batas ukuran file ratchet ≤1000 baris/berkas).
+    sorted_keys = sorted(out_map)
+    third = len(sorted_keys) // 3
+    chunks = [
+        ('kotaCoordsA', sorted_keys[:third]),
+        ('kotaCoordsB', sorted_keys[third:2 * third]),
+        ('kotaCoordsC', sorted_keys[2 * third:]),
+    ]
+    for name, keys in chunks:
+        plines = [
+            "part of 'city_coords.dart';",
+            '',
+            f'const Map<String, List<double>> {name} = {{',
+        ]
+        for k in keys:
+            lat, lon = out_map[k]
+            esc = k.replace("'", "\\'")
+            plines.append(f"  '{esc}': [{lat}, {lon}],")
+        plines.append('};')
+        plines.append('')
+        (ROOT / 'lib' / 'config' / f'city_coords_{name[-1].lower()}.dart').write_text(
+            '\n'.join(plines)
+        )
+
     lines = [
         '// AUTO-GENERATED oleh scripts/gen_city_coords.py — jangan edit manual.',
         '// Sumber koordinat: GeoNames cities15000 (CC-BY 4.0 / ODbL),',
         '// https://www.geonames.org/export/',
         '// Key: \'Negara|Kota\' (harus cocok dengan kotaByNegara di regions.dart).',
         '',
-        "const Map<String, List<double>> kotaCoords = {",
+        "part 'city_coords_a.dart';",
+        "part 'city_coords_b.dart';",
+        "part 'city_coords_c.dart';",
+        '',
+        '/// Koordinat kota (dipecah 3 part demi batas ukuran file).',
+        'Map<String, List<double>> get kotaCoords => {',
+        '  ...kotaCoordsA,',
+        '  ...kotaCoordsB,',
+        '  ...kotaCoordsC,',
+        '};',
+        '',
     ]
-    for k in sorted(out_map):
-        lat, lon = out_map[k]
-        esc = k.replace("'", "\\'")
-        lines.append(f"  '{esc}': [{lat}, {lon}],")
-    lines.append('};')
-    lines.append('')
     OUT.write_text('\n'.join(lines))
     total = sum(len(v) for v in regions.values())
     print(f'total kota kurasi: {total}')
