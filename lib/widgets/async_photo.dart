@@ -64,7 +64,7 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
     _decode();
   }
 
-  static String _diskKey(String base64) => 'galb64:${base64.hashCode}';
+  static String _diskKey(String base64) => 'galb64:${hashKey64(base64)}';
 
   Future<void> _decode() async {
     final bytes = await NativeImage.decodeThumb(

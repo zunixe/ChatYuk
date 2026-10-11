@@ -189,6 +189,12 @@ abstract class _VoiceBase extends ChangeNotifier {
   final Map<String, DateTime> _lastOfferAt = {};
   final Set<String> _offerBusy = {};
   final Set<int> _seenSignalIds = {};
+  /// P4b: cap dedupe-id signal (FIFO) — cegah tumbuh tak terbatas.
+  void _trimSeenSignals() {
+    while (_seenSignalIds.length > 2000) {
+      _seenSignalIds.remove(_seenSignalIds.first);
+    }
+  }
   MediaStream? _localStream;
   // Stream remote per speaker — dipegang agar tidak di-GC (audio jalan
   // otomatis tanpa renderer).

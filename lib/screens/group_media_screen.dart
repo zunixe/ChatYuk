@@ -26,6 +26,17 @@ class GroupMediaScreen extends ConsumerStatefulWidget {
 class _GroupMediaScreenState extends ConsumerState<GroupMediaScreen> {
   List<String> _paths = [];
   final Map<String, Uint8List?> _thumbs = {};
+  // Cap RAM thumb (2026-10-11): 200 thumb @~20KB bisa ~4-6MB di RAM. Disk
+  // (MediaDiskCache 'thumb:<path>') tetap sumber utama; RAM hanya cache cepat.
+  static const int _thumbMemCap = 120;
+
+  /// Simpan thumb ke RAM + trim FIFO (bukan LRU; cukup untuk grid).
+  void _putThumb(String p, Uint8List? b) {
+    _thumbs[p] = b;
+    while (_thumbs.length > _thumbMemCap) {
+      _thumbs.remove(_thumbs.keys.first);
+    }
+  }
   bool _loading = true;
 
   @override
@@ -53,13 +64,16 @@ class _GroupMediaScreenState extends ConsumerState<GroupMediaScreen> {
         _paths = paths;
         _loading = false;
       });
-      // 1) Baca thumb dari CACHE DISK dulu (SINKRON, anti-kedip/re-download).
-      //    Kunci cache thumb = 'thumb:<path>'.
+      // 1) Baca thumb dari CACHE DISK dulu (PARALEL async, non-blocking).
+      //    Kunci cache thumb = 'thumb:<path>'. Dulu loop readSync (200×) =
+      //    stall UI thread; kini Future.wait async.
       final needDownload = <String>[];
+      final cachedMap = await MediaDiskCache.instance
+          .readManyAsync(paths.map((p) => 'thumb:$p').toList());
       for (final p in paths) {
-        final cached = MediaDiskCache.instance.readSync('thumb:$p');
+        final cached = cachedMap['thumb:$p'];
         if (cached != null && cached.isNotEmpty) {
-          _thumbs[p] = cached;
+          _putThumb(p, cached);
         } else {
           needDownload.add(p);
         }
@@ -87,7 +101,7 @@ class _GroupMediaScreenState extends ConsumerState<GroupMediaScreen> {
           for (final e in results) {
             final b = e.value;
             if (b != null && b.isNotEmpty) {
-              _thumbs[e.key] = b;
+              _putThumb(e.key, b);
               unawaited(MediaDiskCache.instance.write('thumb:${e.key}', b));
             }
           }

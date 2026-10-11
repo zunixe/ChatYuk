@@ -276,6 +276,11 @@ class RoomNotifier extends Notifier<RoomState> {
 
   Future<void> markRoomRead(String roomId) async {
     _readRoomIds.add(roomId);
+    // P4a (2026-10-11): cap Set (dulu unbounded — tiap room dibuka menambah
+    // selamanya → tumbuh monoton di sesi panjang). FIFO buang terlama.
+    if (_readRoomIds.length > 500) {
+      _readRoomIds.remove(_readRoomIds.first);
+    }
     _explore = _explore
         .map((r) => r.id == roomId ? r.copyWith(unread: 0) : r)
         .toList();

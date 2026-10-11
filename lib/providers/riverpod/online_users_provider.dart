@@ -101,6 +101,19 @@ class OnlineUsersNotifier extends Notifier<OnlineUsersState> {
   final Map<String, String> _diskAvatars = {};
   final Map<String, String> _avatarWritten = {};
 
+  /// P4c (2026-10-11): cap map avatar (dulu tumbuh per-uid yang pernah tampil).
+  /// Daftar online bisa ratusan/ribuan seiring sesi panjang → memory naik.
+  void _trimAvatarMaps() {
+    while (_diskAvatars.length > 800) {
+      final k = _diskAvatars.keys.first;
+      _diskAvatars.remove(k);
+      _avatarWritten.remove(k);
+    }
+    while (_avatarWritten.length > 800) {
+      _avatarWritten.remove(_avatarWritten.keys.first);
+    }
+  }
+
   @override
   OnlineUsersState build() {
     ref.onDispose(_disposeAll);
@@ -306,6 +319,7 @@ class OnlineUsersNotifier extends Notifier<OnlineUsersState> {
       if (_avatarWritten[u.uid] == u.avatar) continue;
       _avatarWritten[u.uid] = u.avatar;
       _diskAvatars[u.uid] = u.avatar;
+      _trimAvatarMaps();
       MessageCache.instance.saveRawObj('avatar:${u.uid}', {'a': u.avatar});
     }
   }

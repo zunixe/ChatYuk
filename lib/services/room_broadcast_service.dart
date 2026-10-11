@@ -58,6 +58,13 @@ class RoomBroadcastSession extends ChangeNotifier {
   bool _closed = false;
   bool _cameraOn = true;
   final Set<int> _seenSignalIds = {};
+  // P4b (2026-10-11): cap dedupe-id (dulu unbounded → tumbuh tiap signal dalam
+  // sesi live panjang). FIFO buang id terlama.
+  void _trimSeenSignals() {
+    while (_seenSignalIds.length > 2000) {
+      _seenSignalIds.remove(_seenSignalIds.first);
+    }
+  }
   final Map<String, DateTime> _lastOfferAt = {};
   final Map<String, String> _pcIds = {};
   final Map<String, DateTime> _offerSentAt = {};
@@ -248,6 +255,7 @@ class RoomBroadcastSession extends ChangeNotifier {
     final sidInt = sid.toInt();
     if (sidInt > 0) {
       if (!_seenSignalIds.add(sidInt)) return;
+      _trimSeenSignals();
     }
     // Signal basi (replay dari DB / late realtime) diabaikan — mencegah
     // offer/answer lama merusak negosiasi WebRTC (video hitam).

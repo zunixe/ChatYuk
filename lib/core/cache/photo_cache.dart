@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../utils.dart';
 import 'package:path_provider/path_provider.dart';
 import '../media/native_image.dart';
+import 'media_disk_cache.dart';
 import 'message_cache.dart';
 
 // Thumbnail JPEG kecil (~512px) dari base64 — kini di NATIVE
@@ -128,10 +129,10 @@ class PhotoCache {
   }
 
   File _fileFor(Directory folder, String chatKey, String messageId) =>
-      File('${folder.path}/${chatKey.hashCode}_$messageId.enc');
+      File('${folder.path}/${hashKey64(chatKey)}_$messageId.enc');
 
   File _thumbFileFor(Directory folder, String chatKey, String messageId) =>
-      File('${folder.path}/${chatKey.hashCode}_${messageId}_thumb.enc');
+      File('${folder.path}/${hashKey64(chatKey)}_${messageId}_thumb.enc');
 
   /// Baca foto FULL-RES dari file lokal (null jika belum ada / gagal decrypt).
   Future<String?> load(String chatKey, String messageId) async {
@@ -313,7 +314,7 @@ class PhotoCache {
   }
 
   /// Hapus file foto SATU chat (dipanggil saat chat di-hard-delete admin).
-  /// Nama file = `${chatKey.hashCode}_$messageId(.enc|_thumb.enc)` — prefix
+  /// Nama file = `${hashKey64(chatKey)}_$messageId(.enc|_thumb.enc)` — prefix
   /// hash chatKey unik per chat. RAM (keyed messageId) dipurge presisi lewat
   /// indeks `_memChatOf`/`_thumbChatOf` supaya foto chat terhapus tidak
   /// nyangkut di memori.
@@ -340,7 +341,7 @@ class PhotoCache {
       }
       final folder = await _folder();
       if (!await folder.exists()) return;
-      final prefix = '${chatKey.hashCode}_';
+      final prefix = '${hashKey64(chatKey)}_';
       await for (final entity in folder.list()) {
         if (entity is File) {
           final name = entity.path.split('/').last;
@@ -375,17 +376,46 @@ class PhotoCache {
   }
 
   /// Hapus foto lebih tua dari 7 hari — panggil sesekali (startup).
+  /// Kuota disk thumb+foto chat (P3a 2026-10-11). Dulu HANYA hapus >7 hari
+  /// (tanpa cap ukuran) → disk bisa menggunung. Sekarang: hapus >7 hari ATAU
+  /// LRU (mtime terlama) sampai total ≤ [maxDiskBytes].
+  static const int maxDiskBytes = 50 * 1024 * 1024;
+
   Future<void> cleanOldPhotos() async {
     try {
       final folder = await _folder();
       if (!await folder.exists()) return;
       final cutoff = DateTime.now().subtract(const Duration(days: 7));
+      // Kumpulkan (file, mtime, size) sekaligus — 1× list.
+      final entries = <(File, DateTime, int)>[];
+      var total = 0;
       await for (final entity in folder.list()) {
-        if (entity is File) {
-          final stat = await entity.stat();
-          if (stat.modified.isBefore(cutoff)) {
-            await entity.delete();
-          }
+        if (entity is! File) continue;
+        final stat = await entity.stat();
+        entries.add((entity, stat.modified, stat.size));
+        total += stat.size;
+      }
+      // 1) Hapus yang lebih tua dari 7 hari.
+      final keep = <(File, DateTime, int)>[];
+      for (final e in entries) {
+        if (e.$2.isBefore(cutoff)) {
+          try {
+            await e.$1.delete();
+            total -= e.$3;
+          } catch (_) {}
+        } else {
+          keep.add(e);
+        }
+      }
+      // 2) LRU bila masih > kuota: buang mtime terlama dulu.
+      if (total > maxDiskBytes) {
+        keep.sort((a, b) => a.$2.compareTo(b.$2)); // terlama dulu
+        for (final e in keep) {
+          if (total <= maxDiskBytes) break;
+          try {
+            await e.$1.delete();
+            total -= e.$3;
+          } catch (_) {}
         }
       }
     } catch (e) {

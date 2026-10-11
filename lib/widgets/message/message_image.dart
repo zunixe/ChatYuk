@@ -65,12 +65,12 @@ class _MessageImageState extends State<MessageImage> {
   void initState() {
     super.initState();
     final key = widget.imageData.hashCode;
-    _decoded = decodedImageCache[key];
+    _decoded = getDecodedCache(key);
     // Fallback THUMB by messageId (di-precache saat tap) — dipakai saat cold
     // start di mana `imageData` kosong (base64 ter-strip dari cache pesan).
     // Tanpa ini, bubble kosong dulu lalu thumb muncul = "ngeload/kedip".
     if (_decoded == null && widget.messageId.isNotEmpty) {
-      _decoded = decodedImageCache['thumb:${widget.messageId}'.hashCode];
+      _decoded = getDecodedCache('thumb:${widget.messageId}'.hashCode);
     }
     if (_decoded == null) {
       _loading = true;
@@ -131,7 +131,7 @@ class _MessageImageState extends State<MessageImage> {
       // dipertahankan (gapless) sampai download memberi aspek sebenarnya.
       _reservePlaceholder(widget.imageData);
       final key = widget.imageData.hashCode;
-      final hit = decodedImageCache[key];
+      final hit = getDecodedCache(key);
       if (hit != null) {
         _gen++;
         _fadeNext = true;
@@ -252,7 +252,7 @@ class _MessageImageState extends State<MessageImage> {
     }
     // Pakai ulang hasil decode bila isinya SAMA (pending base64 vs download
     // path hasil upload sendiri) — tanpa compute ulang, tanpa kedip.
-    final contentHit = decodedImageCache[data.hashCode];
+    final contentHit = getDecodedCache(data.hashCode);
     if (contentHit != null && contentHit.width > 0 && contentHit.height > 0) {
       putDecodedCache(key, contentHit);
       if (!mounted || gen != _gen) return;

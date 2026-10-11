@@ -16,6 +16,12 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
   // start() dipanggil post-frame.
   final _msgsStreamCtrl = StreamController<List<MessageModel>>.broadcast();
   Stream<List<MessageModel>>? _msgsStreamReal;
+  // P0 (2026-10-11): subscription KE STREAM ASLI (ChatStreamSession). WAJIB
+  // disimpan & di-cancel di dispose — dulu tidak: `handle.stream.listen(...)`
+  // tak disimpan → `ChatStreamSession.onCancel` TAK PERNAH fire →
+  // RealtimeChannel + Timer.periodic(30s) + list _current BOCOR tiap
+  // buka-tutup chat = "makin lama makin lambat" (pulih setelah restart).
+  StreamSubscription<List<MessageModel>>? _msgsRealSub;
   // Handler stream pesan — diisi oleh `_startMessagesStream`.
   Future<void> Function() _loadOlder = () async {};
   Future<void> Function(String messageId) _msgsHandleFetchImage = (_) async {};
@@ -39,9 +45,17 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
     _loadOlder = handle.loadOlder;
     _msgsHandleFetchImage = handle.fetchImage;
     _msgsHandleReload = handle.reload;
-    handle.stream.listen(_msgsStreamCtrl.add, onError: (e) {
+    // Simpan subscription ASLI → bisa di-cancel saat dispose (lihat _msgsRealSub).
+    _msgsRealSub = handle.stream.listen(_msgsStreamCtrl.add, onError: (e) {
       debugPrint('[NAV] msgs stream error: $e');
     });
+  }
+
+  /// P0: lepas subscription ASLI (memicu `ChatStreamSession.onCancel` →
+  /// removeChannel + pollTimer.cancel). Dipanggil dari `dispose()`.
+  void disposeMessagesStream() {
+    _msgsRealSub?.cancel();
+    _msgsRealSub = null;
   }
 
   /// Hangatkan cache voice & POSTER VIDEO (post-frame, fire-and-forget).

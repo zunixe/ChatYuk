@@ -40,6 +40,8 @@ class VideoFileCache {
   static const int maxBytes = 1024 * 1024 * 1024;
 
   final Map<String, DateTime> _index = {};
+  // P2d: map terbalik filename→path (O(1) LRU; hindari O(N×M)).
+  final Map<String, String> _fileNameToPath = {};
   bool _indexLoaded = false;
   String? _docs;
 
@@ -186,18 +188,17 @@ class VideoFileCache {
       final byName = {
         for (final (f, len) in files) f.uri.pathSegments.last: (f, len),
       };
-      // Kembalikan serverPath dari filename via index (catat saat put).
-      String? pathOf(String name) {
-        for (final e in _index.entries) {
-          if (_fileName(e.key) == name) return e.key;
-        }
-        return null;
+      // P2d (2026-10-11): map TERBALIK filename→serverPath dibangun SEKALI
+      // (O(N)) — dulu `pathOf` loop seluruh _index per nama → O(N×M) sinkron
+      // yang makin lambat saat cache besar.
+      _fileNameToPath.clear();
+      for (final k in _index.keys) {
+        _fileNameToPath[_fileName(k)] = k;
       }
-
       final names = byName.keys.toList()
         ..sort((a, b) {
-          final pa = pathOf(a);
-          final pb = pathOf(b);
+          final pa = _fileNameToPath[a];
+          final pb = _fileNameToPath[b];
           final ta = pa == null
               ? DateTime(2000)
               : (_index[pa] ?? DateTime(2000));
