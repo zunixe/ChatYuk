@@ -155,14 +155,13 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                       bytes,
                       fit: BoxFit.contain,
                       gaplessPlayback: true,
-                      // FASE AWAL (belum ada full): bytes = thumbnail bubble
-                      // yang SUDAH didecode di ImageCache dengan cacheWidth
-                      // 1080. Pakai 1080 juga → ImageCache HIT → tampil INSTAN
-                      // tanpa re-decode. Dulu viewer memaksa 1600 walau masih
-                      // bytes bubble 1080 → cache MISS → decode ulang bitmap
-                      // besar tepat saat transisi push = "serasa lambat".
-                      // FASE FULL (setelah _loadFull): pakai 1600 untuk zoom.
-                      cacheWidth: _fullBytes == null ? 1080 : 1600,
+                      // FASE AWAL (thumb): JANGAN set cacheWidth — bytes thumb
+                      // kecil (~256px) di-decode natural = INSTAN. Dulu dipaksa
+                      // 1080 dari bytes thumb → key ImageCache BEDA dgn bubble
+                      // (yang decode 1080 dari base64/path, bukan thumb) → MISS
+                      // → decode ulang tepat saat transisi = "serasa lambat".
+                      // FASE FULL: 1600 untuk ketajaman zoom.
+                      cacheWidth: _fullBytes == null ? null : 1600,
                       // Decode gagal (bytes korup/kosong) → ikon JELAS, bukan
                       // layar hitam polos (laporan "blank" tak terdiagnosa).
                       errorBuilder: (_, _, _) => const Icon(
