@@ -8,7 +8,7 @@ import '../../providers/riverpod/service_locator.dart';
 import '../../core/cache/media_disk_cache.dart';
 import '../../core/media/native_image.dart';
 import '../person_avatar.dart';
-import '../user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes;
+import '../user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes, avatarImageProviderFor;
 
 class PostAuthorAvatar extends StatefulWidget {
   final Map<String, dynamic> post;
@@ -146,16 +146,28 @@ class PostAuthorAvatarState extends State<PostAuthorAvatar> {
           ? _fallback(uid)
           : GestureDetector(onTap: tap, child: _fallback(uid));
     }
+    // Provider STABIL per-uid → ImageCache HIT antar rebuild/remount (anti
+    // decode ulang saat scroll timeline/komentar). Fallback Image.memory bila
+    // uid kosong (tak bisa di-kunci).
+    final provider = avatarImageProviderFor(uid, bytes);
     final img = ClipRRect(
       borderRadius: BorderRadius.circular(widget.size / 2),
-      child: Image.memory(
-        bytes,
-        width: widget.size,
-        height: widget.size,
-        fit: BoxFit.cover,
-        cacheWidth: (widget.size * 2).round(),
-        gaplessPlayback: true,
-      ),
+      child: provider != null
+          ? Image(
+              image: provider,
+              width: widget.size,
+              height: widget.size,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            )
+          : Image.memory(
+              bytes,
+              width: widget.size,
+              height: widget.size,
+              fit: BoxFit.cover,
+              cacheWidth: (widget.size * 2).round(),
+              gaplessPlayback: true,
+            ),
     );
     return tap == null ? img : GestureDetector(onTap: tap, child: img);
   }

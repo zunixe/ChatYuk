@@ -8,7 +8,7 @@ import '../../providers/riverpod/service_locator.dart';
 import '../../core/cache/media_disk_cache.dart';
 import '../../core/media/native_image.dart';
 import '../gender_avatar.dart';
-import '../user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes;
+import '../user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes, avatarImageProviderFor;
 
 class CommentAvatar extends StatefulWidget {
   final String uid;
@@ -117,15 +117,26 @@ class CommentAvatarState extends State<CommentAvatar> {
     if (avatar.isEmpty || bytes == null || _resolvedFor != avatar) {
       return _fallback();
     }
+    // Provider STABIL per-uid → ImageCache HIT antar rebuild/remount (anti
+    // decode ulang saat scroll komentar). Fallback Image.memory bila uid kosong.
+    final provider = avatarImageProviderFor(widget.uid, bytes);
     return ClipOval(
-      child: Image.memory(
-        bytes,
-        width: widget.size,
-        height: widget.size,
-        fit: BoxFit.cover,
-        cacheWidth: (widget.size * 2).round(),
-        gaplessPlayback: true,
-      ),
+      child: provider != null
+          ? Image(
+              image: provider,
+              width: widget.size,
+              height: widget.size,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            )
+          : Image.memory(
+              bytes,
+              width: widget.size,
+              height: widget.size,
+              fit: BoxFit.cover,
+              cacheWidth: (widget.size * 2).round(),
+              gaplessPlayback: true,
+            ),
     );
   }
 }
