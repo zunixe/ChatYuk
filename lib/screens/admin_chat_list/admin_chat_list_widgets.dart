@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'
     hide Provider, ChangeNotifierProvider, Consumer;
@@ -187,22 +189,23 @@ class AdminChatCard extends StatelessWidget {
         // bulak-balik buka chat monitor.
         behavior: HitTestBehavior.opaque,
         onLongPress: onLongPressMenu,
-        onTap: () async {
+        onTap: () {
           final id = chat['chat_id'] as String? ?? '';
           // Tap 2× cepat menumpuk 2 route identik → 1× back terlihat mati.
           if (!tryClaimChatPush(id)) return;
-          // Panaskan cache pesan MONITOR lalu TUNGGU (pola SAMA dengan chat
-          // user: `await prefetchPrivateChat` sebelum push). Dulu ini
-          // fire-and-forget → layar mount saat cache belum siap → satu jeda
-          // "kosong dulu" lalu terisi (keluhan "harus beberapa kali baru
-          // cepet"). Dengan await, `peekChatMessages` PASTI hit saat mount →
-          // frame pertama langsung terisi seperti chat user (ala WhatsApp).
-          // Baca disk/SQLite-monitor terukur sangat cepat (<10ms) — delay tak
-          // terasa, jauh lebih murah daripada menunggu layar render kosong.
-          await ProviderScope.containerOf(
+          // PUSH LANGSUNG tanpa await (2026-10-11): dulu `await
+          // prefetchChatMessages` sebelum push → tap terasa MATI sampai
+          // disk/RPC selesai (apalagi saat antre di belakang belasan RPC
+          // prefetch daftar) → keluhan "klik tampil datanya lama". Sekarang
+          // route didorong SEGERA (feedback tap instan); data menyusul LAZY:
+          // snapshot SINKRON dioper sebagai benih frame pertama, prefetch
+          // jalan di background, view `_fetch` mengambil alih setelah tampil.
+          final admin = ProviderScope.containerOf(
             context,
             listen: false,
-          ).read(adminProvider).prefetchChatMessages(id);
+          ).read(adminProvider);
+          final seed = admin.peekChatMessages(id);
+          unawaited(admin.prefetchChatMessages(id));
           if (!context.mounted) return;
           Navigator.push(
             context,
@@ -210,6 +213,7 @@ class AdminChatCard extends StatelessWidget {
               builder: (_) => AdminChatViewScreen(
                 chatId: id,
                 chatLabel: label,
+                initialMessages: seed,
                 participantOrder: orderUids,
                 participantNames: {
                   for (final e in names.entries) '${e.key}': '${e.value ?? ''}',

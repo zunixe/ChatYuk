@@ -59,6 +59,12 @@ class AdminChatViewScreen extends ConsumerStatefulWidget {
   /// uid → gender peserta (untuk ring warna avatar tanpa foto di header,
   /// sama seperti daftar "Pengguna Online" & kartu monitor).
   final Map<String, String> participantGenders;
+
+  /// Benih pesan SINKRON dari daftar (hasil `peekChatMessages` saat tap) —
+  /// frame pertama langsung terisi tanpa menunggu prefetch background.
+  /// Boleh kosong (chat belum pernah dipanaskan) → view jatuh ke cache
+  /// disk lalu server seperti biasa.
+  final List<Map<String, dynamic>> initialMessages;
   const AdminChatViewScreen({
     super.key,
     required this.chatId,
@@ -66,6 +72,7 @@ class AdminChatViewScreen extends ConsumerStatefulWidget {
     this.participantOrder = const [],
     this.participantNames = const {},
     this.participantGenders = const {},
+    this.initialMessages = const [],
   });
 
   @override
