@@ -1,6 +1,19 @@
 # Catatan Migrasi via API (Playwright fallback) — untuk AI lain
 
 > WAJIB dibaca sebelum `supabase db push`
+## 2026-10-11 — Admin Timeline (menu moderasi post)
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261011170000_admin_timeline.sql`.
+- **Fungsi:** `admin_timeline_all(p_limit int, p_filter text)` — daftar SEMUA
+  post lintas user (public/followers/subscribers) tanpa RLS `posts_select`
+  (moderasi); `admin_set_post_visibility(p_post_id uuid, p_visibility text)` —
+  ubah visibilitas post siapa pun. Dua-duanya `security definer` + guard
+  `is_admin_request()`, validasi nilai sama dengan CHECK constraint `posts`.
+- **Klien:** tab "Timeline" di panel admin (`lib/screens/admin_timeline_tab.dart`)
+  memakai `PostCard` yang sama + bar ubah visibilitas per kartu.
+- **Verifikasi:** `pg_proc` menunjukkan kedua fungsi + argumen; query
+  `admin_timeline_all` mengembalikan 12+ post lintas user.
+
 ## 2026-10-09 — Clamp last_seen (fix "online terus")
 
 - **Status:** SUDAH TERAPPLIED via Management API — `20261009120000_clamp_last_seen.sql` + `20261009130000_presence_stale_offline.sql`.
