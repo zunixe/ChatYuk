@@ -139,6 +139,11 @@ final _inputFocus = FocusNode();
 bool _showAttachRow = false;
   // ── Search dalam percakapan (ala WhatsApp) ──
   bool _searching = false;
+  // Katup pengaman back SEKALI-PAKAI (lihat PopScope di private_chat_core):
+  // bila veto terpicu padahal tak ada yang menahan (state desync) atau
+  // handler melempar, flag ini dibuka lalu pop() dipanggil — tanpa flag,
+  // PopScope juga mem-veto pop programatik → back mati permanen.
+  bool _backEscape = false;
 final _searchCtrl = TextEditingController();
 final _searchFocus = FocusNode();
 String _searchQuery = '';

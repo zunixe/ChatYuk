@@ -72,6 +72,10 @@ abstract class _PcBase extends ConsumerState<PrivateChatsScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   final Set<String> _selected = {};
   bool get _selectionMode => _selected.isNotEmpty;
+  // Katup pengaman back SEKALI-PAKAI (lihat PopScope di
+  // private_chats_build): escape bila veto desync / handler melempar.
+  // Tanpa ini 1 state macet = back mati permanen sampai restart.
+  bool _backEscape = false;
   // Tampilan arsip (gaya WhatsApp): list hanya chat terarsip.
   bool _showArchived = false;
   int _archivedCount = 0;

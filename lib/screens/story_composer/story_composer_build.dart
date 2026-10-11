@@ -527,7 +527,21 @@ mixin _ScBuildMx on _StoryComposerBase {
   /// Back → konfirmasi dulu (Buang / Lanjut). Langsung keluar hanya
   /// kalau belum ada edit (teks kosong + foto utuh) atau saat publish.
   Future<void> _confirmExit() async {
-    if (_publishing) return;
+    if (_publishing) {
+      // JANGAN telan back diam-diam (dulu: return kosong → back mati tanpa
+      // feedback saat upload macet, user mengira tombol rusak). Beri tahu
+      // kenapa belum bisa keluar; upload jalan terus di belakang.
+      if (mounted) {
+        final s = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(localeProvider).s;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.storyUploading)),
+        );
+      }
+      return;
+    }
     final dirty =
         _hasText ||
         _imgScale != 1.0 ||

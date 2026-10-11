@@ -341,14 +341,25 @@ mixin _RcLiveMx on _RoomChatBase {
     final points = ref.watch(pointsProvider.select((p) => p.enabled));
 
     return PopScope(
-      canPop: !inSelection,
+      // `_backEscape` = katup sekali-pakai anti "back mati permanen".
+      canPop: !inSelection || _backEscape,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        // DESYNC: veto terpicu padahal seleksi kosong → paksa keluar SEKALI.
+        if (!inSelection) {
+          debugPrint('[NAV] back escape room-chat (desync, paksa pop)');
+          _backEscape = true;
+          Navigator.of(context).pop();
+          return;
+        }
         debugPrint('[NAV] back veto room-chat selection=${selectedIds.length}');
         try {
           if (inSelection) clearSelection();
         } catch (e) {
+          // Jangan telan exception diam-diam (user terkunci): paksa keluar.
           debugPrint('[NAV] back handler error room-chat: $e');
+          _backEscape = true;
+          Navigator.of(context).pop();
         }
       },
       child: Scaffold(
