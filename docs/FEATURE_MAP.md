@@ -169,6 +169,19 @@ punya ATURAN KETAT berikut:
 = `VideoPrefetch._posterKey`). HARUS sama persis di kedua tempat — kalau beda,
 prefetch menulis ke kunci X tapi bubble baca kunci Y → selalu MISS = reload.
 
+**A2. KUNCI IMAGE-CACHE harus konsisten (akar "kedip" 2026-10-11).**
+`MemoryImage` memakai `hashCode(Uint8List)` sebagai kunci equality Flutter
+image-cache. `MediaDiskCache.readSync()` mengembalikan **instance `Uint8List`
+BARU** tiap panggilan → kalau precache membentuk provider dari bytes A dan
+bubble dari bytes B, **kunci berbeda → decode ulang → kedip** (gejala: buka
+ke-1/2 kedip, ke-3 "diam" karena kebetulan instance memori sama).
+Solusi: bytes poster di-cache **DI MEMORI per path** (`VideoPrefetch.
+posterBytesStable` / `rememberPoster`) sehingga instance SAMA dipakai precache
+(saat tap) & render (bubble). Provider dibentuk lewat SATU fungsi
+`VideoPrefetch.posterProvider()` (ResizeImage width sama). **JANGAN** bentuk
+`MemoryImage(bytes)` dari `readSync` langsung — instance beda = kunci beda.
+Pola ini berlaku untuk SEMUA `Image.memory` yang di-precache (lihat §11b).
+
 **B. Poster disimpan HANYA di `MediaDiskCache` (kecil ~20-50 KB). Video bytes
 disimpan di `VideoFileCache` (kuota 1GB SENDIRI + LRU, direktori persisten
 `video_cache/`, 2026-10-11).** JANGAN simpan video ke `MediaDiskCache` (kuota
@@ -201,6 +214,22 @@ poster bila sudah ada di cache.
 **E. `autoPoster`** = `di < 50` (`private_chat_screen.dart`, pola sama
 `isImageDeferred` foto). Video di luar 50 terbaru tidak auto-unduh poster;
 tap yang memuat (fallback `_loadPoster`).
+
+**F. RENDER POSTER = `RawImage` dari bitmap siap (nol decode) — 2026-10-11.**
+Target: "buka ke-2 & cold start LANGSUNG tampil seperti voice". Decode `Image`
+async selalu menyisakan 1+ frame kosong. Solusi:
+- `VideoPrefetch` decode poster → `ui.Image` (bitmap) & simpan di memori per
+  path (`posterImageSync`). Diisi saat tap (`precachePosters`) & saat bubble
+  pertama generate (`rememberPoster` → `decodePosterFor`).
+- `ChatVideoBubble` render **`RawImage(image: _posterImg)`** bila bitmap ada
+  (NOL decode = instan), fallback `Image` (bytes) saat baru generate.
+- Syarat kunci image-cache konsisten (poin A2) tetap berlaku untuk fallback.
+
+**CATATAN JUJUR:** `ui.Image` (bitmap) TIDAK persisten antar restart — cold
+start tetap decode sekali (JPEG poster ~30KB, cepat). Kalau suatu saat perlu
+benar-benar nol decode saat cold start, simpan bitmap ter-decode ke file
+(WebP/RGBA) di `core/cache/`. Verifikasi frame-diff (rekam + ffmpeg) menunjukkan
+konten video stabil di buka 1/2 & cold start.
 
 **Jebakan (jangan diulang):**
 - Menyimpan video bytes ke `MediaDiskCache` → evict kuota → poster hilang.
