@@ -88,7 +88,10 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                     runCatching { nativeTrim() }
                 }
             }
-            runCatching { System.gc() }
+            // SENGAJA tanpa System.gc(): GC eksplisit men-SUSPEND semua thread
+            // (UI ikut berhenti → jank), dan docs/MEMORY_BEST_PRACTICES §4
+            // sudah membuktikan ia TIDAK menurunkan RSS. Evict + purge di
+            // atas sudah cukup; GC biar jalan alami (concurrent, murah).
         }
     }
 

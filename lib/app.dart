@@ -461,7 +461,9 @@ class _MainNavState extends ConsumerState<_MainNav>
           // clearAll() sudah membuang Flutter imageCache + cache app terdaftar.
           ImageCacheHygiene.clearAll();
         } catch (_) {}
-        unawaited(NativeImage.trim());
+        // Force: commit buffer render ~500MB HARUS segera di-purge (throttle
+        // 60 dtk dilewati — trim staggered di atas tak cukup untuk ini).
+        unawaited(NativeImage.trim(force: true));
       } else if (pausedFor != null && pausedFor.inSeconds >= 15) {
         // Background sedang (15-60 dtk) → trim RAM foto full-res saja (paling
         // besar, paling murah dimuat ulang). Thumb + pesan tetap di RAM
