@@ -39,6 +39,13 @@ class VideoFileCache {
   /// yang paling lama tidak ditonton saat penuh.
   static const int maxBytes = 1024 * 1024 * 1024;
 
+  /// Cap JUMLAH entri index (R6/R7) — sama pola MediaDiskCache._maxIndexEntries.
+  /// Kuota byte saja tak membatasi jumlah entri: banyak video kecil (8MB)
+  /// tetap bisa menumpuk ribuan entri index (path versioned per-upload) →
+  /// `index.json` & map RAM membengkak. Buang entri terlama (Index-only;
+  /// file-nya dibersihkan LRU byte).
+  static const int _maxIndexEntries = 2000;
+
   final Map<String, DateTime> _index = {};
   // P2d: map terbalik filename→path (O(1) LRU; hindari O(N×M)).
   final Map<String, String> _fileNameToPath = {};
@@ -218,6 +225,17 @@ class VideoFileCache {
       }
       final existing = byName.keys.toSet();
       _index.removeWhere((k, _) => !existing.contains(_fileName(k)));
+      // Cap jumlah entri index (R6/R7) — buang terlama dari INDEX saja.
+      if (_index.length > _maxIndexEntries) {
+        final removeCount = _index.length - _maxIndexEntries;
+        final oldest = _index.entries.toList()
+          ..sort((a, b) => a.value.compareTo(b.value));
+        for (var i = 0; i < removeCount; i++) {
+          final k = oldest[i].key;
+          _index.remove(k);
+          _fileNameToPath.remove(_fileName(k));
+        }
+      }
       _scheduleSaveIndex();
       if (kDebugMode) {
         dlog('[VideoCache] LRU enforced, total=${total ~/ 1024}KB');
