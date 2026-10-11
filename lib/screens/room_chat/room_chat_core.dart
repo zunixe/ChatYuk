@@ -552,7 +552,6 @@ mixin _RcCoreMx on _RoomChatBase {
     }
     _joinRoom();
     _startPresenceHeartbeat();
-    _scrollCtrl.addListener(_onRoomScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Cache dulu (tampil instan), stream menimpa sesudahnya.

@@ -680,10 +680,6 @@ mixin _RcRoomMx on _RoomChatBase {
     }
   }
 
-  void _onRoomScroll() {
-    // Bonus baca room DIHAPUS (overhaul coin: tidak ada poin gratis).
-  }
-
   @override
   void dispose() {
     hideActionBar();

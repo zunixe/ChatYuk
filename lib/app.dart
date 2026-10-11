@@ -18,6 +18,7 @@ import 'core/admin_gate.dart';
 import 'providers/riverpod/locale_provider.dart';
 import 'core/cache/message_cache.dart';
 import 'core/nav_journal.dart';
+import 'core/nav_visibility.dart';
 import 'core/admin_trim_registry.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
@@ -611,6 +612,9 @@ class _MainNavState extends ConsumerState<_MainNav>
   @override
   Widget build(BuildContext context) {
     final tab = ref.watch(navProvider);
+    // P1c: kabarkan tab visible ke gate kerja latar (poll list chat/presence)
+    // via ValueNotifier global — nol rebuild tambahan.
+    if (visibleMainTab.value != tab) visibleMainTab.value = tab;
     // Rebuild seluruh tab saat mode terang/gelap berubah.
     final dark = ref.watch(themeProvider.select((t) => t.isDark));
     if (_pages == null || _pagesDark != dark) {
