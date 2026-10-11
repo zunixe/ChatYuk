@@ -540,48 +540,54 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Lapisan poster SELALU di tree — kemunculannya fade-in
-              // halus (tidak pop). Placeholder di bawah hanya saat null.
-              AnimatedOpacity(
-                opacity: _poster != null ? 1 : 0,
-                duration: _fadePoster
-                    ? const Duration(milliseconds: 220)
-                    : Duration.zero,
-                curve: Curves.easeOut,
-                child: _poster != null
-                    ? Image.memory(
+              // Poster — TAMPIL LANGSUNG (tanpa AnimatedOpacity). Kartu voice
+              // langsung tampil karena statis; video harus SAMA: begitu poster
+              // ada, pasang langsung di frame itu juga (fade hanya bila memang
+              // baru di-generate, `_fadePoster`). AnimatedOpacity yg selalu
+              // mulai dari 0 bikin 1 frame kosong = "blink/ngeload".
+              if (_poster != null)
+                _fadePoster
+                    ? AnimatedOpacity(
+                        opacity: 1,
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                        child: Image.memory(
+                          _poster!,
+                          fit: BoxFit.cover,
+                          cacheWidth: 400,
+                          gaplessPlayback: true,
+                        ),
+                      )
+                    : Image.memory(
                         _poster!,
                         fit: BoxFit.cover,
                         cacheWidth: 400,
                         gaplessPlayback: true,
-                      )
-                    : Container(color: Colors.black87),
-              ),
+                      ),
               if (_poster == null)
                 Container(
                   color: Colors.black87,
                   alignment: Alignment.center,
-                  // INSTAN-TERISI (seperti voice): walau poster belum siap,
-                  // card JANGAN kotak hitam kosong — tampilkan ikon play besar
-                  // + durasi segera, spinner kecil di bawah kalau unduh lama.
-                  // Ini menghilangkan kesan "card ngeload" saat poster MISS.
+                  // Poster belum ada → dasar polos + durasi (ikon play sudah
+                  // ada di overlay di atas). TIDAK ada ikon play kedua agar
+                  // tak "popping" saat poster menyusul. Spinner kecil hanya
+                  // kalau unduh terbukti lambat.
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        _failed
-                            ? Icons.refresh_rounded
-                            : Icons.play_circle_fill_rounded,
-                        color: Colors.white54,
-                        size: 44,
-                      ),
-                      if (widget.durationMs > 0) ...[
-                        const SizedBox(height: 4),
+                      if (widget.durationMs > 0)
                         Text(
                           formatVideoDuration(widget.durationMs),
                           style: AppText.chatTime.copyWith(
                             color: Colors.white70,
                           ),
+                        ),
+                      if (_failed) ...[
+                        const SizedBox(height: 6),
+                        const Icon(
+                          Icons.refresh_rounded,
+                          color: Colors.white54,
+                          size: 22,
                         ),
                       ],
                       if (_loading && _slow) ...[
@@ -598,24 +604,26 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
                     ],
                   ),
                 ),
-              // Overlay play (selalu tampil saat siap).
-              if (!_loading)
-                IgnorePointer(
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow_rounded,
-                        size: 26,
-                        color: Colors.white,
-                      ),
+              // Overlay play — SELALU tampil (kartu video selalu terlihat
+              // "siap diputar" sejak frame pertama, sama seperti kartu voice
+              // yang selalu menampilkan tombol play). Tidak bergantung
+              // `_loading` supaya tak ada "popping" ikon saat poster menyusul.
+              IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      size: 26,
+                      color: Colors.white,
                     ),
                   ),
                 ),
+              ),
               // Badge "sekali lihat" (sebelum ditonton).
               if (widget.isOnce)
                 Positioned(
