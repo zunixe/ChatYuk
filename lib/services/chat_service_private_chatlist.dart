@@ -588,6 +588,9 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     // juga sudah tua (>30 dtk). Saat realtime sehat = nol fetch ekstra.
     final pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (controller.isClosed) return;
+      // BATERAI (P3): JANGAN poll saat app di-background (lebih ketat dari
+      // gate-tab P1c di bawah). Dulu timer hidup walau layar mati.
+      if (!AppForeground.now) return;
       // P1c: JANGAN poll saat tab list/Pesan tidak visible (tab lain
       // ter-mount di IndexedStack → timer tetap hidup walau non-aktif).
       // Realtime channel tetap jalan; poll hanya jaring-pengaman saat aktif.
