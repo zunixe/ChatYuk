@@ -7,6 +7,7 @@ import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../widgets/post_card.dart';
+import '../widgets/post/post_prefetch.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/skeleton_card.dart';
 import 'post_composer_screen.dart';
@@ -118,6 +119,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     // (controller scope lain bisa ikut memanggil saat dibangun di TabBarView).
     if (!_scroll.hasClients) return;
     if (!_scroll.position.hasContentDimensions) return;
+    // PREFETCH ala Instagram/chat: hangatkan thumb post di DEPAN viewport
+    // begitu user bergerak — saat kartu masuk, gambarnya sudah di cache.
+    // Dedupe di dalam PostPrefetch → aman dipanggil tiap event scroll murah.
+    _warmAhead();
     if (_scroll.position.pixels <
         _scroll.position.maxScrollExtent - 200) {
       return;
@@ -135,6 +140,21 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
   String get _scope =>
       _current == 0 ? 'all' : (_current == 1 ? 'following' : 'mine');
 
+  /// Hangatkan thumb post di sekitar viewport saat scroll (ala Instagram).
+  /// Pakai posisi scroll kasar → ambil window post di depannya. Murah &
+  /// dedupe di PostPrefetch (no-op bila sudah di cache/inflight).
+  void _warmAhead() {
+    try {
+      final tp = ref.read(timelineProvider.notifier);
+      final all = tp.posts;
+      if (all.isEmpty) return;
+      // Perkiraan kartu ~ tile tinggi rata-rata; ambil window longgar.
+      const estTile = 480.0;
+      final first = (_scroll.position.pixels / estTile).floor().clamp(0, all.length - 1);
+      final last = (first + PostPrefetch.maxPosts).clamp(0, all.length);
+      PostPrefetch.warmPosts(all.sublist(first, last));
+    } catch (_) {}
+  }
   Future<void> _load({bool refresh = false, bool skipIfFresh = false}) async {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (auth.uid == null) return;
@@ -308,7 +328,15 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     // tujuan SEBELUM _current ter-update, jadi tanpa ini halaman baru
     // sekejap menampilkan CTA "ketuk untuk membuat postingan" walau ada isinya.
     final isActive = scopeIndex == _current;
-    final posts = isActive ? _computeFiltered(postsRaw) : const [];
+    final List<Map<String, dynamic>> posts =
+        isActive ? _computeFiltered(postsRaw) : const [];
+    // PREFETCH (contek perilaku chat foto: begitu chat terbuka, thumb sudah
+    // di-cache → tampil instan). Di sini: begitu daftar post tiba, hangatkan
+    // thumb N post teratas di LATAR supaya kartu berikutnya langsung gambar,
+    // bukan "item dulu baru gambar". Fire-and-forget, bounded, dedupe.
+    if (isActive && posts.isNotEmpty) {
+      PostPrefetch.warmPosts(posts);
+    }
     final effectiveSearch = isActive ? _appliedSearch : '';
     final effectiveLoading = isActive ? loading : true;
     final ctrl = _scrolls[scopeIndex];
