@@ -116,7 +116,16 @@ void main() {
     });
 
     test('semua getter String di strings.dart punya isi di kedua cabang', () {
-      final raw = File('lib/config/strings.dart').readAsStringSync();
+      // Getter UI kini tersebar di part-file `strings_*_mx.dart` (pecahan
+      // demi batas ukuran berkas). Gabungkan semuanya saat memindai.
+      final files = Directory('lib/config')
+          .listSync()
+          .whereType<File>()
+          .where((f) =>
+              f.path.endsWith('.dart') &&
+              RegExp(r'strings(_\w+)?\.dart').hasMatch(f.path))
+          .toList();
+      final raw = files.map((f) => f.readAsStringSync()).join('\n');
       final src = raw.replaceAll(RegExp(r'\s+'), ' ');
       final single = RegExp(
           r"String get \w+ .*?isId \? '((?:[^'\\]|\\.)*)' : '((?:[^'\\]|\\.)*)'");
