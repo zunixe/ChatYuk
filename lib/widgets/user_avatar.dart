@@ -380,6 +380,26 @@ class _UserAvatarState extends State<UserAvatar> {
 /// dan `ProfileAvatar` (agar tidak menyimpan salinan bytes sendiri).
 Uint8List? cachedUserAvatarBytes(String uid) => _avatarBytesByUid[uid];
 
+/// Helper: `ImageProvider` STABIL per-uid (instance sama lintas rebuild &
+/// remount) → `ImageCache` selalu HIT, TIDAK decode ulang. Dipakai
+/// `PostAuthorAvatar`/`CommentAvatar` (timeline/komentar) yang sebelumnya
+/// `Image.memory(bytes)` polos → provider baru tiap remount → decode ulang
+/// saat scroll. Bounded via [_boundAvatarMap] (cap sama dengan cache lain).
+///
+/// [bytes] hanya dipakai bila provider untuk [uid] belum ada (instance
+/// di-cache); kalau sudah ada, [bytes] diabaikan (identitas stabil menang).
+ImageProvider? avatarImageProviderFor(String uid, Uint8List bytes) {
+  if (uid.isEmpty || bytes.isEmpty) return null;
+  final existing = _avatarImageByUid[uid];
+  if (existing != null) return existing;
+  _avatarBytesByUid[uid] ??= bytes;
+  _boundAvatarMap(_avatarBytesByUid);
+  final p = _cappedAvatarImage(bytes);
+  _avatarImageByUid[uid] = p;
+  _boundAvatarMap(_avatarImageByUid);
+  return p;
+}
+
 /// Simpan bytes ter-decode ke cache bersama (bounded via [_boundAvatarMap]).
 /// Dipakai `ProfileAvatar` agar bytes yang SAMA tidak ditahan 2× (dulu
 /// `_bytesCache` 60 entri di sana + map di sini = retensi ganda native).
