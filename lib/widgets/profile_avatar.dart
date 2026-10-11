@@ -6,7 +6,8 @@ import '../core/media/native_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/avatar_provider.dart';
 import '../providers/riverpod/service_locator.dart';
-import 'user_avatar.dart' show cachedUserAvatarBytes, rememberAvatarBytes;
+import 'user_avatar.dart'
+    show cachedUserAvatarBytes, rememberAvatarBytes, avatarImageProviderFor;
 
 Uint8List? _decodeAvatarB64(String b64) {
   try {
@@ -141,16 +142,27 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
     final shape = BorderRadius.circular(widget.borderRadius);
     Widget child;
     if (_bytes != null) {
-      final img = Image.memory(
-        _bytes!,
-        width: widget.size,
-        height: widget.size,
-        fit: BoxFit.cover,
-        // Avatar kecil (size x density ~2) — cap decode supaya tidak
-        // raster gambar profil penuh untuk kotak mungil di daftar.
-        cacheWidth: (widget.size * 2).round(),
-        gaplessPlayback: true,
-      );
+      // Provider STABIL per-uid → ImageCache HIT antar rebuild/remount (anti
+      // decode ulang foto profil yang sama). Fallback Image.memory bila uid kosong.
+      final provider = avatarImageProviderFor(widget.uid, _bytes!);
+      final img = provider != null
+          ? Image(
+              image: provider,
+              width: widget.size,
+              height: widget.size,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            )
+          : Image.memory(
+              _bytes!,
+              width: widget.size,
+              height: widget.size,
+              fit: BoxFit.cover,
+              // Avatar kecil (size x density ~2) — cap decode supaya tidak
+              // raster gambar profil penuh untuk kotak mungil di daftar.
+              cacheWidth: (widget.size * 2).round(),
+              gaplessPlayback: true,
+            );
       child = isCircle
           ? ClipOval(child: img)
           : ClipRRect(borderRadius: shape, child: img);
