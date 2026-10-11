@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/app_foreground.dart';
 import '../../core/cache/message_cache.dart';
 import '../../core/perf/perf_probe.dart';
 import '../../services/rt_resilient.dart';
@@ -137,7 +138,23 @@ class TimelineNotifier extends Notifier<TimelineState> {
         _refreshVisibilitySets();
       }
     }, onError: (e) => dlog('[TimelineProvider] auth stream error: $e'));
+    // P1c (baterai): lepas `timeline-posts` saat bg; re-subscribe di resume.
+    AppForeground.isForeground.addListener(_onForegroundChanged);
+    _fgWas = AppForeground.now;
     return const TimelineState();
+  }
+
+  bool _fgWas = true;
+  void _onForegroundChanged() {
+    final now = AppForeground.now;
+    if (now == _fgWas) return;
+    _fgWas = now;
+    if (now) {
+      _listenRealtime();
+    } else {
+      _rtSub?.cancel();
+      _rtSub = null;
+    }
   }
 
   var _disposed = false;
@@ -773,6 +790,7 @@ class TimelineNotifier extends Notifier<TimelineState> {
 
   void _disposeAll() {
     _disposed = true;
+    AppForeground.isForeground.removeListener(_onForegroundChanged);
     _rtSub?.cancel();
     _authSub?.cancel();
     _prefetchTimer?.cancel();

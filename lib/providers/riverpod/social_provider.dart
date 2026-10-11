@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/cache/message_cache.dart';
 import '../../services/rt_resilient.dart';
+import '../../core/app_foreground.dart';
 import '../../services/social_service.dart';
 import '../../utils.dart';
 
@@ -88,7 +89,32 @@ class SocialNotifier extends Notifier<SocialState> {
         _subscribe();
       }
     }, onError: (e) => dlog('[SocialProvider] auth stream error: $e'));
+    // P1c (baterai 2026-10-11): lepas channel realtime saat app di background/
+    // layar mati (event seluruh jaringan tak perlu membangunkan proses).
+    // Re-subscribe saat kembali foreground → data tetap segar.
+    AppForeground.isForeground.addListener(_onForegroundChanged);
+    _fgWas = AppForeground.now;
     return const SocialState();
+  }
+
+  bool _fgWas = true;
+  void _onForegroundChanged() {
+    final now = AppForeground.now;
+    if (now == _fgWas) return;
+    _fgWas = now;
+    if (now) {
+      _subscribe(); // kembali: sambung ulang + refresh
+    } else {
+      _rtSub?.cancel();
+      _rtSub = null;
+      final ch = _rtChannel;
+      _rtChannel = null;
+      if (ch != null) {
+        try {
+          _sb.removeChannel(ch);
+        } catch (_) {}
+      }
+    }
   }
 
   void _emit() {
@@ -415,6 +441,7 @@ class SocialNotifier extends Notifier<SocialState> {
   }
 
   void _disposeAll() {
+    AppForeground.isForeground.removeListener(_onForegroundChanged);
     _refreshDebounce?.cancel();
     _frSub?.cancel();
     _authSub?.cancel();

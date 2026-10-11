@@ -666,6 +666,8 @@ mixin _RcCoreMx on _RoomChatBase {
       // buang-buang RPC & battery.
       _livePoll?.cancel();
       _livePoll = Timer.periodic(const Duration(seconds: 30), (_) {
+        // P2a (baterai): jangan RPC saat background/layar mati.
+        if (!AppForeground.now) return;
         _refreshLiveUid();
         _refreshGrant();
         _ensureViewerSession();
