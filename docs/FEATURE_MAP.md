@@ -170,11 +170,13 @@ punya ATURAN KETAT berikut:
 prefetch menulis ke kunci X tapi bubble baca kunci Y → selalu MISS = reload.
 
 **B. Poster disimpan HANYA di `MediaDiskCache` (kecil ~20-50 KB). Video bytes
-TIDAK PERNAH disimpan di `MediaDiskCache`.** Kuota media 250 MB dibagi bersama
-foto/avatar/voice; video puluhan MB akan meng-evict LRU → poster & foto lain
-hilang → "cold start reload lagi" (insiden 2026-10-11). Video bytes untuk
-playback disimpan di **file temp stabil** (`ChatVideoBubble._ensureLocalFile`,
-`${tmp}/chat_vid_<hash>.mp4`) yang di-manage OS, bukan kuota media.
+disimpan di `VideoFileCache` (kuota 1GB SENDIRI + LRU, direktori persisten
+`video_cache/`, 2026-10-11).** JANGAN simpan video ke `MediaDiskCache` (kuota
+250 MB bersama foto/avatar/voice → video besar meng-evict LRU → poster & foto
+lain hilang → "cold start reload lagi", insiden 2026-10-11) dan JANGAN ke temp
+dir (bisa dibersihkan OS). Sekali video dibuka/di-warm → tersimpan → cold
+start berikutnya langsung kebuka (persis voice). Playback baca
+`VideoFileCache.fileFor` dulu, unduh + `put` bila miss.
 
 **C. Sumber poster (urutan prioritas):**
 1. **Pengirim** (baru kirim): poster SUDAH ada dari hasil kompres
@@ -183,9 +185,9 @@ playback disimpan di **file temp stabil** (`ChatVideoBubble._ensureLocalFile`,
    ulang** server. `pendingVideoPosterB64` disediakan mixin (getter
    di-override layar).
 2. **Video lawan**: `VideoPrefetch.warmChat(chatId, msgs)` (dipanggil dari
-   `_scheduleWarmPrefetch`, ditunda 400 ms) → unduh video, generate poster
-   (native `storyVideoPoster`), simpan poster, **buang** video bytes.
-   `maxPerChat = 6` poster terbaru.
+   `_scheduleWarmPrefetch`, post-frame) → unduh video → **persist ke
+   `VideoFileCache`** + generate poster (native `storyVideoPoster`) → simpan
+   poster. `maxPerChat = 6` terbaru.
 3. **Cache MISS total** (belum sempat warm): bubble generate sendiri lewat
    `ChatVideoBubble._loadPoster()` (unduh + generate, 1×) → simpan disk.
 
@@ -202,6 +204,7 @@ tap yang memuat (fallback `_loadPoster`).
 
 **Jebakan (jangan diulang):**
 - Menyimpan video bytes ke `MediaDiskCache` → evict kuota → poster hilang.
+- Menyimpan video bytes ke temp dir → dibersihkan OS → cold start reload.
 - Kunci poster berbeda antar penulis/pembaca → selalu MISS.
 - `warmOne` selalu unduh ulang walau pengirim punya bytes+poster lokal.
 - `autoPoster=false` lalu SKIP baca cache (harus selalu baca cache sinkron).
