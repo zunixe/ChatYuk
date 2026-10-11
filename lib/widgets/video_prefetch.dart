@@ -346,85 +346,33 @@ class VideoPrefetch {
         return;
       }
 
-      // Tidak ada bytes lokal → unduh video, persist, generate poster.
-      final dl = downloader;
-      final gen = posterGenerator;
-      if (dl == null || gen == null) return;
-      final bytes = await dl(videoPath);
-      if (bytes == null || bytes.isEmpty) return;
-      final vf = await VideoFileCache.instance.put(videoPath, bytes);
-      final src =
-          vf ?? await _tempWrite('vp1_${videoPath.hashCode.abs()}.mp4', bytes);
-      if (src == null) return;
-      final poster = await gen(src.path);
-      if (poster != null && poster.isNotEmpty) {
-        await MediaDiskCache.instance.write(_posterKey(videoPath), poster);
-      }
-      if (vf == null) {
-        try {
-          if (await src.exists()) await src.delete();
-        } catch (_) {}
-      }
+      // Tidak ada bytes lokal → JANGAN unduh (ZERO-JANK 2026-10-11: video
+      // penuh hanya saat tap play). Poster dibuat saat tap via
+      // ChatVideoBubble._openFullscreen → _loadPoster(fromTap: true).
+      // Dulu cabang ini mengunduh video penuh tiap buka chat / tiap video
+      // baru masuk → kuota + bandwidth terkuras otomatis.
+      return;
     } catch (e) {
       if (kDebugMode) debugPrint('[VideoPrefetch] warmOne error: $e');
     }
   }
 
+  /// Hangatkan poster video chat dari CACHE LOKAL saja — TANPA download.
+  ///
+  /// ZERO-JANK (keputusan produk 2026-10-11): dulu tiap video terbaru tanpa
+  /// poster diunduh PENUH (s.d. 6 video) saat chat dibuka → belasan MB
+  /// otomatis + berebut bandwidth dengan foto. Sekarang video penuh HANYA
+  /// diunduh saat user tap play (ChatVideoBubble._openFullscreen →
+  /// _ensureLocalFile); poster dibuat saat itu dan persist untuk sesi
+  /// berikutnya. Fungsi ini dipertahankan (API stabil) tapi tidak lagi
+  /// menyentuh network — aman dipanggil di mana pun.
   static Future<void> warmChat(String chatKey, List<MessageModel> msgs) async {
     if (chatKey.isEmpty || msgs.isEmpty) return;
     if (_warmed.contains(chatKey)) return;
     if (_warmed.length > 50) _warmed.clear();
     _warmed.add(chatKey);
-    final dl = downloader;
-    final gen = posterGenerator;
-    if (dl == null || gen == null) return;
-    try {
-      // Video dari lawan = path storage (bukan base64 pending). Ambil terbaru.
-      final videos = msgs
-          .where(
-            (m) =>
-                (m.type == 'video' ||
-                    m.type == 'video_once' ||
-                    m.type == 'video_once_expired') &&
-                m.imageData.isNotEmpty &&
-                !m.imageData.startsWith('data:') &&
-                !m.imageData.contains('\n') && // bukan base64 panjang
-                m.imageData.contains('/'), // path storage (bucket/…)
-          )
-          .toList()
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      for (final m in videos.take(maxPerChat)) {
-        try {
-          // Sudah ada poster di disk → lewati (hemat).
-          final hit = MediaDiskCache.instance.readSync(_posterKey(m.imageData));
-          if (hit != null && hit.isNotEmpty) continue;
-          final bytes = await dl(m.imageData);
-          if (bytes == null || bytes.isEmpty) continue;
-          // PERSISTEN (seperti voice): simpan video ke VideoFileCache (kuota
-          // 1GB sendiri + LRU) → sekali di-warm, cold start langsung kebuka.
-          // BUKAN ke MediaDiskCache (kuota 250MB bersama foto/avatar/voice).
-          final vf =
-              await VideoFileCache.instance.put(m.imageData, bytes);
-          // Tulis file temp HANYA untuk generate poster (pakai file persist
-          // bila berhasil, supaya tak tulis ganda), lalu generate.
-          final src = vf ??
-              await _tempWrite(
-                  'vp_${m.imageData.hashCode.abs()}.mp4', bytes);
-          if (src == null) continue;
-          final poster = await gen(src.path);
-          if (poster != null && poster.isNotEmpty) {
-            await MediaDiskCache.instance.write(_posterKey(m.imageData), poster);
-          }
-          // Bersihkan file temp (bukan file VideoFileCache).
-          if (vf == null) {
-            try {
-              if (await src.exists()) await src.delete();
-            } catch (_) {}
-          }
-        } catch (e) {
-          if (kDebugMode) debugPrint('[VideoPrefetch] item error: $e');
-        }
-      }
-    } catch (_) {}
+    // Sengaja tanpa kerja network: poster yang sudah ada di disk dibaca
+    // sinkron oleh bubble sendiri (posterBytesStable); yang belum ada
+    // dibuat saat tap. Tidak ada loop download di sini lagi.
   }
 }

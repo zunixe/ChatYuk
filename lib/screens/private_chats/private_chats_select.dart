@@ -44,19 +44,23 @@ mixin _PcSelectMx on _PcBase {
           '';
     } catch (_) {}
     // PUSH: precache poster video + thumb foto + prefetch pesan secara PARALEL
-    // (Future.wait) dengan SATU deadline — dulu 3 await BERURUTAN dgn timeout
-    // terpisah → worst-case 300+450+450=1200ms sebelum push (tap terasa freeze).
-    // Sekarang: satu deadline ~400ms untuk semua.
+    // di BACKGROUND (fire-and-forget) — ZERO-JANK (2026-10-11): dulu 3 await
+    // BERURUTAN dgn timeout 400ms SEBELUM push → tap tertahan s.d. 400ms
+    // (plus decode codec bitmap di tap path). Sekarang route didorong SEGERA;
+    // layar terisi dari cache sinkron (initialData peekMessages) + thumb disk
+    // di MessageImage._decode, precache menyusul tanpa memblokir transisi.
     final pcKey = 'private_${chat.chatId}';
-    await Future.wait<void>([
-      ProviderScope.containerOf(context, listen: false)
-          .read(chatProvider.notifier)
-          .prefetchPrivateChat(chat.chatId),
-      if (context.mounted) VideoPrefetch.precachePosters(context, pcKey),
-      if (context.mounted) PhotoPrefetch.precacheThumbs(context, pcKey),
-    ]).timeout(
-      const Duration(milliseconds: 400),
-      onTimeout: () => const <void>[],
+    unawaited(
+      Future.wait<void>([
+        ProviderScope.containerOf(context, listen: false)
+            .read(chatProvider.notifier)
+            .prefetchPrivateChat(chat.chatId),
+        if (context.mounted) VideoPrefetch.precachePosters(context, pcKey),
+        if (context.mounted) PhotoPrefetch.precacheThumbs(context, pcKey),
+      ]).timeout(
+        const Duration(milliseconds: 400),
+        onTimeout: () => const <void>[],
+      ),
     );
     if (!mounted) {
       releaseNav(navKey);

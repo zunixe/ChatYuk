@@ -301,7 +301,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
 
   /// Poster: base64 kecil dari payload (bubble sendiri) atau generate
   /// frame dari video (pesan lawan; 1× lalu simpan memori + DISK).
-  Future<void> _loadPoster() async {
+  Future<void> _loadPoster({bool fromTap = false}) async {
     if (!mounted) return;
     // 1) Cache DISK dulu (instan, tanpa unduh video) — kunci anti-blink
     //    saat cold start / scroll ulang / keluar-masuk chat.
@@ -337,6 +337,16 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       dlog('[VideoBubble] poster MISS disk key=${_posterKey.hashCode} → generate');
     } catch (_) {}
     if (!mounted) return;
+    // ZERO-JANK (keputusan produk 2026-10-11): video lawan TIDAK diunduh
+    // otomatis saat chat dibuka — MISS disk saat mount = placeholder
+    // (durasi + tombol play) + tap yang memuat (lihat _openFullscreen).
+    // Dulu MISS → _generatePoster → unduh video PENUH per bubble (50 terbaru)
+    // + warmChat mengunduh 6 video → buka chat video = belasan MB otomatis.
+    // Pesan SENDIRI (base64 lokal, tanpa unduh) tetap generate otomatis.
+    if (!_isPendingBase64 && !fromTap) {
+      if (mounted && _loading) setState(() => _loading = false);
+      return;
+    }
     setState(() {
       _loading = true;
       _failed = false;
@@ -455,7 +465,8 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       if (_poster == null &&
           !_locked &&
           widget.videoData.isNotEmpty) {
-        await _loadPoster();
+        // Tap eksplisit → boleh unduh + generate (fromTap).
+        await _loadPoster(fromTap: true);
         if (!mounted) return;
       }
       final file = await _ensureLocalFile();
