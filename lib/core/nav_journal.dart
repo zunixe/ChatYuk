@@ -16,6 +16,7 @@ library;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 class NavJournal {
@@ -37,7 +38,6 @@ class NavJournal {
   /// Isi ring buffer (baca-saja, untuk test).
   @visibleForTesting
   static List<String> get ringForTest => List.unmodifiable(_ring);
-
   /// Samarkan id sensitif dari nama rute:
   /// 'private-chat:abc123' → 'private-chat'. Id chat/uid user JANGAN
   /// bocor ke file (walau app-private, prinsipnya minimal).
@@ -81,5 +81,52 @@ class NavJournal {
         await f.writeAsString('$line\n', mode: FileMode.append);
       } catch (_) {}
     }();
+  }
+}
+
+/// Penjaga veto back anti "mati permanen" SEKALIGUS anti "salah keluar".
+///
+/// Konteks (insiden 2026-10-11, terbukti via NavJournal): antara evaluasi
+/// `canPop` dan callback `onPopInvoked`, state bisa dibersihkan konkuren
+/// (mis. rebuild stream memanggil clear) → veto BASI (tak ada yang menahan).
+/// Force-pop saat veto basi SALAH: niat user (batal seleksi) sudah terpenuhi,
+/// pop malah mengeluarkan app sampai launcher.
+///
+/// Aturan:
+/// - Veto basi (tak ada yang menahan SAAT callback) → NO-OP, kecuali basi
+///   yang SAMA berulang ≥2x (signature identik = state macet beneran) →
+///   escape sekali.
+/// - Handler melempar + route masih mounted & masih tertahan → escape sekali.
+/// - Escape = flag `_backEscape` (PopScope juga mem-veto pop programatik!)
+///   + [safePop] (mounted-check + try/catch: pop di context mati melempar
+///   dan merusak dispatcher).
+class BackVetoGuard {
+  String _lastSig = '';
+  int _repeat = 0;
+
+  /// Veto basi dengan [sig] ini boleh escape? True hanya bila [sig] yang
+  /// SAMA sudah terlihat ≥2x berturut (bukan perubahan konkuren).
+  bool shouldEscape(String sig) {
+    if (sig == _lastSig) {
+      _repeat++;
+    } else {
+      _lastSig = sig;
+      _repeat = 1;
+    }
+    return _repeat >= 2;
+  }
+
+  /// Panggil tiap veto ASLI (masih ada yang menahan) & tiap pop sukses —
+  /// penghitung pengulangan mulai dari nol lagi.
+  void reset() {
+    _lastSig = '';
+    _repeat = 0;
+  }
+
+  /// Pop yang tak pernah melempar (context mati / navigator rusak).
+  static void safePop(BuildContext context) {
+    try {
+      if (context.mounted) Navigator.of(context).pop();
+    } catch (_) {}
   }
 }

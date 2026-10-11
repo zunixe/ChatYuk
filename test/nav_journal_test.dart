@@ -41,4 +41,19 @@ void main() {
       await dir.delete(recursive: true);
     });
   });
+
+  group('BackVetoGuard', () {
+    test('veto basi pertama NO-OP (jangan escape), berulang baru escape', () {
+      final g = BackVetoGuard();
+      expect(g.shouldEscape('pcl:clean'), isFalse);
+      expect(g.shouldEscape('pcl:clean'), isTrue);
+    });
+    test('reset mengulang hitungan dari nol', () {
+      final g = BackVetoGuard();
+      expect(g.shouldEscape('pcl:clean'), isFalse);
+      g.reset();
+      expect(g.shouldEscape('pcl:clean'), isFalse);
+      expect(g.shouldEscape('pcl:clean'), isTrue);
+    });
+  });
 }

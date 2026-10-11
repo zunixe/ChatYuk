@@ -163,6 +163,13 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                       // besar tepat saat transisi push = "serasa lambat".
                       // FASE FULL (setelah _loadFull): pakai 1600 untuk zoom.
                       cacheWidth: _fullBytes == null ? 1080 : 1600,
+                      // Decode gagal (bytes korup/kosong) → ikon JELAS, bukan
+                      // layar hitam polos (laporan "blank" tak terdiagnosa).
+                      errorBuilder: (_, _, _) => const Icon(
+                        Icons.broken_image_outlined,
+                        size: 64,
+                        color: Colors.white54,
+                      ),
                     ),
                   ),
                 ),

@@ -31,6 +31,9 @@ String privateChatRoute(String chatId) => 'private-chat:$chatId';
 class RouteTracker extends NavigatorObserver {
   final Set<String> active = {};
 
+  /// Urutan push (untuk jurnal: depth SEBENARNYA, bukan distinct-name).
+  final List<String> order = [];
+
   bool contains(String name) => active.contains(name);
 
   static String _label(Route<dynamic>? route) {
@@ -43,15 +46,20 @@ class RouteTracker extends NavigatorObserver {
   void _add(Route<dynamic> route) {
     final n = route.settings.name;
     if (n != null && n.isNotEmpty) active.add(n);
+    order.add(_label(route));
     debugPrint('[NAV] push ${_label(route)} stack=${active.toList()}');
-    NavJournal.log('push ${_label(route)} depth=${active.length}');
+    NavJournal.log('push ${_label(route)} depth=${order.length}');
   }
 
   void _remove(Route<dynamic> route) {
     final n = route.settings.name;
     if (n != null && n.isNotEmpty) active.remove(n);
+    final label = _label(route);
+    // Buang kemunculan TERAKHIR (LIFO) — duplikat nama tetap seimbang.
+    final i = order.lastIndexOf(label);
+    if (i >= 0) order.removeAt(i);
     debugPrint('[NAV] pop ${_label(route)} stack=${active.toList()}');
-    NavJournal.log('pop ${_label(route)} depth=${active.length}');
+    NavJournal.log('pop ${_label(route)} depth=${order.length}');
   }
 
   @override
@@ -73,7 +81,7 @@ class RouteTracker extends NavigatorObserver {
     debugPrint(
         '[NAV] replace ${_label(oldRoute)} -> ${_label(newRoute)} stack=${active.toList()}');
     NavJournal.log(
-        'replace ${_label(oldRoute)} -> ${_label(newRoute)} depth=${active.length}');
+        'replace ${_label(oldRoute)} -> ${_label(newRoute)} depth=${order.length}');
   }
 }
 

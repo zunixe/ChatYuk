@@ -106,11 +106,22 @@ class MainActivity : FlutterActivity() {
     // banking. Cold start berikutnya tap ikon → gelap → skeleton, bukan
     // foto konten terakhir yang terang. State secure Dart (private chat)
     // dipertahankan — hanya clear kalau memang bukan request Dart.
+    //
+    // PENTING (insiden blank-hitam tiap resume, 2026-10-11): DULU selalu
+    // tambah FLAG_SECURE saat pause → SEMUA snapshot recents HITAM → tiap
+    // buka app dari recents, sistem menampilkan snapshot hitam sampai frame
+    // pertama Flutter (detik saat resume berat!) = "blank". SEKARANG: hanya
+    // pertahankan bila Dart SUDAH secure (private chat terbuka — privasi).
+    // Jika tidak secure, JANGAN tambah → resume menampilkan snapshot asli
+    // (instan, tanpa flash hitam). Cold start tetap ditutup BootOverlay
+    // native di atas, jadi tak ada regresi anti-blink.
     override fun onPause() {
         super.onPause()
         wasSecureAtPause =
             window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        // wasSecureAtPause==true → Dart sedang secure (private chat): biarkan
+        // (snapshot gelap = privasi yang diinginkan). ==false → jangan sentuh
+        // (snapshot normal = resume instan).
     }
 
     override fun onResume() {
