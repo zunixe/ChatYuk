@@ -10,7 +10,7 @@ import '../../config/app_flavor.dart';
 import '../../config/strings.dart';
 import '../../config/theme.dart';
 import '../../core/admin_gate.dart';
-import '../../screens/point_history/widgets/topup_sheet.dart';
+import '../../core/nav_gate.dart';
 import '../../services/points_service.dart';
 import '../../utils.dart';
 import '../../widgets/points_toast.dart';
@@ -360,8 +360,10 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   }
 
   void _openTopupOrSoon(BuildContext context, S s) {
-    if (AppFlavor.topupEnabled || AdminGate.enabled || topupPathOpen) {
-      showTopupSheet(context, s);
+    final show = NavGate.topupSheet;
+    if ((AppFlavor.topupEnabled || AdminGate.enabled || topupPathOpen) &&
+        show != null) {
+      show(context, s);
     } else {
       ScaffoldMessenger.of(
         context,

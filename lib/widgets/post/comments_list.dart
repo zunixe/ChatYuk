@@ -1,8 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/user_model.dart';
 import '../../providers/riverpod/auth_provider.dart';
@@ -228,7 +226,6 @@ class CommentsListState extends ConsumerState<CommentsList> {
   // true setelah fetch pertama selesai (atau cache ada) — sebelum itu
   // tampilkan skeleton, bukan kotak kosong.
   bool _loaded = false;
-  RealtimeChannel? _channel;
   final ScrollController _scrollCtrl = ScrollController();
 
   @override
@@ -251,42 +248,28 @@ class CommentsListState extends ConsumerState<CommentsList> {
 
   @override
   void dispose() {
-    final ch = _channel;
-    _channel = null;
-    if (ch != null) {
-      try {
-        ch.unsubscribe();
-        Supabase.instance.client.removeChannel(ch);
-      } catch (_) {}
-    }
+    try {
+      _commentsCleanup?.call();
+      _commentsCleanup = null;
+    } catch (_) {}
     _scrollCtrl.dispose();
     super.dispose();
   }
 
   /// Realtime komentar HANYA untuk post ini (filter post_id) — komentar baru
   /// dari orang lain muncul live; unsubscribe saat sheet ditutup.
+  // Cleanup channel komentar (dari service via provider) — dipanggil dispose.
+  void Function()? _commentsCleanup;
+
   void _subscribeRealtime() {
     try {
-      final sb = Supabase.instance.client;
-      final ch = sb.channel('post-comments-${widget.postId}');
-      final filter = PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'post_id',
-        value: widget.postId,
-      );
-      ch.onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'post_comments',
-        filter: filter,
-        callback: (_) {
-          if (mounted) _load();
-        },
-      );
-      ch.subscribe((status, err) {
-        if (err != null) debugPrint('[POST] comments realtime error: $err');
+      // Boundary: widget dilarang buka channel Supabase langsung — lewat
+      // provider → service (timelineProvider.watchPostComments).
+      _commentsCleanup = ProviderScope.containerOf(context, listen: false)
+          .read(timelineProvider.notifier)
+          .watchPostComments(widget.postId, () {
+        if (mounted) _load();
       });
-      _channel = ch;
     } catch (_) {}
   }
 

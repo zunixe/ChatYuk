@@ -160,8 +160,10 @@ class VideoPrefetch {
   static Future<ui.Image?> _loadPersistedBitmap(String videoPath) async {
     try {
       final f = await _bmpFile(videoPath);
-      if (!f.existsSync() || f.lengthSync() < 8) return null;
-      final b = f.readAsBytesSync();
+      if (!await f.exists() || await f.length() < 8) return null;
+      // P1b: baca ASYNC (bukan readAsBytesSync) — bitmap poster RGBA bisa
+      // 1-4MB; baca sinkron di UI thread = stall saat buka chat.
+      final b = await f.readAsBytes();
       final bd = ByteData.sublistView(b);
       final w = bd.getUint32(0);
       final h = bd.getUint32(4);

@@ -200,7 +200,7 @@ class _MessageImageState extends State<MessageImage> {
             );
             putDecodedCache(key, td);
             // Bitmap thumb di latar → RawImage pada render berikutnya.
-            unawaited(attachDecodedImage(td, targetWidth: 1080).then((_) {
+            unawaited(attachDecodedImage(td, targetWidth: 720).then((_) {
               if (mounted && gen == _gen && td.image != null) setState(() {});
             }));
             _fadeNext = true;
@@ -274,7 +274,7 @@ class _MessageImageState extends State<MessageImage> {
     // Set state SEKARANG (fallback Image.memory render instan), lalu decode
     // bitmap di latar → begitu siap, RawImage dipakai (nol decode) pada render
     // berikutnya. TIDAK menunggu (agar tak gantung bila codec lambat/gagal).
-    unawaited(attachDecodedImage(decoded, targetWidth: 1080).then((_) {
+    unawaited(attachDecodedImage(decoded, targetWidth: 720).then((_) {
       if (mounted && gen == _gen && decoded.image != null) setState(() {});
     }));
     if (!mounted || gen != _gen) return;
@@ -414,7 +414,7 @@ class _MessageImageState extends State<MessageImage> {
       gaplessPlayback: true,
       // Decode max 1080px (bukan full-res 12MP): bubble max 280px,
       // zoom inline 6x tetap tajam; hemat ~6x RAM bitmap.
-      cacheWidth: 1080,
+      cacheWidth: 720,
       errorBuilder: (_, _, _) => GestureDetector(
         onTap: _retry,
         child: Container(

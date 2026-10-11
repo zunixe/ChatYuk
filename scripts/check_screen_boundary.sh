@@ -50,5 +50,19 @@ for pat in "\(\.\./\)\+services/" "\(\.\./\)\+providers/" "package:chatyuk/servi
   fi
 done
 
+# Gate diperluas 2026-10-11 (Fase P2c): PROVIDER dilarang import screens/.
+# Arah dependensi wajib: screens → providers → services → core.
+# Provider yang butuh navigasi/dialog UI → inject via core/*_gate.dart
+# (AdminGate/NavGate), di-wire di main.dart.
+prov_hits=$(grep -rn "import '\(\.\./\)\+screens/" lib/providers --include='*.dart' || true)
+if [ -n "$prov_hits" ]; then
+  echo "DITOLAK: provider dilarang import screens/ (arah dependensi terbalik)."
+  echo "$prov_hits" | head -20
+  echo
+  echo "Perbaikan: inject builder/callback via lib/core/nav_gate.dart"
+  echo "(pola AdminGate), di-wire di lib/main.dart."
+  exit 1
+fi
+
 # Cari import core/<sub>/ yang tidak lewat prefix core (defensif).
-echo "OK: 0 screen/widget/mixin import services/ + 0 core import services/providers."
+echo "OK: 0 screen/widget/mixin import services/ + 0 core import services/providers + 0 provider import screens/."

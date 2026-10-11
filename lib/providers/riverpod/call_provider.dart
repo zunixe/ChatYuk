@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/supabase_config.dart';
 import '../../core/nav_journal.dart';
 import '../../main.dart';
-import '../../screens/incoming_call_screen.dart';
+import '../../core/nav_gate.dart';
 import '../../services/call_service.dart';
 import '../../services/call/call_session.dart';
 export '../../services/call_service.dart' show CallService;
@@ -329,12 +329,15 @@ class CallNotifier extends Notifier<CallState> {
     nav.push(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => IncomingCallScreen(
-          callId: callId,
-          callerUid: callerUid,
-          callType: callType,
-          chatId: row['chat_id'] as String? ?? '',
-        ),
+        builder: (_) =>
+            NavGate.incomingCallBuilder?.call(
+              callId: callId,
+              callerUid: callerUid,
+              callType: callType,
+              chatId: row['chat_id'] as String? ?? '',
+              autoAccept: false,
+            ) ??
+            const SizedBox.shrink(),
       ),
     );
     unawaited(
@@ -449,13 +452,15 @@ class CallNotifier extends Notifier<CallState> {
     nav.push(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => IncomingCallScreen(
-          callId: callId,
-          callerUid: row!['caller_id'] as String? ?? '',
-          callType: row['call_type'] as String? ?? 'video',
-          chatId: row['chat_id'] as String? ?? '',
-          autoAccept: true,
-        ),
+        builder: (_) =>
+            NavGate.incomingCallBuilder?.call(
+              callId: callId,
+              callerUid: row!['caller_id'] as String? ?? '',
+              callType: row['call_type'] as String? ?? 'video',
+              chatId: row['chat_id'] as String? ?? '',
+              autoAccept: true,
+            ) ??
+            const SizedBox.shrink(),
       ),
     );
   }
