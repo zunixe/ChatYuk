@@ -3887,3 +3887,30 @@ memakai token segar. Gagal refresh (offline) ditelan → SDK retry normal.
 - `Skipped frames` saat resume: **89 → 33** (sisa = DDIC idle MIUI + I/O resume,
   bukan lagi reconnect storm — lihat §27).
 - Commit `70b15cb`.
+
+---
+
+## §47. Audit avatar — provider stabil per-uid (2026-10-11)
+
+**Audit sistem avatar ChatYuk:**
+- Sumber: `AvatarB64Service` (RAM→disk `MediaDiskCache`→network) + provider
+  Riverpod `avatarProvider`. Sumber avatar server = **PATH** `avatars/...`
+  (62 char), BUKAN base64 inline — terverifikasi 12 post (PATH/EMPTY).
+- `UserAvatar`/`PersonAvatar`: BENAR — provider stabil per-uid, cap 120 entri,
+  decode 96px, disk-sync `MediaDiskCache`.
+- `AdminAvatarCircle` tile 34px: BENAR (pakai `UserAvatar`). `cacheWidth:1080`
+  hanya di dialog zoom (di-evict saat tutup) = wajar.
+
+**Bottleneck (bukti kode):** `PostAuthorAvatar` (timeline), `CommentAvatar`
+(komentar), `ProfileAvatar` memakai `Image.memory(bytes)` polos →
+`MemoryImage` identity BARU tiap remount → `ImageCache` MISS → **decode ulang**
+saat scroll (pola sama foto timeline §45).
+
+**Fix:** helper publik `avatarImageProviderFor(uid, bytes)` di
+`user_avatar.dart` (instance stabil per-uid, bounded cap 120, reuse
+`_cappedAvatarImage` 96px). Ketiga komponen pakai `Image(image:)` → ImageCache
+HIT lintas rebuild/remount; fallback `Image.memory` bila uid kosong.
+Commit `47f2b72`, `d652041`. Analyze 0; test image_cap/post_card hijau.
+
+**Belum diukur:** cache hit rate & RAM sebelum/sesudah (butuh profiling
+device); file-size guard merah karena `chat_video_bubble.dart` (kerja lain).
