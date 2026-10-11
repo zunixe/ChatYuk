@@ -68,9 +68,6 @@ mixin _PcCoreMx on _PrivateChatBase {
       _typingSub?.cancel();
       _typingSub = null;
     }
-    final points = ref.watch(pointsProvider.select((p) => p.points));
-    final pointsEnabled = ref.watch(pointsProvider.select((p) => p.enabled));
-
     // Show online bonus toast jika ada yang nunggu (sekali per buka chat).
     if (!_bonusToastScheduled) {
       _bonusToastScheduled = true;
@@ -439,7 +436,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                       }
                     },
                     itemBuilder: (_) {
-                      final (:following, :friendLocked) = ref.watch(
+                      final (:following, :friendLocked) = ref.read(
                         socialProvider.select(
                           (s) => (
                             following: s.isFollowing(widget.otherUid),
@@ -840,41 +837,53 @@ mixin _PcCoreMx on _PrivateChatBase {
                               );
                             },
                           ),
-                          if (pointsEnabled)
-                            Positioned(
-                              top: 8,
-                              right: 12,
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.bgCard,
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.15,
+                          // L2: chip 🪙 di Consumer kecil — perub. poin tak
+                          // rebuild root layar.
+                          Consumer(
+                            builder: (context, refPts, _) {
+                              final pts = refPts.watch(
+                                pointsProvider.select((p) => p.points),
+                              );
+                              final on = refPts.watch(
+                                pointsProvider.select((p) => p.enabled),
+                              );
+                              if (!on) return const SizedBox.shrink();
+                              return Positioned(
+                                top: 8,
+                                right: 12,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.bgCard,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.15,
+                                        ),
+                                        blurRadius: 8,
+                                        offset: Offset(0, 2),
                                       ),
-                                      blurRadius: 8,
-                                      offset: Offset(0, 2),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    '🪙 $pts',
+                                    style: AppText.label.copyWith(
+                                      color: AppTheme.textPrimary,
+                                      fontWeight: FontWeight.w700,
                                     ),
-                                  ],
-                                ),
-                                child: Text(
-                                  '🪙 $points',
-                                  style: AppText.label.copyWith(
-                                    color: AppTheme.textPrimary,
-                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                              ),
-                            ),
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ),
-                    _buildBottomBar(context, s, pointsEnabled),
+                    _buildBottomBar(context, s),
                   ],
                 ),
               ),

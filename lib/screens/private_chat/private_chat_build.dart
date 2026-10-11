@@ -507,7 +507,10 @@ mixin _PcBuildMx on _PrivateChatBase {
     }
   }
 
-  Widget _buildBottomBar(BuildContext context, S s, bool pointsEnabled) {
+  Widget _buildBottomBar(BuildContext context, S s) {
+    // L2: baca enabled DI SINI (bukan di root build) — perub. poin tak
+    // rebuild header/list; hanya composer.
+    final pointsEnabled = ref.watch(pointsProvider.select((p) => p.enabled));
     return Container(
       padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
       decoration: BoxDecoration(
