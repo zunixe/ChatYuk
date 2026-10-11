@@ -3660,3 +3660,45 @@ R2/R4/R6/R7/R10 punya temuan → 16 commit perbaikan.
   **1872 lulus, 0 gagal**; guard file-size: OK.
 - **Catatan (R9):** angka PSS ini bukan bukti "tidak ada leak" — hanya
   memastikan trim responsif. Audit TIDAK mengklaim bebas lag.
+
+---
+
+## §44. Prioritas 4 — Rebuild realtime private chat (2026-10-11)
+
+**Hipotesis awal (dari diagram "pesan masuk → seluruh app rebuild"):** pesan
+realtime memicu rebuild besar. **HASIL AUDIT: TIDAK TERBUKTI.** `ChatStreamSession
+._emit` hanya `controller.add` ke stream layar chat yang terbuka; list chat punya
+stream per-uid + debounce 180ms + dedupe fetch. Jadi yang tersisa = rebuild DI
+DALAM layar chat.
+
+**Titik nyata yang diperbaiki:**
+- `_scheduleRebuild()` = `setState()` di ROOT layar untuk update header
+  (status/last-seen/kota/umur/gender/read) → membangun ulang AppBar+Scaffold+
+  PopScope+list padahal 1 baris subtitle berubah.
+
+**Patch (commit terpisah):**
+1. `chatHeaderProvider(chatId)` — `AutoDisposeNotifierProviderFamily` +
+   `ChatHeader` immutable (`==` value-based → patch identik = nol notify).
+2. Sumber tulis header (status sub, chatInfo sub, getOtherProfile, cached-read,
+   prime deleted) → `_patchHdr`, bukan `setState`. `_scheduleRebuild` untuk
+   header: **12 → 4 call site** (sisanya reactions/starred/deleted — memang
+   mengubah bubble, bukan header).
+3. Title AppBar → `Consumer(ref.watch header)`; hanya subtitle/status rebuild.
+4. Read-receipt (centang-2) → `_lastReadNotifier` (di-drive `ref.listen`
+   header) → subtree LIST saja. Root `build()` tak lagi baca header.
+   `toolbarHeight` konstan 56 (headerRows selalu <=2).
+5. L2: `points`/`social` watch keluar dari root (chip 🪙 Consumer kecil,
+   `_buildBottomBar` baca sendiri); `socialProvider` di menu titik-3 `watch`→
+   `read` (itemBuilder bukan tempat valid ref.watch — perbaikan bug).
+
+**Ukur (Xiaomi 24129PN74G, build profile + PERF_PROBE):**
+- Baseline & sesudah **tidak comparable** (sesi beda panjang: 650 vs 1548
+  frame) → tidak diklaim sebagai perbaikan terukur. Yang tercatat:
+  `build[p50=0.3ms p90=2.8ms]` · janky(build)=1/1548 · `PrivateChat=12` build.
+- **Temuan baru (belum diperbaiki, di luar scope):** `rpc.mark_chat_read`
+  terpanggil beruntun (4–8× per sesi <30 dtk) walau throttle 2500ms di
+  `ChatService.markAsRead` — perlu investigasi terpisah (kandidat: beberapa
+  jalur memanggil dengan instance/uid berbeda).
+
+**Status:** perubahan struktur terverifikasi via `flutter analyze lib/`=0,
+`flutter test` hijau, guard file-size OK. **Tidak** diklaim bebas lag (§11).
