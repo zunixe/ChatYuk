@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../../config/supabase_config.dart';
 import '../../core/admin_err.dart';
+import '../../core/app_foreground.dart';
 import '../../utils.dart';
 
 /// Status koneksi global (Riverpod) — dipakai banner offline di atas semua
@@ -35,7 +36,13 @@ class ConnectivityNotifier extends Notifier<bool> {
     // Pengaman "stuck offline": revalidasi berkala murah.
     _revalidateTimer = Timer.periodic(
       const Duration(seconds: 20),
-      (_) => _recheck(),
+      (_) {
+        // BATERAI (P4): skip saat app di-background — `_recheck` memanggil
+        // platform channel `checkConnectivity()` (bangunkan UI isolate).
+        // Revalidasi tetap terjadi saat resume (`revalidate()` di app.dart).
+        if (!AppForeground.now) return;
+        _recheck();
+      },
     );
     ref.onDispose(() {
       _revalidateTimer?.cancel();
