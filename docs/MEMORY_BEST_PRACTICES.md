@@ -289,6 +289,32 @@ Status per jalur (audit 2026-10-11):
 **JANGAN** bikin permukaan gambar baru dengan RAM-only cache atau fetch
 post-frame tanpa baca sinkron dulu.
 
+### 9b. Degradasi waktu ("makin lama makin lambat") + tabrakan hash + cap disk (2026-10-11)
+
+**LEAK UTAMA (P0):** `ChatStreamSession` (channel realtime + `Timer.periodic(30s)`
++ list `_current`) BOCOR tiap buka-tutup private chat. Akar: subscription ke
+stream-nya (`handle.stream.listen(...)` di `private_chat_open_timing.dart`)
+**tidak disimpan** → `onCancel` tak pernah fire → `removeChannel`+poll cancel tak
+jalan. **ATURAN: setiap `listen()` ke stream yang punya `onCancel`/cleanup WAJIB
+disimpan subscription-nya & di-`cancel()` di dispose.** (P0b `controller.close()`
+di `onCancel` DIBATALKAN — merusak broadcast reuse `handle.stream.first`.)
+Verifikasi: buka-tutup 10/20/30× → memori 354→354→**353MB** (dulu naik terus).
+
+**Tabrakan hash:** `mediaCacheFileName` FNV-32 → **64-bit** (BigInt). Semua kunci
+turunan wajib pakai **`hashKey64(string penuh)`**, JANGAN `'x:${s.hashCode}'`
+(double-hash 32-bit → ruang tabrakan ganda; path versioned tumbuh → media bisa
+tertukar).
+
+**Perf:** `readSync` JANGAN di loop panjang (pakai `readManyAsync`);
+`_enforceQuota` throttle 30s (bukan tiap write); `decodedImageCache` cap 32 +
+LRU sejati; `VideoFileCache` LRU O(N); `ui.Image` di-dispose saat dibuang.
+
+**Cap disk (wajib):** `PhotoCache` 50MB LRU; `MediaDiskCache._index` cap 5000.
+
+**Akumulasi:** Set/Map per-aksi WAJIB cap FIFO (`_readRoomIds` 500,
+`_seenSignalIds` 2000, `_diskAvatars` 800).
+
+
 
 ---
 
