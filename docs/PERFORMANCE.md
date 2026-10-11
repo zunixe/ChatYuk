@@ -3871,3 +3871,19 @@ mengganggu).
 **Status:** notifikasi TERVERIFIKASI andal; gate timer TERVERIFIKASI (0 log bg);
 jangka-panjang mAh belum diukur penuh (butuh 30–60 mnt ideal). Tidak diklaim
 "hemat X%" tanpa data penuh.
+
+### §46c. Fix JWT expired saat resume (2026-10-11)
+
+**Akar (terukur):** app background panjang → auto-refresh token supabase tak
+jalan → `InvalidJWTToken: Token has expired 144s` → stream realtime error
+beruntun → reconnect + refresh token sekaligus → `Skipped 89 frames` saat resume.
+
+**Fix:** `AuthService.goOnline()` (dipanggil saat resume) memanggil
+`_sb.auth.refreshSession()` **SEBELUM** update status — reconnect realtime
+memakai token segar. Gagal refresh (offline) ditelan → SDK retry normal.
+
+**Before → after (HP, resume setelah ~4 mnt bg):**
+- `InvalidJWT/Token expired`: **4+ → 0**.
+- `Skipped frames` saat resume: **89 → 33** (sisa = DDIC idle MIUI + I/O resume,
+  bukan lagi reconnect storm — lihat §27).
+- Commit `70b15cb`.
