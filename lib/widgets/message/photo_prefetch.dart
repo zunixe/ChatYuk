@@ -52,6 +52,45 @@ class PhotoPrefetch {
       final msgs =
           MessageCache.instance.peekMessages(chatKey) ?? const <MessageModel>[];
       if (msgs.isEmpty) return;
+      await _warmMessages(chatKey, msgs);
+    } catch (err) {
+      if (kDebugMode) debugPrint('[PhotoPrefetch] error: $err');
+    }
+  }
+
+  /// Warmup STARTUP (anti-kedip cold start, insiden 2026-10-11): decode thumb
+  /// [maxChats] chat terbaru di LATAR setelah konten tampil. Tanpa ini
+  /// tap-precache berpacu dengan SQLCipher dingin (timeout 300-450ms) dan
+  /// bubble foto ngeblink walau sudah persist di disk. Bonus: query pertama
+  /// menghangatkan SQLCipher untuk tap berikutnya. Bounded (3 chat × 6 foto),
+  /// tak melempar; pemanggil beri timeout + delay agar frame awal settle.
+  static Future<void> precacheRecentChats(
+    List<String> chatKeys, {
+    int maxChats = 3,
+  }) async {
+    var done = 0;
+    for (final key in chatKeys) {
+      if (done >= maxChats) break;
+      try {
+        // Hangatkan SQLCipher + mem (query dingin ~1 dtk, lalu cepat).
+        await MessageCache.instance.preloadMessages(key);
+        final msgs =
+            MessageCache.instance.peekMessages(key) ?? const <MessageModel>[];
+        if (msgs.isEmpty) continue;
+        await _warmMessages(key, msgs);
+        done++;
+      } catch (_) {}
+    }
+  }
+
+  /// Inti disk-only (tanpa context/download): thumb terbaru → decode →
+  /// bitmap + daftarkan ke decoded-mem-cache dengan SEMUA kunci yang dibaca
+  /// [MessageImage] (hash imageData/path + fallback 'thumb:id').
+  static Future<void> _warmMessages(
+    String chatKey,
+    List<MessageModel> msgs,
+  ) async {
+    try {
       // Ambil foto terbaru dulu (paling mungkin di viewport saat buka).
       // PENTING: JANGAN syaratkan `imageData.isNotEmpty` — di cache pesan,
       // base64 foto SENGAJA di-strip (hemat disk) sehingga `imageData` KOSONG
