@@ -39,5 +39,29 @@ class ViewOnceTick {
   }
 }
 
+/// State view-once per messageId (countdown/kunci). GLOBAL (lintas screen)
+/// karena viewer & bubble berbagi tick yang sama.
+///
+/// BOUNDED (R4/R6): dulu tumbuh per pesan view-once dibuka tanpa batas
+/// (dibersihkan hanya saat expired via remove(id)) → sesi lama menumpuk
+/// ViewOnceTick. Cap FIFO: entri TERTUA dibuang saat melebihi. Aman: entri
+/// yang SEDANG dibuka tak pernah jadi "tertua" (baru dimasukkan), dan
+/// pembuangan tak menyentuh objek yang dipegang widget (bubble cek
+/// `identical` sebelum pakai — lihat view_once_image.dart:130).
 final viewOnceStates = <String, ViewOnceTick>{};
+
+/// Batas jumlah state view-once di memori.
+const int viewOnceStatesMax = 100;
+
+/// Daftarkan [tick] untuk [id] dengan cap FIFO. Mengembalikan objek yang
+/// dipakai (existing bila ada, atau yang baru).
+ViewOnceTick putViewOnceState(String id, ViewOnceTick tick) {
+  final existing = viewOnceStates[id];
+  if (existing != null) return existing;
+  if (viewOnceStates.length >= viewOnceStatesMax) {
+    viewOnceStates.remove(viewOnceStates.keys.first);
+  }
+  viewOnceStates[id] = tick;
+  return tick;
+}
 

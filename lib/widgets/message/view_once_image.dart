@@ -61,7 +61,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       return;
     }
     final id = widget.messageId ?? 'pending-${widget.imageData.hashCode}';
-    _tick = viewOnceStates[id] ?? (viewOnceStates[id] = ViewOnceTick());
+    _tick = putViewOnceState(id, ViewOnceTick());
     if (widget.viewSecs != null) {
       _tick.totalSecs = resolveViewOnceSecs(widget.viewSecs);
     }
