@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
+import '../core/cache/media_disk_cache.dart';
 import '../core/media/native_image.dart';
 import '../utils.dart';
 
@@ -50,8 +52,19 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
       _bytes = cached;
       return;
     }
+    // ANTI-KEDIP cold start: thumb tersimpan di DISK (kunci hash base64) →
+    // baca sinkron dulu (frame pertama galeri langsung foto), decode hanya bila
+    // benar-benar belum ada. Dulu RAM-only → tiap buka profil decode ulang.
+    final disk = MediaDiskCache.instance.readSync(_diskKey(widget.base64));
+    if (disk != null && disk.isNotEmpty) {
+      _cache[widget.base64] = disk;
+      _bytes = disk;
+      return;
+    }
     _decode();
   }
+
+  static String _diskKey(String base64) => 'galb64:${base64.hashCode}';
 
   Future<void> _decode() async {
     final bytes = await NativeImage.decodeThumb(
@@ -61,6 +74,9 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
     );
     if (!mounted) return;
     if (bytes != null && _cache.length < 300) _cache[widget.base64] = bytes;
+    if (bytes != null && bytes.isNotEmpty) {
+      unawaited(MediaDiskCache.instance.write(_diskKey(widget.base64), bytes));
+    }
     setState(() => _bytes = bytes);
   }
 

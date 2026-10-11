@@ -82,13 +82,25 @@ class _PostCardState extends ConsumerState<PostCard> {
     final paths = _imagePaths();
     _imageThumbs.addAll(List.filled(paths.length, null));
     _initAspects(paths);
-    // PERF: foto TIDAK dimuat di initState (frame pertama hanya layout).
-    // Dimuat post-frame — plus `cacheExtent` kecil di Timeline, kartu yang
-    // masih di luar viewport tidak lagi mengunduh+decode foto. Buka Timeline
-    // jadi tidak menembak puluhan foto sekaligus.
+    // ANTI-KEDIP: thumb yang SUDAH ada di RAM/disk dibaca SINKRON dulu (frame
+    // pertama Timeline langsung foto). Tanpa ini placeholder tampil dulu →
+    // thumb menyusul post-frame = kedip saat cold start (pola sama foto chat).
+    var syncHit = false;
+    for (var i = 0; i < paths.length; i++) {
+      final t = PostPhotoCache.instance.thumbSync(paths[i]);
+      if (t != null && t.isNotEmpty) {
+        _imageThumbs[i] = t;
+        syncHit = true;
+      }
+    }
+    // PERF: foto yang BELUM ada di cache TIDAK dimuat di initState (frame
+    // pertama hanya layout). Dimuat post-frame — plus `cacheExtent` kecil di
+    // Timeline, kartu di luar viewport tak mengunduh+decode foto.
     if (paths.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        // Sudah lengkap dari cache sinkron → tak perlu fetch lagi.
+        if (syncHit && _imageThumbs.every((t) => t != null)) return;
         _loadImages(_imagePaths());
       });
     }
