@@ -6,19 +6,25 @@ mixin ChatServicePrivateChatListMx on ChatBase {
   // Throttle markAsRead per chat — chat aktif dengan banyak pesan masuk
   // memanggil ini tiap pesan; cukup sekali per ~2.5s (read state jarang
   // berubah & RPC-nya berat di jaringan). Emit lokal tetap jalan.
-  final Map<String, DateTime> _lastMarkReadAt = {};
+  //
+  // STATIS (lintas instance): ChatService dibuat BEBERAPA kali (chatProvider,
+  // roomProvider, onlineUsersProvider, + main_notifications) sehingga map
+  // per-instance membuat throttle TIDAK terbagi → RPC mark_chat_read bocor
+  // beruntun (terukur 4–8×/sesi walau window 2500ms). Satu map global = satu
+  // kebijakan throttle untuk chatId yang sama, apa pun instance-nya.
+  // (map throttle lihat top-level `_markReadLastAt` di bawah mixin)
 
   Future<void> markAsRead(String chatId, String uid) async {
     try {
       final now = DateTime.now();
-      final last = _lastMarkReadAt[chatId];
+      final last = _markReadLastAt[chatId];
       if (last != null && now.difference(last).inMilliseconds < 2500) {
         // Masih dalam window throttle → tetap update snapshot lokal (murah,
         // UI centang-2 instan) tanpa RPC.
         _applyLocalRead(uid, chatId);
         return;
       }
-      _lastMarkReadAt[chatId] = now;
+      _markReadLastAt[chatId] = now;
       await measuredRpc(_sb, 
         'mark_chat_read',
         params: {'p_chat_id': chatId, 'p_uid': uid},
@@ -747,4 +753,20 @@ mixin ChatServicePrivateChatListMx on ChatBase {
         .eq('blocker_id', myUid);
     return res.map((r) => '${r['blocked_id']}').toList();
   }
+}
+
+// ── Throttle markAsRead: GLOBAL (lintas instance ChatService) ──
+// ChatService dibuat beberapa kali (chatProvider/roomProvider/online/notif) →
+// map per-instance tak terbagi → RPC mark_chat_read bocor (terukur 4-8x).
+// Top-level (bukan static mixin) supaya bisa diakses kelas + test.
+final Map<String, DateTime> _markReadLastAt = {};
+
+@visibleForTesting
+void resetMarkReadThrottleForTest() => _markReadLastAt.clear();
+
+@visibleForTesting
+bool isMarkReadThrottledForTest(String chatId, {int windowMs = 2500}) {
+  final last = _markReadLastAt[chatId];
+  if (last == null) return false;
+  return DateTime.now().difference(last).inMilliseconds < windowMs;
 }

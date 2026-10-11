@@ -147,6 +147,15 @@ class ChatService extends ChatBase with ChatServicePrivateMx, ChatServicePrivate
   /// Client opsional untuk test; produksi → `SupabaseConfig.client`.
   ChatService([super.sb]);
 
+  /// Reset throttle markAsRead (uji) — map top-level global.
+  @visibleForTesting
+  static void resetMarkReadThrottle() => resetMarkReadThrottleForTest();
+
+  /// Sudah di-throttle untuk [chatId]? (uji)
+  @visibleForTesting
+  static bool markReadThrottled(String chatId, {int windowMs = 2500}) =>
+      isMarkReadThrottledForTest(chatId, windowMs: windowMs);
+
   // ── Cache avatar: KONSOLIDASI ke AvatarB64Service ────────────────────────
   // API statis dipertahankan (caller: auth_provider & chat_service_presence)
   // tapi seluruh isi delegasi ke `AvatarB64Service` (RAM→disk→network,
