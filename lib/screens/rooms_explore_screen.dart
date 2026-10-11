@@ -13,6 +13,7 @@ import 'room_chat_screen.dart';
 import 'rooms_explore/widgets/category_chips.dart';
 import 'rooms_explore/widgets/create_room_sheet.dart';
 import 'rooms_explore/widgets/room_explore_card.dart';
+import '../widgets/message/photo_prefetch.dart';
 import '../config/strings.dart';
 
 /// Explore room ala gambar: chip kategori (Rame = agregat online > 0) +
@@ -58,6 +59,15 @@ class _RoomsExploreScreenState extends ConsumerState<RoomsExploreScreen> {
     if (!mounted) return;
     final navKey = navKeyRoom(room.id);
     if (!tryClaimNav(navKey)) return;
+    // Precache poster/thumb dari cache (bila ada) — frame pertama room isi.
+    try {
+      await PhotoPrefetch.precacheAll(context, 'room_${room.id}')
+          .timeout(const Duration(milliseconds: 450));
+    } catch (_) {}
+    if (!mounted) {
+      releaseNav(navKey);
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),

@@ -66,6 +66,12 @@ class _MessageImageState extends State<MessageImage> {
     super.initState();
     final key = widget.imageData.hashCode;
     _decoded = decodedImageCache[key];
+    // Fallback THUMB by messageId (di-precache saat tap) — dipakai saat cold
+    // start di mana `imageData` kosong (base64 ter-strip dari cache pesan).
+    // Tanpa ini, bubble kosong dulu lalu thumb muncul = "ngeload/kedip".
+    if (_decoded == null && widget.messageId.isNotEmpty) {
+      _decoded = decodedImageCache['thumb:${widget.messageId}'.hashCode];
+    }
     if (_decoded == null) {
       _loading = true;
       _fadeNext = true;

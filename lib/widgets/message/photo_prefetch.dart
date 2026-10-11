@@ -8,6 +8,7 @@ import '../../core/cache/message_cache.dart';
 import '../../core/cache/photo_cache.dart';
 import '../../core/media/chat_photo_helper.dart';
 import '../../models/message_model.dart';
+import '../video_prefetch.dart';
 import 'image_decode_core.dart';
 
 /// Pre-decode FOTO/THUMB chat ke [decodedImageCache] SEBELUM layar chat tampil.
@@ -26,6 +27,19 @@ class PhotoPrefetch {
   /// Maks foto di-precache per buka chat (bounded — hemat CPU & RAM).
   static const int maxPerChat = 6;
 
+  /// Precache SEMUA media chat (poster video + thumb foto) untuk [chatKey]
+  /// (`private_<chatId>` atau `room_<roomId>`). Dipanggil saat TAP sebelum push
+  /// supaya frame pertama chat sudah terisi gambar (nol 'ngeload'). Bounded &
+  /// tidak melempar; pemanggil boleh beri timeout.
+  static Future<void> precacheAll(BuildContext context, String chatKey) async {
+    try {
+      await VideoPrefetch.precachePosters(context, chatKey);
+    } catch (_) {}
+    try {
+      await PhotoPrefetch.precacheThumbs(context, chatKey);
+    } catch (_) {}
+  }
+
   /// Decode thumbnail `imageData` (path storage) yang sudah ada di PhotoCache
   /// disk → taruh di [decodedImageCache] memakai kunci `hashCode(imageData)`
   /// (KUNCI SAMA yang dibaca [MessageImage]) supaya frame pertama hit.
@@ -39,18 +53,16 @@ class PhotoPrefetch {
           MessageCache.instance.peekMessages(chatKey) ?? const <MessageModel>[];
       if (msgs.isEmpty) return;
       // Ambil foto terbaru dulu (paling mungkin di viewport saat buka).
+      // PENTING: JANGAN syaratkan `imageData.isNotEmpty` — di cache pesan,
+      // base64 foto SENGAJA di-strip (hemat disk) sehingga `imageData` KOSONG
+      // saat cold start. Thumb diambil by messageId dari PhotoCache.
       final photos = msgs
-          .where((m) =>
-              (m.type == 'image' || m.type == 'view_once') &&
-              m.imageData.isNotEmpty)
+          .where((m) => m.type == 'image' || m.type == 'view_once')
           .toList()
         ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
       var n = 0;
       for (final m in photos) {
         if (n >= maxPerChat) break;
-        final data = m.imageData;
-        final key = data.hashCode;
-        if (decodedImageCache.containsKey(key)) continue; // sudah ter-decode.
         // Ambil thumb dari disk (bukan download) — hanya yang sudah ada.
         final thumbB64 = await PhotoCache.instance.loadThumb(chatKey, m.id);
         if (thumbB64 == null || thumbB64.isEmpty) continue;
@@ -62,7 +74,16 @@ class PhotoPrefetch {
         }
         final dims = parseImageDimensions(bytes);
         if (dims == null) continue;
-        putDecodedCache(key, DecodedImage(bytes, dims.width, dims.height));
+        final decoded = DecodedImage(bytes, dims.width, dims.height);
+        // Daftarkan ke BEBERAPA kunci yang mungkin dipakai MessageImage:
+        // - hashCode(imageData/base64) saat base64 ada
+        // - hashCode(path) saat path storage ada
+        // - khusus: kunci fallback by messageId agar selalu HIT saat cold
+        //   start walau imageData kosong (base64 ter-strip dari cache).
+        if (m.imageData.isNotEmpty) {
+          putDecodedCache(m.imageData.hashCode, decoded);
+        }
+        putDecodedCache('thumb:${m.id}'.hashCode, decoded);
         n++;
       }
     } catch (err) {
