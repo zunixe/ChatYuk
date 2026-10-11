@@ -71,7 +71,12 @@ mixin AuthServiceSettingsMx on AuthBase {
   /// terus-menerus).
   Stream<Map<String, dynamic>?> watchGlobalSettings() async* {
     yield await fetchGlobalSettings();
+    // BATERAI: JANGAN fetch tiap 20 dtk saat app di-background (dulu RPC
+    // global-settings jalan seumur app walau layar mati — terukur di
+    // batterystats). Saat foreground, refresh instan lagi (event berikut
+    // menyusul; perubahan admin tertinggal maksimum 1 siklus saat resume).
     yield* Stream<void>.periodic(const Duration(seconds: 20))
+        .where((_) => AppForeground.now)
         .asyncMap((_) => fetchGlobalSettings());
   }
 
