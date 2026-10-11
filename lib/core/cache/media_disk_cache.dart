@@ -8,8 +8,8 @@ import '../../utils.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Nama file cache = hash FNV-1a (32-bit) dari serverPath, hex 8 digit.
-/// Murni & top-level supaya bisa di-unit-test (stabilitas & anti-tabrakan).
-@visibleForTesting
+/// Murni & top-level: dipakai `MediaDiskCache` dan `VideoFileCache`
+/// (keduanya butuh nama file stabil lintas restart), plus unit-test.
 String mediaCacheFileName(String serverPath) {
   var h = 0x811c9dc5;
   for (final c in serverPath.codeUnits) {
@@ -19,8 +19,8 @@ String mediaCacheFileName(String serverPath) {
   return h.toRadixString(16).padLeft(8, '0');
 }
 
-/// Apakah kuota terlampaui (perlu buang LRU)? Murni & testable.
-@visibleForTesting
+/// Apakah kuota terlampaui (perlu buang LRU)? Murni & testable. Dipakai
+/// `MediaDiskCache` dan `VideoFileCache`.
 bool mediaQuotaExceeded(int total, int incoming, int maxBytes) =>
     total + incoming > maxBytes;
 
