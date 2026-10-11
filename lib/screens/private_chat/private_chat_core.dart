@@ -605,9 +605,10 @@ mixin _PcCoreMx on _PrivateChatBase {
                               },
                             );
                           }
-                          // Auto-load image deferred (di luar window 50) —
-                          // fire-and-forget, hasil masuk via stream emit.
-                          _autoLoadMissingImages(all);
+                          // Auto-load foto deferred DIPINDAH ke listener stream
+                          // (lihat private_chat_chat.dart _msgsSub) — dulu di sini
+                          // (itemBuilder) → tiap rebuild (tiap kirim TEKS) memicu
+                          // fetchImage → emit → bubble FOTO ngedip.
                           // Derivasikan deletedIds + items via CACHE (lihat
                           // _deriveItems): hanya dihitung ulang saat list
                           // pesan/pending/locale/hari berubah — bukan tiap

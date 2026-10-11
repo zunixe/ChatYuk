@@ -106,6 +106,12 @@ mixin _PcChatMx on _PrivateChatBase {
     // Dedupe _pending: hapus satu per satu saat server konfirmasi — aman utk double-send text sama
     _msgsSub = _msgsStreamCtrl.stream.listen((msgs) {
       _scheduleWarmPrefetch(msgs); // hangatkan voice + poster video (post-frame).
+      // Auto-load foto deferred (di luar window) — HANYA saat daftar pesan
+      // berubah (emit stream), BUKAN dari build(). Dulu dipanggil di itemBuilder
+      // → tiap rebuild (mis. tiap kirim TEKS) memicu fetchImage → `_emit()`
+      // stream baru → bubble FOTO di atasnya re-mount/re-decode = "foto ngedip
+      // saat kirim pesan teks" (insiden 2026-10-11).
+      _autoLoadMissingImages(msgs);
       // Pesan BARU dari lawan yang masuk sementara chat terbuka → tandai baca
       // agar last_read_at lawan maju → centang 2 (read) pengirim langsung terisi.
       // Tanpa ini, centang 2 baru muncul setelah keluar-masuk chat.
