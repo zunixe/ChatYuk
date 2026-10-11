@@ -1191,6 +1191,34 @@ terakhir lepas.
 **Belum terukur angka** (adb wireless tak andal dari sesi ini) — perlu
 `dumpsys SurfaceFlinger --latency` saat buka chat berulang untuk mengisi angka.
 
+### 2.20 Perbaikan performa chat: emit-dulu, guard reaksi, gating tab (2026-10-11)
+
+Audit performa Flutter (UI thread, rebuild, realtime, subscription). Perbaikan
+bertahap (perilaku/realtime/state terjaga). JANGAN DIBALIK:
+
+- **P1a emit-dulu**: broadcast realtime `new_message` (`chat_stream_session`)
+  dulu `await` download+PhotoCache SEBELUM `_emit()` → pesan masuk tertahan
+  saat foto besar. Sekarang **emit placeholder dulu**, foto/voice di latar
+  (`queuePhotoDownload`) — konsisten dgn jalur INSERT postgres.
+- **P1b guard reaksi/starred**: emit realtime yang tak mengubah isi (heartbeat/
+  re-emit) TIDAK memicu `_scheduleRebuild` (`_sameReactions`/`setEquals`).
+- **P1c gating tab**: `lib/core/nav_visibility.dart` (`visibleMainTab`, di-set
+  `_MainNav`). Tab utama ter-mount di `IndexedStack` → timer/stream tetap hidup
+  walau non-aktif (`TickerMode` cuma matikan animasi). Poll list chat (30s)
+  hanya jalan saat tab Chat/Online visible.
+- **P3**: buang `_onRoomScroll` kosong + listener mati.
+
+**Kesimpulan audit (BUKAN masalah, verified):** `_msgsStreamCtrl` broadcast =
+1 add → fan-out 2 listener (bukan re-broadcast); scroll `online_users` setState
+sudah debounced 500ms; animasi `.repeat()` dimatikan `TickerMode` saat non-aktif.
+
+**Ukur HP:** pindah tab 12× → memori 337→310MB (stabil); poll list chat 1× saja
+(gating OK); frame-diff ngetik → burst area-list [11,2,1,1] (tak rebuild per
+keystroke).
+
+**Utang opsional (belum dikerjakan — risiko refactor tinggi/manfaat sedang):**
+refcount channel list-chat ke active-listener (P2c).
+
 ### 8. Target tersisa
 
 **Tidak ada.** Semua item bagian 6 sudah tertutup:
