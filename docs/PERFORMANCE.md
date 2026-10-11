@@ -1246,6 +1246,39 @@ Main thread idle ~3.7% (heartbeat 240ms). `ddic_mode=2 @120Hz` tetap terjaga
 **Diperiksa & aman:** `phone_verify` poll 3s self-limiting 2m; `points
 onlineTick` no-op/murah; presence fallback 30s coalesced; `camera:bg` historis.
 
+### 2.22 Audit baterai lengkap — gating lifecycle channel & timer (2026-10-11)
+
+Master-prompt optimasi baterai (benchmark WhatsApp). Akar: channel realtime &
+timer latar TETAP hidup saat app background/layar mati → event seluruh jaringan
+(post/story/follow/status) bangunkan proses terus. FCM & native sudah bersih
+(tak ada download riwayat sebelum notif; tak ada thread/wakelock bocor).
+
+**Perbaikan (commit d6e8dc3):**
+- **P1a** presence `online-list-sync` fallback 30s → gate `AppForeground`
+  (jangan RPC `get_online_users` saat bg/layar mati).
+- **P1b** live-location timer (private + room) → gate `AppForeground` (jangan
+  GPS + update DB saat bg; lokasi terakhir tetap tersimpan).
+- **P1c** channel GLOBAL dilepas saat bg, re-subscribe di resume:
+  `social-rt` (social_provider), `timeline-posts` (timeline_provider),
+  `stories-realtime` + `story-views-realtime` (story_provider).
+- **P2a** room `_livePoll` 30s → gate; `rt_resilient` retry → **tunda saat bg**
+  (resume di foreground) agar device offline tak bangun tiap ~60s selamanya.
+
+**Yang SENGAJA tetap hidup saat bg** (keandalan pesan/notif): channel pesan
+(`msg-*`), `calls-incoming-$me`, FCM handler. Sync saat resume.
+
+**Ukur (batterystats delta, HP MIUI battery-saver):**
+| Skenario | Sebelum | Sesudah |
+|---|---|---|
+| Δ CPU bg /menit (layar mati) | ~1.68 | **~0.16–0.37 (~4.5–10× hemat)** |
+| Thread CPU saat layar mati | — | **0% (idle sempurna)** |
+
+**Utang/opsional (dicatat, belum dikerjakan):** duplikasi channel `profiles`
+(`online-global` + `online-list-sync` + `user-status-*` = 3×) dan `private_chats`
+(2× per instance) — perbaikan struktural sedang, risiko regresi; perlu refcount
+bersama + 1 channel `profiles`. `rt_resilient` retry tanpa batas (sudah
+di-gate bg). ForegroundService call pakai `dataSync` (idealnya `phoneCall`).
+
 ### 8. Target tersisa
 
 **Tidak ada.** Semua item bagian 6 sudah tertutup:
