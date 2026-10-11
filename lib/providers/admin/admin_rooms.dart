@@ -112,9 +112,21 @@ mixin AdminRoomsMx on AdminBase {
   }
 
   // ── Anggota satu grup ──
+  // BOUNDED (R6): dulu tumbuh per-room dibuka, hanya dibuang saat deleteRoom
+  // → admin yang browse banyak grup menumpuk List<Map> anggota. Cap FIFO 20
+  // (pola _touchRoomMsg): room jarang dibuka dibuang, muat ulang saat perlu.
+  static const int _roomMembersMax = 20;
   final Map<String, List<Map<String, dynamic>>> _roomMembersCache = {};
   List<Map<String, dynamic>> roomMembersFor(String roomId) =>
       _roomMembersCache[roomId] ?? const [];
+
+  void _touchRoomMembers(String roomId, List<Map<String, dynamic>> rows) {
+    _roomMembersCache.remove(roomId);
+    _roomMembersCache[roomId] = rows;
+    while (_roomMembersCache.length > _roomMembersMax) {
+      _roomMembersCache.remove(_roomMembersCache.keys.first);
+    }
+  }
 
   Future<List<Map<String, dynamic>>> fetchRoomMembers(
     String roomId, {
@@ -125,7 +137,7 @@ mixin AdminRoomsMx on AdminBase {
     }
     try {
       final list = await _service.getRoomMembers(roomId);
-      _roomMembersCache[roomId] = list;
+      _touchRoomMembers(roomId, list);
       return list;
     } catch (e) {
       dlog('[ADMIN] fetchRoomMembers $roomId error: $e');
