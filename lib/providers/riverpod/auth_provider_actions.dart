@@ -545,6 +545,10 @@ mixin _AuthActionsMx on _AuthBase {
     _profile = _profile?.copyWith(status: 'online');
     _emit();
     resetIdleTimer();
+    // BATERAI (P1): nyalakan ulang heartbeat saat kembali online/resume —
+    // pasangan dari `goIdle()` yang mematikannya saat background. Idempoten
+    // (cancel dulu di _startHeartbeat) & murah.
+    _startHeartbeat();
     // CATATAN (terukur): JANGAN nyalakan GPS di sini (dulu memanggil
     // _startLocationPing + _updateLocationOnOnline). Keduanya membuat
     // GeolocatorLocationService tetap BOUND ke proses → MIUI menganggap app
@@ -588,6 +592,13 @@ mixin _AuthActionsMx on _AuthBase {
     // _startLocationPing dipanggil di goOnline.
     _locationTimer?.cancel();
     _locationTimer = null;
+    // BATERAI (P1): HENTIKAN heartbeat saat background. Dulu timer 240s tetap
+    // hidup walau layar mati → wake + RPC `updateLastSeen` tiap 4 menit
+    // (batterystats: ChatYuk pemakai baterai tertinggi, cached CPU 3.17 mAh).
+    // Pesan masuk saat background tetap andal via FCM; last_seen disegarkan
+    // lagi saat online/resume (`_startHeartbeat` di goOnline).
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
     _isIdle = true;
     await _auth.goIdle();
     _profile = _profile?.copyWith(status: 'idle');
