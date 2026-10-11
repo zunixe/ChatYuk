@@ -284,6 +284,11 @@ class TimelineNotifier extends Notifier<TimelineState> {
     );
   }
 
+  /// Realtime komentar SATU post — passthrough ke service (boundary: widget
+  /// dilarang buka channel Supabase langsung). Return cleanup.
+  void Function() watchPostComments(String postId, void Function() onEvent) =>
+      _service.watchPostComments(postId, onEvent);
+
   @visibleForTesting
   void debugOnNewPost(Map<String, dynamic> msg) => _onNewPost(msg);
 

@@ -205,6 +205,32 @@ class TimelineService {
     return controller.stream;
   }
 
+  /// Realtime komentar SATU post (filter post_id) — subscribe channel di
+  /// layanan (bukan widget, boundary). [onEvent] dipanggil saat ada perubahan.
+  /// Return fungsi cleanup (removeChannel) — panggil saat sheet ditutup.
+  void Function() watchPostComments(String postId, void Function() onEvent) {
+    final channel = _sb.channel('post-comments-$postId');
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'post_comments',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'post_id',
+        value: postId,
+      ),
+      callback: (_) => onEvent(),
+    );
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[Timeline] comments realtime error: $err');
+    });
+    return () {
+      try {
+        _sb.removeChannel(channel);
+      } catch (_) {}
+    };
+  }
+
   Map<String, dynamic> _map(dynamic res) {
     if (res is Map) return Map<String, dynamic>.from(res);
     return {};

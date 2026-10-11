@@ -43,24 +43,21 @@ mixin _PcSelectMx on _PcBase {
           av.cachedSyncIncludeDisk(otherUid) ??
           '';
     } catch (_) {}
-    // PUSH: tunggu SEBENTAR precache poster video + thumb foto supaya frame
-    // pertama chat SUDAH gambar (nol 'ngeload' di buka ke-1 juga) — dibatasi
-    // timeout pendek agar tap tetap responsif.
+    // PUSH: precache poster video + thumb foto + prefetch pesan secara PARALEL
+    // (Future.wait) dengan SATU deadline — dulu 3 await BERURUTAN dgn timeout
+    // terpisah → worst-case 300+450+450=1200ms sebelum push (tap terasa freeze).
+    // Sekarang: satu deadline ~400ms untuk semua.
     final pcKey = 'private_${chat.chatId}';
-    try {
-      await ProviderScope.containerOf(context, listen: false)
+    await Future.wait<void>([
+      ProviderScope.containerOf(context, listen: false)
           .read(chatProvider.notifier)
-          .prefetchPrivateChat(chat.chatId)
-          .timeout(const Duration(milliseconds: 300));
-      if (context.mounted) {
-        await VideoPrefetch.precachePosters(context, pcKey)
-            .timeout(const Duration(milliseconds: 450));
-      }
-      if (context.mounted) {
-        await PhotoPrefetch.precacheThumbs(context, pcKey)
-            .timeout(const Duration(milliseconds: 450));
-      }
-    } catch (_) {}
+          .prefetchPrivateChat(chat.chatId),
+      if (context.mounted) VideoPrefetch.precachePosters(context, pcKey),
+      if (context.mounted) PhotoPrefetch.precacheThumbs(context, pcKey),
+    ]).timeout(
+      const Duration(milliseconds: 400),
+      onTimeout: () => const <void>[],
+    );
     if (!mounted) {
       releaseNav(navKey);
       return;

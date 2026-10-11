@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'core/admin_gate.dart';
+import 'core/nav_gate.dart';
 import 'app.dart';
 import 'models/room_model.dart';
 import 'providers/riverpod/auth_provider.dart';
@@ -24,6 +25,7 @@ import 'providers/riverpod/locale_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
 import 'providers/riverpod/update_provider.dart';
 import 'screens/incoming_call_screen.dart';
+import 'screens/point_history/widgets/topup_sheet.dart';
 import 'screens/call_screen.dart';
 import 'screens/friend_requests_screen.dart';
 import 'screens/user_info_screen.dart';
@@ -676,6 +678,22 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   } catch (_) {}
   // Fire-and-forget yang tidak block TTI
   unawaited(AdminGate.postInit?.call());
+  // NavGate: jembatan navigasi/dialog UI (provider dilarang import screens/).
+  NavGate.incomingCallBuilder = ({
+    required String callId,
+    required String callerUid,
+    required String callType,
+    required String chatId,
+    bool autoAccept = false,
+  }) =>
+      IncomingCallScreen(
+        callId: callId,
+        callerUid: callerUid,
+        callType: callType,
+        chatId: chatId,
+        autoAccept: autoAccept,
+      );
+  NavGate.topupSheet = showTopupSheet;
   // Meta App Events (FB Ads): no-op selama App ID belum diisi.
   unawaited(MetaAnalytics.init());
   // TikTok App Events (TikTok Ads) — init SDK native (App ID dari manifest,

@@ -168,10 +168,16 @@ void _drainImageQueue() {
     _cachedDeletedIds = deletedIds;
     return (items, deletedIds);
   }
-void _scheduleRebuild() {
-    if (!mounted || _rebuildScheduled) return;
+  void _scheduleRebuild() {
+    if (!mounted) return;
+    // P1c (2026-10-11): KOALESENSI WINDOW ~80ms (dulu per-frame). Saat buka
+    // chat ada gelombang ~6 sumber rebuild (reactions/starred/status/typing/
+    // profil/chatInfo) tersebar di 220-500ms → dulu 1 setState PER FRAME
+    // (rebuild penuh ListView+bubble). Sekarang di-kuantum 80ms: burst dalam
+    // 1 window = 1 setState. Timer 220/280ms TETAP terpisah (tak digabung).
+    if (_rebuildScheduled) return;
     _rebuildScheduled = true;
-    WidgetsBinding.instance.scheduleFrameCallback((_) {
+    Timer(const Duration(milliseconds: 80), () {
       _rebuildScheduled = false;
       if (mounted) setState(() {});
     });
