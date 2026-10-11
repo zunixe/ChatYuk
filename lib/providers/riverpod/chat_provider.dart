@@ -68,22 +68,21 @@ class ChatNotifier extends Notifier<ChatState> {
     String? repliedToSenderName,
     bool isForwarded = false,
     List<Mention> mentions = const [],
-  }) =>
-      _service.sendRoomMessage(
-        roomId: roomId,
-        senderId: senderId,
-        senderName: senderName,
-        senderGender: senderGender,
-        text: text,
-        type: type,
-        imageData: imageData,
-        durationMs: durationMs,
-        repliedToId: repliedToId,
-        repliedToText: repliedToText,
-        repliedToSenderName: repliedToSenderName,
-        isForwarded: isForwarded,
-        mentions: mentions,
-      );
+  }) => _service.sendRoomMessage(
+    roomId: roomId,
+    senderId: senderId,
+    senderName: senderName,
+    senderGender: senderGender,
+    text: text,
+    type: type,
+    imageData: imageData,
+    durationMs: durationMs,
+    repliedToId: repliedToId,
+    repliedToText: repliedToText,
+    repliedToSenderName: repliedToSenderName,
+    isForwarded: isForwarded,
+    mentions: mentions,
+  );
 
   /// Perbarui payload lokasi live di room.
   Future<bool> updateRoomLocationMessage(String id, String payload) =>
@@ -201,22 +200,21 @@ class ChatNotifier extends Notifier<ChatState> {
     String? repliedToSenderName,
     bool isForwarded = false,
     List<Mention> mentions = const [],
-  }) =>
-      _service.sendPrivateMessage(
-        chatId: chatId,
-        senderId: senderId,
-        senderName: senderName,
-        senderGender: senderGender,
-        text: text,
-        type: type,
-        imageData: imageData,
-        durationMs: durationMs,
-        repliedToId: repliedToId,
-        repliedToText: repliedToText,
-        repliedToSenderName: repliedToSenderName,
-        isForwarded: isForwarded,
-        mentions: mentions,
-      );
+  }) => _service.sendPrivateMessage(
+    chatId: chatId,
+    senderId: senderId,
+    senderName: senderName,
+    senderGender: senderGender,
+    text: text,
+    type: type,
+    imageData: imageData,
+    durationMs: durationMs,
+    repliedToId: repliedToId,
+    repliedToText: repliedToText,
+    repliedToSenderName: repliedToSenderName,
+    isForwarded: isForwarded,
+    mentions: mentions,
+  );
 
   Future<void> markAsRead(String chatId, String uid) async {
     await _service.markAsRead(chatId, uid);
@@ -227,8 +225,9 @@ class ChatNotifier extends Notifier<ChatState> {
   /// batch 10 (dulu serial; paralel tanpa batas = DB storm).
   Future<int> markAllChatsRead(String uid) async {
     final snapshot = _service.lastPrivateChatsSnapshot(uid) ?? const [];
-    final targets =
-        snapshot.where((c) => (c.unreadCounts[uid] ?? 0) > 0).toList();
+    final targets = snapshot
+        .where((c) => (c.unreadCounts[uid] ?? 0) > 0)
+        .toList();
     for (var i = 0; i < targets.length; i += 10) {
       final chunk = targets.skip(i).take(10);
       await Future.wait(chunk.map((c) => _service.markAsRead(c.chatId, uid)));
@@ -247,11 +246,7 @@ class ChatNotifier extends Notifier<ChatState> {
     bool isRoom = false,
     bool video = false,
   }) async {
-    await _service.clearViewOnceImage(
-      messageId,
-      isRoom: isRoom,
-      video: video,
-    );
+    await _service.clearViewOnceImage(messageId, isRoom: isRoom, video: video);
   }
 
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
@@ -341,7 +336,6 @@ class ChatNotifier extends Notifier<ChatState> {
     _emit();
   }
 
-
   // ── Passthrough agar screen tidak import ChatService (Fase 9b) ──
   Future<bool> editPrivateMessage(String id, String text) =>
       _service.editPrivateMessage(id, text);
@@ -371,4 +365,121 @@ class ChatNotifier extends Notifier<ChatState> {
   }
 }
 
-final chatProvider = NotifierProvider<ChatNotifier, ChatState>(ChatNotifier.new);
+final chatProvider = NotifierProvider<ChatNotifier, ChatState>(
+  ChatNotifier.new,
+);
+
+/// ── Header private chat (per-chat) ──────────────────────────────────────
+///
+/// PERF (Prioritas 4): dulu header (status/last-seen/kota/umur/gender/read)
+/// adalah FIELD di State layar chat → tiap update memanggil `setState()`
+/// di ROOT layar → membangun ulang AppBar + Scaffold + PopScope + seluruh
+/// list, padahal yang berubah hanya 1 baris subtitle/centang. Sekarang state
+/// header dipisah ke provider per-chat → hanya subtree yang `watch` rebuild.
+///
+/// Immutable + `==` value-based supaya Riverpod skip notify saat tak berubah
+/// (heartbeat presence yang emit nilai sama = nol rebuild).
+class ChatHeader {
+  final String otherStatus;
+  final DateTime? otherLastSeen;
+  final String otherCity;
+  final String otherCountry;
+  final int otherAge;
+  final String otherGender;
+  final bool otherRegistered;
+  final bool otherDeleted;
+  final DateTime? otherLastRead;
+  final bool isBlocked;
+
+  const ChatHeader({
+    this.otherStatus = 'offline',
+    this.otherLastSeen,
+    this.otherCity = '',
+    this.otherCountry = '',
+    this.otherAge = 0,
+    this.otherGender = '',
+    this.otherRegistered = false,
+    this.otherDeleted = false,
+    this.otherLastRead,
+    this.isBlocked = false,
+  });
+
+  ChatHeader copyWith({
+    String? otherStatus,
+    DateTime? otherLastSeen,
+    bool clearLastSeen = false,
+    String? otherCity,
+    String? otherCountry,
+    int? otherAge,
+    String? otherGender,
+    bool? otherRegistered,
+    bool? otherDeleted,
+    DateTime? otherLastRead,
+    bool clearLastRead = false,
+    bool? isBlocked,
+  }) {
+    return ChatHeader(
+      otherStatus: otherStatus ?? this.otherStatus,
+      otherLastSeen: clearLastSeen
+          ? null
+          : (otherLastSeen ?? this.otherLastSeen),
+      otherCity: otherCity ?? this.otherCity,
+      otherCountry: otherCountry ?? this.otherCountry,
+      otherAge: otherAge ?? this.otherAge,
+      otherGender: otherGender ?? this.otherGender,
+      otherRegistered: otherRegistered ?? this.otherRegistered,
+      otherDeleted: otherDeleted ?? this.otherDeleted,
+      otherLastRead: clearLastRead
+          ? null
+          : (otherLastRead ?? this.otherLastRead),
+      isBlocked: isBlocked ?? this.isBlocked,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChatHeader &&
+      other.otherStatus == otherStatus &&
+      other.otherLastSeen == otherLastSeen &&
+      other.otherCity == otherCity &&
+      other.otherCountry == otherCountry &&
+      other.otherAge == otherAge &&
+      other.otherGender == otherGender &&
+      other.otherRegistered == otherRegistered &&
+      other.otherDeleted == otherDeleted &&
+      other.otherLastRead == otherLastRead &&
+      other.isBlocked == isBlocked;
+
+  @override
+  int get hashCode => Object.hash(
+    otherStatus,
+    otherLastSeen,
+    otherCity,
+    otherCountry,
+    otherAge,
+    otherGender,
+    otherRegistered,
+    otherDeleted,
+    otherLastRead,
+    isBlocked,
+  );
+}
+
+/// Notifier header chat (per-chatId). Null-safe: `family` per chat, auto
+/// dibuang saat tak ada listener (`autoDispose`).
+class ChatHeaderNotifier extends AutoDisposeFamilyNotifier<ChatHeader, String> {
+  @override
+  ChatHeader build(String chatId) => const ChatHeader();
+
+  /// Patch sebagian field — no-op bila hasilnya identik (skip notify).
+  void patch(ChatHeader Function(ChatHeader) f) {
+    final next = f(state);
+    if (next == state) return;
+    state = next;
+  }
+}
+
+final chatHeaderProvider =
+    AutoDisposeNotifierProviderFamily<ChatHeaderNotifier, ChatHeader, String>(
+      ChatHeaderNotifier.new,
+    );
