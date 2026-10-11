@@ -194,7 +194,11 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
           _poster = hit;
           _loading = false;
           // Decode bitmap di latar → render berikutnya pakai RawImage (instan).
-          unawaited(VideoPrefetch.decodePosterFor(widget.videoData, hit));
+          unawaited(VideoPrefetch.decodePosterFor(widget.videoData, hit).then((_) {
+            if (!mounted) return;
+            final img = VideoPrefetch.posterImageSync(widget.videoData);
+            if (img != null && _posterImg == null) setState(() => _posterImg = img);
+          }));
           return;
         }
         dlog('[VideoBubble] poster MISS-sync key=${_posterKey.hashCode} → async');

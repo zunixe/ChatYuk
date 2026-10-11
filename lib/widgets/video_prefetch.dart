@@ -87,16 +87,47 @@ class VideoPrefetch {
   /// Ambil bitmap poster siap-render (sinkron). null bila belum di-decode.
   static ui.Image? posterImageSync(String videoPath) => _posterImages[videoPath];
 
+  /// Future decode poster yang sedang berjalan (kalau ada) — dipakai bubble
+  /// untuk MENUNGGU sebentar agar frame pertama sudah poster (buka-1 tidak
+  /// 'ngeload'). Key = videoPath.
+  static final Map<String, Future<void>> _pendingDecode = {};
+
+  static Future<void>? pendingDecode(String videoPath) =>
+      _pendingDecode[videoPath];
+
   /// Decode poster → [ui.Image] (target lebar [posterDecodeWidth]) & simpan.
   /// Sinkron dari sisi pemanggil berikutnya (posterImageSync) = nol decode.
-  /// Decode poster → [ui.Image] (target lebar [posterDecodeWidth]) & simpan.
-  /// Sinkron dari sisi pemanggil berikutnya (posterImageSync) = nol decode.
-  static Future<void> decodePosterFor(String videoPath, Uint8List bytes) =>
-      _decodePosterImage(videoPath, bytes);
+  static Future<void> decodePosterFor(String videoPath, Uint8List bytes) async {
+    await _decodePosterImage(videoPath, bytes);
+  }
 
   static Future<void> _decodePosterImage(String videoPath, Uint8List bytes) async {
     if (_posterImages.containsKey(videoPath)) return;
+    final existing = _pendingDecode[videoPath];
+    if (existing != null) {
+      await existing;
+      return;
+    }
+    final fut = _doDecodePoster(videoPath, bytes);
+    _pendingDecode[videoPath] = fut;
     try {
+      await fut;
+    } finally {
+      _pendingDecode.remove(videoPath);
+    }
+  }
+
+  static Future<void> _doDecodePoster(String videoPath, Uint8List bytes) async {
+    if (_posterImages.containsKey(videoPath)) return;
+    try {
+      // Coba muat BITMAP PERSISTEN dulu (raw RGBA dari sesi sebelumnya) →
+      // decodeImageFromPixels ~0ms (nol decode JPEG) → cold start langsung.
+      final persisted = await _loadPersistedBitmap(videoPath);
+      if (persisted != null) {
+        if (_posterImages.length > 64) _posterImages.clear();
+        _posterImages[videoPath] = persisted;
+        return;
+      }
       final codec = await ui.instantiateImageCodec(
         bytes,
         targetWidth: posterDecodeWidth,
@@ -104,9 +135,57 @@ class VideoPrefetch {
       final frame = await codec.getNextFrame();
       if (_posterImages.length > 64) _posterImages.clear();
       _posterImages[videoPath] = frame.image;
+      // Simpan bitmap mentah ke disk → cold start berikutnya nol decode.
+      unawaited(_persistBitmap(videoPath, frame.image));
     } catch (e) {
       if (kDebugMode) debugPrint('[VideoPrefetch] decode poster err: $e');
     }
+  }
+
+  /// Ukuran bitmap tersimpan per path (bytes) → file di direktori VideoFileCache
+  /// (persisten). Format: [4 byte W][4 byte H][RGBA...] agar muat cepat.
+  static String _bitmapKey(String videoPath) => 'poster_bmp_${videoPath.hashCode}';
+
+  static Future<ui.Image?> _loadPersistedBitmap(String videoPath) async {
+    try {
+      final f = await _bmpFile(videoPath);
+      if (!f.existsSync() || f.lengthSync() < 8) return null;
+      final b = f.readAsBytesSync();
+      final bd = ByteData.sublistView(b);
+      final w = bd.getUint32(0);
+      final h = bd.getUint32(4);
+      if (w == 0 || h == 0 || b.length < 8 + w * h * 4) return null;
+      final pixels = Uint8List.sublistView(b, 8);
+      final completer = Completer<ui.Image>();
+      ui.decodeImageFromPixels(
+        pixels, w, h, ui.PixelFormat.rgba8888, completer.complete,
+      );
+      // await di dalam try → bukan "return future tanpa await".
+      final img = await completer.future;
+      return img;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _persistBitmap(String videoPath, ui.Image img) async {
+    try {
+      final bd = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (bd == null) return;
+      final w = img.width, h = img.height;
+      final out = Uint8List(8 + w * h * 4);
+      final od = ByteData.sublistView(out);
+      od.setUint32(0, w);
+      od.setUint32(4, h);
+      out.setRange(8, out.length, bd.buffer.asUint8List());
+      final f = await _bmpFile(videoPath);
+      await f.writeAsBytes(out, flush: false);
+    } catch (_) {}
+  }
+
+  static Future<File> _bmpFile(String videoPath) async {
+    final dir = await VideoFileCache.instance.cacheDir();
+    return File('${dir.path}/${mediaCacheFileName(_bitmapKey(videoPath))}.bmp');
   }
 
   /// Kosongkan cache bytes poster di memori (logout / uji).

@@ -74,6 +74,10 @@ class VideoFileCache {
     }
   }
 
+  /// Direktori cache video (persisten) — dipakai juga untuk menyimpan bitmap
+  /// poster mentah (poster_bmp_*) agar cold start nol-decode.
+  Future<Directory> cacheDir() async => _dir();
+
   Future<void> _loadIndex() async {
     if (_indexLoaded) return;
     _indexLoaded = true;
