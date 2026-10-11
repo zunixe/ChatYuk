@@ -111,7 +111,11 @@ Future<void> fetchDevices() async {
       var added = false;
       for (final d in devices) {
         final id = '${d['install_id'] ?? ''}';
-        if (id.isNotEmpty && _seenDeviceIds.add(id)) added = true;
+        if (id.isNotEmpty) {
+          final before = _seenDeviceIds.contains(id);
+          AdminBase._boundedAdd(_seenDeviceIds, id);
+          if (!before) added = true;
+        }
       }
       if (added) {
         try {
@@ -132,7 +136,7 @@ Future<void> fetchDevices() async {
       final installId = '${d['install_id'] ?? ''}';
       if (installId.isEmpty) continue;
       if (_seenDeviceIds.contains(installId)) continue;
-      _seenDeviceIds.add(installId);
+      AdminBase._boundedAdd(_seenDeviceIds, installId);
       await _persistSeenDevice(installId);
       if (excluded.contains(installId)) continue; // jangan notif excluded
       final nick = '${d['nickname'] ?? '?'}';

@@ -18,7 +18,9 @@ mixin AdminNotifMx on AdminBase {
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getStringList(AdminBase._kSeenDevicesKey) ?? const [];
-      _seenDeviceIds.addAll(saved);
+      for (final id in saved) {
+        AdminBase._boundedAdd(_seenDeviceIds, id);
+      }
     } catch (_) {}
 
     _seedDone = false;
