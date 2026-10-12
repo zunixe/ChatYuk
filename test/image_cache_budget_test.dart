@@ -20,8 +20,15 @@ void main() {
     expect(imageCacheEntriesForRam(1 * gb), 60); // 32 → clamp bawah
   });
 
-  test('RAM tak valid → fallback 4GB', () {
+  test('RAM tak valid (0/negatif, physicalRamSize bug ROM) → fallback 4GB', () {
     expect(imageCacheBytesForRam(0), 32 * mb);
     expect(imageCacheEntriesForRam(-1), 128);
+  });
+
+  test('HP RAM besar (physicalRamSize 0 → fallback) tak turun ke 16MB', () {
+    // Regresi: dulu ramBytes=0 → clamp(0)=16MB (paling kecil) di HP RAM besar.
+    // Fallback 4GB → 32MB; device 11GB valid → 48MB. Keduanya > 16MB.
+    expect(imageCacheBytesForRam(kImageCacheFallbackRamBytes), 32 * mb);
+    expect(imageCacheBytesForRam(11 * gb), 48 * mb);
   });
 }
