@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
+import '../core/app_haptic.dart';
 
 /// `GestureDetector` dengan long-press dipercepat (lihat [AppTiming]).
 ///
@@ -27,6 +28,11 @@ class AppGestureDetector extends StatelessWidget {
   final HitTestBehavior behavior;
   final bool excludeFromSemantics;
 
+  /// Getar ringan (ala WhatsApp) saat tap. Default **true** — hampir semua
+  /// tap kartu/item memakai pola ini. Set false untuk tap yang tak diinginkan
+  /// getar (mis. kontrol internal).
+  final bool haptic;
+
   /// Override durasi tahan. Default [AppTiming.longPress] (450ms). Dipakai
   /// bubble chat yang butuh LEBIH lama ([AppTiming.longPressBubble]) karena
   /// area besar & sering kena jari saat scroll (konflik `SwipeToReply`).
@@ -45,6 +51,7 @@ class AppGestureDetector extends StatelessWidget {
     this.behavior = HitTestBehavior.deferToChild,
     this.excludeFromSemantics = false,
     this.longPressDuration,
+    this.haptic = true,
   });
 
   @override
@@ -59,7 +66,16 @@ class AppGestureDetector extends StatelessWidget {
           GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
         () => TapGestureRecognizer(),
         (r) {
-          r.onTap = onTap;
+          // Getar ringan ala WhatsApp pada tap kartu/item (default on).
+          final tap = onTap;
+          r.onTap = tap == null
+              ? null
+              : (haptic
+                    ? () {
+                        AppHaptic.tap();
+                        tap();
+                      }
+                    : tap);
           r.onTapDown = onTapDown;
           r.onTapUp = onTapUp;
           r.onTapCancel = onTapCancel;
@@ -74,8 +90,16 @@ class AppGestureDetector extends StatelessWidget {
           duration: longPressDuration ?? AppTiming.longPress,
         ),
         (r) {
+          final lp = onLongPress;
           r.onLongPressStart = onLongPressStart;
-          r.onLongPress = onLongPress;
+          r.onLongPress = lp == null
+              ? null
+              : (haptic
+                    ? () {
+                        AppHaptic.medium();
+                        lp();
+                      }
+                    : lp);
           r.onLongPressEnd = onLongPressEnd;
         },
       );

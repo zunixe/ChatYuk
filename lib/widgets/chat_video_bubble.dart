@@ -273,6 +273,12 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   @override
   void dispose() {
     _slowTimer?.cancel();
+    // Lepas referensi bitmap poster — JANGAN dispose (bitmap milik pool
+    // VideoPrefetch, mungkin masih dipakai bubble lain). Melepas referensi
+    // membuat bitmap yang sudah tak dipegang siapa pun bisa di-GC
+    // (anti-retensi "Native Heap 515MB" saat buka-tutup chat berulang).
+    _posterImg = null;
+    _poster = null;
     super.dispose();
   }
 
