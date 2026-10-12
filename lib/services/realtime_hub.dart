@@ -25,6 +25,11 @@ class RealtimeHub {
 
   // ── Presence global online ───────────────────────────────────────────────
   RealtimeChannel? _onlineChannel;
+
+  /// Channel yang SEDANG di-remove — guard anti-rekursi (removeChannel memicu
+  /// push WS yang bisa menembak callback error ini LAGI → Stack Overflow tak
+  /// berujung; terukur di logcat 2026-10-13).
+  final Set<RealtimeChannel> _removingChannels = {};
   final _onlineCtrl = StreamController<Map<String, dynamic>>.broadcast();
   String? _trackedUid;
 
@@ -64,12 +69,23 @@ class RealtimeHub {
           _onlineChannel = null;
           _trackedUid = null;
         }
-        try {
-          await _sb.removeChannel(ch);
-        } catch (_) {}
+        _safeRemoveChannel(ch);
       }
     });
     _onlineChannel = ch;
+  }
+
+  /// `removeChannel` dengan guard anti-rekursi (fire-and-forget). Tanpa ini,
+  /// push WS saat unsubscribe menembak callback error channel LAGI →
+  /// removeChannel lagi = Stack Overflow.
+  void _safeRemoveChannel(RealtimeChannel ch) {
+    if (!_removingChannels.add(ch)) return;
+    try {
+      unawaited(_sb.removeChannel(ch));
+    } catch (_) {
+    } finally {
+      scheduleMicrotask(() => _removingChannels.remove(ch));
+    }
   }
 
   Future<void> untrackOnline() async {
@@ -122,9 +138,7 @@ class RealtimeHub {
         if (identical(_roomChannels[key], ch)) {
           _roomChannels.remove(key);
         }
-        try {
-          await _sb.removeChannel(ch);
-        } catch (_) {}
+        _safeRemoveChannel(ch);
       }
     });
     _roomChannels[key] = ch;
