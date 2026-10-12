@@ -63,6 +63,23 @@ class PostPrefetch {
     }
   }
 
+  /// Prefetch thumb [ahead] post DI DEPAN index [from] — dipakai `itemBuilder`
+  /// saat kartu dibangun. Berbeda dari prefetch berbasis posisi-scroll, ini
+  /// mengekor index yang benar-benar dibangun sehingga TETAP unggul saat
+  /// scroll cepat (posisi melompat). [ahead] kecil (default 4) supaya tidak
+  /// membuang bandwidth untuk post jauh.
+  static void warmAheadFrom(
+    List<Map<String, dynamic>> posts,
+    int from, {
+    int ahead = 8,
+  }) {
+    if (posts.isEmpty) return;
+    final start = from + 1;
+    final end = (start + ahead).clamp(0, posts.length);
+    if (start >= end) return;
+    warmPosts(posts.sublist(start, end));
+  }
+
   static void _markDone(String path) {
     if (_done.length >= _doneCap) {
       _done.remove(_done.first);

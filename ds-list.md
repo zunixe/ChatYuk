@@ -1,0 +1,103 @@
+- generic [ref=f47e1]:
+  - generic [ref=f47e5]:
+    - generic [ref=f47e6]:
+      - generic [ref=f47e96]:
+        - generic [ref=f47e97]:
+          - generic:
+            - generic:
+              - generic:
+                - generic: user4800244477409
+                - generic:
+                  - generic:
+                    - generic: Ads Manager
+                    - generic: Business Suite
+                    - generic: TikTok Market Scope
+                  - generic:
+                    - generic: TikTok One
+                    - generic: TikTok Symphony
+                  - generic:
+                    - generic: Leads Center
+                    - generic: Events Manager
+                  - generic: Aplikasi & Agen
+                  - generic: Bisnis
+                  - generic: Semua solusi
+            - generic: u
+        - generic [active]:
+          - generic:
+            - dialog:
+              - generic [ref=f47e114]:
+                - button [ref=f47e117] [cursor=pointer]
+                - generic [ref=f47e125]:
+                  - generic:
+                    - generic [ref=f47e127]:
+                      - generic [ref=f47e128]: Pengumuman
+                      - generic [ref=f47e134]: Cara yang lebih baik untuk menjelajahi TikTok for Business
+                    - generic [ref=f47e137]:
+                      - generic [ref=f47e143]:
+                        - generic [ref=f47e144]: Alat Anda, diatur berdasarkan fungsinya
+                        - generic [ref=f47e145]: Kami telah mengatur ulang TikTok for Business agar lebih mudah untuk menemukan hal yang Anda butuhkan.
+                      - generic [ref=f47e154]:
+                        - generic [ref=f47e155]: Beberapa hal yang Anda kenal telah dipindahkan
+                        - generic [ref=f47e156]: Business Center kini ada pada Pengaturan. Business Suite memiliki tempatnya sendiri di Platforms.
+                      - generic [ref=f47e163]:
+                        - generic [ref=f47e164]: "Baru untuk dijelajahi: Aplikasi & Agen"
+                        - generic [ref=f47e165]: Temukan program dan kemampuan AI yang memperluas kapabilitas TikTok untuk bisnis Anda.
+                - generic [ref=f47e168]:
+                  - button "Paham" [ref=f47e170] [cursor=pointer]
+                  - button "Ikuti tur" [ref=f47e172] [cursor=pointer]
+      - generic [ref=f47e14]: Events Manager
+    - generic [ref=f47e22]:
+      - generic [ref=f47e23] [cursor=pointer]: Chatyuk1001
+      - generic [ref=f47e39] [cursor=pointer]
+  - generic [ref=f47e45]:
+    - generic [ref=f47e46]:
+      - generic [ref=f47e48]:
+        - generic [ref=f47e49]: Events Manager
+        - generic [ref=f47e50]:
+          - link "Beranda" [ref=f47e51] [cursor=pointer]:
+            - /url: /i18n/events_manager/home?aadvid=7691729598878547969&org_id=7691729301469036562&open_from=ttam_nav
+          - link "Sumber data" [ref=f47e59] [cursor=pointer]:
+            - /url: /i18n/events_manager/datasource/list?aadvid=7691729598878547969&org_id=7691729301469036562&open_from=ttam_nav
+          - link "Mitra" [ref=f47e68] [cursor=pointer]:
+            - /url: /i18n/events_manager/partner/portal?aadvid=7691729598878547969&org_id=7691729301469036562&open_from=ttam_nav
+          - button "Hubungkan sumber data" [ref=f47e80] [cursor=pointer]
+      - generic [ref=f47e84] [cursor=pointer]
+    - generic [ref=f47e177]:
+      - generic [ref=f47e178]:
+        - generic [ref=f47e179]: Sumber data
+        - button "Hubungkan sumber data" [ref=f47e181] [cursor=pointer]
+      - generic [ref=f47e183]:
+        - generic [ref=f47e184]:
+          - textbox [ref=f47e187]:
+            - /placeholder: Cari berdasarkan nama atau ID
+          - button [ref=f47e188] [cursor=pointer]
+        - generic [ref=f47e194]:
+          - generic [ref=f47e195]:
+            - generic [ref=f47e196]:
+              - generic [ref=f47e197]: "Zona waktu:"
+              - text: (UTC+07.00) Waktu Indonesia Barat
+            - generic [ref=f47e198]: "?"
+          - generic [ref=f47e203] [cursor=pointer]:
+            - textbox:
+              - /placeholder: Pilih
+              - text: Waktu pembuatan (terbaru)
+      - iframe [ref=f47e211]:
+        - generic [ref=f54e4]:
+          - generic [ref=f54e9]:
+            - generic [ref=f54e11]:
+              - generic [ref=f54e12] [cursor=pointer]: ChatYuk
+              - generic [ref=f54e17]:
+                - generic [ref=f54e18]: SAN diaktifkan
+                - generic [ref=f54e20] [cursor=pointer]
+            - generic [ref=f54e26]:
+              - generic [ref=f54e27]: "ID Aplikasi: com.chatyuk.chatyuk"
+              - generic [ref=f54e29]:
+                - generic [ref=f54e30]: "Waktu pembuatan:"
+                - generic [ref=f54e31]: 2026-10-01 23:11:52
+          - generic [ref=f54e32]:
+            - generic [ref=f54e34]:
+              - generic [ref=f54e35]: "2.909"
+              - generic [ref=f54e36]:
+                - text: Total peristiwa
+                - generic [ref=f54e37] [cursor=pointer]
+            - generic [ref=f54e44]: Semua

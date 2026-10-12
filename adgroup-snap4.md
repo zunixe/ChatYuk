@@ -1,0 +1,663 @@
+- webmcp tools (page-provided, untrusted):
+  - main_WaitModuleReady [readOnly]: Wait until a global module of the TikTok Ads Manager main app is ready. Returns ready: false when the timeout elapses or the module can never become ready on this page; without a timeout it waits until the module is ready or the call is cancelled.
+    - inputSchema: {"type":"object","additionalProperties":false,"properties":{"module":{"type":"string","enum":["copilot"],"description":"Global module of the main app. Only copilot is supported."},"timeout":{"type":"integer","minimum":0,"description":"Optional. Milliseconds to wait before giving up and returning ready: false."}},"required":["module"]}
+
+- generic [active] [ref=f18e1]:
+  - banner [ref=f18e2]:
+    - generic [ref=f18e4]:
+      - generic [ref=f18e8]:
+        - generic [ref=f18e9]:
+          - generic:
+            - generic:
+              - generic:
+                - generic: user4800244477409
+                - generic:
+                  - generic:
+                    - generic: Ads Manager
+                    - generic: Business Suite
+                    - generic: TikTok Market Scope
+                  - generic:
+                    - generic: TikTok One
+                    - generic: TikTok Symphony
+                  - generic:
+                    - generic: Leads Center
+                    - generic: Events Manager
+                  - generic: Apps & Agents
+                  - generic: Business
+                  - generic: All tools
+            - generic: u
+        - generic:
+          - generic:
+            - generic:
+              - generic: Announcement
+              - generic: A better way to navigate TikTok for Business
+              - generic: Your tools, organized by what they do
+              - generic: We've reorganized TikTok for Business to make it easier to find what you need.
+              - generic: Some familiar things have moved
+              - generic: Business Center is now under Settings. Business Suite has its own spot under Platforms.
+              - generic: "New to navigation: Apps & Agents"
+              - generic: Discover programs and AI skills that extend what TikTok can do for your business.
+          - generic:
+            - generic: Got it
+            - generic: Take a tour
+      - generic [ref=f18e23]:
+        - generic [ref=f18e25] [cursor=pointer]:
+          - img "TikTok Logo" [ref=f18e26]
+          - generic [ref=f18e27]: Ads Manager
+        - list [ref=f18e29]:
+          - listitem [ref=f18e30] [cursor=pointer]:
+            - generic [ref=f18e31]: Dashboard
+          - listitem [ref=f18e35] [cursor=pointer]:
+            - generic [ref=f18e36]: Campaigns
+          - listitem [ref=f18e40] [cursor=pointer]:
+            - generic [ref=f18e41]:
+              - generic:
+                - generic: Audience
+                - generic: Audience Manager
+                - generic: Comments Manager
+                - generic: Creative
+                - generic: Creative Library
+                - generic: Instant page
+                - generic:
+                  - generic: Video editor
+                  - generic: New
+                - generic: TikTok Symphony
+                - generic: Creative inspiration
+                - generic:
+                  - generic: Ad Preview Tool
+                  - generic: New
+                - generic: Management
+                - generic: Recommendation Center
+                - generic: Catalog Manager
+                - generic: Automated rules
+                - generic: Events Manager
+                - generic: Leads Center
+                - generic: MMM Data Request
+                - generic: Brand Showcase
+                - generic: TikTok Ad Network brand safety
+                - generic: Mission manager
+                - generic: Search Center
+                - generic:
+                  - generic: Keyword planner
+                  - generic: New
+                - generic: Negative keywords
+                - generic:
+                  - generic: Search ads inspiration
+                  - generic: New
+                - generic: Settings
+                - generic: Account settings
+                - generic: Audience controls
+                - generic: Brand safety hub
+                - generic: Documents
+                - generic: Billing
+                - generic: Tools
+          - listitem [ref=f18e45] [cursor=pointer]:
+            - generic [ref=f18e46]:
+              - generic:
+                - generic: Custom reports
+                - generic: Experiment manager
+                - generic: Attribution analytics
+                - generic: Audience insights
+                - generic: Comment insights
+                - generic: Creative inspirations
+                - generic: Video insights
+                - generic: Analytics
+          - listitem [ref=f18e50] [cursor=pointer]:
+            - generic [ref=f18e51]: GMV Max
+      - generic [ref=f18e61]:
+        - generic [ref=f18e62] [cursor=pointer]
+        - generic [ref=f18e75] [cursor=pointer]:
+          - generic:
+            - generic:
+              - generic: You have no messages.
+              - generic: Notifications
+              - generic: Notification settings
+              - generic: Choose which notifications you receive.
+            - button [ref=f18e79]
+        - generic [ref=f18e88] [cursor=pointer]:
+          - generic:
+            - generic: Help Center
+            - generic: Customer Support
+            - generic: Learning Center
+        - generic [ref=f18e94] [cursor=pointer]: Chatyuk1001
+  - generic [ref=f18e103]:
+    - generic [ref=f18e106]:
+      - complementary [ref=f18e108]:
+        - navigation [ref=f18e109]:
+          - generic [ref=f18e110]:
+            - generic [ref=f18e111] [cursor=pointer]: App promotion20261009225550
+            - generic [ref=f18e119] [cursor=pointer]:
+              - generic [ref=f18e120]: Ad group 20261009105643
+              - generic [ref=f18e126]:
+                - button [ref=f18e129]
+                - button [ref=f18e137]
+      - generic [ref=f18e145]:
+        - main [ref=f18e146]:
+          - generic [ref=f18e147]: Ad group
+          - generic [ref=f18e153]:
+            - generic [ref=f18e154]:
+              - generic [ref=f18e155]:
+                - generic [ref=f18e157] [cursor=pointer]:
+                  - generic [ref=f18e158]:
+                    - generic [ref=f18e160]:
+                      - generic [ref=f18e161]: Ad group name
+                      - generic [ref=f18e162]: Learn more
+                    - button [ref=f18e169]
+                  - generic [ref=f18e173]: This name isn’t publicly visible, so include any details to help you easily identify it from other ad groups in your campaign.
+                - generic [ref=f18e179]:
+                  - generic [ref=f18e180]: Ad group name
+                  - generic [ref=f18e188]:
+                    - generic [ref=f18e189]:
+                      - textbox "Enter ad group name" [ref=f18e194]: Ad group 20261009105643
+                      - button [ref=f18e198] [cursor=pointer]
+                    - generic:
+                      - generic: Delete this template?
+                      - generic:
+                        - generic: Cancel
+                        - generic: Confirm
+              - generic [ref=f18e204]:
+                - generic [ref=f18e206] [cursor=pointer]:
+                  - generic [ref=f18e207]:
+                    - generic [ref=f18e209]:
+                      - generic [ref=f18e210]: Optimization and bidding
+                      - generic [ref=f18e211]: Learn more
+                    - button [ref=f18e218]
+                  - generic [ref=f18e222]: Optimize your ad group for maximum performance and budget efficiency.
+                - generic [ref=f18e224]:
+                  - generic [ref=f18e225]:
+                    - generic [ref=f18e228]:
+                      - generic [ref=f18e229]: App
+                      - generic [ref=f18e238]:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: Create
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: ChatYuk
+                                      - generic: com.chatyuk.chatyuk
+                                      - generic: Google
+                              - generic:
+                                - generic:
+                                  - generic: Refresh
+                                  - generic: Create new
+                            - generic [ref=f18e241] [cursor=pointer]:
+                              - generic [ref=f18e245]: ChatYuk
+                              - generic [ref=f18e246]: Google
+                    - generic [ref=f18e257]:
+                      - generic [ref=f18e258]: Optimization goal
+                      - generic [ref=f18e272]:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: Value
+                                      - generic: Go to campaign
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - generic: Value
+                                          - generic: We'll deliver your ads to users that are more likely to make a purchase in order to maximize your total purchase value.
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: In-app event
+                                      - generic: We'll show your ads to the people who are most likely to perform certain actions within your app.
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: Install
+                                      - generic: We'll show your ads to the people who are most likely to install your app.
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: Click
+                                      - generic: We'll deliver your ads to the people most likely to click on your ad.
+                            - generic [ref=f18e280] [cursor=pointer]:
+                              - generic: In-app event
+                              - textbox [ref=f18e281]
+                    - generic [ref=f18e1418]:
+                      - generic [ref=f18e1419]: Select in-app event
+                      - generic [ref=f18e1442] [cursor=pointer]:
+                        - generic: Registration
+                        - textbox [ref=f18e1443]
+                    - generic [ref=f18e289]:
+                      - generic [ref=f18e292]:
+                        - generic [ref=f18e293]: Bid strategy
+                        - generic [ref=f18e303]:
+                          - generic:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic: Target cost per result
+                                  - generic: We'll keep your cost per result near this amount throughout your campaign.
+                                  - generic: Maximum results
+                                  - generic: We'll aim for the most results possible within your budget, but cost per result may be higher.
+                              - generic [ref=f18e311] [cursor=pointer]:
+                                - generic: Target cost per result
+                                - textbox [ref=f18e312]
+                      - generic [ref=f18e1452]:
+                        - generic [ref=f18e1453]:
+                          - generic [ref=f18e1455]:
+                            - generic [ref=f18e1456]: Target cost per result
+                            - generic [ref=f18e1459]:
+                              - generic:
+                                - generic:
+                                  - generic: Maximum results
+                                  - generic: This bid strategy prioritizes getting you more results without controlling their individual cost. It typically spends your budget quicker — ideal for time-sensitive events like promotions or flash sales.
+                                  - generic: Learn more
+                                - generic:
+                                  - generic:
+                                    - generic: Target cost per result
+                                    - generic: This bid strategy helps you control how much each result costs. While some initial fluctuation is normal, your average cost over time will be close to your target.
+                                    - generic: Learn more
+                                - generic:
+                                  - generic:
+                                    - generic: Maximum results
+                                    - generic: This bid strategy prioritizes getting you more results without controlling their individual cost. It typically spends your budget quicker — ideal for time-sensitive events like promotions or flash sales.
+                                    - generic: Learn more
+                                - generic:
+                                  - generic: Target cost per result
+                                  - generic: This bid strategy helps you control how much each result costs. While some initial fluctuation is normal, your average cost over time will be close to your target.
+                                  - generic: Learn more
+                            - generic [ref=f18e1465]:
+                              - generic: Bid protection
+                              - generic:
+                                - text: If delivery results in costs above your bid, you may receive ad credits to help offset part of the difference. Eligibility is reviewed daily. Terms apply.
+                                - generic: Learn more
+                              - generic: Bid protection
+                          - generic [ref=f18e1473]: Keep your average cost per result near your specified amount.
+                        - generic [ref=f18e1484]:
+                          - textbox "Enter a value" [ref=f18e1485]
+                          - generic [ref=f18e1486]: IDR/Unique Registration
+                  - link "Advanced settings" [ref=f18e359]
+              - generic [ref=f18e369]:
+                - generic [ref=f18e372] [cursor=pointer]:
+                  - generic [ref=f18e373]: Budget and schedule
+                  - button [ref=f18e377]
+                - generic [ref=f18e381]:
+                  - generic [ref=f18e382]:
+                    - generic [ref=f18e384]:
+                      - generic [ref=f18e385]: Budget
+                      - generic [ref=f18e397]:
+                        - generic:
+                          - generic [ref=f18e408] [cursor=pointer]:
+                            - generic: Daily
+                            - textbox [ref=f18e409]
+                          - generic [ref=f18e421]:
+                            - textbox "At least 200,000" [ref=f18e422]: 200,000
+                            - generic [ref=f18e423]: IDR
+                    - generic [ref=f18e1489]:
+                      - generic [ref=f18e1492]:
+                        - generic [ref=f18e1493]:
+                          - generic [ref=f18e1494]:
+                            - generic [ref=f18e1495]: Goal-based budget increase
+                            - generic [ref=f18e1497]:
+                              - generic: You can customize the increase amount and frequency anytime.
+                              - generic: When this feature is on, any automated rules that modify your budget will not take effect for this ad group.
+                          - generic [ref=f18e1506]:
+                            - generic:
+                              - generic:
+                                - generic: Goal-based budget increase enabled
+                                - button [ref=f18e1509] [cursor=pointer]
+                        - generic [ref=f18e1515]: Allow your budget to automatically increase when your ads are performing well, ensuring high-performing campaigns keep driving results.
+                      - generic [ref=f18e1520]:
+                        - generic [ref=f18e1521]: Enabled
+                        - generic [ref=f18e1522]:
+                          - generic [ref=f18e1523]:
+                            - generic: "Your budget will increase automatically only when both conditions are met:"
+                            - list [ref=f18e1524]:
+                              - listitem [ref=f18e1525]:
+                                - generic: Budget utilization reaches 90% or more
+                              - listitem [ref=f18e1526]:
+                                - generic: Bid goal (target cost per result) is achieved
+                          - separator [ref=f18e1527]:
+                            - separator [ref=f18e1528]
+                          - generic [ref=f18e1529]:
+                            - generic [ref=f18e1530]:
+                              - generic [ref=f18e1531]: "Increase amount:"
+                              - generic [ref=f18e1532]: 40,000 IDR
+                              - generic [ref=f18e1533]: "Max number of increases:"
+                              - generic [ref=f18e1534]: "10"
+                            - generic [ref=f18e1535]:
+                              - generic:
+                                - text: Your daily budget won't exceed
+                                - generic: 600,000 IDR
+                    - generic [ref=f18e475]:
+                      - generic [ref=f18e478]:
+                        - generic [ref=f18e479]: Schedule
+                        - generic [ref=f18e481]:
+                          - generic: "This is when your ads will be live on TikTok, or other placements that you’ve selected. You can choose from two types of schedules:"
+                          - generic: Run ad group continuously
+                          - generic: Set start and end time
+                          - generic: Time zone is default to your account’s time zone, but you can select a different one if needed. All reporting is in UTC+08:00.
+                      - generic [ref=f18e491]:
+                        - generic:
+                          - radio [ref=f18e492]:
+                            - generic [ref=f18e493]:
+                              - radio "Run ad group continuously" [checked] [ref=f18e495] [cursor=pointer]
+                              - generic [ref=f18e496]: Run ad group continuously
+                            - generic [ref=f18e500]:
+                              - button "Oct 9, 2026, 10:56 PM" [ref=f18e506] [cursor=pointer]
+                              - generic [ref=f18e524] [cursor=pointer]:
+                                - generic: (UTC+07:00) Western Indonesian Time (Indonesia)
+                                - textbox [ref=f18e525]
+                          - radio [ref=f18e531]:
+                            - generic [ref=f18e532]:
+                              - radio "Set start and end time" [ref=f18e534] [cursor=pointer]
+                              - generic [ref=f18e535]: Set start and end time
+                  - link "More options" [ref=f18e540]
+                  - generic: Override scheduled budget change?
+                  - generic: Your budget is already set to change to NaN IDR on . Turning on a goal-based budget increase will override this change.
+                  - generic:
+                    - generic: Cancel
+                    - generic: Confirm
+              - generic [ref=f18e552]:
+                - generic [ref=f18e554] [cursor=pointer]:
+                  - generic [ref=f18e555]:
+                    - generic [ref=f18e2286]:
+                      - generic [ref=f18e2287]: Audience targeting
+                      - button "Use saved audience" [ref=f18e2292]
+                    - button [ref=f18e567]
+                  - generic [ref=f18e571]: For manual targeting, use the settings below to control who sees your ads. No automatic targeting will be used unless smart audience or smart interests and behaviors are selected below.
+                - generic [ref=f18e576]:
+                  - alert [ref=f18e2298]:
+                    - generic [ref=f18e2300]:
+                      - generic [ref=f18e2308]:
+                        - generic [ref=f18e2309]: Switch to automatic targeting to find your ideal audience
+                        - generic [ref=f18e2310]: Smart+ uses real-time data to find the audiences most likely to engage with your ads. To compare approaches, run a split test between manual and automatic targeting.
+                        - generic [ref=f18e2312]:
+                          - link "Switch now" [ref=f18e2313]
+                          - link "Create split test" [ref=f18e2315]
+                      - button [ref=f18e2320] [cursor=pointer]
+                  - generic [ref=f18e577]:
+                    - generic [ref=f18e2326] [cursor=pointer]:
+                      - generic [ref=f18e2327]: Demographics
+                      - generic [ref=f18e2344]:
+                        - generic [ref=f18e3099]:
+                          - generic [ref=f18e3100]:
+                            - generic [ref=f18e3101]: Location
+                            - generic [ref=f18e3102]: ":"
+                          - text: Indonesia
+                        - generic [ref=f18e3103]:
+                          - generic [ref=f18e3104]:
+                            - generic [ref=f18e3105]: Age
+                            - generic [ref=f18e3106]: ":"
+                          - text: 18-24, 25-34, 35-44
+                        - generic [ref=f18e3107]:
+                          - generic [ref=f18e3108]:
+                            - generic [ref=f18e3109]: Gender
+                            - generic [ref=f18e3110]: ":"
+                          - text: Female
+                        - generic [ref=f18e3111]:
+                          - generic [ref=f18e3112]:
+                            - generic [ref=f18e3113]: Languages
+                            - generic [ref=f18e3114]: ":"
+                          - text: Indonesian
+                    - generic [ref=f18e2366]:
+                      - generic [ref=f18e2367] [cursor=pointer]: Custom audience
+                      - generic [ref=f18e2386]:
+                        - generic [ref=f18e2391]:
+                          - generic [ref=f18e2392]: Include audience
+                          - generic [ref=f18e2402]:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic: Quick select
+                                  - generic: Custom
+                                  - generic: Lookalike
+                                  - generic: No Data
+                                  - generic:
+                                    - generic:
+                                      - generic: Refresh
+                                      - generic: Create new
+                                - generic [ref=f18e2410] [cursor=pointer]:
+                                  - generic: Search or select audiences
+                                  - textbox [ref=f18e2411]
+                        - generic [ref=f18e2419]:
+                          - generic [ref=f18e2420]: Exclude audience
+                          - generic [ref=f18e2430]:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic: Quick select
+                                  - generic: Custom
+                                  - generic: Lookalike
+                                  - generic: No Data
+                                  - generic:
+                                    - generic:
+                                      - generic: Refresh
+                                      - generic: Create new
+                                - generic [ref=f18e2438] [cursor=pointer]:
+                                  - generic: Search or select audiences
+                                  - textbox [ref=f18e2439]
+                      - generic [ref=f18e2446]:
+                        - generic [ref=f18e3115]:
+                          - generic [ref=f18e3116]:
+                            - generic [ref=f18e3117]: Include audience
+                            - generic [ref=f18e3118]: ":"
+                          - text: No limit
+                        - generic [ref=f18e3119]:
+                          - generic [ref=f18e3120]:
+                            - generic [ref=f18e3121]: Exclude audience
+                            - generic [ref=f18e3122]: ":"
+                          - text: No limit
+                    - generic [ref=f18e2458]:
+                      - generic [ref=f18e2459] [cursor=pointer]: Detailed targeting
+                      - generic [ref=f18e2471]:
+                        - generic [ref=f18e2474]:
+                          - generic [ref=f18e2475]:
+                            - generic [ref=f18e2476]: Interests & behaviors
+                            - generic [ref=f18e2480]:
+                              - generic:
+                                - text: Target an audience based on their long-term interests and interactions with content on TikTok.
+                                - generic [ref=f18e2481] [cursor=pointer]: Learn more
+                          - generic [ref=f18e2484]:
+                            - generic [ref=f18e2486]:
+                              - generic [ref=f18e2489] [cursor=pointer]:
+                                - generic [ref=f18e2490]:
+                                  - generic [ref=f18e2491]: 3 Interests
+                                  - generic [ref=f18e2492]:
+                                    - generic [ref=f18e3124]:
+                                      - generic [ref=f18e3125]: Dating
+                                      - button "Remove tag" [ref=f18e3126]
+                                    - generic [ref=f18e3132]:
+                                      - generic [ref=f18e3133]: meet friends
+                                      - button "Remove tag" [ref=f18e3134]
+                                    - generic [ref=f18e3140]:
+                                      - generic [ref=f18e3141]: Making Friends
+                                      - button "Remove tag" [ref=f18e3142]
+                                - generic [ref=f18e2509]:
+                                  - generic [ref=f18e2510]: 3 Hashtag interactions
+                                  - generic [ref=f18e2511]:
+                                    - generic [ref=f18e2513]:
+                                      - generic [ref=f18e2514]: "#michat"
+                                      - button "Remove tag" [ref=f18e2515]
+                                    - generic [ref=f18e2521]:
+                                      - generic [ref=f18e2522]: "#sexy😍🤤😍"
+                                      - button "Remove tag" [ref=f18e2523]
+                                    - generic [ref=f18e3148]:
+                                      - generic [ref=f18e3149]: "#onlinedating"
+                                      - button "Remove tag" [ref=f18e3150]
+                                - generic [ref=f18e2528]:
+                                  - generic [ref=f18e2529]: 1 Purchase intention
+                                  - generic [ref=f18e2532]:
+                                    - generic [ref=f18e2533]: Chatting
+                                    - button "Remove tag" [ref=f18e2534]
+                              - alert [ref=f18e2546]:
+                                - generic [ref=f18e2548]:
+                                  - generic [ref=f18e2556]:
+                                    - generic [ref=f18e2557]: Targeting for new parents is now available
+                                    - generic [ref=f18e2558]: This audience can be selected under "Life events".
+                                    - link "Go now" [ref=f18e2560]
+                                  - button [ref=f18e2564] [cursor=pointer]
+                              - generic [ref=f18e2570]:
+                                - generic [ref=f18e2577]:
+                                  - generic [ref=f18e2578]: "Recommended categories:"
+                                  - generic [ref=f18e2579]: Based on your industry
+                                - generic [ref=f18e2580]:
+                                  - generic [ref=f18e2581]:
+                                    - button [ref=f18e2584] [cursor=pointer]
+                                    - button [ref=f18e2589] [cursor=pointer]
+                                    - button [ref=f18e2594] [cursor=pointer]
+                                    - button [ref=f18e2599] [cursor=pointer]
+                                    - button [ref=f18e2604] [cursor=pointer]
+                                    - button [ref=f18e2609] [cursor=pointer]
+                                    - button [ref=f18e2614] [cursor=pointer]
+                                    - button [ref=f18e2619] [cursor=pointer]
+                                    - button [ref=f18e2624] [cursor=pointer]
+                                    - button [ref=f18e2629] [cursor=pointer]
+                                    - button [ref=f18e2634] [cursor=pointer]
+                                    - button [ref=f18e2639] [cursor=pointer]
+                                    - button [ref=f18e2644] [cursor=pointer]
+                                    - button [ref=f18e2649] [cursor=pointer]
+                                    - button [ref=f18e2654] [cursor=pointer]
+                                  - link "Show all" [ref=f18e2658]
+                            - generic [ref=f18e2660]:
+                              - generic [ref=f18e2664]:
+                                - generic [ref=f18e2666]:
+                                  - generic [ref=f18e2667]: Smart interests & behaviors
+                                  - generic [ref=f18e2668]: Learn more
+                                - generic [ref=f18e2674]:
+                                  - generic [ref=f18e2675]: On(We may deliver ads outside of your interests & behaviors selection if it's likely to improve performance.)
+                                  - button [ref=f18e2681] [cursor=pointer]
+                              - alert [ref=f18e2688]:
+                                - generic [ref=f18e2697]:
+                                  - generic [ref=f18e2698]: Notice for advertisers
+                                  - generic [ref=f18e2701]:
+                                    - list [ref=f18e2702]:
+                                      - listitem [ref=f18e2703]:
+                                        - generic [ref=f18e2704]: Interest and behavior targeting settings won't be applied to your Global App Bundle and TikTok Ad Network audience. Note that this may significantly impact on your estimated audience size.
+                                    - list [ref=f18e2705]:
+                                      - listitem [ref=f18e3155]: Interest and behavior targeting settings won't be applied to your Global App Bundle and TikTok Ad Network audience. Note that this may significantly impact on your estimated audience size.
+                                      - listitem [ref=f18e3156]: Smart interests & behaviors is not supported for Global App Bundle and TikTok Ad Network. The targeting settings of any ads delivered on Global App Bundle and TikTok Ad Network will not be changed.
+                                  - link "View more" [ref=f18e2709]
+                        - generic [ref=f18e2718]:
+                          - generic [ref=f18e2719]: Spending power
+                          - generic [ref=f18e2733]:
+                            - generic:
+                              - generic [ref=f18e2735] [cursor=pointer]:
+                                - textbox [ref=f18e2736]
+                                - generic [ref=f18e2737]: All
+                              - generic [ref=f18e2740] [cursor=pointer]:
+                                - textbox [ref=f18e2741]
+                                - generic [ref=f18e2742]: High spending power
+                      - generic [ref=f18e2745]:
+                        - generic [ref=f18e3157]:
+                          - generic [ref=f18e3158]:
+                            - generic [ref=f18e3159]: Interests & behaviors
+                            - generic [ref=f18e3160]: ":"
+                          - text: "Dating, meet friends, Making Friends, Chatting, #michat, #sexy😍🤤😍, #onlinedating"
+                        - generic [ref=f18e3161]:
+                          - generic [ref=f18e3162]:
+                            - generic [ref=f18e3163]: Spending power
+                            - generic [ref=f18e3164]: ":"
+                          - text: All
+                    - generic [ref=f18e2757] [cursor=pointer]:
+                      - generic [ref=f18e2758]: Device
+                      - generic [ref=f18e2774]: No limit
+                  - generic [ref=f18e642]:
+                    - generic [ref=f18e2778]:
+                      - button "Save new audience" [ref=f18e2781] [cursor=pointer]
+                      - generic:
+                        - generic: New saved audience
+                        - generic: Save commonly used targeting options for future campaigns.
+                        - generic:
+                          - generic:
+                            - generic: Name
+                            - generic: Details
+                        - generic:
+                          - generic: Learn more
+                          - generic: Cancel
+                          - generic: Save
+                      - generic:
+                        - generic: You've reached the maximum number of saved audiences. Delete existing to create more.
+                        - generic: No Data
+                        - generic:
+                          - generic: Cancel
+                          - generic: Manage
+                    - button [ref=f18e2786] [cursor=pointer]:
+                      - generic:
+                        - text: Switch to automatic targeting
+                        - generic [ref=f18e2787]: Learn more
+              - generic [ref=f18e653]:
+                - generic [ref=f18e655] [cursor=pointer]:
+                  - generic [ref=f18e656]:
+                    - generic [ref=f18e657]: Placements
+                    - button [ref=f18e661]
+                  - generic [ref=f18e665]: Your ads will appear on the placements you choose.
+                - generic [ref=f18e670]:
+                  - generic [ref=f18e672]:
+                    - generic [ref=f18e673]: Eligible placements
+                    - generic [ref=f18e677]: TikTok (including search results, Lemon8, and PineDrama), TikTok Ad Network, Global App Bundle
+                  - link "Advanced settings" [ref=f18e685]
+            - generic [ref=f18e694]:
+              - generic [ref=f18e695]:
+                - generic [ref=f18e696]: Recommendation usage
+                - generic [ref=f18e703]:
+                  - generic [ref=f18e708]:
+                    - generic: "0123456789"
+                    - generic: "0123456789"
+                  - generic [ref=f18e709]: Ad group is partially optimized. For best results, apply all recommendations.
+                - generic [ref=f18e711]:
+                  - generic [ref=f18e713] [cursor=pointer]:
+                    - status [ref=f18e1632]
+                    - generic [ref=f18e718]: Optimization and bidding
+                    - generic [ref=f18e1635]: Complete section to see related recommendations
+                  - generic [ref=f18e722]:
+                    - status [ref=f18e723]
+                    - generic [ref=f18e729]: Budget and schedule
+                  - generic [ref=f18e730] [cursor=pointer]:
+                    - generic [ref=f18e731]:
+                      - status [ref=f18e2792]
+                      - generic [ref=f18e738]: Audience targeting
+                    - alert [ref=f18e2800]:
+                      - generic [ref=f18e2802]:
+                        - generic [ref=f18e2803]:
+                          - generic [ref=f18e2804]: Use automatic targeting
+                          - generic [ref=f18e2805]: Smart+ uses real-time data to find the audiences most likely to engage with your ads. To compare approaches, run a split test between manual and automatic targeting.
+                          - generic [ref=f18e2807]:
+                            - link "Apply to this ad group" [ref=f18e2808]
+                            - link "Create split test" [ref=f18e2810]
+                        - button [ref=f18e2815]
+                  - generic [ref=f18e740] [cursor=pointer]:
+                    - status [ref=f18e742]
+                    - generic [ref=f18e745]: Creative assets
+                    - generic [ref=f18e746]: Complete section to see related recommendations
+                - link "View less" [ref=f18e748]
+              - generic [ref=f18e756]:
+                - generic [ref=f18e757]:
+                  - generic [ref=f18e758]: Available audience
+                  - generic [ref=f18e759]: Learn more
+                - generic [ref=f18e771]:
+                  - generic:
+                    - generic [ref=f18e772]: Narrow
+                    - generic [ref=f18e775]: 46,002,000-56,226,000
+                - generic [ref=f18e2820]:
+                  - generic [ref=f18e2821]: Does not include potential users reached through smart interests & behaviors or smart audience.
+                  - alert [ref=f18e2827]:
+                    - generic [ref=f18e2828]: Your audience is narrow. Broad targeting settings may improve performance.
+        - generic [ref=f18e791]:
+          - generic [ref=f18e792]:
+            - generic [ref=f18e794]:
+              - generic:
+                - button "Exit" [ref=f18e796] [cursor=pointer]
+                - button [ref=f18e800] [cursor=pointer]
+            - generic [ref=f18e804]:
+              - generic: All edits saved to draft
+              - generic: Drafts are not yet active. Publish to start running ads.
+              - generic: Draft saved
+          - button "Continue" [ref=f18e812] [cursor=pointer]
+    - generic: Ad Assistant
+    - generic:
+      - generic:
+        - generic: I have reviewed and will abide by TikTok's Anti-Discrimination Ad Policy and all applicable laws.
+        - generic: I will not use TikTok Advertising for any wrongfully discriminatory practices.
+        - generic: Accept

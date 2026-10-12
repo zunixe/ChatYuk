@@ -1,0 +1,591 @@
+- webmcp tools (page-provided, untrusted):
+  - main_WaitModuleReady [readOnly]: Wait until a global module of the TikTok Ads Manager main app is ready. Returns ready: false when the timeout elapses or the module can never become ready on this page; without a timeout it waits until the module is ready or the call is cancelled.
+    - inputSchema: {"type":"object","additionalProperties":false,"properties":{"module":{"type":"string","enum":["copilot"],"description":"Global module of the main app. Only copilot is supported."},"timeout":{"type":"integer","minimum":0,"description":"Optional. Milliseconds to wait before giving up and returning ready: false."}},"required":["module"]}
+
+- generic [ref=f18e1]:
+  - banner [ref=f18e2]:
+    - generic [ref=f18e4]:
+      - generic [ref=f18e8]:
+        - generic [ref=f18e9]:
+          - generic:
+            - generic:
+              - generic:
+                - generic: user4800244477409
+                - generic:
+                  - generic:
+                    - generic: Ads Manager
+                    - generic: Business Suite
+                    - generic: TikTok Market Scope
+                  - generic:
+                    - generic: TikTok One
+                    - generic: TikTok Symphony
+                  - generic:
+                    - generic: Leads Center
+                    - generic: Events Manager
+                  - generic: Apps & Agents
+                  - generic: Business
+                  - generic: All tools
+            - generic: u
+        - generic:
+          - generic:
+            - generic:
+              - generic: Announcement
+              - generic: A better way to navigate TikTok for Business
+              - generic: Your tools, organized by what they do
+              - generic: We've reorganized TikTok for Business to make it easier to find what you need.
+              - generic: Some familiar things have moved
+              - generic: Business Center is now under Settings. Business Suite has its own spot under Platforms.
+              - generic: "New to navigation: Apps & Agents"
+              - generic: Discover programs and AI skills that extend what TikTok can do for your business.
+          - generic:
+            - generic: Got it
+            - generic: Take a tour
+      - generic [ref=f18e23]:
+        - generic [ref=f18e25] [cursor=pointer]:
+          - img "TikTok Logo" [ref=f18e26]
+          - generic [ref=f18e27]: Ads Manager
+        - list [ref=f18e29]:
+          - listitem [ref=f18e30] [cursor=pointer]:
+            - generic [ref=f18e31]: Dashboard
+          - listitem [ref=f18e35] [cursor=pointer]:
+            - generic [ref=f18e36]: Campaigns
+          - listitem [ref=f18e40] [cursor=pointer]:
+            - generic [ref=f18e41]:
+              - generic:
+                - generic: Audience
+                - generic: Audience Manager
+                - generic: Comments Manager
+                - generic: Creative
+                - generic: Creative Library
+                - generic: Instant page
+                - generic:
+                  - generic: Video editor
+                  - generic: New
+                - generic: TikTok Symphony
+                - generic: Creative inspiration
+                - generic:
+                  - generic: Ad Preview Tool
+                  - generic: New
+                - generic: Management
+                - generic: Recommendation Center
+                - generic: Catalog Manager
+                - generic: Automated rules
+                - generic: Events Manager
+                - generic: Leads Center
+                - generic: MMM Data Request
+                - generic: Brand Showcase
+                - generic: TikTok Ad Network brand safety
+                - generic: Mission manager
+                - generic: Search Center
+                - generic:
+                  - generic: Keyword planner
+                  - generic: New
+                - generic: Negative keywords
+                - generic:
+                  - generic: Search ads inspiration
+                  - generic: New
+                - generic: Settings
+                - generic: Account settings
+                - generic: Audience controls
+                - generic: Brand safety hub
+                - generic: Documents
+                - generic: Billing
+                - generic: Tools
+          - listitem [ref=f18e45] [cursor=pointer]:
+            - generic [ref=f18e46]:
+              - generic:
+                - generic: Custom reports
+                - generic: Experiment manager
+                - generic: Attribution analytics
+                - generic: Audience insights
+                - generic: Comment insights
+                - generic: Creative inspirations
+                - generic: Video insights
+                - generic: Analytics
+          - listitem [ref=f18e50] [cursor=pointer]:
+            - generic [ref=f18e51]: GMV Max
+      - generic [ref=f18e61]:
+        - generic [ref=f18e62] [cursor=pointer]
+        - generic [ref=f18e75] [cursor=pointer]:
+          - generic:
+            - generic:
+              - generic: You have no messages.
+              - generic: Notifications
+              - generic: Notification settings
+              - generic: Choose which notifications you receive.
+            - button [ref=f18e79]
+        - generic [ref=f18e88] [cursor=pointer]:
+          - generic:
+            - generic: Help Center
+            - generic: Customer Support
+            - generic: Learning Center
+        - generic [ref=f18e94] [cursor=pointer]: Chatyuk1001
+  - generic [ref=f18e103]:
+    - generic [ref=f18e106]:
+      - complementary [ref=f18e108]:
+        - navigation [ref=f18e109]:
+          - generic [ref=f18e110]:
+            - generic [ref=f18e111] [cursor=pointer]: App promotion20261009225550
+            - generic [ref=f18e119] [cursor=pointer]:
+              - generic [ref=f18e120]: Ad group 20261009105643
+              - generic [ref=f18e126]:
+                - button [ref=f18e129]
+                - button [ref=f18e137]
+      - generic [ref=f18e145]:
+        - main [ref=f18e146]:
+          - generic [ref=f18e147]: Ad group
+          - generic [ref=f18e153]:
+            - generic [ref=f18e154]:
+              - generic [ref=f18e155]:
+                - generic [ref=f18e157] [cursor=pointer]:
+                  - generic [ref=f18e158]:
+                    - generic [ref=f18e160]:
+                      - generic [ref=f18e161]: Ad group name
+                      - generic [ref=f18e162]: Learn more
+                    - button [ref=f18e169]
+                  - generic [ref=f18e173]: This name isn’t publicly visible, so include any details to help you easily identify it from other ad groups in your campaign.
+                - generic [ref=f18e179]:
+                  - generic [ref=f18e180]: Ad group name
+                  - generic [ref=f18e188]:
+                    - generic [ref=f18e189]:
+                      - textbox "Enter ad group name" [ref=f18e194]: Ad group 20261009105643
+                      - button [ref=f18e198] [cursor=pointer]
+                    - generic:
+                      - generic: Delete this template?
+                      - generic:
+                        - generic: Cancel
+                        - generic: Confirm
+              - generic [ref=f18e204]:
+                - generic [ref=f18e206] [cursor=pointer]:
+                  - generic [ref=f18e207]:
+                    - generic [ref=f18e209]:
+                      - generic [ref=f18e210]: Optimization and bidding
+                      - generic [ref=f18e211]: Learn more
+                    - button [ref=f18e218]
+                  - generic [ref=f18e222]: Optimize your ad group for maximum performance and budget efficiency.
+                - generic [ref=f18e224]:
+                  - generic [ref=f18e225]:
+                    - generic [ref=f18e228]:
+                      - generic [ref=f18e229]: App
+                      - generic [ref=f18e238]:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: Create
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: ChatYuk
+                                      - generic: com.chatyuk.chatyuk
+                                      - generic: Google
+                              - generic:
+                                - generic:
+                                  - generic: Refresh
+                                  - generic: Create new
+                            - generic [ref=f18e241] [cursor=pointer]:
+                              - generic [ref=f18e245]: ChatYuk
+                              - generic [ref=f18e246]: Google
+                    - generic [ref=f18e257]:
+                      - generic [ref=f18e258]: Optimization goal
+                      - generic [ref=f18e272]:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: Value
+                                      - generic: Go to campaign
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - generic: Value
+                                          - generic: We'll deliver your ads to users that are more likely to make a purchase in order to maximize your total purchase value.
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: In-app event
+                                      - generic: We'll show your ads to the people who are most likely to perform certain actions within your app.
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: Install
+                                      - generic: We'll show your ads to the people who are most likely to install your app.
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic: Click
+                                      - generic: We'll deliver your ads to the people most likely to click on your ad.
+                            - generic [ref=f18e280] [cursor=pointer]:
+                              - generic: Install
+                              - textbox [ref=f18e281]
+                    - generic [ref=f18e292]:
+                      - generic [ref=f18e293]: Bid strategy
+                      - generic [ref=f18e303]:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic:
+                                - generic: Target cost per result
+                                - generic: We'll keep your cost per result near this amount throughout your campaign.
+                                - generic: Maximum results
+                                - generic: We'll aim for the most results possible within your budget, but cost per result may be higher.
+                            - generic [ref=f18e311] [cursor=pointer]:
+                              - generic: Maximum results
+                              - textbox [ref=f18e312]
+                  - link "Advanced settings" [ref=f18e359]
+              - generic [ref=f18e369]:
+                - generic [ref=f18e372] [cursor=pointer]:
+                  - generic [ref=f18e373]: Budget and schedule
+                  - button [ref=f18e377]
+                - generic [ref=f18e381]:
+                  - generic [ref=f18e382]:
+                    - generic [ref=f18e384]:
+                      - generic [ref=f18e385]: Budget
+                      - generic [ref=f18e393]:
+                        - generic [ref=f18e397]:
+                          - generic:
+                            - generic [ref=f18e408] [cursor=pointer]:
+                              - generic: Daily
+                              - textbox [ref=f18e409]
+                            - generic [ref=f18e421]:
+                              - textbox "At least 200,000" [ref=f18e422]: 200,000
+                              - generic [ref=f18e423]: IDR
+                        - generic [ref=f18e886]:
+                          - text: You'll spend up to 250,000 IDR on some days, and less on others. You'll spend an average of 200,000 IDR per day and no more than 1,400,000 IDR per calendar week.
+                          - link "Learn more" [ref=f18e887]
+                    - generic [ref=f18e475]:
+                      - generic [ref=f18e478]:
+                        - generic [ref=f18e479]: Schedule
+                        - generic [ref=f18e481]:
+                          - generic: "This is when your ads will be live on TikTok, or other placements that you’ve selected. You can choose from two types of schedules:"
+                          - generic: Run ad group continuously
+                          - generic: Set start and end time
+                          - generic: Time zone is default to your account’s time zone, but you can select a different one if needed. All reporting is in UTC+08:00.
+                      - generic [ref=f18e491]:
+                        - generic:
+                          - radio [ref=f18e492]:
+                            - generic [ref=f18e493]:
+                              - radio "Run ad group continuously" [checked] [ref=f18e495] [cursor=pointer]
+                              - generic [ref=f18e496]: Run ad group continuously
+                            - generic [ref=f18e500]:
+                              - button "Oct 9, 2026, 10:56 PM" [ref=f18e506] [cursor=pointer]
+                              - generic [ref=f18e524] [cursor=pointer]:
+                                - generic: (UTC+07:00) Western Indonesian Time (Indonesia)
+                                - textbox [ref=f18e525]
+                          - radio [ref=f18e531]:
+                            - generic [ref=f18e532]:
+                              - radio "Set start and end time" [ref=f18e534] [cursor=pointer]
+                              - generic [ref=f18e535]: Set start and end time
+                  - link "More options" [ref=f18e540]
+                  - generic: Override scheduled budget change?
+                  - generic: Your budget is already set to change to NaN IDR on . Turning on a scheduled budget increase will override this change.
+                  - generic:
+                    - generic: Cancel
+                    - generic: Confirm
+              - generic [ref=f18e552]:
+                - generic [ref=f18e554] [cursor=pointer]:
+                  - generic [ref=f18e555]:
+                    - generic [ref=f18e557]:
+                      - generic [ref=f18e558]: Audience targeting
+                      - generic [ref=f18e559]: Watch guide
+                    - button [ref=f18e567]
+                  - generic [ref=f18e573]:
+                    - generic:
+                      - text: Account-level targeting is applied to this ad group by default. To modify, visit the
+                      - link [ref=f18e574]:
+                        - link "Account audience controls page" [ref=f18e575]:
+                          - /url: /i18n/account/account_level_control/?aadvid=7691729598878547969
+                      - text: . Automatic targeting is also enabled to reach people most likely to engage with your ads. For more control, switch to custom targeting.
+                - generic [ref=f18e576]:
+                  - generic [ref=f18e578]:
+                    - generic [ref=f18e580]:
+                      - generic [ref=f18e581] [cursor=pointer]: Audience controls
+                      - generic [ref=f18e1059] [cursor=pointer]:
+                        - generic:
+                          - text: Limit who sees your ads for this ad group. Previous account-level settings have been applied. To modify, visit the
+                          - link [ref=f18e1060]:
+                            - link "Account audience controls page" [ref=f18e1061]:
+                              - /url: https://ads.tiktok.com/i18n/account/account_level_control/?aadvid=7691729598878547969
+                          - text: .
+                      - generic [ref=f18e895]:
+                        - generic [ref=f18e898]:
+                          - generic [ref=f18e899]:
+                            - generic [ref=f18e900]: Locations
+                            - generic [ref=f18e909]: Choose where to reach people, including countries, regions, cities, or postal/ZIP codes.
+                          - generic [ref=f18e914]:
+                            - generic [ref=f18e919] [cursor=pointer]:
+                              - generic [ref=f18e920]: Indonesia
+                              - generic [ref=f18e923]:
+                                - generic [ref=f18e924]: Indonesia
+                                - button "Remove tag" [ref=f18e925]
+                            - generic: Tips
+                            - generic: "TikTok Ad Network provides its services in available regions as follows: In the US, TikTok Ad Network operates as an audience network of TikTok, Inc. In other regions, TikTok Ad Network operates as an ad network of ByteDance Pte. Ltd, a Singapore entity."
+                            - generic: Got it
+                            - button "Bulk upload" [ref=f18e937] [cursor=pointer]
+                        - generic [ref=f18e940]:
+                          - generic [ref=f18e941]: Minimum age
+                          - generic [ref=f18e950]:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic: No limit
+                                    - generic: "18"
+                                    - generic: "25"
+                                - generic [ref=f18e958] [cursor=pointer]:
+                                  - generic: "18"
+                                  - textbox [ref=f18e959]
+                        - generic [ref=f18e967]:
+                          - generic [ref=f18e968]: Languages
+                          - generic [ref=f18e982]:
+                            - generic:
+                              - generic:
+                                - generic: Search results
+                                - generic [ref=f18e986] [cursor=pointer]:
+                                  - generic [ref=f18e989]:
+                                    - generic [ref=f18e991]:
+                                      - generic [ref=f18e992]: Indonesian
+                                      - button "Remove tag" [ref=f18e994]
+                                    - textbox [ref=f18e1000]
+                                  - generic: All
+                        - generic [ref=f18e1008]:
+                          - generic [ref=f18e1009]: Exclude audiences
+                          - generic [ref=f18e1019]:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic: Quick select
+                                  - generic: Custom
+                                  - generic: Lookalike
+                                  - generic: No Data
+                                  - generic:
+                                    - generic:
+                                      - generic: Refresh
+                                      - generic: Create new
+                                - generic [ref=f18e1027] [cursor=pointer]:
+                                  - generic: Search or select audiences
+                                  - textbox [ref=f18e1028]
+                      - generic [ref=f18e602]:
+                        - generic [ref=f18e1267]:
+                          - generic [ref=f18e1268]:
+                            - generic [ref=f18e1269]: Locations
+                            - generic [ref=f18e1270]: ":"
+                          - text: Indonesia
+                        - generic [ref=f18e1271]:
+                          - generic [ref=f18e1272]:
+                            - generic [ref=f18e1273]: Minimum age
+                            - generic [ref=f18e1274]: ":"
+                          - text: "18"
+                        - generic [ref=f18e1275]:
+                          - generic [ref=f18e1276]:
+                            - generic [ref=f18e1277]: Languages
+                            - generic [ref=f18e1278]: ":"
+                          - text: Indonesian
+                    - generic [ref=f18e614]:
+                      - generic [ref=f18e615] [cursor=pointer]: Automatic targeting guidance · Optional
+                      - generic [ref=f18e631] [cursor=pointer]: Use additional audience settings to guide automatic targeting. Ad delivery to those audiences isn’t guaranteed.
+                      - generic [ref=f18e1078]:
+                        - generic [ref=f18e1081]:
+                          - generic [ref=f18e1082]:
+                            - generic [ref=f18e1083]: Ages
+                            - generic [ref=f18e1088]:
+                              - generic:
+                                - text: Some regions have additional age-targeting restrictions.
+                                - generic [ref=f18e1089] [cursor=pointer]: Learn more
+                          - generic [ref=f18e1094]:
+                            - generic:
+                              - generic [ref=f18e1096]:
+                                - textbox [ref=f18e1097]
+                                - generic [ref=f18e1098]: No limit
+                              - generic [ref=f18e1109]:
+                                - textbox [ref=f18e1110]
+                                - generic [ref=f18e1111]: 13-17
+                              - generic [ref=f18e1114] [cursor=pointer]:
+                                - textbox [ref=f18e1115]
+                                - generic [ref=f18e1116]: 18-24
+                              - generic [ref=f18e1122] [cursor=pointer]:
+                                - textbox [ref=f18e1123]
+                                - generic [ref=f18e1124]: 25-34
+                              - generic [ref=f18e1130] [cursor=pointer]:
+                                - textbox [ref=f18e1131]
+                                - generic [ref=f18e1132]: 35-44
+                              - generic [ref=f18e1138] [cursor=pointer]:
+                                - textbox [ref=f18e1139]
+                                - generic [ref=f18e1140]: 45-54
+                              - generic [ref=f18e1146] [cursor=pointer]:
+                                - textbox [ref=f18e1147]
+                                - generic [ref=f18e1148]: 55+
+                        - generic [ref=f18e1155]:
+                          - generic [ref=f18e1156]: Genders
+                          - generic [ref=f18e1165]:
+                            - generic:
+                              - generic [ref=f18e1167] [cursor=pointer]:
+                                - textbox [ref=f18e1168]
+                                - generic [ref=f18e1169]: All
+                              - generic [ref=f18e1172] [cursor=pointer]:
+                                - textbox [ref=f18e1173]
+                                - generic [ref=f18e1174]: Male
+                              - generic [ref=f18e1177] [cursor=pointer]:
+                                - textbox [ref=f18e1178]
+                                - generic [ref=f18e1179]: Female
+                        - generic [ref=f18e1183]:
+                          - generic [ref=f18e1184]: Custom audiences
+                          - generic [ref=f18e1201]:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic: Quick select
+                                  - generic: Custom
+                                  - generic: Lookalike
+                                  - generic: No Data
+                                  - generic:
+                                    - generic:
+                                      - generic: Refresh
+                                      - generic: Create new
+                                - generic [ref=f18e1209] [cursor=pointer]:
+                                  - generic: Search or select audiences
+                                  - textbox [ref=f18e1210]
+                        - generic [ref=f18e1218]:
+                          - generic [ref=f18e1219]:
+                            - generic [ref=f18e1220]: Interests & behaviors
+                            - generic [ref=f18e1224]:
+                              - generic:
+                                - text: Target audiences based on their long-term interests and content interactions on TikTok.
+                                - generic [ref=f18e1225] [cursor=pointer]: Learn more
+                          - generic [ref=f18e1230]:
+                            - generic [ref=f18e1231] [cursor=pointer]: Search or select interests & behaviors
+                            - alert [ref=f18e1239]:
+                              - generic [ref=f18e1241]:
+                                - generic [ref=f18e1249]:
+                                  - generic [ref=f18e1250]: Targeting for new parents is now available
+                                  - generic [ref=f18e1251]: This audience can be selected under "Life events".
+                                  - link "Go now" [ref=f18e1253]
+                                - button [ref=f18e1257] [cursor=pointer]
+                      - generic [ref=f18e636]:
+                        - generic [ref=f18e1279]:
+                          - generic [ref=f18e1280]:
+                            - generic [ref=f18e1281]: Ages
+                            - generic [ref=f18e1282]: ":"
+                          - text: 18-24, 25-34
+                        - generic [ref=f18e1284]:
+                          - generic [ref=f18e1285]:
+                            - generic [ref=f18e1286]: Genders
+                            - generic [ref=f18e1287]: ":"
+                          - text: Female
+                  - button [ref=f18e647] [cursor=pointer]:
+                    - generic:
+                      - text: Switch to manual targeting
+                      - generic [ref=f18e648]: Learn more
+              - generic [ref=f18e653]:
+                - generic [ref=f18e655] [cursor=pointer]:
+                  - generic [ref=f18e656]:
+                    - generic [ref=f18e657]: Placements
+                    - button [ref=f18e661]
+                  - generic [ref=f18e665]: Your ads will appear on the placements you choose.
+                - generic [ref=f18e670]:
+                  - generic [ref=f18e672]:
+                    - generic [ref=f18e673]: Eligible placements
+                    - generic [ref=f18e677]: TikTok (including search results, Lemon8, and PineDrama), TikTok Ad Network, Global App Bundle
+                  - link "Advanced settings" [ref=f18e685]
+            - generic [ref=f18e694]:
+              - generic [ref=f18e695]:
+                - generic [ref=f18e696]: Recommendation usage
+                - generic [ref=f18e703]:
+                  - generic [ref=f18e708]:
+                    - generic: "0123456789"
+                    - generic: "0123456789"
+                  - generic [ref=f18e709]: Ad group is partially optimized. For best results, apply all recommendations.
+                - generic [ref=f18e711]:
+                  - generic [ref=f18e713]:
+                    - status [ref=f18e1053]
+                    - generic [ref=f18e718]: Optimization and bidding
+                  - generic [ref=f18e722]:
+                    - status [ref=f18e723]
+                    - generic [ref=f18e729]: Budget and schedule
+                  - generic [ref=f18e731]:
+                    - status [ref=f18e732]
+                    - generic [ref=f18e738]: Audience targeting
+                  - generic [ref=f18e740] [cursor=pointer]:
+                    - status [ref=f18e742]
+                    - generic [ref=f18e745]: Creative assets
+                    - generic [ref=f18e746]: Complete section to see related recommendations
+                - link "View less" [ref=f18e748]
+              - generic [ref=f18e756]:
+                - generic [ref=f18e757]:
+                  - generic [ref=f18e758]: Available audience
+                  - generic [ref=f18e759]: Learn more
+                - generic [ref=f18e771]:
+                  - generic:
+                    - generic [ref=f18e772]: Balanced
+                    - generic [ref=f18e775]: 134,521,000-164,416,000
+        - generic [ref=f18e791]:
+          - generic [ref=f18e792]:
+            - generic [ref=f18e794]:
+              - generic:
+                - button "Exit" [ref=f18e796] [cursor=pointer]
+                - button [ref=f18e800] [cursor=pointer]
+            - generic [ref=f18e804]:
+              - generic: All edits saved to draft
+              - generic: Drafts are not yet active. Publish to start running ads.
+              - generic: Draft saved
+          - button "Continue" [ref=f18e812] [cursor=pointer]
+    - generic: Ad Assistant
+    - generic:
+      - generic:
+        - generic: I have reviewed and will abide by TikTok's Anti-Discrimination Ad Policy and all applicable laws.
+        - generic: I will not use TikTok Advertising for any wrongfully discriminatory practices.
+        - generic: Accept
+  - tooltip "Interests Purchase intention Video interactions Creator interactions Hashtag interactions Life events" [ref=f18e1290]:
+    - generic [ref=f18e1293]:
+      - textbox "Search" [active] [ref=f18e1295]
+      - generic [ref=f18e1298]:
+        - generic [ref=f18e1299]:
+          - generic [ref=f18e1300]: Interests
+          - generic [ref=f18e1302]: Purchase intention
+          - generic [ref=f18e1304]: Video interactions
+          - generic [ref=f18e1306]: Creator interactions
+          - generic [ref=f18e1308]: Hashtag interactions
+          - generic [ref=f18e1310]: Life events
+        - generic [ref=f18e1312]:
+          - generic:
+            - textbox "for screen reader"
+          - tree [ref=f18e1313]:
+            - generic [ref=f18e1316]:
+              - treeitem "Select tree node Tech & Electronics" [ref=f18e1317]:
+                - generic [ref=f18e1318] [cursor=pointer]
+                - checkbox "Select tree node" [ref=f18e1322] [cursor=pointer]
+                - generic [ref=f18e1324] [cursor=pointer]: Tech & Electronics
+              - treeitem "Select tree node Appliances" [ref=f18e1329]:
+                - generic [ref=f18e1330] [cursor=pointer]
+                - checkbox "Select tree node" [ref=f18e1334] [cursor=pointer]
+                - generic [ref=f18e1336] [cursor=pointer]: Appliances
+              - treeitem "Select tree node Education" [ref=f18e1341]:
+                - generic [ref=f18e1342] [cursor=pointer]
+                - checkbox "Select tree node" [ref=f18e1346] [cursor=pointer]
+                - generic [ref=f18e1348] [cursor=pointer]: Education
+              - treeitem "Select tree node Baby & Kids Products" [ref=f18e1353]:
+                - generic [ref=f18e1354] [cursor=pointer]
+                - checkbox "Select tree node" [ref=f18e1358] [cursor=pointer]
+                - generic [ref=f18e1360] [cursor=pointer]: Baby & Kids Products
+              - treeitem "Select tree node Home Improvement" [ref=f18e1365]:
+                - generic [ref=f18e1366] [cursor=pointer]
+                - checkbox "Select tree node" [ref=f18e1370] [cursor=pointer]
+                - generic [ref=f18e1372] [cursor=pointer]: Home Improvement
+              - treeitem "Select tree node Apparel & Accessories" [ref=f18e1377]:
+                - generic [ref=f18e1378] [cursor=pointer]
+                - checkbox "Select tree node" [ref=f18e1382] [cursor=pointer]
+                - generic [ref=f18e1384] [cursor=pointer]: Apparel & Accessories
+              - treeitem "Select tree node Financial Services" [ref=f18e1389]:
+                - generic [ref=f18e1390] [cursor=pointer]
+                - checkbox "Select tree node" [ref=f18e1394] [cursor=pointer]
+                - generic [ref=f18e1396] [cursor=pointer]: Financial Services
+              - treeitem "Select tree node E-Commerce (Non-app)" [ref=f18e1401]:
+                - generic [ref=f18e1402] [cursor=pointer]
+                - checkbox "Select tree node" [ref=f18e1406] [cursor=pointer]
+                - generic [ref=f18e1408] [cursor=pointer]: E-Commerce (Non-app)
+            - generic [ref=f18e1414] [cursor=pointer]
