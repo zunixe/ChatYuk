@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
-import '../core/media/native_image.dart';
 import '../utils.dart';
 
 /// Avatar user (berbasis FOTO) yang MODULAR untuk semua halaman user-facing:
@@ -124,7 +123,6 @@ void _boundAvatarMap(Map<String, Object?> m) {
 /// block UI thread saat scroll list.
 class _UserAvatarState extends State<UserAvatar> {
   ImageProvider? _provider;
-  String? _asyncResolvingFor;
 
   /// UID pendek untuk log — aman untuk uid kosong/pendek.
   String get _uid8 => widget.uid.length >= 8
@@ -205,50 +203,19 @@ class _UserAvatarState extends State<UserAvatar> {
       _provider = stable;
       return;
     }
-    // Decode sinkron (murah — server sudah q70/300px) lalu simpan
-    // instance ImageProvider sekali selamanya untuk uid ini.
+    // ANTI-KEDIP cold start (2026-10-12): dulu base64 >100 KB di-decode ASYNC
+    // (isolate) → frame pertama transparan → foto menyusul = "kedip". Kini
+    // SELALU base64Decode sinkron (murah, ~ms) lalu `ResizeImage(MemoryImage)`
+    // cap 96px — decode BITMAP tetap ditunda oleh Image widget/framework,
+    // tapi provider sudah ADA di frame pertama sehingga tidak ada frame kosong.
     // Bytes disimpan HANYA di `_avatarBytesByUid` (single source) — dulu ada
     // salinan kedua per-src (`_avatarCache`) yang menggandakan retensi.
     if (_avatarBytesByUid[widget.uid] == null) {
       Uint8List? b;
-      if (src.length > 100000 && _asyncResolvingFor != src) {
-        // B64 besar dari network batch → decode di isolate agar scroll
-        // tidak jank; poll initState menampilkan hasilnya saat siap.
-        _asyncResolvingFor = src;
-        NativeImage.decodeAvatar(src, maxPx: 256).then((decoded) {
-          _asyncResolvingFor = null;
-          if (decoded == null || decoded.isEmpty) {
-            dlog(
-              '[AVATAR] $_uid8 DECODE-FAIL(async) keep-old=${_provider != null}',
-            );
-            return;
-          }
-          // Foto sudah berganti saat decode berjalan → buang hasil basi
-          // (jangan timpa foto baru dengan foto lama).
-          if (_avatarLastSrcByUid[widget.uid] != src) {
-            dlog('[AVATAR] $_uid8 STALE-DECODE dropped');
-            return;
-          }
-          _avatarBytesByUid[widget.uid] ??= decoded;
-          _avatarImageByUid.putIfAbsent(
-            widget.uid,
-            () => _cappedAvatarImage(_avatarBytesByUid[widget.uid]!),
-          );
-          _boundAvatarMap(_avatarBytesByUid);
-          _boundAvatarMap(_avatarImageByUid);
-          if (mounted) {
-            setState(() => _provider = _avatarImageByUid[widget.uid]);
-          }
-        });
-        return;
-      } else if (src.length > 100000) {
-        return;
-      } else {
-        try {
-          b = base64Decode(src);
-        } catch (_) {
-          b = null;
-        }
+      try {
+        b = base64Decode(src);
+      } catch (_) {
+        b = null;
       }
       if (b == null) {
         // ── JANGAN buang foto yang sudah tampil ──
