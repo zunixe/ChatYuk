@@ -191,6 +191,27 @@ class MediaDiskCache {
     }
   }
 
+  /// Baca avatar by-uid (SINKRON): uid-only `avatars/<uid>.jpg` dulu, lalu
+  /// cari versioned `avatars/<uid>_<millis>.jpg` di index (ambil terbaru).
+  /// Anti-kedip: cache bisa menyimpan / mencari path yang tak match nama file.
+  Uint8List? readAvatarByUid(String uid) {
+    if (uid.isEmpty || _docs == null) return null;
+    final direct = readSync('avatars/$uid.jpg');
+    if (direct != null && direct.isNotEmpty) return direct;
+    final prefix = 'avatars/${uid}_';
+    String? best;
+    DateTime? bestAt;
+    for (final e in _index.entries) {
+      if (!e.key.startsWith(prefix)) continue;
+      if (bestAt == null || e.value.isAfter(bestAt)) {
+        bestAt = e.value;
+        best = e.key;
+      }
+    }
+    if (best == null) return null;
+    return readSync(best);
+  }
+
   /// Baca BANYAK path PARALEL (async, non-blocking) — untuk daftar panjang
   /// (mis. 200 thumb galeri grup). Dulu loop `readSync` = 200 stat + 200 baca
   /// file di UI thread → stall. Ini pakai `read()` async → tak blok frame.
