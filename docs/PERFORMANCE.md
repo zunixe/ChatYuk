@@ -4013,3 +4013,34 @@ Coalesce RPC (`_inflight`) di PointsService/SocialService BENAR.
 **Masih tersisa (belum diukur ulang):** `chat.listFetch` 660 ms & `get_wallet`
 590 ms masih di p90 — kandidat query berat / koneksi residual (perlu
 investigasi lanjutan + network lambat).
+
+### §48c. Uji leak sesi panjang (HP fisik, terukur)
+
+Skenario: 30× buka-tutup private chat + 200× pindah tab (50 putaran × 4).
+
+| Metrik | Awal | 30× chat | +200× tab |
+|---|---|---|---|
+| PSS | 300 MB | 234 MB | **238 MB** |
+| Native Heap | 32 MB | 4.5 MB | **7.6 MB** |
+| RSS | 350 MB | 192 MB | 212 MB |
+
+**Tidak ada leak** — memori STABIL (~235 MB), bahkan turun dari awal (trim arena
+foreground-idle bekerja). Activities=0 setelah chat ditutup (tak ada Activity
+tertahan). `subscribe`=179 vs `unsubscribe`=5 = **reconnect channel bersama**
+(RealtimeHub `online-global`/`room-*`, bukan per-chat) saat jaringan putus —
+bukan leak. Channel private chat (`msg-<key>`) di-`removeChannel` via
+`onCancel` (deferred microtask, anti-lag tutup chat).
+
+**Jank sesi panjang:** `janky(build)=57` dari 4000 frame (raster tetap 0) —
+semua dari **1 spike build 42.5 ms** saat buka chat pertama (bukan pola; build
+count per widget tetap rendah: MainNav 12, PostCard 15, dll). `chat.parseRows`
+hanya 4.1 ms (bukan penyebab). Kandidat spike: decode/gc saat chat mount.
+
+**`chat.listFetch` 307 ms avg = LATENCY, bukan query:** EXPLAIN ANALYZE → 0.5 ms
+(GIN `participants` + btree `last_message_at DESC`, index lengkap). Poll 30 s
+by-design (hanya saat tab chat/online visible + realtime diam >25 s).
+
+**Kesimpulan (terukur):** navigasi & interaksi sehat di seluruh app; tidak ada
+leak; rendering 0 jank raster. Sisa kandidat: spike build 42 ms sekali saat
+buka chat (perlu profil lanjutan bila terasa), `get_wallet`/`listFetch` p90
+(latency jaringan).
