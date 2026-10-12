@@ -4150,3 +4150,36 @@ saveLayer/opacity besar di jalur transisi (Fade chat = 1 layer, sudah ada).
 - Memori: tidak ada leak (27-32MB stabil).
 - Sisa: layer besar in-activity = batas arsitektur Flutter (WhatsApp native
   pakai Activity transition yang di-composite sistem). 0.5% frame = wajar.
+
+---
+
+## §48. Adopsi pola Telegram (A/B/C) — image cache & decode (2026-10-12)
+
+Bandingkan Telegram Android (`DrKLO/Telegram`, `ImageLoader.java`) vs ChatYuk,
+lalu adopsi 3 pola yang terbukti & aman:
+
+**A — cap imageCache ADAPTIF ke RAM** (`lib/core/media/image_cache_budget.dart`,
+commit `800f2ea`). Telegram: `min(maxSize, memoryClass/7)` dinamis. ChatYuk dulu
+STATIS 40MB. Sekarang: byte=RAM/128 (clamp 16–48MB), entri=RAM/32MB (clamp
+60–160); baca RAM via `device_info_plus` saat boot; gagal→fallback 4GB, Util
+murni + test (2GB→16MB, 4GB→32MB, 6GB→48MB).
+
+**B — cache avatar TERPISAH** (`lib/widgets/avatar_image_cache.dart`,
+commit `1d52f6d`). Telegram pisah `smallImagesMemCache`(20%)/`memCache`(80%).
+ChatYuk: `imageCache` global menyatukan avatar 96px (36KB) vs foto 1080px
+(4.4MB) → 1 foto ≈ 124× avatar → scroll Timeline menyapu avatar. Sekarang
+`AvatarImageCache` (store `ui.Image` sendiri, LRU byte, cap 8MB ≈ 220 avatar) +
+`AvatarMemoryImage` (ImageProvider yg resolve dari store itu, BUKAN imageCache
+global) → foto besar tak bisa men-evict avatar. Dibersihkan saat logout.
+
+**C — pool decode + RGB_565 thumb** (`ImageBridge.kt`, commit `e0cfb3c`).
+Pool BAOS encode SUDAH ada (§40). Pool byte decode base64 TIDAK applicable
+(`android.util.Base64` tak punya varian ke-dest). Yang diterapkan:
+`decodeSampled` (jalur thumb) pakai `RGB_565` (bitmap sementara saat decode 50%
+lebih kecil; output JPEG tanpa alpha → kualitas aman) + pool
+`BitmapFactory.Options` thread-local.
+
+**Verifikasi:** `flutter analyze lib/`=0; test (`image_cache_budget`,
+`avatar_image_cache`, `avatar_provider_stable`, `image_cap_widgets`) hijau;
+build Kotlin (AAB/APK profile) OK; install HP. **Belum diukur:** PSS/jank
+sebelum-sesudah A/B/C di device (butuh sesi profiling); tidak diklaim angka.
