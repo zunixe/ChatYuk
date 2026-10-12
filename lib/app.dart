@@ -246,6 +246,8 @@ class _MainNavState extends ConsumerState<_MainNav>
   // saat resume (hanya kalau background CUKUP LAMA, biar chat tetap instan
   // saat app sekadar sebentar pindah app).
   DateTime? _pausedAt;
+  // PROFILING: report recap hanya SEKALI per siklus foreground→leave.
+  bool _perfReportedOnLeave = false;
   // Provider tab sudah dibuat di root (_ChatYukAppState) sejak app start —
   // di sini cukup consume. Dulu: dibuat DI SINI (setelah skeleton auth
   // hilang) → disk cache baru menghangat saat halaman sudah tampil →
@@ -423,11 +425,22 @@ class _MainNavState extends ConsumerState<_MainNav>
     // BATERAI: satu sumber kebenaran foreground → gate timer/poll latar.
     AppForeground.set(state);
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    // PROFILING: cetak recap saat app MENINGGALKAN foreground. Sebagian ROM
+    // (MIUI) hanya mengirim `inactive` saat Home cepat — tanpa ini, report
+    // tak pernah keluar sehingga pengukuran mandek. `report()` idempoten
+    // (reset tiap panggil) → aman dipanggil di inactive+paused.
+    if (state == AppLifecycleState.inactive && !_perfReportedOnLeave) {
+      _perfReportedOnLeave = true;
+      PerfProbe.report('sesi berakhir (app meninggalkan foreground)');
+    }
     if (state == AppLifecycleState.paused) {
       _pausedAt = DateTime.now();
       // Ringkasan probe (p50/p90/max) dicetak saat app di-background — satu
       // blok per sesi, tanpa perlu memanggil manual. No-op saat probe off.
-      PerfProbe.report('sesi berakhir (app di-background)');
+      if (!_perfReportedOnLeave) {
+        _perfReportedOnLeave = true;
+        PerfProbe.report('sesi berakhir (app di-background)');
+      }
       // App di-background → set idle, bukan offline.
       // User tetap tampil di menu online sebagai idle.
       auth.goIdle();
@@ -441,6 +454,7 @@ class _MainNavState extends ConsumerState<_MainNav>
       // App di-kill/force-close → set idle (offline otomatis setelah threshold).
       auth.goIdle();
     } else if (state == AppLifecycleState.resumed) {
+      _perfReportedOnLeave = false; // siklus baru → boleh report lagi nanti.
       // CATATAN (dicoba & TIDAK berhasil — jangan ulangi): stall 181ms pada
       // frame pertama setelah resume BUKAN kode kita, melainkan DDIC idle
       // mode MIUI. Bukti: framestats ui_work=0ms, Vsync melompat +181ms;
