@@ -810,9 +810,12 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
 /// sehingga request nyata berikutnya memakai koneksi segar.
 Future<void> _warmupRpcConnection() async {
   try {
-    // Beri jeda sangat singkat supaya frame pertama + warm-gate (cap 400ms)
-    // selesai dulu; warm-up tidak boleh berebut dengan render awal.
-    await Future<void>.delayed(const Duration(milliseconds: 600));
+    // PERF (2026-10-12, terukur): dulu jeda 600 ms — tapi RPC boot (dari tab
+    // Online/warm-gate) sudah menembak di ~0 ms, sehingga mereka KENA koneksi
+    // dingin (TLS) dan warm-up justru telat. Sekarang warm-up yang menang
+    // lomba: mulai setelah frame pertama saja (16 ms), supaya handshake TLS
+    // selesai/koneksi pool siap SEBELUM burst RPC boot mengantre.
+    await Future<void>.delayed(const Duration(milliseconds: 16));
     await warmupRpcConnection();
   } catch (e) {
     dlog('[WARMUP] dilewati: $e');

@@ -164,7 +164,13 @@ class SupabaseConfig {
       ..connectionTimeout = const Duration(seconds: 5)
       ..idleTimeout = const Duration(seconds: 15)
       // Keep-alive tetap aktif (untuk performa request beruntun normal).
-      ..maxConnectionsPerHost = 8;
+      // PERF (2026-10-12, terukur): `maxConnectionsPerHost = 8` membuat ~21 RPC
+      // saat boot BEREREBUT 8 koneksi → antre ~900-1080 ms (semua selesai di
+      // timestamp sama; PerfProbe boot). Naik ke 20: cukup untuk burst boot
+      // (21 RPC) tanpa throttle, tetap wajar untuk keep-alive. Overshoot
+      // koneksi dihindari tetap melalui `idleTimeout` 15 s (koneksi menganggur
+      // ditutup → tidak menumpuk saat idle).
+      ..maxConnectionsPerHost = 20;
     return IOClient(inner);
   }
 
