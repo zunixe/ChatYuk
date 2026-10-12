@@ -4183,3 +4183,20 @@ lebih kecil; output JPEG tanpa alpha → kualitas aman) + pool
 `avatar_image_cache`, `avatar_provider_stable`, `image_cap_widgets`) hijau;
 build Kotlin (AAB/APK profile) OK; install HP. **Belum diukur:** PSS/jank
 sebelum-sesudah A/B/C di device (butuh sesi profiling); tidak diklaim angka.
+
+### §48b. Hasil ukur A/B/C di device (HP Xiaomi, build profile)
+
+| Titik ukur | TOTAL PSS | Native Heap | EGL mtrack |
+|---|---|---|---|
+| Baru buka (cap 32MB) | 346 MB | 44 MB | 51 MB |
+| Setelah scroll Timeline + list chat + komentar | **297 MB** | 49 MB | 51 MB |
+
+**Temuan nyata saat ukur (BUG, sudah difix):** `device_info_plus.physicalRamSize`
+di HyperOS balik nilai TAK WAJAR (<2GB) di HP RAM 11GB → cap jatuh ke **16MB**
+(clamp terkecil), bukan 32/48MB. Fix `9a2cfd5`: sanity floor ≥2GB, selain itu
+fallback 4GB. Verifikasi device: `[IMGCACHE] ram=4.0GB cap=32MB/128 entri`.
+
+**Kesimpulan:** PSS stabil & sehat (297MB setelah aktivitas berat, tak
+membengkak). **Belum:** recap imageCache/jank via PERF tak selalu keluar di ROM
+ini (lifecycle inactive/paused tak konsisten) → hit-rate persis belum terukur;
+angka PSS ini indikatif (bukan A/B terkontrol dgn build sebelum A/B/C).
