@@ -794,10 +794,10 @@ class AppSlidePageTransitionsBuilder extends PageTransitionsBuilder {
   const AppSlidePageTransitionsBuilder();
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 150);
+  Duration get transitionDuration => const Duration(milliseconds: 120);
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 120);
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 100);
 
   // Builder default untuk kasus fullscreen dialog (bottom-up) — dipakai apa
   // adanya supaya panggilan tidak ikut slide horizontal.

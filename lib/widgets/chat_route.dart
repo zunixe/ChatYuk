@@ -13,8 +13,8 @@ import '../screens/private_chat_screen.dart';
 /// Sebelumnya transisi ini disalin manual di 2 tempat (chat list & Online)
 /// sementara jalur lain (Nearby/CallHistory/UserInfo/RoomSheet) hanya Slide
 /// murni → tidak konsisten. Sekarang semua lewat sini.
-const Duration kChatRouteDuration = Duration(milliseconds: 150);
-const Duration kChatRouteReverseDuration = Duration(milliseconds: 120);
+const Duration kChatRouteDuration = Duration(milliseconds: 120);
+const Duration kChatRouteReverseDuration = Duration(milliseconds: 100);
 
 /// Bangun route ke [PrivateChatScreen] dengan transisi Slide+Fade seragam.
 PageRoute<void> chatRoute({
