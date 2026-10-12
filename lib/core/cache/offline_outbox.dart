@@ -26,6 +26,9 @@ class OutboxEntry {
   final DateTime createdAt;
   final bool pointsDeducted;
   final String pointsKind;
+  /// Poster video (base64 JPEG, opsional) — disimpan agar kirim ulang dari
+  /// outbox tetap menyertakan thumbnail preview penerima.
+  final String videoPosterB64;
 
   const OutboxEntry({
     required this.pendingId,
@@ -48,6 +51,7 @@ class OutboxEntry {
     required this.createdAt,
     this.pointsDeducted = false,
     this.pointsKind = 'text',
+    this.videoPosterB64 = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -71,6 +75,7 @@ class OutboxEntry {
         'createdAt': createdAt.toUtc().toIso8601String(),
         'pointsDeducted': pointsDeducted,
         'pointsKind': pointsKind,
+        'videoPosterB64': videoPosterB64,
       };
 
   factory OutboxEntry.fromMap(Map<String, dynamic> m) => OutboxEntry(
@@ -94,6 +99,7 @@ class OutboxEntry {
         createdAt: DateTime.tryParse('${m['createdAt'] ?? ''}') ?? DateTime.now(),
         pointsDeducted: m['pointsDeducted'] == true,
         pointsKind: '${m['pointsKind'] ?? 'text'}',
+        videoPosterB64: '${m['videoPosterB64'] ?? ''}',
       );
 }
 

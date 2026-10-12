@@ -403,6 +403,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     // me-reset _pendingVideoOnce=false → kalau dibaca setelah clear, video
     // sekali-lihat selalu terkirim sebagai video biasa (bug: type='video').
     final isOnce = videoOnceSelected;
+    // POSTER juga WAJIB ditangkap SEBELUM clear — videoClearPreview men-null-kan
+    // _pendingVideoPoster → dulu poster selalu null saat kirim (thumbnail
+    // penerima tak pernah ada). Sama pola dengan isOnce di atas.
+    final posterB64 = pendingVideoPosterB64;
     videoClearPreview();
 
     final file = File(path);
@@ -419,6 +423,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       text: text,
       reply: reply,
       isOnce: isOnce,
+      posterB64: posterB64,
     );
   }
 
@@ -439,6 +444,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     String text = '',
     MessageModel? reply,
     bool isOnce = false,
+    String? posterB64,
   }) async {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
@@ -479,6 +485,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        videoPosterB64: pendingVideoPosterB64 ?? '',
       );
       return;
     }
@@ -499,6 +506,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
           repliedToId: reply?.id,
           repliedToText: reply?.text,
           repliedToSenderName: reply?.senderName,
+          videoPosterB64: pendingVideoPosterB64 ?? '',
         );
         return;
       }
@@ -539,9 +547,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       // ulang server). Dipanggil SEBELUM dispatch supaya poster sudah di disk
       // saat bubble versi-path muncul (kalau dibalik, ada race: bubble render
       // path baru sebelum poster tersimpan → MISS = "card ngeload").
-      final posterB64 = pendingVideoPosterB64;
-      final posterBytes = (posterB64 != null && posterB64.isNotEmpty)
-          ? base64Decode(posterB64)
+      final posterB64v = posterB64;
+      final posterBytes = (posterB64v != null && posterB64v.isNotEmpty)
+          ? base64Decode(posterB64v)
           : null;
       unawaited(
         VideoPrefetch.warmOne(path, videoBytes: bytes, posterBytes: posterBytes),
@@ -557,6 +565,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
                 .read(storageProvider)
                 .uploadChatVideoPoster(chatId: photoUploadChatId, bytes: posterBytes) ??
             '';
+        dlog('[VideoSend] poster upload path=$posterPath bytes=${posterBytes.length}');
+      } else {
+        dlog('[VideoSend] poster KOSONG (posterB64=${posterB64v == null ? "null" : posterB64v.length}) → tanpa preview');
       }
       await photoDispatch(
         imageData: path,
