@@ -16,7 +16,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'core/admin_gate.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'core/battery_optimization_service.dart';
+import 'core/media/image_cache_budget.dart';
 import 'core/nav_gate.dart';
 import 'app.dart';
 import 'models/room_model.dart';
@@ -565,8 +567,21 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // cache → kartu masuk viewport langsung gambar (bukan placeholder). Tetap
   // BOUNDED (bukan unbounded) supaya memori tak membengkak; thumb post ~135KB
   // → 120 entry ≈ 16MB bitmap, aman bersama cap lain.
-  PaintingBinding.instance.imageCache.maximumSize = 120;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 40 << 20;
+  // Cap ADAPTIF ke RAM device (A) — ambil RAM fisik, lalu set cap. Gagal baca
+  // → fallback 4GB (perilaku lama). Di luar jalur kritis (sekali saat boot).
+  int ramBytes = kImageCacheFallbackRamBytes;
+  try {
+    final info = DeviceInfoPlugin();
+    if (Platform.isAndroid) {
+      ramBytes = (await info.androidInfo).physicalRamSize;
+    }
+  } catch (_) {}
+  final capBytes = imageCacheBytesForRam(ramBytes);
+  final capEntries = imageCacheEntriesForRam(ramBytes);
+  PaintingBinding.instance.imageCache.maximumSize = capEntries;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = capBytes;
+  dlog('[IMGCACHE] ram=${(ramBytes / (1 << 30)).toStringAsFixed(1)}GB '
+      'cap=${(capBytes / (1 << 20)).toStringAsFixed(0)}MB/$capEntries entri');
   kFirebaseOptionsOverride = firebaseOptions;
   // Crashlytics butuh Firebase ter-init dulu — aktifkan pasca-init di bawah.
   // Handler di sini hanya dlog; setelah FlutterError.crashlytics disambung,
