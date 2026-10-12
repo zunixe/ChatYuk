@@ -567,15 +567,17 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // cache → kartu masuk viewport langsung gambar (bukan placeholder). Tetap
   // BOUNDED (bukan unbounded) supaya memori tak membengkak; thumb post ~135KB
   // → 120 entry ≈ 16MB bitmap, aman bersama cap lain.
-  // Cap ADAPTIF ke RAM device (A) — ambil RAM fisik, lalu set cap. Gagal baca
-  // (device_info kadang return 0 di sebagian ROM, mis. HyperOS) → fallback.
+  // Cap ADAPTIF ke RAM device (A) — ambil RAM fisik, lalu set cap.
+  // SANITY: `device_info_plus` kadang return 0 ATAU nilai tak wajar (<2GB) di
+  // sebagian ROM (HyperOS: terukur "0.0GB" di HP RAM 11GB) → kalau dipakai apa
+  // adanya, clamp jatuh ke cap TERKECIL (16MB). Hanya percaya nilai >= 2GB;
+  // selain itu pakai fallback 4GB (→ 32MB). Aman & tidak lagi salah-rendah.
+  const int kMinSaneRamBytes = 2 * 1024 * 1024 * 1024;
   int ramBytes = kImageCacheFallbackRamBytes;
   try {
     if (Platform.isAndroid) {
       final v = (await DeviceInfoPlugin().androidInfo).physicalRamSize;
-      // physicalRamSize bisa 0 (bukan exception) di sebagian ROM → abaikan 0,
-      // kalau tidak cap malah jadi 16MB (paling kecil) di HP RAM besar.
-      if (v > 0) ramBytes = v;
+      if (v >= kMinSaneRamBytes) ramBytes = v;
     }
   } catch (_) {}
   final capBytes = imageCacheBytesForRam(ramBytes);
