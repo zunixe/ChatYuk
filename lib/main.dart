@@ -568,12 +568,14 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // BOUNDED (bukan unbounded) supaya memori tak membengkak; thumb post ~135KB
   // → 120 entry ≈ 16MB bitmap, aman bersama cap lain.
   // Cap ADAPTIF ke RAM device (A) — ambil RAM fisik, lalu set cap. Gagal baca
-  // → fallback 4GB (perilaku lama). Di luar jalur kritis (sekali saat boot).
+  // (device_info kadang return 0 di sebagian ROM, mis. HyperOS) → fallback.
   int ramBytes = kImageCacheFallbackRamBytes;
   try {
-    final info = DeviceInfoPlugin();
     if (Platform.isAndroid) {
-      ramBytes = (await info.androidInfo).physicalRamSize;
+      final v = (await DeviceInfoPlugin().androidInfo).physicalRamSize;
+      // physicalRamSize bisa 0 (bukan exception) di sebagian ROM → abaikan 0,
+      // kalau tidak cap malah jadi 16MB (paling kecil) di HP RAM besar.
+      if (v > 0) ramBytes = v;
     }
   } catch (_) {}
   final capBytes = imageCacheBytesForRam(ramBytes);
