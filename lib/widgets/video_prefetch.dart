@@ -156,6 +156,16 @@ class VideoPrefetch {  VideoPrefetch._();
   /// Ambil bitmap poster siap-render (sinkron). null bila belum di-decode.
   static ui.Image? posterImageSync(String videoPath) => _posterImages[videoPath];
 
+  /// Jumlah bitmap di pool (uji): memastikan evict menjaga batas & replace
+  /// tidak menumpuk.
+  @visibleForTesting
+  static int posterImageCount() => _posterImages.length;
+
+  /// True bila pool punya bitmap untuk [videoPath] (uji).
+  @visibleForTesting
+  static bool hasPosterImage(String videoPath) =>
+      _posterImages.containsKey(videoPath);
+
   /// Future decode poster yang sedang berjalan (kalau ada) — dipakai bubble
   /// untuk MENUNGGU sebentar agar frame pertama sudah poster (buka-1 tidak
   /// 'ngeload'). Key = videoPath.
@@ -193,8 +203,15 @@ class VideoPrefetch {  VideoPrefetch._();
       // decodeImageFromPixels ~0ms (nol decode JPEG) → cold start langsung.
       final persisted = await _loadPersistedBitmap(videoPath);
       if (persisted != null) {
-        if (_posterImages.length > _posterImageBudget) _clearPosterImages();
-        _posterImages[videoPath] = persisted;
+        // RACE: entry bisa sudah terisi oleh decode lain saat kita await.
+        // Bila sudah ada → dispose milik kita (tidak dipakai) agar tak leak.
+        if (_posterImages.containsKey(videoPath)) {
+          try {
+            persisted.dispose();
+          } catch (_) {}
+          return;
+        }
+        _putPosterImage(videoPath, persisted);
         return;
       }
       final codec = await ui.instantiateImageCodec(
@@ -202,24 +219,43 @@ class VideoPrefetch {  VideoPrefetch._();
         targetWidth: posterDecodeWidth,
       );
       final frame = await codec.getNextFrame();
-      // Dispose bitmap LAMA untuk kunci SAMA (kalau ada) — aman: tak ada
-      // widget lain memegang objek yang baru saja digantikan dari pool untuk
-      // path yang sama (pola sama decodedImageCache foto). Mencegah bitmap
-      // menumpuk (regresi "Native Heap 515MB" 2026-10-12: pool di-clear tanpa
-      // dispose + replace tanpa dispose → ui.Image native tak pernah bebas).
-      final old = _posterImages.remove(videoPath);
-      if (old != null && !identical(old, frame.image)) {
+      // OWNERSHIP `codec`: dibuat di sini, hanya dipakai untuk 1 frame →
+      // dispose setelah frame diambil (frame.image adalah handle independen).
+      try {
+        codec.dispose();
+      } catch (_) {}
+      // RACE: decode lain mungkin mengisi entry saat kita await di atas.
+      if (_posterImages.containsKey(videoPath)) {
         try {
-          old.dispose();
+          frame.image.dispose();
         } catch (_) {}
+        return;
       }
-      if (_posterImages.length > _posterImageBudget) _clearPosterImages();
-      _posterImages[videoPath] = frame.image;
-      // Simpan bitmap mentah ke disk → cold start berikutnya nol decode.
+      _putPosterImage(videoPath, frame.image);
+      // Persist bytes ke disk (derive dari frame.image, tapi byte diekstrak
+      // di dalam dan frame.image TIDAK ditahan setelahnya).
       unawaited(_persistBitmap(videoPath, frame.image));
     } catch (e) {
       if (kDebugMode) debugPrint('[VideoPrefetch] decode poster err: $e');
     }
+  }
+
+  /// Masukkan [img] ke pool `_posterImages[path]` dgn aturan ownership TEGAS
+  /// (pola sama `_putDecodedCache` foto):
+  ///   * Bila ada entry LAMA untuk path SAMA → dispose (kunci sama: caller
+  ///     kita sendiri yang menaruh entry itu, dan penggantinya objek baru —
+  ///     aman; bukan evict LRU).
+  ///   * Evict (pool penuh) → `_clearPosterImages()` hanya **lepas referensi**
+  ///     (TIDAK dispose) — entry evicted bisa masih dirender bubble lain.
+  static void _putPosterImage(String videoPath, ui.Image img) {
+    final old = _posterImages.remove(videoPath);
+    if (old != null && !identical(old, img)) {
+      try {
+        old.dispose();
+      } catch (_) {}
+    }
+    if (_posterImages.length >= _posterImageBudget) _clearPosterImages();
+    _posterImages[videoPath] = img;
   }
 
   /// Ukuran bitmap tersimpan per path (bytes) → file di direktori VideoFileCache
@@ -242,30 +278,46 @@ class VideoPrefetch {  VideoPrefetch._();
       // file .bmp warisan (1080p RGBA ~8 MB).
       if (w > posterDecodeWidth * 2 || h > posterDecodeWidth * 4) return null;
       final pixels = Uint8List.sublistView(b, 8);
-      final completer = Completer<ui.Image>();
-      ui.decodeImageFromPixels(
-        pixels, w, h, ui.PixelFormat.rgba8888, completer.complete,
-      );
-      // await di dalam try → bukan "return future tanpa await".
-      final img = await completer.future;
-      return img;
+      // await di dalam try (bukan `return` future) — cegah warning
+      // unawaited_return_in_try & tangkap galat di sini.
+      return await _decodeRgbaToImage(pixels, w, h);
     } catch (_) {
       return null;
     }
   }
 
+  /// Persist bitmap poster ke `.bmp`.
+  ///
+  /// OWNERSHIP (Phase 5): fungsi ini **TIDAK memiliki** [img] — ia meminjam
+  /// milik pool `_posterImages`. Karena itu:
+  ///   * Byte RGBA diekstrak DULU (downscale bila perlu) lalu [img] TIDAK
+  ///     dipakai lagi → native bitmap sumber tak ditahan selama I/O disk.
+  ///   * [small] (bitmap hasil downscale, MILIK fungsi ini) DI-DISPOSE di
+  ///     sini setelah byte diambil — bukan ditahan.
+  ///   * Caller (pool) yang bertanggung jawab men-dispose [img]; fungsi ini
+  ///     tidak pernah memanggil `img.dispose()`.
+  ///
+  /// RACE: tugas ini boleh selesai setelah bubble unmount / entry diganti —
+  /// aman, karena ia hanya menulis FILE (berdasar bytes independen), tak
+  /// menyentuh `ui.Image` pool.
   static Future<void> _persistBitmap(String videoPath, ui.Image img) async {
     try {
-      // ZERO-JANK/leak: downscale ke [posterDecodeWidth] DULU. Poster asli
-      // (thumbnail video 1080p) = RGBA ~8 MB; file .bmp sebesar itu dibaca
-      // ulang tiap cold start → native heap membengkak. Render hanya butuh
-      // 400px, jadi simpan versi kecil.
+      // Downscale ke [posterDecodeWidth] bila perlu. Bila poster sudah kecil
+      // (≤ target) → `_downscaleImage` null → pakai bitmaP SUMBER untuk
+      // ekstrak byte. `small` hanya non-null kalau kita MEMBUAT bitmap baru.
       final small = await _downscaleImage(img, posterDecodeWidth);
-      if (small == null) return;
-      final bd = await small.toByteData(format: ui.ImageByteFormat.rawRgba);
-      small.dispose();
+      final src = small ?? img;
+      // Ekstrak byte SEKARANG (sebelum I/O) — setelah ini tak ada referensi
+      // ke `img` yang ditahan.
+      final bd = await src.toByteData(format: ui.ImageByteFormat.rawRgba);
+      // Dispose HANYA bitmap yang kita buat sendiri (bukan `img` milik pool).
+      if (small != null) {
+        try {
+          small.dispose();
+        } catch (_) {}
+      }
       if (bd == null) return;
-      final w = small.width, h = small.height;
+      final w = src.width, h = src.height;
       final out = Uint8List(8 + w * h * 4);
       final od = ByteData.sublistView(out);
       od.setUint32(0, w);
@@ -311,15 +363,37 @@ class VideoPrefetch {  VideoPrefetch._();
   ) async {
     final out = await compute(_nearestResizeRgba, _ResizeJob(src, sw, sh, dw, dh));
     if (out == null) return null;
+    // Validasi hasil isolate (harus tepat dw*dh*4) — cegah decode dgn buffer
+    // salah ukuran (crash native).
+    if (out.length < dw * dh * 4) return null;
+    return _decodeRgbaToImage(out, dw, dh);
+  }
+
+  /// Decode RGBA [pixels] ([w]×[h]) → [ui.Image]. Completer SELALU selesai
+  /// (tanpa gantung): `decodeImageFromPixels` memanggil callback sekali;
+  /// bungkus try agar galat tak menahan future.
+  static Future<ui.Image?> _decodeRgbaToImage(
+    Uint8List pixels,
+    int w,
+    int h,
+  ) async {
     final completer = Completer<ui.Image>();
-    ui.decodeImageFromPixels(
-      out,
-      dw,
-      dh,
-      ui.PixelFormat.rgba8888,
-      completer.complete,
-    );
-    return completer.future;
+    try {
+      ui.decodeImageFromPixels(
+        pixels,
+        w,
+        h,
+        ui.PixelFormat.rgba8888,
+        completer.complete,
+      );
+    } catch (e) {
+      if (!completer.isCompleted) completer.completeError(e);
+    }
+    try {
+      return await completer.future;
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<File> _bmpFile(String videoPath) async {
