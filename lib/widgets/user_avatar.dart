@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'avatar_image_cache.dart';
 
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
@@ -92,16 +93,14 @@ final Map<String, ImageProvider> _avatarImageByUid = {};
 /// di layar 2-3× DPI tanpa blur, ~25× lebih kecil dari decode full-res.
 const int _avatarDecodePx = 96;
 
-/// Bungkus MemoryImage dengan cap decode. Provider STABIL per-uid (instance
-/// sama dipakai terus) supaya ImageCache hit & tidak kedip.
-ImageProvider _cappedAvatarImage(Uint8List bytes) =>
-    ResizeImage(MemoryImage(bytes), width: _avatarDecodePx);
 
 /// Bersihkan seluruh cache avatar modul ini (dipanggil saat logout/ganti akun).
 void clearAllAvatarCaches() {
   _avatarBytesByUid.clear();
   _avatarLastSrcByUid.clear();
   _avatarImageByUid.clear();
+  // B: buang juga store bitmap avatar terpisah (dispose ui.Image).
+  AvatarImageCache.instance.clear();
 }
 
 // Batas ukuran map avatar global — tanpa ini, 3 map tumbuh seumur sesi
@@ -189,7 +188,11 @@ class _UserAvatarState extends State<UserAvatar> {
         _avatarBytesByUid[widget.uid] ??= disk;
         _provider = _avatarImageByUid.putIfAbsent(
           widget.uid,
-          () => _cappedAvatarImage(_avatarBytesByUid[widget.uid]!),
+          () => AvatarMemoryImage(
+        widget.uid,
+        _avatarBytesByUid[widget.uid]!,
+        width: _avatarDecodePx,
+      ),
         );
         _boundAvatarMap(_avatarBytesByUid);
         _boundAvatarMap(_avatarImageByUid);
@@ -234,7 +237,11 @@ class _UserAvatarState extends State<UserAvatar> {
     }
     _provider = _avatarImageByUid.putIfAbsent(
       widget.uid,
-      () => _cappedAvatarImage(_avatarBytesByUid[widget.uid]!),
+      () => AvatarMemoryImage(
+        widget.uid,
+        _avatarBytesByUid[widget.uid]!,
+        width: _avatarDecodePx,
+      ),
     );
     _boundAvatarMap(_avatarBytesByUid);
     _boundAvatarMap(_avatarImageByUid);
@@ -361,7 +368,9 @@ ImageProvider? avatarImageProviderFor(String uid, Uint8List bytes) {
   if (existing != null) return existing;
   _avatarBytesByUid[uid] ??= bytes;
   _boundAvatarMap(_avatarBytesByUid);
-  final p = _cappedAvatarImage(bytes);
+  // B: pakai store avatar TERPISAH (AvatarImageCache) — foto besar tak bisa
+  // men-evict avatar. Bukan imageCache global.
+  final p = AvatarMemoryImage(uid, bytes, width: _avatarDecodePx);
   _avatarImageByUid[uid] = p;
   _boundAvatarMap(_avatarImageByUid);
   return p;
