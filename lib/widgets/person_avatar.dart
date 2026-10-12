@@ -85,6 +85,13 @@ class _PersonAvatarState extends State<PersonAvatar> {
   void initState() {
     super.initState();
     _src = widget.avatarB64;
+    // Fast-path SINKRON (RAM→disk) untuk frame pertama — list chat tak kirim
+    // avatarB64 → dulu langsung async → frame-1 inisial (kedip/"kadang hilang").
+    if (_src.isEmpty) {
+      _src = _avatarSvc.cachedSync(widget.uid) ??
+          _avatarSvc.cachedSyncIncludeDisk(widget.uid) ??
+          '';
+    }
     if (_src.isEmpty) _resolveUid();
   }
 
@@ -95,8 +102,13 @@ class _PersonAvatarState extends State<PersonAvatar> {
       _src = widget.avatarB64;
       if (_src.isEmpty) _resolveUid();
     } else if (old.uid != widget.uid && widget.avatarB64.isEmpty) {
-      _src = '';
-      _resolveUid();
+      // ELEMENT DAUR-ULANG (ListView recycle): uid BARU. SINKRON dulu dari
+      // RAM→disk supaya frame ini TIDAK kosong (dulu `_src=''` lalu async =
+      // avatar hilang 1+ frame saat scroll = "kadang tampil kadang tidak").
+      _src = _avatarSvc.cachedSync(widget.uid) ??
+          _avatarSvc.cachedSyncIncludeDisk(widget.uid) ??
+          '';
+      if (_src.isEmpty) _resolveUid();
     }
   }
 
