@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'avatar_image_cache.dart';
+import '../core/perf/abc_toggle.dart';
 
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
@@ -368,9 +369,11 @@ ImageProvider? avatarImageProviderFor(String uid, Uint8List bytes) {
   if (existing != null) return existing;
   _avatarBytesByUid[uid] ??= bytes;
   _boundAvatarMap(_avatarBytesByUid);
-  // B: pakai store avatar TERPISAH (AvatarImageCache) — foto besar tak bisa
-  // men-evict avatar. Bukan imageCache global.
-  final p = AvatarMemoryImage(uid, bytes, width: _avatarDecodePx);
+  // B (terkontrol): ABC off → provider LAMA (ResizeImage/imageCache global);
+  // ABC on → store avatar TERPISAH (AvatarImageCache).
+  final ImageProvider p = abcBEnabled
+      ? AvatarMemoryImage(uid, bytes, width: _avatarDecodePx)
+      : ResizeImage(MemoryImage(bytes), width: _avatarDecodePx);
   _avatarImageByUid[uid] = p;
   _boundAvatarMap(_avatarImageByUid);
   return p;

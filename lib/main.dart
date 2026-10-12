@@ -19,6 +19,7 @@ import 'core/admin_gate.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'core/battery_optimization_service.dart';
 import 'core/media/image_cache_budget.dart';
+import 'core/perf/abc_toggle.dart';
 import 'core/nav_gate.dart';
 import 'app.dart';
 import 'models/room_model.dart';
@@ -580,8 +581,11 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
       if (v >= kMinSaneRamBytes) ramBytes = v;
     }
   } catch (_) {}
-  final capBytes = imageCacheBytesForRam(ramBytes);
-  final capEntries = imageCacheEntriesForRam(ramBytes);
+  // A/B TERKONTROL: `--dart-define=PERF_ABC_OFF=true` → pakai cap STATIS LAMA
+  // (40MB/120) untuk baseline, tanpa mengubah kode. Default = A/B/C aktif.
+  final capBytes =
+      kPerfAbcOff ? (40 << 20) : imageCacheBytesForRam(ramBytes);
+  final capEntries = kPerfAbcOff ? 120 : imageCacheEntriesForRam(ramBytes);
   PaintingBinding.instance.imageCache.maximumSize = capEntries;
   PaintingBinding.instance.imageCache.maximumSizeBytes = capBytes;
   dlog('[IMGCACHE] ram=${(ramBytes / (1 << 30)).toStringAsFixed(1)}GB '
