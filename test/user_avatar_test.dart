@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -180,5 +183,36 @@ void main() {
     });
     expect(find.byType(Image), findsOneWidget,
         reason: 'foto lama tidak boleh hilang saat emission kosong');
+  });
+
+  testWidgets('anti-kedip cold start: base64 BESAR → foto di frame PERTAMA',
+      (tester) async {
+    // Regresi 2026-10-12: base64 >100 KB dulu di-decode ASYNC (isolate) →
+    // frame pertama transparan (SizedBox.shrink) → foto menyusul = "kedip"
+    // di daftar Online saat cold start. Kini selalu base64Decode sinkron →
+    // provider ADA sejak frame pertama (decode bitmap ditunda framework).
+    // Base64 VALID berukuran besar: bytes PNG diulang lalu di-encode ulang
+    // (mengulang STRING base64 akan jadi base64 invalid → bukan skenario asli).
+    final pngBytes = base64Decode(_png1px);
+    final bigBytes = Uint8List(pngBytes.length * 6000);
+    for (var i = 0; i < 6000; i++) {
+      bigBytes.setRange(i * pngBytes.length, (i + 1) * pngBytes.length, pngBytes);
+    }
+    final big = base64Encode(bigBytes);
+    await tester.pumpWidget(
+      wrap(
+        UserAvatar(
+          uid: 'u-big',
+          avatarB64: big,
+          initial: 'Z',
+          color: Colors.blue,
+        ),
+      ),
+    );
+    // Frame pertama — TANPA pump tambahan/delay.
+    expect(find.byType(Image), findsOneWidget,
+        reason: 'foto harus sudah terpasang di frame pertama (anti-kedip)');
+    expect(find.text('Z'), findsNothing,
+        reason: 'jangan flash inisial lalu foto');
   });
 }
