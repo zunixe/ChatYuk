@@ -26,10 +26,42 @@ import '../models/message_model.dart';
 /// Kunci poster `video_poster:<path>` SAMA dengan `ChatVideoBubble._posterKey`
 /// sehingga `initState` bubble HIT-sync.
 ///
+/// Job resize RGBA (dikirim ke isolate via [compute]).
+class _ResizeJob {
+  final Uint8List src;
+  final int sw, sh, dw, dh;
+  const _ResizeJob(this.src, this.sw, this.sh, this.dw, this.dh);
+}
+
+/// Resize RGBA [job.src] ([sw]×[sh]) ke [dw]×[dh] — nearest sampling.
+/// Top-level (bukan method) agar bisa dipakai `compute`. Return Uint8List RGBA.
+Uint8List? _nearestResizeRgba(_ResizeJob job) {
+  try {
+    final src = job.src;
+    final out = Uint8List(job.dw * job.dh * 4);
+    final xRatio = job.sw / job.dw;
+    final yRatio = job.sh / job.dh;
+    for (var y = 0; y < job.dh; y++) {
+      final sy = (y * yRatio).floor().clamp(0, job.sh - 1);
+      for (var x = 0; x < job.dw; x++) {
+        final sx = (x * xRatio).floor().clamp(0, job.sw - 1);
+        final si = (sy * job.sw + sx) * 4;
+        final di = (y * job.dw + x) * 4;
+        out[di] = src[si];
+        out[di + 1] = src[si + 1];
+        out[di + 2] = src[si + 2];
+        out[di + 3] = src[si + 3];
+      }
+    }
+    return out;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Boundary (AGENTS.md): widgets dilarang import services/ → downloader &
 /// generator poster DIINJEKSI dari luar (di-wire di `main.dart`).
-class VideoPrefetch {
-  VideoPrefetch._();
+class VideoPrefetch {  VideoPrefetch._();
 
   /// Maks poster dihangatkan per chat per sesi. 6 (dulu 2) — cukup untuk
   /// beberapa video terbaru; hanya POSTER yang disimpan (kecil), bukan video.
@@ -79,7 +111,7 @@ class VideoPrefetch {
     if (cached != null) return cached;
     final p = MediaDiskCache.instance.readSync(posterKeyFor(videoPath));
     if (p == null || p.isEmpty) return null;
-    if (_posterBytesMem.length > 64) _posterBytesMem.clear();
+    if (_posterBytesMem.length > _posterImageBudget) _posterBytesMem.clear();
     _posterBytesMem[videoPath] = p;
     return p;
   }
@@ -88,6 +120,13 @@ class VideoPrefetch {
   /// = NOL decode di frame pertama → benar-benar langsung tampil seperti voice.
   /// Diisi saat tap (precachePosters) & saat bubble pertama generate.
   static final Map<String, ui.Image> _posterImages = {};
+
+  /// Budget bitmap poster di memori (jumlah). ZERO-JANK/leak (2026-10-12):
+  /// dulu 64 — poster video resolusi asli (1080p) = RGBA ~8 MB per bitmap →
+  /// 64 × 8 MB = ~500 MB native heap (terukur via dumpsys meminfo:
+  /// Native Heap 487 MB tak turun walau GC). Karena render hanya butuh
+  /// lebar [posterDecodeWidth]=400, 12 cukup untuk viewport + scroll dekat.
+  static const int _posterImageBudget = 12;
 
   /// Buang semua bitmap poster + DISPOSE tiap ui.Image (P2e) — ui.Image
   /// memegang memori native/GPU; tanpa dispose → retensi saat cache dibuang.
@@ -140,7 +179,7 @@ class VideoPrefetch {
       // decodeImageFromPixels ~0ms (nol decode JPEG) → cold start langsung.
       final persisted = await _loadPersistedBitmap(videoPath);
       if (persisted != null) {
-        if (_posterImages.length > 64) _clearPosterImages();
+        if (_posterImages.length > _posterImageBudget) _clearPosterImages();
         _posterImages[videoPath] = persisted;
         return;
       }
@@ -149,7 +188,7 @@ class VideoPrefetch {
         targetWidth: posterDecodeWidth,
       );
       final frame = await codec.getNextFrame();
-      if (_posterImages.length > 64) _clearPosterImages();
+      if (_posterImages.length > _posterImageBudget) _clearPosterImages();
       _posterImages[videoPath] = frame.image;
       // Simpan bitmap mentah ke disk → cold start berikutnya nol decode.
       unawaited(_persistBitmap(videoPath, frame.image));
@@ -173,6 +212,10 @@ class VideoPrefetch {
       final w = bd.getUint32(0);
       final h = bd.getUint32(4);
       if (w == 0 || h == 0 || b.length < 8 + w * h * 4) return null;
+      // Bitmap LAMA berukuran besar (sebelum downscale diperkenalkan) → abaikan
+      // dan biarkan regenerate kecil. Mencegah native heap membengkak dari
+      // file .bmp warisan (1080p RGBA ~8 MB).
+      if (w > posterDecodeWidth * 2 || h > posterDecodeWidth * 4) return null;
       final pixels = Uint8List.sublistView(b, 8);
       final completer = Completer<ui.Image>();
       ui.decodeImageFromPixels(
@@ -188,9 +231,16 @@ class VideoPrefetch {
 
   static Future<void> _persistBitmap(String videoPath, ui.Image img) async {
     try {
-      final bd = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+      // ZERO-JANK/leak: downscale ke [posterDecodeWidth] DULU. Poster asli
+      // (thumbnail video 1080p) = RGBA ~8 MB; file .bmp sebesar itu dibaca
+      // ulang tiap cold start → native heap membengkak. Render hanya butuh
+      // 400px, jadi simpan versi kecil.
+      final small = await _downscaleImage(img, posterDecodeWidth);
+      if (small == null) return;
+      final bd = await small.toByteData(format: ui.ImageByteFormat.rawRgba);
+      small.dispose();
       if (bd == null) return;
-      final w = img.width, h = img.height;
+      final w = small.width, h = small.height;
       final out = Uint8List(8 + w * h * 4);
       final od = ByteData.sublistView(out);
       od.setUint32(0, w);
@@ -199,6 +249,52 @@ class VideoPrefetch {
       final f = await _bmpFile(videoPath);
       await f.writeAsBytes(out, flush: false);
     } catch (_) {}
+  }
+
+  /// Downscale [img] ke lebar [targetWidth] (aspek dipertahankan). Return null
+  /// bila gagal / tidak perlu (sudah ≤ target). Dipakai agar bitmap tersimpan
+  /// KECIL (hindari native heap ratusan MB dari poster 1080p).
+  static Future<ui.Image?> _downscaleImage(ui.Image img, int targetWidth) async {
+    if (img.width <= targetWidth) return null;
+    try {
+      final w = targetWidth;
+      final h = (img.height * targetWidth / img.width).round();
+      final bd = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (bd == null) return null;
+      final small = await _resizeRgba(
+        bd.buffer.asUint8List(),
+        img.width,
+        img.height,
+        w,
+        h,
+      );
+      return small;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Resize RGBA [src] ([sw]×[sh]) ke [dw]×[dh] via nearest sampling di
+  /// isolate (compute) lalu decodeImageFromPixels → ui.Image. Nearest cukup
+  /// untuk thumbnail (cepat + murah); kualitas tak krusial untuk preview kecil.
+  static Future<ui.Image?> _resizeRgba(
+    Uint8List src,
+    int sw,
+    int sh,
+    int dw,
+    int dh,
+  ) async {
+    final out = await compute(_nearestResizeRgba, _ResizeJob(src, sw, sh, dw, dh));
+    if (out == null) return null;
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      out,
+      dw,
+      dh,
+      ui.PixelFormat.rgba8888,
+      completer.complete,
+    );
+    return completer.future;
   }
 
   static Future<File> _bmpFile(String videoPath) async {
@@ -217,7 +313,7 @@ class VideoPrefetch {
   /// image-cache identik (cegah decode ulang = kedip).
   static void rememberPoster(String videoPath, Uint8List bytes) {
     if (videoPath.isEmpty || bytes.isEmpty) return;
-    if (_posterBytesMem.length > 64) _posterBytesMem.clear();
+    if (_posterBytesMem.length > _posterImageBudget) _posterBytesMem.clear();
     _posterBytesMem[videoPath] = bytes;
     // Decode ke bitmap siap-render (fire-and-forget) → render berikutnya nol
     // decode (RawImage).

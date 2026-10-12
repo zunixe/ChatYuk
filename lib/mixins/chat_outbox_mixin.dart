@@ -101,6 +101,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
     String? repliedToSenderName,
     bool isForwarded = false,
     List<Mention> mentions = const [],
+    String videoPosterB64 = '',
   }) async {
     await OfflineOutbox.instance.enqueue(
       OutboxEntry(
@@ -124,6 +125,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
         createdAt: pending.timestamp,
         pointsDeducted: pointsDeducted,
         pointsKind: pointsKind,
+        videoPosterB64: videoPosterB64,
       ),
     );
     if (!mounted) return;

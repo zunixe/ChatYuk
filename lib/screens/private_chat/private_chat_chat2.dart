@@ -257,6 +257,21 @@ void _sendTypingSignal() {
   bool get outboxIsFlushing => _flushingOutbox;
 @override
   Future<void> outboxSendEntry(OutboxEntry e, String imageData) async {
+    // Kirim ulang video dari outbox: unggah poster juga (kalau disimpan) agar
+    // penerima tetap dapat thumbnail — dulu upload video saja → kotak hitam.
+    var posterPath = '';
+    if (e.videoPosterB64.isNotEmpty &&
+        (e.type == 'video' || e.type == 'video_once' || e.type == 'video_once_expired')) {
+      try {
+        posterPath = await ProviderScope.containerOf(context, listen: false)
+                .read(storageProvider)
+                .uploadChatVideoPoster(
+                  chatId: photoUploadChatId,
+                  bytes: base64Decode(e.videoPosterB64),
+                ) ??
+            '';
+      } catch (_) {}
+    }
     await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
       senderId: e.senderId,
@@ -271,6 +286,7 @@ void _sendTypingSignal() {
       repliedToSenderName: e.repliedToSenderName,
       isForwarded: e.isForwarded,
       mentions: e.mentions,
+      videoPoster: posterPath,
     );
   }
 @override
