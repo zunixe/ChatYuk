@@ -4065,3 +4065,30 @@ bukti dampak besar"):
 skenario normal (4000 frame), 0.13% pada buka-chat pertama; no leak (memori
 stabil 235 MB sesi panjang); boot RPC −46% p90. Tidak ada lagi bottleneck
 berdampak besar yang terbukti.
+
+### §49. Investigasi lag back dari private chat (2026-10-12)
+
+**Keluhan:** back dari private chat (dari list chat) kadang ngelag.
+
+**Ukur (gfxinfo, 10× buka-tutup via list chat):**
+- Total 11 frame, **janky 3 (27%)**, 50th **150 ms**, 95th **200 ms**.
+- GPU sehat: p50 2 ms, p95 7 ms. **Slow UI thread=2, Slow issue draw=2**.
+- Histogram: 2 frame @150 ms + 5 frame @200 ms (bukan GPU).
+
+**Akar (terbukti): DDIC idle mode MIUI.** logcat: `MI-SF: isTpIdleScene`
+→ `setIdleFps choose FPS:60` → `DisplayModeController: isDdicIdleMode: 1`.
+atrace: thread chatyuk hanya `waitForever` (tunggu vsync) + buffer normal —
+**tidak ada pekerjaan berat app** saat back (tak ada decode/raster besar di
+trace; `decodeBitmap` di trace = Telegram, bukan kita). Jadi stall 200 ms =
+panel bangun dari idle mode, **kebijakan sistem**, bukan kode.
+
+**Sudah dicoba sebelumnya & GAGAL** (docs/NATIVE_UI_ONLY.md + komentar app.dart):
+(a) kunci `preferredDisplayModeId=60Hz`, (b) paksa frame bergerak 300 ms saat
+resume → 54 event DDIC idle tetap muncul. MIUI butuh arus frame terus-menerus.
+
+**Tidak diubah:** `RepaintBoundary` akar chat (layer besar) SENGAJA dipasang
+untuk back mulus (dulu justru ngelag tanpa itu). Menghapusnya = risiko regresi
+tanpa bukti manfaat. Trade-off sudah teroptimasi.
+
+**Status: di luar kendali app.** Yang bisa dikurangi (kerja app) sudah 0 ms di
+trace; sisanya panel MIUI.
