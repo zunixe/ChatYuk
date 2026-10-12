@@ -4200,3 +4200,26 @@ fallback 4GB. Verifikasi device: `[IMGCACHE] ram=4.0GB cap=32MB/128 entri`.
 membengkak). **Belum:** recap imageCache/jank via PERF tak selalu keluar di ROM
 ini (lifecycle inactive/paused tak konsisten) → hit-rate persis belum terukur;
 angka PSS ini indikatif (bukan A/B terkontrol dgn build sebelum A/B/C).
+
+### §48c. A/B TERKONTROL A/B/C di device (flag `PERF_ABC_OFF`, build profile)
+
+Protokol identik: force-stop → buka → 15 dtk idle → ukur → skenario (Timeline
+scroll cepat + list chat + komentar ~30 dtk) → ukur. Toggle via
+`--dart-define=PERF_ABC_OFF=true` (build SAMA, kode tak diubah).
+
+| Metrik | ABC OFF (baseline) | ABC ON | Delta |
+|---|---|---|---|
+| Cap imageCache | 40 MB / 120 | 32 MB / 128 | −8 MB |
+| PSS idle (baru buka) | 366 MB | **345 MB** | **−21 MB** |
+| PSS setelah skenario | 385 MB | 385 MB | ~0 (cache terisi penuh, bounded) |
+| Native Heap (skenario) | 52 MB | 54 MB | +2 MB |
+| **SwapPss (skenario)** | **32 MB** | **0.09 MB** | **−32 MB** ✅ |
+
+**Kesimpulan terukur:** A/B/C **−21 MB PSS saat idle** & **menghilangkan tekanan
+swap** (32 MB → 0.09 MB) — RAM tidak tertekan sehingga OS tak memindahkan
+halaman ke swap. PSS pasca-skenario sama karena cache di kedua versi terisi
+penuh (bounded) — sesuai desain (bukan unbounded). Bukan klaim penghematan
+bandwidth (belum diukur).
+
+**Catatan:** C (RGB_565+pool, native) tak di-gate terpisah (efek bitmap sementara
+kecil & native-only); A/B = yang diukur. `PERF_ABC_OFF` = alat ukur permanen.
