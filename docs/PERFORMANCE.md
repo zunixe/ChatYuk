@@ -4092,3 +4092,61 @@ tanpa bukti manfaat. Trade-off sudah teroptimasi.
 
 **Status: di luar kendali app.** Yang bisa dikurangi (kerja app) sudah 0 ms di
 trace; sisanya panel MIUI.
+
+## §50. WhatsApp-class slide transition (2026-10-12, terukur)
+
+Dokumen "WHATSnative-feel slide transitions". Audit + A/B di HP fisik
+(Xiaomi 24129PN74G 120Hz, profile, gfxinfo + atrace + PerfProbe frame timings).
+
+### Phase 1 — root cause (terukur, bukan asumsi)
+- Instrumentasi `SchedulerBinding.addTimingsCallback` → log frame
+  build>16 / raster>16ms: **3 frame lambat dari 3× buka-tutup (~200 frame)**.
+- Frame tersebut: `build=0 raster=22ms`, `build=13 raster=24`, `build=19 raster=3`.
+  → **stall = RASTER 22-24ms** (1 frame/transisi), BUKAN build (max 19ms).
+- atrace: thread raster chatyuk `IplrVkFenceWait`/`waitForever` (busy-wait GPU
+  fence, Impeller Vulkan) — **bukan** rebuild berat; present idle 18/s normal.
+- Bukan DDIC saja (raster tak pernah idle), bukan leak (lihat Phase 3).
+- Kesimpulan: stall = **composite layer besar** (RepaintBoundary akar full-
+  screen 900×2000 + Slide/Fade) saat transisi. ~0.5% frame = ringan.
+
+### Phase 2 — transition system
+Sudah terpusat: `AppSlidePageTransitionsBuilder` (global, Slide 1 arah) +
+`chatRoute` (Slide+Fade) — satu engine, tak ada override global buta.
+Dialog/fullscreen (panggilan) tetap ZoomPageTransitionsBuilder (tak diubah).
+
+### Phase 3 — halaman sebelumnya
+Tidak reload: `_MainNav` IndexedStack + `_TabFreeze` → list chat tetap mounted
+saat kembali; tak ada fetch di return path. State & scroll terjaga.
+
+### Phase 4 — durasi (A/B, 3 run × 5× buka-tutup)
+| Durasi | Janky | Slow UI | Slow issue draw |
+|---|---|---|---|
+| 150ms (baseline) | 1/37, **5/50**, 4/13 (variatif) | 1-4 | 0 |
+| **120ms** | **2/31 konsisten (6.45%)** | 2 | **0** |
+→ **120 in / 100 out** dipilih: konsisten lebih rendah, tidak abrupt.
+File: `lib/config/theme.dart`, `lib/widgets/chat_route.dart`.
+
+### Phase 5 — snapshot transition: DITOLAK
+Root cause = raster composite (bukan rekonstruksi halaman). Snapshot tak
+menyelesaikan (justru +texture upload & +memori). Tidak diimplementasikan.
+
+### Phase 6 — rendering
+Impeller Vulkan aktif (terverifikasi log + A/B §47 sebelumnya). Tak ada
+saveLayer/opacity besar di jalur transisi (Fade chat = 1 layer, sudah ada).
+
+### Phase 7-8 — regression
+- 120× pindah tab: Native stabil 32MB (tak naik).
+- 10× buka-tutup chat (jeda cukup): Native **stabil 27MB** (no leak).
+- 15× buka-tutup CEPAT: Native stabil 31MB.
+- 1907 test hijau; analyze 0/0.
+- Catatan: angka 478MB pernah muncul = **sisa state sesi lama** (bukan sesi
+  bersih); sesi bersih (force-stop→start) = 27-32MB stabil. Bukti: `Heap
+  Alloc` hanya 31MB (sisanya free arena jemalloc sesi lama).
+
+### Phase 9 — kesimpulan
+- Root cause: 1 frame raster 22-24ms/transisi (layer composite besar).
+- Perubahan: durasi 150→120/100ms (terukur lebih konsisten).
+- Snapshot: ditolak (bukan akar).
+- Memori: tidak ada leak (27-32MB stabil).
+- Sisa: layer besar in-activity = batas arsitektur Flutter (WhatsApp native
+  pakai Activity transition yang di-composite sistem). 0.5% frame = wajar.
