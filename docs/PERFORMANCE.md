@@ -3914,3 +3914,27 @@ Commit `47f2b72`, `d652041`. Analyze 0; test image_cap/post_card hijau.
 
 **Belum diukur:** cache hit rate & RAM sebelum/sesudah (butuh profiling
 device); file-size guard merah karena `chat_video_bubble.dart` (kerja lain).
+
+### §47b. Hasil ukur avatar (HP fisik, build profile + PERF_PROBE)
+
+Skenario: Timeline scroll cepat naik-turun + buka komentar + buka profil, lalu
+Home (recap otomatis keluar setelah fix `10edafb`).
+
+| Metrik | Nilai |
+|---|---|
+| frames | 1764 |
+| build [p50/p90/max] | 0.5 / 1.5 / 13.9 ms |
+| raster [p50/p90/max] | 1.0 / 2.2 / 14.1 ms |
+| **janky build / raster** | **0 / 0** |
+| build PostCard (dari scroll) | 58 |
+| imageCache | live=10, bytes=40.3 MB (bounded < 41.9 MB cap), refs=3 |
+| PSS proses | 265 MB (Native Heap 38 MB) |
+
+**Kesimpulan (terukur):** scroll 58 kartu timeline → **0 frame jank** (UI & raster);
+avatar tak menghambat scrolling. `imageCache` **bounded** (40.3 MB < 41.9 MB cap);
+PSS 265 MB — turun dari 310–455 MB pada sesi-sesi sebelum optimasi (bukan klaim
+1:1 karena skenario beda, tapi indikatif sehat). Avatar 96px = kontribusi kecil;
+mayoritas 40 MB = foto timeline (1080px).
+
+**Belum diukur:** hit-rate persis (Flutter tak ekspos hits/misses); uji network
+lambat, ganti avatar, RAM terbatas (§10 poin 7–10).
