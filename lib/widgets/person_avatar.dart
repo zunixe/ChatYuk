@@ -102,10 +102,19 @@ class _PersonAvatarState extends State<PersonAvatar> {
 
   Future<void> _resolveUid() async {
     if (widget.uid.isEmpty) return;
-    // Fast-path sinkron: kalau sudah di RAM, tampil tanpa menunggu async.
+    // Fast-path sinkron RAM: kalau sudah di RAM, tampil tanpa menunggu async.
     final sync = _avatarSvc.cachedSync(widget.uid);
     if (sync != null && sync.isNotEmpty) {
       if (mounted) setState(() => _src = sync);
+      return;
+    }
+    // Fast-path sinkron RAM→DISK: byte avatar (MediaDiskCache) bertahan antar
+    // sesi → frame pertama sudah foto. Tanpa ini, RAM-miss → async `get()` →
+    // list chat "kadang tampil kadang tidak" (race). Disk-read sync murah
+    // (file kecil per uid).
+    final disk = _avatarSvc.cachedSyncIncludeDisk(widget.uid);
+    if (disk != null && disk.isNotEmpty) {
+      if (mounted) setState(() => _src = disk);
       return;
     }
     try {

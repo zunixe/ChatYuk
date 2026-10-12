@@ -111,7 +111,8 @@ class AvatarB64Service {
     final ram = cachedSync(uid);
     if (ram != null) return ram;
     if (uid.isEmpty || !MediaDiskCache.instance.isReady) return null;
-    final disk = MediaDiskCache.instance.readSync('avatars/$uid.jpg');
+    // Cari by-uid: uid-only ATAU versioned `avatars/<uid>_<millis>.jpg`.
+    final disk = MediaDiskCache.instance.readAvatarByUid(uid);
     if (disk != null && disk.isNotEmpty) {
       final b64 = base64Encode(disk);
       if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
