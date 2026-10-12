@@ -4044,3 +4044,24 @@ by-design (hanya saat tab chat/online visible + realtime diam >25 s).
 leak; rendering 0 jank raster. Sisa kandidat: spike build 42 ms sekali saat
 buka chat (perlu profil lanjutan bila terasa), `get_wallet`/`listFetch` p90
 (latency jaringan).
+
+### §48d. Profil spike buka chat (2026-10-12) — 2 janky, DITOLAK diperbaiki
+
+Reproduksi: buka chat pertama → **2 janky build + 2 janky raster** dari 1593
+frame (build max 32 ms, raster max 26 ms). Transisi `Slide+Fade` 150 ms.
+
+**Keputusan: TIDAK diubah.** Alasan (jujur, sesuai aturan "no optimasi tanpa
+bukti dampak besar"):
+- Dampak **0.13% frame** (2/1593) — di bawah signifikansi UX.
+- `FadeTransition` di `chatRoute` SENGAJA ditambah (catatan kode 2026-10-11):
+  menutupi celah raster slide full-screen di Skia/GL/Adreno; menghapusnya
+  berisiko **regresi** (kasus lama lebih buruk).
+- `build PrivateChat` tidak muncul di recap top → build widget chat murah.
+- `chat.parseRows` 4.1 ms (bukan penyebab).
+- Memverifikasi lebih dalam butuh DevTools timeline (raster span) — di luar
+  cakupan probe; rasio manfaat/risiko rendah.
+
+**Kesimpulan akhir audit global (2026-10-12):** app sehat — 0 jank raster pada
+skenario normal (4000 frame), 0.13% pada buka-chat pertama; no leak (memori
+stabil 235 MB sesi panjang); boot RPC −46% p90. Tidak ada lagi bottleneck
+berdampak besar yang terbukti.
