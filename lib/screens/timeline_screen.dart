@@ -496,6 +496,14 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                       ),
                     );
                   }
+                  // PREFETCH AKTIF (index-based): saat kartu ke-i DIBANGUN,
+                  // hangatkan thumb beberapa post DI DEPANNYA. Berbeda dari
+                  // prefetch berbasis posisi-scroll (yang kalah saat scroll
+                  // cepat karena posisi melompat): ini mengekor index yang
+                  // benar-benar dibangun → selalu unggul dari jari, sehingga
+                  // scroll cepat pun fotonya sudah siap. Dedupe di PostPrefetch
+                  // membuat ini murah (no-op bila sudah di cache).
+                  PostPrefetch.warmAheadFrom(posts, i);
                   // RepaintBoundary: kartu post lain tidak ikut repaint
                   // saat satu kartu berubah (like/komentar/avatar).
                   return RepaintBoundary(
