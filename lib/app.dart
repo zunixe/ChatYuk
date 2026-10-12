@@ -19,6 +19,7 @@ import 'providers/riverpod/locale_provider.dart';
 import 'core/cache/message_cache.dart';
 import 'core/nav_journal.dart';
 import 'core/nav_visibility.dart';
+import 'core/app_haptic.dart';
 import 'core/app_foreground.dart';
 import 'core/admin_trim_registry.dart';
 import 'core/cache/photo_cache.dart';
@@ -26,6 +27,7 @@ import 'core/cache/post_photo_cache.dart';
 import 'core/media/image_cache_hygiene.dart';
 import 'core/media/native_image.dart';
 import 'widgets/message/photo_prefetch.dart';
+import 'widgets/video_prefetch.dart';
 import 'providers/riverpod/connectivity_provider.dart';
 import 'providers/riverpod/nav_provider.dart';
 import 'providers/riverpod/theme_provider.dart';
@@ -514,6 +516,12 @@ class _MainNavState extends ConsumerState<_MainNav>
         try {
           // clearAll() sudah membuang Flutter imageCache + cache app terdaftar.
           ImageCacheHygiene.clearAll();
+        } catch (_) {}
+        // Lepas + dispose bitmap poster video (pool global) — buka-buka chat
+        // berisi banyak video meninggalkan bitmap poster di RAM; background
+        // lama = waktu aman membebaskannya (tak ada bubble aktif).
+        try {
+          VideoPrefetch.clearPosterMem();
         } catch (_) {}
         // Force: commit buffer render ~500MB HARUS segera di-purge (throttle
         // 60 dtk dilewati — trim staggered di atas tak cukup untuk ini).

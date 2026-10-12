@@ -202,6 +202,17 @@ class VideoPrefetch {  VideoPrefetch._();
         targetWidth: posterDecodeWidth,
       );
       final frame = await codec.getNextFrame();
+      // Dispose bitmap LAMA untuk kunci SAMA (kalau ada) — aman: tak ada
+      // widget lain memegang objek yang baru saja digantikan dari pool untuk
+      // path yang sama (pola sama decodedImageCache foto). Mencegah bitmap
+      // menumpuk (regresi "Native Heap 515MB" 2026-10-12: pool di-clear tanpa
+      // dispose + replace tanpa dispose → ui.Image native tak pernah bebas).
+      final old = _posterImages.remove(videoPath);
+      if (old != null && !identical(old, frame.image)) {
+        try {
+          old.dispose();
+        } catch (_) {}
+      }
       if (_posterImages.length > _posterImageBudget) _clearPosterImages();
       _posterImages[videoPath] = frame.image;
       // Simpan bitmap mentah ke disk → cold start berikutnya nol decode.

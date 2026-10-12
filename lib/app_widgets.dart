@@ -186,7 +186,11 @@ class AppBottomNav extends ConsumerWidget {
     // menerima tap; tanpa ini tap di tepi sering "tidak kena".
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => onTap(index),
+      onTap: () {
+        // Getar ringan ala WhatsApp saat tekan menu bawah.
+        AppHaptic.tap();
+        onTap(index);
+      },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         child: Column(
