@@ -128,9 +128,23 @@ class VideoPrefetch {  VideoPrefetch._();
   /// lebar [posterDecodeWidth]=400, 12 cukup untuk viewport + scroll dekat.
   static const int _posterImageBudget = 12;
 
-  /// Buang semua bitmap poster + DISPOSE tiap ui.Image (P2e) — ui.Image
-  /// memegang memori native/GPU; tanpa dispose → retensi saat cache dibuang.
+  /// Buang referensi bitmap poster dari cache.
+  ///
+  /// PENTING (bug 2026-10-12 "Cannot clone a disposed image"): JANGAN
+  /// `dispose()` bitmap di sini. `_posterImages` adalah pool yang dipakai
+  /// BERSAMA bubble aktif — `_clearPosterImages` dipanggil saat pool penuh
+  /// (evict) atau decode baru, dan bubble yang MASIH dirender memegang
+  /// referensi `_posterImg` ke bitmap lama. Dispose di sini → bubble render
+  /// `RawImage` dgn handle mati → error "Cannot clone a disposed image" →
+  /// kotak abu placeholder. Cukup LEPAS referensi; `ui.Image` di-GC setelah
+  /// tak ada yang memegang (pool bounded 12 → retensi tetap terkendali).
   static void _clearPosterImages() {
+    _posterImages.clear();
+  }
+
+  /// DISPOSE semua bitmap poster — HANYA saat logout/ganti akun (tak ada
+  /// bubble aktif). Dipakai [clearPosterMem].
+  static void _disposeAllPosterImages() {
     for (final img in _posterImages.values) {
       try {
         img.dispose();
@@ -302,10 +316,11 @@ class VideoPrefetch {  VideoPrefetch._();
     return File('${dir.path}/${mediaCacheFileName(_bitmapKey(videoPath))}.bmp');
   }
 
-  /// Kosongkan cache bytes poster di memori (logout / uji).
+  /// Kosongkan cache bytes poster di memori (logout / uji). Di sini aman
+  /// DISPOSE (layar chat sudah ditutup, tak ada bubble memegang bitmap).
   static void clearPosterMem() {
     _posterBytesMem.clear();
-    _clearPosterImages();
+    _disposeAllPosterImages();
   }
 
   /// Simpan bytes poster ke mem-cache stabil (instance SAMA) — dipanggil bubble
