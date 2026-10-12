@@ -756,19 +756,38 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
             }
         }
 
+        /**
+         * Pool `BitmapFactory.Options` (C, ala Telegram `ImageLoader` yang
+         * memakai ulang Options). Objek kecil, tapi dibuat 2× per foto dan
+         * berjalan di jalur scroll berat → pemakaian ulang memangkas alokasi
+         * & tekanan GC Dart/ART. Thread-local (executor IO = 2 thread).
+         */
+        private val optionsPool = ThreadLocal.withInitial { BitmapFactory.Options() }
+
         /** Decode dengan inSampleSize (hemat memori) tanpa memuat full-res. */
         private fun decodeSampled(bytes: ByteArray, maxPx: Int): Bitmap? {
             return try {
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                val bounds = optionsPool.get()!!.apply {
+                    inJustDecodeBounds = true
+                    inSampleSize = 1
+                    inPreferredConfig = null
+                }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
                 var sample = 1
                 val longest = maxOf(bounds.outWidth, bounds.outHeight)
                 if (longest > 0) {
                     while (longest / (sample * 2) >= maxPx) sample *= 2
                 }
-                val opts = BitmapFactory.Options().apply {
+                val opts = optionsPool.get()!!.apply {
+                    inJustDecodeBounds = false
                     inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    // POOL/MEMORI (C, ala Telegram): thumbnail (bubble, avatar,
+                    // thumb timeline) adalah JPEG tanpa kanal alpha → RGB_565
+                    // memakai 2 byte/piksel (50% lebih hemat dari ARGB_8888)
+                    // → bitmap sementara saat decode turun setengah, memangkas
+                    // tekanan native heap saat scroll foto berat. Output tetap
+                    // JPEG q(quality) → kualitas visual tak berubah berarti.
+                    inPreferredConfig = Bitmap.Config.RGB_565
                 }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
             } catch (_: Throwable) {
