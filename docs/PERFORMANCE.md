@@ -3938,3 +3938,78 @@ mayoritas 40 MB = foto timeline (1080px).
 
 **Belum diukur:** hit-rate persis (Flutter tak ekspos hits/misses); uji network
 lambat, ganti avatar, RAM terbatas (§10 poin 7–10).
+
+## §48. Audit global navigasi & interaksi (2026-10-12) — baseline terukur
+
+**Sasaran:** seluruh app responsif (bukan satu halaman). Audit menyeluruh
+sebelum ubah kode, sesuai aturan "jangan optimasi tanpa profiling".
+
+### Baseline (HP fisik Xiaomi 24129PN74G, build profile + `PERF_PROBE=true`)
+
+Skenario: boot → 2 putaran pindah 4 tab → buka-tutup private chat 2× →
+Timeline scroll cepat naik-turun 3× → Home (recap otomatis).
+
+| Metrik | Nilai | Target | Status |
+|---|---|---|---|
+| frames | 4000 | — | — |
+| build p50/p90/max | 2.1 / 3.2 / 14.1 ms | ≤16.7 (60Hz) | OK |
+| raster p50/p90/max | 1.8 / 3.0 / 7.4 ms | ≤16.7 | OK |
+| **janky build / raster** | **0 / 0** | 0 | OK |
+| imageCache | live=8, 14.7 MB, refs=1 | bounded | OK |
+| MainNav build | 6 | minimal | OK |
+| PSS / Native Heap | 309 MB / 35 MB | stabil | OK |
+| Swap | 20 MB (dulu 98-116 MB) | rendah | OK |
+
+**Kesimpulan 1 (terukur):** rendering & navigasi SUDAH SEHAT — 0 frame janky
+dari 4000 frame; p90 build 3.2 ms, raster 3.0 ms. Arsitektur navigasi matang:
+lazy `IndexedStack` + `_visitedTabs`, `_TabFreeze(active:)`, Riverpod
+`select()` granular, `AppBottomNav` (select angka), initState pakai
+`Future.microtask`/post-frame/`unawaited`, trim arena foreground-idle.
+
+**Kesimpulan 2 (terukur) — AKAR "lambat keseluruhan" saat boot:** ~21 RPC
+BERBEDA ditembak hampir serentak di boot → semua selesai pada timestamp yang
+sama (18:31:24.4xx–24.6xx) setelah menunggu **900–1080 ms**. Bukan satu RPC
+lambat, tapi semua BEREREBUT koneksi Supabase yang belum hangat (TLS
+handshake + pool dingin). RPC nyata saat boot: `social_list`(2),
+`social_counts_uids`(2), `online.rpc`(2), `online.rpcCountry`(2),
+`timeline.rpc`(3), `my_subscriptions`, `friend_request_inbox_page`,
+`friend_request_outbox_page`, `chat.hiddenFetch`, `story.tray`,
+`rpc.user_counts`, `chat.listFetch`, `metered_pricing_public`, `get_wallet`,
+`get_points_enabled`, `list_my_groups`, `count_room_presence_by_country`,
+`yukcoin_v2_status`, `get_feature_flags`, `cleanup_room_presence`.
+
+**Catatan `n=3` di recap = TTL kedaluwarsa, BUKAN duplikat**: timestamps
+`get_points_enabled` = 18:27:33 → 18:28:13 (40 s, TTL 30 s) — wajar. Coalesce
+RPC (`_inflight` + `_ttlCache`) di `PointsService` BENAR.
+
+**Belum diukur:** kalender RPC boot sebelum/sesudah throttle (perlu patch);
+network lambat; perangkat low-end.
+
+### §48b. Hasil ukur — throttle koneksi + warm-up (HP fisik, terukur)
+
+**Fix 1 (`maxConnectionsPerHost` 8→20):** ~21 RPC boot berebut 8 koneksi →
+antre. 20 = cukup untuk burst boot.
+
+**Fix 2 (warm-up 600ms→16ms):** RPC boot menembak ~0 ms, warm-up dulu baru
+mulai di 600 ms → RPC kena koneksi dingin. Kini warm-up menang lomba
+(handshake TLS selesai sebelum burst mengantre).
+
+| Metrik RPC boot | Baseline | maxConn=20 | +warmup 16ms |
+|---|---|---|---|
+| p50 | ~890 ms | 396 ms | **369 ms (-59%)** |
+| p90 | ~1080 ms | 667 ms | **584 ms (-46%)** |
+| max | ~1080 ms | 685 ms | **661 ms (-39%)** |
+| min | 378 ms | 140 ms | **120 ms** |
+
+**Catatan "n>1" = wajar, bukan duplikat:** `social_list` n=2 (followers +
+following), `online.rpc`/`rpcCountry` n=2 (2 bagian), `timeline.rpc` n=3
+(prewarm+poll), `get_wallet` n=2 (boot + setelah fetch points; coalesce tanpa
+TTL sengaja agar saldo fresh). `get_points_enabled` n=3 lintas >30 s = TTL.
+Coalesce RPC (`_inflight`) di PointsService/SocialService BENAR.
+
+**File:** `lib/config/supabase_config.dart`, `lib/main.dart`.
+**Verifikasi:** analyze 0/0; 1891 test hijau; janky build/raster tetap 0/0.
+
+**Masih tersisa (belum diukur ulang):** `chat.listFetch` 660 ms & `get_wallet`
+590 ms masih di p90 — kandidat query berat / koneksi residual (perlu
+investigasi lanjutan + network lambat).
