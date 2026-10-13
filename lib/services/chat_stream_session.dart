@@ -748,15 +748,16 @@ class ChatStreamSession {
     });
     reload();
 
-    // Fallback polling: hanya jalan kalau realtime diam > 25s.
-    // Saat realtime sehat (tangkap INSERT/UPDATE/DELETE), tidak ada
-    // fetch redundant tiap 30 detik.
-    final pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // Fallback polling: 8s (dulu 30s). Realtime sehat = 0 fetch (dilewati
+    // oleh gate `lastRealtime`), tapi bila realtime telat/mati, pesan masuk
+    // & centang-2 menyusul dalam ≤8s — dulu 30s terasa "lama banget".
+    // Baterai: tetap di-skip saat app di-background.
+    final pollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       // BATERAI (P2): JANGAN poll saat app di-background (layar mati/tidak
-      // dilihat). Dulu timer 30s hidup terus → wake + query DB saat diam.
+      // dilihat). Dulu timer hidup terus → wake + query DB saat diam.
       // Pesan saat background tetap andal via FCM; sinkron saat resume.
       if (!AppForeground.now) return;
-      if (DateTime.now().difference(lastRealtime).inSeconds < 25) return;
+      if (DateTime.now().difference(lastRealtime).inSeconds < 6) return;
       reload();
     });
 
