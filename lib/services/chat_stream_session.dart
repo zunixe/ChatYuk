@@ -605,10 +605,20 @@ class ChatStreamSession {
     // Nama deterministik + filter server-side (dulu hashCode tak stabil +
     // semua client terima semua insert lalu buang di client).
     final channelName = 'msg-$cacheKey';
-    final channel = _sb.channel(channelName);
+    var channelAttempt = 0;
+    late RealtimeChannel channel;
+    // Forward-declare: attach() memicu reconnect lewat ini, tapi definisi
+    // `_scheduleChannelReconnect` ada SETELAH attach (butuh `openChannel`
+    // yang butuh `attach` — sirkular, tak bisa urut linear).
+    late void Function() requestReconnect;
+    var _reconnectAttempt = 0;
 
+    /// Pasang SELURUH handler realtime ke [ch]. Dipanggil untuk channel awal &
+    /// tiap channel BARU saat reconnect (Supabase melarang `subscribe` 2x pada
+    /// instance yang sama — bug terukur "tried to subscribe multiple times").
+    void attach(RealtimeChannel ch) {
     // INSERT: append langsung dari payload — tidak perlu round-trip ke server
-    channel.onPostgresChanges(
+    ch.onPostgresChanges(
       event: PostgresChangeEvent.insert,
       schema: 'public',
       table: table,
@@ -683,7 +693,7 @@ class ChatStreamSession {
       },
     );
     // UPDATE: parse payload untuk update partial (jangan refetch full)
-    channel.onPostgresChanges(
+    ch.onPostgresChanges(
       event: PostgresChangeEvent.update,
       schema: 'public',
       table: table,
@@ -707,7 +717,7 @@ class ChatStreamSession {
         }
       },
     );
-    channel.onPostgresChanges(
+    ch.onPostgresChanges(
       event: PostgresChangeEvent.delete,
       schema: 'public',
       table: table,
@@ -722,7 +732,7 @@ class ChatStreamSession {
         scheduleReload();
       },
     );
-    channel.onBroadcast(event: 'new_message', callback: (payload, [ref]) async {
+    ch.onBroadcast(event: 'new_message', callback: (payload, [ref]) async {
       _hiddenCutoffCache.remove(filterVal);
       lastRealtime = DateTime.now();
       if (controller.isClosed) return;
@@ -755,10 +765,31 @@ class ChatStreamSession {
         }
       } catch (_) {}
     });
+
+    ch.subscribe((status, err) {
+      if (err != null) dlog('[ChatStream] realtime error: $err');
+      // REALTIME RESILIENT: channel mati (mis. 1002 saat network blip) →
+      // reconnect via channel BARU (bukan subscribe ulang instance).
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.timedOut ||
+          status == RealtimeSubscribeStatus.closed) {
+        requestReconnect();
+      } else if (status == RealtimeSubscribeStatus.subscribed) {
+        _reconnectAttempt = 0; // sukses → reset backoff
+        lastRealtime = DateTime.now();
+      }
+    });
+    } // attach: handler + subscribe terpasang ke ch.
+
+    void openChannel() {
+      channel = _sb.channel('$channelName-${channelAttempt++}');
+      attach(channel);
+    }
+    openChannel();
+
     // State reconnect realtime (backoff). Lihat _scheduleChannelReconnect.
     final _rng = Random();
     final _reconnectDelays = const [2, 4, 8, 16, 32, 60];
-    var _reconnectAttempt = 0;
     Timer? _reconnectTimer;
 
     // Reconnect ter-debounce + backoff. Idempoten via flag `_reconnecting`.
@@ -781,43 +812,23 @@ class ChatStreamSession {
         if (!AppForeground.now) return; // jangan bangun proses saat background
         // Ambil pesan yang mungkin terlewat selama channel putus.
         unawaited(reload());
-        // Re-subscribe channel yang sama (Supabase: unsubscribe → subscribe).
+        // Buang channel lama lalu buat BARU (Supabase melarang subscribe
+        // ulang pada instance yang sama).
+        final old = channel;
         try {
-          await channel.unsubscribe();
+          await _sb.removeChannel(old);
         } catch (_) {}
+        if (controller.isClosed) return;
         try {
-          channel.subscribe((s, e) {
-            if (e != null) dlog('[ChatStream] realtime error: $e');
-            if (s == RealtimeSubscribeStatus.channelError ||
-                s == RealtimeSubscribeStatus.timedOut ||
-                s == RealtimeSubscribeStatus.closed) {
-              _scheduleChannelReconnect();
-            } else if (s == RealtimeSubscribeStatus.subscribed) {
-              _reconnectAttempt = 0; // sukses → reset backoff
-              lastRealtime = DateTime.now();
-            }
-          });
+          openChannel();
         } catch (e) {
-          dlog('[ChatStream] re-subscribe gagal: $e');
+          dlog('[ChatStream] reconnect gagal: $e');
           _scheduleChannelReconnect();
         }
       });
     }
 
-    channel.subscribe((status, err) {
-      if (err != null) dlog('[ChatStream] realtime error: $err');
-      // REALTIME RESILIENT (2026-10-13): dulu hanya LOG — channel yang mati
-      // (mis. `RealtimeCloseEvent(code: 1002)` saat network blip) TIDAK
-      // pernah hidup lagi → pesan & centang-2 hanya lewat poll (lambat)
-      // sampai user buka-tutup chat. Sekarang: saat error/closed/timeout,
-      // jadwalkan re-subscribe (backoff 2→4→8→16→32→60s + jitter) yang juga
-      // `reload()` untuk menyegarkan pesan yang terlewat selama putus.
-      if (status == RealtimeSubscribeStatus.channelError ||
-          status == RealtimeSubscribeStatus.timedOut ||
-          status == RealtimeSubscribeStatus.closed) {
-        _scheduleChannelReconnect();
-      }
-    });
+    requestReconnect = _scheduleChannelReconnect;
 
     reload();
 
