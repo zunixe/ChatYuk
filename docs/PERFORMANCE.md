@@ -4350,3 +4350,39 @@ init setelah file siap.
 **Verifikasi:** `flutter analyze lib/`=0; guard OK; test hijau; build profile +
 install HP. **Belum:** ukur ulang `video.prepare→push`/`tap→open` di device
 pasca-fix (menunggu sesi pengukuran).
+
+---
+
+## §50. Penyempurnaan link preview (LP-A/B/E/F) — mirip Telegram (2026-10-13)
+
+**Sebelum:** fetch metadata di device tiap render, cache RAM cap 50 (hilang
+saat app tutup), foto via `Image.network` RAW (RAM only, fetch ulang), tidak
+simpan per-pesan. Telegram: fetch server + simpan webPage per pesan + foto disk.
+
+**Sesudah:**
+- **LP-B** — `LinkPreviewService` cache RAM→**DISK** (`MediaDiskCache`,
+  key `linkpreview:<url>`) → persist lintas sesi, **nol fetch** bila sudah ada;
+  dedupe in-flight. + `networkFetchCount` (verifikasi anti re-fetch).
+- **LP-A** — `peek()` sinkron → widget render dari cache **tanpa spinner** saat
+  scroll balik.
+- **LP-E** — `LinkPreviewImage` (baru): foto preview unduh sekali → simpan
+  `MediaDiskCache` → frame berikut instan (bukan `Image.network` RAW).
+- **LP-F** — **Edge Function `link-preview`** (Deno, deploy via CLI): fetch
+  server-side + parse og:*.
+
+**Temuan terukur (uji curl 3 situs, 2026-10-13):**
+| Sumber | YouTube | TikTok/Shopee |
+|---|---|---|
+| IP server Supabase (function) | **429** (datacenter IP dibatasi) | hanya host |
+| IP rumah (device) | **og:title+image ✅** | bervariasi |
+
+→ **Urutan dibalik (fix `454f00f`): DEVICE dulu**, Edge Function = **fallback**
+(utk device gagal/DNS-block). Kartu tetap tampil metadata nyata di jalur device.
+
+**LP-C (hapus preview) & LP-D (ukuran kecil/besar): TIDAK dikerjakan.**
+LP-C butuh field `noPreview` per-pesan (kolom DB + jalur kirim) — mahal utk
+nilai sedang; LP-D tak berguna di bubble lebar-tetap (rekomendasi: skip).
+
+**Verifikasi:** `flutter analyze lib/`=0; guard OK; test
+(`link_preview_disk_test`, `link_preview_cache_test`) hijau; build profile +
+install. **Belum:** ukur `networkFetchCount` saat scroll chat di device.
