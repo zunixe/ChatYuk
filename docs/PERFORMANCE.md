@@ -4321,3 +4321,32 @@ play/pause 5x. Hasil (HP Xiaomi, build profile):
 **Keputusan:** N1 (audio visualizer/engine), N3 (audio pool), N5 (camera) TIDAK
 diperlukan (voice sangat cepat, 0 leak). Native video frame (N2) hanya bernilai
 bila target <150ms KETAT & termasuk kasus cold — dipertimbangkan terpisah.
+
+### §49b. Fix "video cold berat" — buka viewer segera (2026-10-13)
+
+**Gejala user:** buka video **cold** (belum pernah dibuka) terasa berat.
+
+**Akar (bukan latency init):** `ChatVideoBubble._openFullscreen` **`await
+_ensureLocalFile()`** → **unduh video FULL (MB) dari network** SEBELUM viewer
+dibuka. Jadi "berat" = menunggu unduhan selesai (bukan 228 ms
+`VideoPlayerController.initialize()`).
+
+**Fix (commit `3ba873c`):**
+- `VideoPlayerScreen` kini menerima `fileLoader: Future<File?> Function()?` +
+  `posterBytes` → **viewer dibuka SEGERA**; file (unduh) di-resolve **di latar**
+  oleh screen; **poster tampil sebagai placeholder** (bukan layar hitam) +
+  spinner. Pemanggil lama (composer) tetap pakai `file:` langsung (kompatibel).
+- `VideoPlayerScreen` dipindah ke `lib/widgets/media/video_player_screen.dart`
+  supaya `chat_video_bubble.dart` turun **1119 → 976** (<1000; guard hijau).
+
+**Bukti pendukung (dari §49, sebelum fix):** `video.prepare→push` hanya
+**3.5 ms** (poster sudah cached) — jadi delay cold **bukan** di poster/push,
+melainkan di `_ensureLocalFile` (unduh) yang dulu di-await.
+
+**Metrik baru untuk verifikasi:** setelah fix, `video.prepare→push` harus tetap
+~0 ms & viewer terbuka sebelum unduhan selesai; `video.tap→open` mengukur
+init setelah file siap.
+
+**Verifikasi:** `flutter analyze lib/`=0; guard OK; test hijau; build profile +
+install HP. **Belum:** ukur ulang `video.prepare→push`/`tap→open` di device
+pasca-fix (menunggu sesi pengukuran).
