@@ -150,35 +150,42 @@ class LinkPreviewService {
   }
 
   Future<LinkPreviewData?> _fetchNetwork(String url) async {
-    // 1) Edge Function (LP-F) — lebih andal utk situs anti-bot (IP server).
+    // URUTAN (terukur 2026-10-13): DEVICE dulu. Dari IP rumah, YouTube dkk
+    // BERHASIL (og:title+image); dari IP server Supabase justru **429 / bot
+    // challenge** (datacenter IP dibatasi). Jadi device = jalur utama.
+    networkFetchCount++;
+    LinkPreviewData? device;
+    try {
+      final res = await http
+          .get(Uri.parse(url), headers: {
+            'User-Agent':
+                'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/120 Mobile Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
+          })
+          .timeout(const Duration(seconds: 6));
+      if (res.statusCode == 200) {
+        final d = parseHtml(url, res.body);
+        // Ada metadata nyata (bukan cuma host)? → pakai.
+        if (d.image.isNotEmpty || d.description.isNotEmpty) return d;
+        device = d;
+      }
+    } catch (_) {}
+    // FALLBACK (LP-F): Edge Function — untuk kasus device gagal/DNS-block.
     final srv = serverFetch;
     if (srv != null) {
       try {
         final d = await srv(url).timeout(const Duration(seconds: 8));
-        if (d != null && d.title.isNotEmpty) {
-          networkFetchCount++;
+        if (d != null && (d.image.isNotEmpty || d.description.isNotEmpty)) {
           return d;
         }
       } catch (_) {}
     }
-    // 2) Fallback: fetch langsung dari device (perilaku lama).
-    try {
-      networkFetchCount++;
-      final res = await http
-          .get(Uri.parse(url), headers: {'User-Agent': 'Mozilla/5.0'})
-          .timeout(const Duration(seconds: 5));
-      if (res.statusCode != 200) throw Exception('status ${res.statusCode}');
-      return parseHtml(url, res.body);
-    } catch (_) {
-      // Fallback terakhir: judul = host saja (jangan sembunyikan kartu total).
-      final host = Uri.tryParse(url)?.host ?? url;
-      return LinkPreviewData(
-        url: url,
-        title: host,
-        siteName: host,
-        ok: false,
-      );
-    }
+    // Hasil device apa adanya (judul=host bila semua gagal) — jangan
+    // sembunyikan kartu total.
+    if (device != null) return device;
+    final host = Uri.tryParse(url)?.host ?? url;
+    return LinkPreviewData(url: url, title: host, siteName: host, ok: false);
   }
 
   /// Parse HTML → [LinkPreviewData] (og:* → <title> → host). Dipisah supaya
