@@ -3,6 +3,26 @@ part of '../private_chats_screen.dart';
 // ignore_for_file: unused_element
 
 mixin _PcBuildMx on _PcBase {
+  /// Tap AVATAR kartu → zoom foto (pola sama menu "Pengguna Online"), BUKAN
+  /// buka chat/profil. Foto diambil dari cache avatar (RAM→disk, sinkron);
+  /// bila kosong → dialog lingkaran inisial.
+  void _showAvatarZoomFor(
+    String uid,
+    String name,
+    String gender,
+  ) {
+    final b64 = ProviderScope.containerOf(context, listen: false)
+        .read(avatarProvider)
+        .cachedSyncIncludeDisk(uid) ??
+        '';
+    showAvatarZoomDialog(
+      context,
+      b64: b64,
+      bgColor: PersonAvatar.colorFor(gender),
+      initial: name.isNotEmpty ? name[0].toUpperCase() : '?',
+    );
+  }
+
   Widget build(BuildContext context) {
     PerfProbe.buildCount('ChatList');
     ref.watch(themeProvider);
@@ -479,34 +499,47 @@ mixin _PcBuildMx on _PcBase {
                                           children: [
                                             // PersonAvatar — SAMA warna/ring/badge
                                             // dengan menu Online & header chat.
-                                            PersonAvatar(
-                                              uid: otherUid,
-                                              name: otherName,
-                                              gender: otherGender,
-                                              size: 44,
-                                              status: isBlocked
-                                                  ? null
-                                                  : (statusMap[otherUid] ??
-                                                        'offline'),
-                                              badge: isBlocked
-                                                  ? Container(
-                                                      padding: EdgeInsets.all(
-                                                        2,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: AppTheme.danger,
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              4,
-                                                            ),
-                                                      ),
-                                                      child: Icon(
-                                                        Icons.block,
-                                                        size: 10,
-                                                        color: Colors.white,
-                                                      ),
-                                                    )
-                                                  : null,
+                                            // Tap avatar → profil lawan (pola sama
+                                            // menu Online); tap badan kartu → chat.
+                                            // Di mode seleksi → ikut toggle.
+                                            GestureDetector(
+                                              behavior:
+                                                  HitTestBehavior.opaque,
+                                              onTap: () => _selectionMode
+                                                  ? _toggleSelect(chat.chatId)
+                                                  : _showAvatarZoomFor(
+                                                      otherUid,
+                                                      otherName,
+                                                      otherGender,
+                                                    ),
+                                              child: PersonAvatar(
+                                                uid: otherUid,
+                                                name: otherName,
+                                                gender: otherGender,
+                                                size: 44,
+                                                status: isBlocked
+                                                    ? null
+                                                    : (statusMap[otherUid] ??
+                                                          'offline'),
+                                                badge: isBlocked
+                                                    ? Container(
+                                                        padding:
+                                                            EdgeInsets.all(2),
+                                                        decoration: BoxDecoration(
+                                                          color: AppTheme.danger,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                4,
+                                                              ),
+                                                        ),
+                                                        child: Icon(
+                                                          Icons.block,
+                                                          size: 10,
+                                                          color: Colors.white,
+                                                        ),
+                                                      )
+                                                    : null,
+                                              ),
                                             ),
                                             SizedBox(width: 10),
                                             Expanded(

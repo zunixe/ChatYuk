@@ -29,6 +29,7 @@ import '../widgets/video_prefetch.dart';
 import '../widgets/message/photo_prefetch.dart';
 import '../config/theme.dart';
 import 'private_chats/private_chats_widgets.dart';
+import 'online_users/widgets/avatar_zoom.dart';
 
 part 'private_chats/private_chats_select.dart';
 part 'private_chats/private_chats_filter.dart';
