@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../utils.dart';
+import 'media_probe.dart';
 
 /// Alat ukur performa (HANYA aktif saat `--dart-define=PERF_PROBE=true`).
 ///
@@ -233,6 +234,8 @@ class PerfProbe {
           'bytes=${ic.currentSizeBytes} '
           'refs=${ic.liveImageCount}');
     } catch (_) {}
+    // Media (video/audio) — counter live & leak (Fase 1 audit).
+    _log('[PERF] mediaCtrl ${MediaProbe.label()}');
     for (int i = 0; i < 4; i++) {
       final list = _tabFramesUs[i];
       if (list == null || list.isEmpty) continue;
