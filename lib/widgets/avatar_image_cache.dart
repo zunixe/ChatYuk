@@ -76,16 +76,21 @@ class AvatarImageCache {
     final old = _images.remove(uid);
     if (old != null) {
       _bytes -= _sizeOf(old);
-      _safeDispose(old);
+      // JANGAN dispose `old` di sini: `AvatarMemoryImage.loadImage` membungkus
+      // bitmap ini ke `ImageInfo` yang dipegang `ImageStreamCompleter` milik
+      // widget yang mungkin MASIH aktif. Dispose → `Image.clone()` pada handle
+      // mati = "Cannot clone a disposed image" (bug 2026-10-13, avatar kosong
+      // di timeline). Lepas referensi saja; `ui.Image` dibebaskan GC native
+      // setelah tak ada `ImageInfo` yang memakainya.
     }
     _images[uid] = img;
     _bytes += _sizeOf(img);
     // LRU penuh (Map pertahankan urutan insert; refresh saat get→reinsert).
+    // Evict = LEPAS referensi (bukan dispose) — alasan sama seperti di atas.
     while (_bytes > maxBytes && _images.isNotEmpty) {
       final first = _images.keys.first;
       final ev = _images.remove(first)!;
       _bytes -= _sizeOf(ev);
-      _safeDispose(ev);
     }
   }
 
@@ -97,27 +102,19 @@ class AvatarImageCache {
 
   static int _sizeOf(ui.Image img) => img.width * img.height * 4;
 
-  static void _safeDispose(ui.Image img) {
-    try {
-      img.dispose();
-    } catch (_) {}
-  }
-
-  /// Buang semua (logout / ganti akun). Bitmap di-dispose.
+  /// Buang semua (logout / ganti akun). JANGAN dispose bitmap — `ImageInfo`
+  /// yang dipegang `ImageStreamCompleter` bisa masih hidup; dilepas saja.
   void clear() {
-    for (final img in _images.values) {
-      _safeDispose(img);
-    }
     _images.clear();
     _bytes = 0;
   }
 
   /// Buang satu uid (mis. foto profil diganti → versi lama tak dipakai lagi).
+  /// LEPAS referensi saja (bukan dispose) — lihat catatan [_store].
   void evict(String uid) {
     final img = _images.remove(uid);
     if (img != null) {
       _bytes -= _sizeOf(img);
-      _safeDispose(img);
     }
   }
 }

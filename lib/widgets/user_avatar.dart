@@ -122,13 +122,17 @@ void clearAllAvatarCaches() {
 }
 
 // Batas ukuran map avatar global — tanpa ini, 3 map tumbuh seumur sesi
-// (1 entry per user yang pernah terlihat) → risiko memori besar di HP
-// low-end saat sesi panjang. Evict FIFO (urutan insert) kalau lewat cap.
+// (1 entry per user yang pernah terlihat) → risiko memori di HP low-end.
 //
-// 120 (dulu 200): bitmap sudah di-cap render via [_cappedAvatarImage], tapi
-// `_avatarBytesByUid` menyimpan bytes MENTAH base64-decoded (ratusan KB/uid)
-// untuk zoom. 120 × ~200KB ≈ 24MB — cukup untuk list & tetap ringan.
-const _avatarMapCap = 120;
+// PENTING (bug 2026-10-13 "foto avatar hilang setelah scroll jauh lalu balik",
+// di timeline + daftar chat): evict FIFO 120 terlalu AGRESIF — timeline +
+// daftar chat bisa merujuk >120 uid berbeda; FIFO membuang entri yang MASIH
+// tampil (yang paling lama insert), sehingga saat scroll balik provider global
+// sudah hilang → foto ter-render ulang dari nol atau blank. Kontrol memori
+// bitmap sudah ditangani `AvatarImageCache` (8 MB LRU sejati, keputusan per-uid
+// berdasarkan pemakaian) & `_avatarBytesByUid` di-cap render. Jadi cap map di
+// sini dinaikkan agar TIDAK membuang avatar yang masih dipakai viewport.
+const _avatarMapCap = 600;
 
 void _boundAvatarMap(Map<String, Object?> m) {
   while (m.length > _avatarMapCap) {
@@ -184,17 +188,18 @@ class _UserAvatarState extends State<UserAvatar> {
       dlog('[AVATAR] $_uid8 EMPTY keep-old=${_provider != null}');
       return;
     }
-    // Instance MemoryImage stabil per-uid sudah ada di cache GLOBAL → pakai
-    // langsung TANPA membuang bytes/provider. PENTING: map `_avatarBytesByUid`
-    // / `_avatarImageByUid` dibagi SEMUA instance UserAvatar; dulu jalur ini
-    // selalu `remove(uid)` + `_provider=null` → instance LAIN (bubble lain
-    // dengan uid sama) kehilangan provider saat widget ini _resolve ulang
-    // (gejala "foto muncul sebentar lalu hilang"). Karena `src` untuk uid ini
-    // sudah diproses sebelumnya (`_avatarLastSrcByUid[uid]==src`), cache-nya
-    // valid → cukup ambil.
+    // Provider stabil per-uid sudah ada di cache GLOBAL → pakai langsung
+    // TANPA membuang bytes/provider. PENTING: map `_avatarBytesByUid` /
+    // `_avatarImageByUid` dibagi SEMUA instance UserAvatar & helper
+    // `avatarImageProviderFor` (timeline). Dulu jalur ini membandingkan
+    // `_avatarLastSrcForProvider[uid] == src` — tapi helper timeline
+    // mendaftarkan provider dengan src `''`, sehingga cek ini GAGAL → provider
+    // yang masih dipakai widget lain dihapus → foto avatar "hilang setelah
+    // scroll lalu kembali". Karena `clearForUid()` (dipanggil saat avatar user
+    // benar-benar berubah) yang membuang entri global, cukup pakai provider
+    // yang ada bila tersedia.
     final cachedStable = _avatarImageByUid[widget.uid];
-    if (cachedStable != null &&
-        _avatarLastSrcForProvider[widget.uid] == src) {
+    if (cachedStable != null) {
       if (_provider != cachedStable) _provider = cachedStable;
       return;
     }
