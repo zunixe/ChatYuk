@@ -89,9 +89,9 @@ class _LinkPreviewImageState extends State<LinkPreviewImage> {
         child: Container(color: AppTheme.bgInput),
       );
     }
-    // PROPORSI (fix "gepeng"): pakai rasio ASLI gambar (dari header) + clamp
-    // tinggi [minH..maxH] ala Telegram. Dulu tinggi dipaksa 140 + lebar penuh
-    // -> cover memotong gambar lebar (16:9) = terlihat gepeng.
+    // PENUH + PROPORSIONAL: lebar penuh kartu, tinggi mengikuti rasio ASLI
+    // gambar (16:9 YouTube = penuh & tak gepeng). Clamp rasio hanya mencegah
+    // ekstrem (banner sangat pendek / potret sangat tinggi) supaya kartu wajar.
     final dims = parseImageDimensions(bytes);
     final double aspect = (dims != null && dims.width > 0 && dims.height > 0)
         ? dims.width / dims.height
@@ -101,21 +101,16 @@ class _LinkPreviewImageState extends State<LinkPreviewImage> {
         topLeft: Radius.circular(8),
         topRight: Radius.circular(8),
       ),
-      // Batas tinggi = widget.height (mis. 140) supaya kartu tak memanjang;
-      // rasio asli tetap dipertahankan (tidak gepeng).
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: widget.height),
-        child: AspectRatio(
-          // Clamp rasio agar sangat tinggi/lebar tak mendominasi kartu.
-          aspectRatio: aspect.clamp(0.8, 2.4),
-          child: Image.memory(
-            bytes,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            cacheWidth: 480,
-            gaplessPlayback: true,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-          ),
+      child: AspectRatio(
+        // Clamp rasio agar sangat tinggi/lebar tak mendominasi kartu.
+        aspectRatio: aspect.clamp(1.2, 2.4),
+        child: Image.memory(
+          bytes,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          cacheWidth: 480,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
         ),
       ),
     );
