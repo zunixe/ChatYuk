@@ -713,37 +713,56 @@ class MessageBubble extends StatelessWidget {
                           },
                         )
                       else
-                        MessageTextWithTime(
-                          text: msg.text,
-                          timeStr: msg.edited
-                              ? '$timeStr ${s.msgEdited}'
-                              : timeStr,
-                          textStyle: AppText.chatBody,
-                          timeStyle: AppText.chatTime.copyWith(
-                            color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w400,
-                          ),
-                          alignRight: isMe,
-                          mentions: msg.mentions,
-                          highlightMentionAll: highlightMentionAll,
-                          searchQuery: searchQuery,
-                          trailing: isMe
-                              ? Tooltip(
-                                  message:
-                                      isQueued ? s.msgWaitingConnection : '',
-                                  child: Icon(
-                                    (isPending || isQueued)
-                                        ? Icons.done
-                                        : Icons.done_all,
-                                    size: 12,
-                                    color: (!isQueued &&
-                                            !isPending &&
-                                            isRead)
-                                        ? AppTheme.primary
-                                        : AppTheme.textSecondary,
-                                  ),
-                                )
-                              : null,
+                        Column(
+                          crossAxisAlignment: isMe
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          children: [
+                            // LINK PREVIEW utk PESAN TEKS (bukan foto) — dulu
+                            // preview HANYA di _PhotoBubble (foto+caption),
+                            // sehingga kirim link YouTube di pesan teks TIDAK
+                            // tampil kartunya. Sekarang paritas (mirip Telegram).
+                            if (LinkPreviewService.instance
+                                    .extractUrl(msg.text) !=
+                                null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: LinkPreview(text: msg.text),
+                              ),
+                            MessageTextWithTime(
+                              text: msg.text,
+                              timeStr: msg.edited
+                                  ? '$timeStr ${s.msgEdited}'
+                                  : timeStr,
+                              textStyle: AppText.chatBody,
+                              timeStyle: AppText.chatTime.copyWith(
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              alignRight: isMe,
+                              mentions: msg.mentions,
+                              highlightMentionAll: highlightMentionAll,
+                              searchQuery: searchQuery,
+                              trailing: isMe
+                                  ? Tooltip(
+                                      message: isQueued
+                                          ? s.msgWaitingConnection
+                                          : '',
+                                      child: Icon(
+                                        (isPending || isQueued)
+                                            ? Icons.done
+                                            : Icons.done_all,
+                                        size: 12,
+                                        color: (!isQueued &&
+                                                !isPending &&
+                                                isRead)
+                                            ? AppTheme.primary
+                                            : AppTheme.textSecondary,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ],
                         ),
                     ],
                   ),
