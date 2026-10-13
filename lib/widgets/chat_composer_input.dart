@@ -13,7 +13,7 @@ import '../core/perf/perf_probe.dart';
 import '../mixins/voice_recorder_mixin.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../utils/mention.dart';
-import 'chat_video_bubble.dart';
+import 'media/video_player_screen.dart';
 import 'mic_record_button.dart';
 import 'mention_autocomplete.dart';
 import 'chat_ui_shared.dart';

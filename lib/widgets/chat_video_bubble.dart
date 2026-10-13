@@ -17,8 +17,8 @@ import '../core/storage_paths.dart';
 import '../providers/riverpod/service_locator.dart';
 import '../utils.dart';
 import 'video_prefetch.dart';
-import 'package:video_player/video_player.dart';
 import '../core/perf/media_probe.dart';
+import 'media/video_player_screen.dart';
 
 /// Gate konkurensi sederhana (max N paralel) — dipakai membatasi unduhan
 /// poster video lintas-instance bubble. Mirip `_Semaphore` di
@@ -579,20 +579,18 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         await _loadPoster(fromTap: true);
         if (!mounted) return;
       }
-      final file = await _ensureLocalFile();
-      if (!mounted) return;
+      // CEPAT-COLD (fix "video cold berat"): JANGAN tunggu unduh video full
+      // di sini. Buka viewer SEGERA — file (unduh) di-resolve di latar oleh
+      // VideoPlayerScreen lewat `fileLoader`; poster tampil sebagai
+      // placeholder (bukan layar hitam). Dulu `await _ensureLocalFile()`
+      // (unduh MB) memblok pembukaan viewer = "berat".
+      final posterBytes = _poster;
       MediaProbe.stop('video.prepare→push', sw);
-      if (file == null) {
-        final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.videoCompressFail)));
-        return;
-      }
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoPlayerScreen(
-            file: file,
+            fileLoader: _ensureLocalFile,
+            posterBytes: posterBytes,
             durationMs: widget.durationMs,
           ),
         ),
@@ -880,117 +878,6 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   }
 }
 
-/// Pemutar video fullscreen: kontrol dasar (play/pause) + loop dimatikan
-/// agar user tahu videonya selesai. Dipakai bubble chat DAN preview composer.
-class VideoPlayerScreen extends StatefulWidget {
-  final File file;
-  final int durationMs;
-  const VideoPlayerScreen({super.key, required this.file, this.durationMs = 0});
-
-  @override
-  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
-}
-
-class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  VideoPlayerController? _ctrl;
-  bool _ready = false;
-  bool _failed = false;
-  Stopwatch? _initSw;
-
-  @override
-  void initState() {
-    super.initState();
-    MediaProbe.videoScreenOpened();
-    _initSw = MediaProbe.start();
-    unawaited(_init());
-  }
-
-  Future<void> _init() async {
-    try {
-      final ctrl = VideoPlayerController.file(widget.file);
-      _ctrl = ctrl;
-      MediaProbe.videoCtrlOpened();
-      await ctrl.initialize().timeout(const Duration(seconds: 20));
-      await ctrl.setLooping(false);
-      await ctrl.play();
-      // init → play() benar-benar dipanggil.
-      MediaProbe.stop('video.tap→play', _initSw);
-      if (!mounted) return;
-      setState(() => _ready = true);
-      // play() → frame pertama siap tampil.
-      MediaProbe.stop('video.tap→open', _initSw);
-    } catch (e) {
-      dlog('[VideoPlayer] init gagal: $e');
-      if (mounted) setState(() => _failed = true);
-    }
-  }
-
-  @override
-  void dispose() {
-    if (_ctrl != null) MediaProbe.videoCtrlClosed();
-    _ctrl?.dispose();
-    super.dispose();
-  }
-
-  void _togglePlay() {
-    final c = _ctrl;
-    if (c == null) return;
-    setState(() {
-      c.value.isPlaying ? c.pause() : c.play();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      // SafeArea: video portrait penuh TANPA ini memanjang sampai ke
-      // belakang menu navigasi Android bawah (overlap). Lihat PhotoViewer.
-      body: SafeArea(
-        child: Center(
-          child: _failed
-            ? Text(
-                s.videoCompressFail,
-                style: AppText.body.copyWith(color: Colors.white70),
-              )
-            : !_ready
-            ? const CircularProgressIndicator(color: Colors.white)
-            : GestureDetector(
-                onTap: _togglePlay,
-                child: AspectRatio(
-                  aspectRatio: _ctrl!.value.aspectRatio,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      VideoPlayer(_ctrl!),
-                      if (!_ctrl!.value.isPlaying)
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: const BoxDecoration(
-                            color: Colors.black54,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            size: 34,
-                            color: Colors.white,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-        ),
-      ),
-    );
-  }
-}
 
 // Kartu "foto sudah kadaluarsa" — dipakai pengirim & penerima (design sama).
 class ViewOnceLockedCard extends StatelessWidget {
