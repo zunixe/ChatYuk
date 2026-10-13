@@ -18,7 +18,10 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     try {
       final now = DateTime.now();
       final last = _markReadLastAt[chatId];
-      if (last != null && now.difference(last).inMilliseconds < 2500) {
+      // 1000ms (dulu 2500ms): batas ini menentukan seberapa cepat LAWAN
+      // melihat centang-2 setelah kita membuka chat. 2.5s terasa "lama
+      // update centangnya". 1s cukup meredam burst pesan tapi responsif.
+      if (last != null && now.difference(last).inMilliseconds < 1000) {
         // Masih dalam window throttle → tetap update snapshot lokal (murah,
         // UI centang-2 instan) tanpa RPC.
         _applyLocalRead(uid, chatId);
@@ -768,7 +771,7 @@ final Map<String, DateTime> _markReadLastAt = {};
 void resetMarkReadThrottleForTest() => _markReadLastAt.clear();
 
 @visibleForTesting
-bool isMarkReadThrottledForTest(String chatId, {int windowMs = 2500}) {
+bool isMarkReadThrottledForTest(String chatId, {int windowMs = 1000}) {
   final last = _markReadLastAt[chatId];
   if (last == null) return false;
   return DateTime.now().difference(last).inMilliseconds < windowMs;
