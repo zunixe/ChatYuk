@@ -18,6 +18,7 @@ import '../providers/riverpod/service_locator.dart';
 import '../utils.dart';
 import 'video_prefetch.dart';
 import 'package:video_player/video_player.dart';
+import '../core/perf/media_probe.dart';
 
 /// Gate konkurensi sederhana (max N paralel) — dipakai membatasi unduhan
 /// poster video lintas-instance bubble. Mirip `_Semaphore` di
@@ -566,6 +567,8 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   Future<void> _openFullscreen() async {
     if (_opening || _locked) return;
     _opening = true;
+    // Fase respons tap: poster-load + local-file → push viewer.
+    final sw = MediaProbe.start();
     try {
       // Deferred (poster belum ada): muat poster dulu (unduh + generate +
       // cache) supaya bubble terisi saat kembali dari fullscreen.
@@ -578,6 +581,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       }
       final file = await _ensureLocalFile();
       if (!mounted) return;
+      MediaProbe.stop('video.prepare→push', sw);
       if (file == null) {
         final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
         ScaffoldMessenger.of(
@@ -891,10 +895,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   VideoPlayerController? _ctrl;
   bool _ready = false;
   bool _failed = false;
+  Stopwatch? _initSw;
 
   @override
   void initState() {
     super.initState();
+    MediaProbe.videoScreenOpened();
+    _initSw = MediaProbe.start();
     unawaited(_init());
   }
 
@@ -902,11 +909,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     try {
       final ctrl = VideoPlayerController.file(widget.file);
       _ctrl = ctrl;
+      MediaProbe.videoCtrlOpened();
       await ctrl.initialize().timeout(const Duration(seconds: 20));
       await ctrl.setLooping(false);
       await ctrl.play();
+      // init → play() benar-benar dipanggil.
+      MediaProbe.stop('video.tap→play', _initSw);
       if (!mounted) return;
       setState(() => _ready = true);
+      // play() → frame pertama siap tampil.
+      MediaProbe.stop('video.tap→open', _initSw);
     } catch (e) {
       dlog('[VideoPlayer] init gagal: $e');
       if (mounted) setState(() => _failed = true);
@@ -915,6 +927,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
+    if (_ctrl != null) MediaProbe.videoCtrlClosed();
     _ctrl?.dispose();
     super.dispose();
   }

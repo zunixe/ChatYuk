@@ -6,6 +6,7 @@ import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../models/message_model.dart';
 import '../providers/riverpod/service_locator.dart';
+import '../core/perf/media_probe.dart';
 
 /// Prefetch file voice TERBARU di background sekali per buka chat — supaya
 /// tap play terasa instan seperti foto (yang auto-load dari disk).
@@ -115,6 +116,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
     if (existing != null) return existing;
     final p = AudioPlayer();
     _player = p;
+    MediaProbe.audioPlayerOpened();
     // onError di semua stream player: stream plugin (just_audio) bisa error
     // (mis. file rusak/offline) — tanpa ini error tak tertangkap merusak
     // frame/dispatcher (back mati). Cukup log; UI dibiarkan apa adanya.
@@ -156,11 +158,13 @@ class _VoiceBubbleState extends State<VoiceBubble> {
     _durSub?.cancel();
     _completeSub?.cancel();
     _otherSub?.cancel();
+    if (_player != null) MediaProbe.audioPlayerClosed();
     _player?.dispose();
     super.dispose();
   }
 
   Future<void> _toggle() async {
+    final sw = MediaProbe.start(); // tap → bunyi
     if (_playing) {
       await _player?.pause();
       if (mounted) setState(() => _playing = false);
@@ -177,6 +181,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
         if (f != null) {
           _VoicePlayerManager.instance.started_(player);
           await player.play(DeviceFileSource(f.path));
+          MediaProbe.stop('voice.tap→play', sw);
           if (mounted) setState(() => _playing = true);
           return;
         }
@@ -189,6 +194,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
         if (f2 == null || !mounted) return;
         _VoicePlayerManager.instance.started_(player);
         await player.play(DeviceFileSource(f2.path));
+        MediaProbe.stop('voice.tap→play', sw);
         if (mounted) setState(() => _playing = true);
       } catch (_) {
       } finally {
