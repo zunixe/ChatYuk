@@ -58,8 +58,9 @@ class AvatarImageCache {
     Uint8List bytes,
     int targetWidth,
   ) async {
+    ui.Codec? codec;
     try {
-      final codec = await ui.instantiateImageCodec(
+      codec = await ui.instantiateImageCodec(
         bytes,
         targetWidth: targetWidth,
       );
@@ -69,28 +70,32 @@ class AvatarImageCache {
       return img;
     } catch (_) {
       return null;
+    } finally {
+      // Codec hanya alat decode; frame.image independen. Tanpa ini tiap
+      // decode bocor 1 objek codec native.
+      try {
+        codec?.dispose();
+      } catch (_) {}
     }
   }
 
   void _store(String uid, ui.Image img) {
+    // Master lama untuk uid SAMA boleh di-dispose: setiap subscriber memegang
+    // CLONE-nya sendiri (lihat loadImage), jadi dispose master tak mematikan
+    // render yang sedang berjalan (refcount texture tetap >0 selama clone hidup).
     final old = _images.remove(uid);
     if (old != null) {
       _bytes -= _sizeOf(old);
-      // JANGAN dispose `old` di sini: `AvatarMemoryImage.loadImage` membungkus
-      // bitmap ini ke `ImageInfo` yang dipegang `ImageStreamCompleter` milik
-      // widget yang mungkin MASIH aktif. Dispose → `Image.clone()` pada handle
-      // mati = "Cannot clone a disposed image" (bug 2026-10-13, avatar kosong
-      // di timeline). Lepas referensi saja; `ui.Image` dibebaskan GC native
-      // setelah tak ada `ImageInfo` yang memakainya.
+      _safeDispose(old);
     }
     _images[uid] = img;
     _bytes += _sizeOf(img);
-    // LRU penuh (Map pertahankan urutan insert; refresh saat get→reinsert).
-    // Evict = LEPAS referensi (bukan dispose) — alasan sama seperti di atas.
+    // LRU penuh: evict + dispose master lama (subscriber-nya pegang clone).
     while (_bytes > maxBytes && _images.isNotEmpty) {
       final first = _images.keys.first;
       final ev = _images.remove(first)!;
       _bytes -= _sizeOf(ev);
+      _safeDispose(ev);
     }
   }
 
@@ -102,19 +107,27 @@ class AvatarImageCache {
 
   static int _sizeOf(ui.Image img) => img.width * img.height * 4;
 
-  /// Buang semua (logout / ganti akun). JANGAN dispose bitmap — `ImageInfo`
-  /// yang dipegang `ImageStreamCompleter` bisa masih hidup; dilepas saja.
+  static void _safeDispose(ui.Image img) {
+    try {
+      img.dispose();
+    } catch (_) {}
+  }
+
+  /// Buang semua (logout / ganti akun). Aman: subscriber memegang clone.
   void clear() {
+    for (final img in _images.values) {
+      _safeDispose(img);
+    }
     _images.clear();
     _bytes = 0;
   }
 
-  /// Buang satu uid (mis. foto profil diganti → versi lama tak dipakai lagi).
-  /// LEPAS referensi saja (bukan dispose) — lihat catatan [_store].
+  /// Buang satu uid (foto profil diganti). Aman: subscriber pegang clone.
   void evict(String uid) {
     final img = _images.remove(uid);
     if (img != null) {
       _bytes -= _sizeOf(img);
+      _safeDispose(img);
     }
   }
 }
@@ -144,18 +157,37 @@ class AvatarMemoryImage extends ImageProvider<AvatarMemoryImage> {
     final cached = AvatarImageCache.instance.get(key.uid);
     if (cached != null) {
       AvatarImageCache.instance.touch(key.uid);
-      return OneFrameImageStreamCompleter(
-        Future<ImageInfo>.value(ImageInfo(image: cached)),
-      );
+      try {
+        // WAJIB clone: master milik pool, handle ini milik subscriber.
+        // Tanpa clone, dispose pool/evict/global-imageCache membunuh bitmap
+        // yang masih dirender → "Cannot clone a disposed image" (2026-10-13).
+        final handle = cached.clone();
+        return OneFrameImageStreamCompleter(
+          Future<ImageInfo>.value(ImageInfo(image: handle)),
+        );
+      } catch (_) {
+        // Master mati balapan dengan evict → buang & decode ulang dari bytes.
+        AvatarImageCache.instance.evict(key.uid);
+      }
     }
     return OneFrameImageStreamCompleter(
       AvatarImageCache.instance
           .put(key.uid, key.bytes, targetWidth: key.width)
-          .then((img) => img == null
-              ? Future<ImageInfo>.error(
-                  StateError('avatar decode fail'),
-                )
-              : ImageInfo(image: img)),
+          .then((img) {
+        if (img == null) {
+          return Future<ImageInfo>.error(
+            StateError('avatar decode fail'),
+          );
+        }
+        try {
+          return ImageInfo(image: img.clone());
+        } catch (_) {
+          AvatarImageCache.instance.evict(key.uid);
+          return Future<ImageInfo>.error(
+            StateError('avatar handle dead'),
+          );
+        }
+      }),
     );
   }
 

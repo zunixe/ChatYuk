@@ -4223,3 +4223,70 @@ bandwidth (belum diukur).
 
 **Catatan:** C (RGB_565+pool, native) tak di-gate terpisah (efek bitmap sementara
 kecil & native-only); A/B = yang diukur. `PERF_ABC_OFF` = alat ukur permanen.
+
+## §51. Avatar hilang saat scroll timeline (2026-10-13) — IN PROGRESS
+
+**Keluhan:** semua avatar yang SUDAH tampil fotonya HILANG (jadi kosong) saat
+scroll Timeline (kebawah lalu keatas). Juga terlihat di daftar Chat.
+
+### Fakta terukur sejauh ini
+- logcat: `[FLUTTER-ERROR] Bad state: Cannot clone a disposed image` via
+  `ImageStreamCompleter.setImage → ImageInfo.clone → Image.clone` — BERULANG.
+  → ada `ui.Image` yang di-dispose padahal masih dipegang `ImageStreamCompleter`
+  yang aktif dirender.
+- Arsitektur avatar:
+  - `UserAvatar`/`PersonAvatar`: provider via `avatarImageProviderFor` →
+    `AvatarMemoryImage` (store `AvatarImageCache`) ATAU `ResizeImage(MemoryImage)`.
+  - `PostAuthorAvatar` (timeline): resolve bytes sendiri → `avatarImageProviderFor`.
+  - `ImageCacheHygiene.clearAll()` (dipanggil app.dart resume/background) →
+    `imageCache.clear()+clearLiveImages()`; `AvatarImageCache.clear()` terdaftar
+    di `clearAllAvatarCaches`.
+- Map global `_avatarBytesByUid`/`_avatarImageByUid` dibagi semua instance;
+  cap FIFO `_avatarMapCap` (dulu 120, kini 600).
+
+### Perbaikan yang sudah dicoba (belum menyelesaikan keluhan)
+1. `PersonAvatar` frame-1 sinkron (RAM→disk) — commit 255ed90.
+2. `_resolve` pakai `cachedStable` tanpa banding src — commit e3c4f94.
+3. `AvatarImageCache._store/evict/clear` TIDAK lagi `dispose()` `ui.Image`
+   (cukup lepas referensi) — commit 949ffbc. → `Cannot clone` = 0 di uji
+   terbatas (scroll timeline + chat), TAPI keluhan foto-hilang MASIH ada.
+4. Cap map 120→600.
+
+### Hipotesis berikutnya (belum terbukti)
+- `image_cache_hygiene.clearAll()` menghapus Flutter `imageCache` (bitmap)
+   saat resume/idle → provider `ResizeImage(MemoryImage(bytes))` kehilangan
+  bitmap → re-decode; untuk store `AvatarMemoryImage` harusnya aman.
+- `_boundAvatarMap` evict (FIFO) membuang provider yang masih dipakai.
+- `PostAuthorAvatar._bytes`/`_resolvedFor` di-null saat `didUpdateWidget`
+   dengan `authorAvatar` berubah.
+
+### Langkah wajib
+- Probe di HP saat scroll timeline: catat `_provider==null` per uid di
+  `UserAvatar`/`PostAuthorAvatar`, evict map, dan `imageCache.clear`.
+- JANGAN klaim selesai sebelum 0 foto-hilang terukur.
+
+### UPDATE 2026-10-13 — akar ketemu via logcat, fix terkirim
+- Bukti: `[FLUTTER-ERROR] Bad state: Cannot clone a disposed image` (5×,
+  `ImageStreamCompleter.setImage → ImageInfo.clone`), TEPAT saat user
+  reproduksi "avatar hilang" di timeline. BUKAN tebakan.
+- Mekanisme: `AvatarMemoryImage.loadImage` membungkus bitmap MASTER pool
+  langsung ke `ImageInfo` (tanpa clone). `imageCache` global Flutter ikut
+  menyimpan completer itu; saat LRU global tertekan foto timeline besar
+  (cap 32MB/128 entri, terukur `[IMGCACHE]`), completer avatar di-evict →
+  `dispose()` → bitmap master mati. Scroll balik → remount → subscribe →
+  `clone()` pada handle mati → crash + avatar kosong. `AvatarImageCache`
+  tetap menyajikan objek mati itu (tak tahu sudah mati) → permanen sampai
+  re-decode.
+- Fix (commit `fix(avatar): clone-per-subscriber`): `loadImage` membagikan
+  `cached.clone()` ke subscriber; pool boleh dispose master (replace/evict/
+  clear) karena render aktif pegang ref sendiri. Plus: `codec.dispose()`
+  setelah decode (bocor 1 codec native per decode sebelumnya), dan fallback
+  evict+error bila clone gagal balapan.
+- Regression test `avatar_image_cache_test.dart`: urutan persis produksi
+  (loadImage → evict → clone). Negatif kontrol jujur: backend Skia di
+  `flutter test` TIDAK menegakkan dispose (clone setelah dispose tetap
+  jalan), jadi test mengunci KONTRAK alur, bukan crash nativenya.
+- Verifikasi HP (build profile): scroll stress list (16–48 swipe) → 0
+  `Cannot clone`, kolom avatar stabil 384px. Timeline: MASIH TERBUKA —
+  navigasi tab via adb tak andal (koordinat nav tak terdeteksi, notif shade
+  ikut kerekam), menunggu repro user + cek log.
