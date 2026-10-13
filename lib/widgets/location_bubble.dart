@@ -15,7 +15,14 @@ import 'package:url_launcher/url_launcher.dart';
 /// Peta hanya-pandang (tanpa interaksi) supaya tidak merebut gesture scroll
 /// chat. Bila tile gagal dimuat (offline), latar abu + ikon tetap tampil —
 /// tombol buka Google Maps tetap bisa ditekan.
-class LocationBubble extends ConsumerWidget {
+///
+/// COLD-START RINGAN (2026-10-13): bubble chat (non-interaktif) TIDAK
+/// langsung me-mount `FlutterMap` + `TileLayer` (unduh tile OSM = jaringan +
+/// raster berat per lokasi). Placeholder STATIS (pin + label, nol jaringan)
+/// dulu; peta nyata di-mount hanya saat bubble DI-TAP (lalu peta terbuka ala
+/// WhatsApp) atau saat [interactive] (preview composer). Pola sama seperti
+/// video (poster dulu, konten saat diminta).
+class LocationBubble extends ConsumerStatefulWidget {
   final ChatLocation location;
 
   /// Lebar kartu (default 220). Pakai `double.infinity` di preview composer.
@@ -24,8 +31,8 @@ class LocationBubble extends ConsumerWidget {
   /// Tinggi peta (default 160).
   final double height;
 
-  /// Preview composer = true (bisa digeser). Bubble chat = false (tap =
-  /// buka Maps; peta di-IgnorePointer agar tap sampai ke pembungkus).
+  /// Preview composer = true (bisa digeser + peta langsung tampil). Bubble
+  /// chat = false (placeholder statis; tap = buka peta/Maps).
   final bool interactive;
 
   /// Override aksi tap — HANYA untuk test (null = buka Google Maps).
@@ -53,6 +60,24 @@ class LocationBubble extends ConsumerWidget {
     this.isQueued = false,
     this.isRead = false,
   });
+
+  @override
+  ConsumerState<LocationBubble> createState() => _LocationBubbleState();
+}
+
+class _LocationBubbleState extends ConsumerState<LocationBubble> {
+  /// Peta NYATA sudah di-mount? False saat cold start (placeholder statis).
+  bool _mapMounted = false;
+
+  ChatLocation get location => widget.location;
+  bool get interactive => widget.interactive;
+  double get width => widget.width;
+  double get height => widget.height;
+  String get timeStr => widget.timeStr;
+  bool get showChecks => widget.showChecks;
+  bool get isPending => widget.isPending;
+  bool get isQueued => widget.isQueued;
+  bool get isRead => widget.isRead;
 
   /// Baris jam (+ centang) untuk kasus tanpa caption.
   Widget _timeRow() {
@@ -112,16 +137,24 @@ class LocationBubble extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final s = ref.watch(localeProvider).s;
     return GestureDetector(
       // opaque: seluruh area bubble menerima tap walau child (peta) tidak
       // hit-testable di beberapa kondisi → tap pasti sampai ke handler.
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        final cb = onTapOverride;
+        final cb = widget.onTapOverride;
         if (cb != null) {
           cb();
+          return;
+        }
+        // COLD-START RINGAN: bubble chat belum mount peta (placeholder) —
+        // tap pertama me-mount peta di tempat (ala WhatsApp: tap → peta
+        // hidup). Tap berikutnya (peta sudah ada) → buka Google Maps.
+        // Preview composer (interactive) langsung Maps.
+        if (!interactive && !_mapMounted) {
+          setState(() => _mapMounted = true);
           return;
         }
         _open(context);
@@ -154,7 +187,8 @@ class LocationBubble extends ConsumerWidget {
                         // ulang tile peta (terukur: buka chat banyak lokasi =
                         // frame raster berat ~58ms tanpa isolasi).
                         child: RepaintBoundary(
-                          child: FlutterMap(
+                          child: (interactive || _mapMounted)
+                              ? FlutterMap(
                           options: MapOptions(
                             initialCenter: LatLng(location.lat, location.lng),
                             initialZoom: 15,
@@ -248,7 +282,32 @@ class LocationBubble extends ConsumerWidget {
                               ),
                             ),
                           ],
-                        ),
+                        )
+                              // PLACEHOLDER STATIS (cold start, nol jaringan):
+                              // latar + pin + koordinat. Peta nyata di-mount
+                              // saat tap / interactive. Nol unduh tile.
+                              : Container(
+                                  color: AppTheme.bgInput,
+                                  alignment: Alignment.center,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.location_on,
+                                        color: Colors.red,
+                                        size: 36,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${location.lat.toStringAsFixed(5)}, '
+                                        '${location.lng.toStringAsFixed(5)}',
+                                        style: AppText.micro.copyWith(
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                       ),
                     ),
                     ),

@@ -328,6 +328,12 @@ class ChatStreamSession {
     // Isi imageData dari file lokal (batch decrypt 1 isolate per chunk).
     // Background (tidak di-await) supaya teks tampil dulu, foto nyusul.
     // Chunk kecil → foto pertama muncul cepat, sisanya menyusul berurutan.
+    // DEDUPE (cold-start ringan 2026-10-13): loadPhotosAsync dipanggil 3×
+    // saat boot (memori → SQLite → server). Tanpa guard, batch head 12 foto
+    // di-decrypt & di-queue 3× → I/O + emit berlebih. Kunci = id batch head
+    // yang sudah pernah diproses; konten yang sama → skip.
+    String? _lastPhotoHeadKey;
+
     void loadPhotosAsync(List<MessageModel> models) {
       if (models.isEmpty) return;
       // Voice: prefetch audio TERBARU di background (lazy) supaya tap play
@@ -360,6 +366,11 @@ class ChatStreamSession {
       // di-decrypt saat buka chat → buka chat berisi ratusan foto terasa
       // berat (ratusan baca file + decrypt + rebuild list per pesan).
       final head = photos.take(_lazyPhotoHeadCount).toList();
+      // Dedupe: id head identik dengan batch terakhir yang sudah diproses →
+      // tak perlu decrypt/queue ulang (boot mem→cache→server 3×).
+      final headKey = head.map((m) => m.id).join(',');
+      if (headKey == _lastPhotoHeadKey) return;
+      _lastPhotoHeadKey = headKey;
       _photoLoadGate.run(() async {
         if (controller.isClosed) return;
         final chunk = head.map((m) => m.id).toList();
