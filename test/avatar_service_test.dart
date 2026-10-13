@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/core/cache/media_disk_cache.dart';
@@ -133,5 +134,67 @@ void main() {
     svc.setForPath('avatars/u6_1729000000000.jpg', 'SGVsbG8=');
     expect(await svc.get('u6'), 'SGVsbG8=');
     expect(handler.captured.isEmpty, isTrue);
+  });
+
+  test('RPC avatar_for hang → get selesai (tidak menggantung selamanya)',
+      () {
+    // Regresi nyata: RPC tanpa timeout menggantung saat boot storm → future
+    // in-flight tak pernah selesai → avatar "hilang" permanen. Kontrak:
+    // get() selesai dengan '' dalam batas waktu (timeout + 1 retry).
+    fakeAsync((async) {
+      handler.onHang('avatar_for');
+      String? result;
+      svc.get('u-hang').then((v) => result = v);
+      async.elapse(const Duration(seconds: 30));
+      async.flushMicrotasks();
+      expect(result, '',
+          reason: 'hang harus berakhir sebagai kegagalan, bukan menggantung');
+    });
+  });
+
+  test('setelah hang, get berikutnya coba network lagi (tidak dihafal)',
+      () {
+    // Catatan: bagian kedua hanya assert RPC terkirim ulang (bukan nilai
+    // return), karena MediaDiskCache.write (real file IO) tak selesai di
+    // dalam zona fakeAsync. Jalur nilai-sukses sudah dikunci test
+    // 'get profil avatar base64' di zona real.
+    fakeAsync((async) {
+      handler.onHang('avatar_for');
+      String? first;
+      svc.get('u-retry').then((v) => first = v);
+      async.elapse(const Duration(seconds: 30));
+      async.flushMicrotasks();
+      expect(first, '');
+      final sentAfterFirst = handler.captured
+          .where((r) => r.url.path.contains('avatar_for'))
+          .length;
+      expect(sentAfterFirst, 2,
+          reason: 'timeout + 1 retry saat hang');
+      // Jaringan pulih → get berikutnya harus mencoba RPC lagi
+      // ('' kegagalan tak boleh di-cache).
+      handler.hangs.remove('avatar_for');
+      handler.on('avatar_for', (_) => 'QUJD');
+      svc.get('u-retry');
+      async.elapse(const Duration(seconds: 30));
+      async.flushMicrotasks();
+      final sentAfterSecond = handler.captured
+          .where((r) => r.url.path.contains('avatar_for'))
+          .length;
+      expect(sentAfterSecond, greaterThan(sentAfterFirst),
+          reason: 'get kedua harus re-attempt network, bukan pakai cache kosong');
+    });
+  });
+
+  test('get() pakai file versioned-only di disk (tanpa RPC)', () async {
+    final bytes = Uint8List.fromList(utf8.encode('versionedimg'));
+    await MediaDiskCache.instance
+        .write('avatars/u9_1791690685546.jpg', bytes);
+    final out = await svc.get('u9');
+    expect(out, base64Encode(bytes));
+    final rpcReqs = handler.captured
+        .where((r) => r.url.path.contains('/rpc/avatar_for'))
+        .toList();
+    expect(rpcReqs, isEmpty,
+        reason: 'file versioned-only harus kena fallback readAvatarByUid');
   });
 }
