@@ -4,7 +4,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
+import '../core/media/chat_photo_helper.dart';
 
 /// Foto thumbnail LINK PREVIEW dengan cache DISK (bukan `Image.network` RAW).
 ///
@@ -81,18 +83,41 @@ class _LinkPreviewImageState extends State<LinkPreviewImage> {
     if (_failed || widget.url.isEmpty) return const SizedBox.shrink();
     final bytes = _bytes;
     if (bytes == null) {
-      // Placeholder ringan berukuran SAMA (anti layout shift) saat memuat.
-      return SizedBox(height: widget.height, width: double.infinity);
+      // Placeholder ringan (anti layout shift) saat memuat.
+      return AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Container(color: AppTheme.bgInput),
+      );
     }
-    return Image.memory(
-      bytes,
-      width: double.infinity,
-      height: widget.height,
-      fit: BoxFit.cover,
-      cacheWidth: 480,
-      cacheHeight: 420,
-      gaplessPlayback: true,
-      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+    // PROPORSI (fix "gepeng"): pakai rasio ASLI gambar (dari header) + clamp
+    // tinggi [minH..maxH] ala Telegram. Dulu tinggi dipaksa 140 + lebar penuh
+    // -> cover memotong gambar lebar (16:9) = terlihat gepeng.
+    final dims = parseImageDimensions(bytes);
+    final double aspect = (dims != null && dims.width > 0 && dims.height > 0)
+        ? dims.width / dims.height
+        : 16 / 9;
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(8),
+        topRight: Radius.circular(8),
+      ),
+      // Batas tinggi = widget.height (mis. 140) supaya kartu tak memanjang;
+      // rasio asli tetap dipertahankan (tidak gepeng).
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: widget.height),
+        child: AspectRatio(
+          // Clamp rasio agar sangat tinggi/lebar tak mendominasi kartu.
+          aspectRatio: aspect.clamp(0.8, 2.4),
+          child: Image.memory(
+            bytes,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            cacheWidth: 480,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
     );
   }
 }
