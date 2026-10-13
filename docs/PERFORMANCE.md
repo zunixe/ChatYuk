@@ -4224,7 +4224,7 @@ bandwidth (belum diukur).
 **Catatan:** C (RGB_565+pool, native) tak di-gate terpisah (efek bitmap sementara
 kecil & native-only); A/B = yang diukur. `PERF_ABC_OFF` = alat ukur permanen.
 
-## §51. Avatar hilang saat scroll timeline (2026-10-13) — IN PROGRESS
+## §51. Avatar hilang saat scroll timeline (2026-10-13) — FIX TERKIRIM, VERIFIKASI VISUAL TIMELINE TERBUKA
 
 **Keluhan:** semua avatar yang SUDAH tampil fotonya HILANG (jadi kosong) saat
 scroll Timeline (kebawah lalu keatas). Juga terlihat di daftar Chat.
@@ -4252,18 +4252,17 @@ scroll Timeline (kebawah lalu keatas). Juga terlihat di daftar Chat.
    terbatas (scroll timeline + chat), TAPI keluhan foto-hilang MASIH ada.
 4. Cap map 120→600.
 
-### Hipotesis berikutnya (belum terbukti)
-- `image_cache_hygiene.clearAll()` menghapus Flutter `imageCache` (bitmap)
-   saat resume/idle → provider `ResizeImage(MemoryImage(bytes))` kehilangan
-  bitmap → re-decode; untuk store `AvatarMemoryImage` harusnya aman.
-- `_boundAvatarMap` evict (FIFO) membuang provider yang masih dipakai.
-- `PostAuthorAvatar._bytes`/`_resolvedFor` di-null saat `didUpdateWidget`
-   dengan `authorAvatar` berubah.
-
-### Langkah wajib
-- Probe di HP saat scroll timeline: catat `_provider==null` per uid di
-  `UserAvatar`/`PostAuthorAvatar`, evict map, dan `imageCache.clear`.
-- JANGAN klaim selesai sebelum 0 foto-hilang terukur.
+### Hipotesis lama — status (dievaluasi jujur pasca-fix)
+- `image_cache_hygiene.clearAll()` menghapus bitmap saat resume/idle →
+  SEBAGIAN BENAR dan tercakup fix: completer avatar memang hidup di
+  `imageCache` global, jadi clear/evict global MEMANG membunuh bitmap yang
+  masih dirender. Fix clone-per-subscriber menutupnya (subscriber pegang
+  ref sendiri).
+- `_boundAvatarMap` evict (FIFO) membuang provider yang masih dipakai →
+  TIDAK TERBUKTI (probe `AVA-EVICT` = 0 selama scroll; cap kini 600).
+- `PostAuthorAvatar._bytes`/`_resolvedFor` di-null saat `didUpdateWidget` →
+  TIDAK TERBUKTI (probe `TL-FALLBACK`/`TL-UPDATE` = 0 selama scroll yang
+  terekam; catatan: sesi rekam sempat terkontaminasi panel notifikasi).
 
 ### UPDATE 2026-10-13 — akar ketemu via logcat, fix terkirim
 - Bukti: `[FLUTTER-ERROR] Bad state: Cannot clone a disposed image` (5×,
@@ -4286,7 +4285,11 @@ scroll Timeline (kebawah lalu keatas). Juga terlihat di daftar Chat.
   (loadImage → evict → clone). Negatif kontrol jujur: backend Skia di
   `flutter test` TIDAK menegakkan dispose (clone setelah dispose tetap
   jalan), jadi test mengunci KONTRAK alur, bukan crash nativenya.
-- Verifikasi HP (build profile): scroll stress list (16–48 swipe) → 0
-  `Cannot clone`, kolom avatar stabil 384px. Timeline: MASIH TERBUKA —
-  navigasi tab via adb tak andal (koordinat nav tak terdeteksi, notif shade
-  ikut kerekam), menunggu repro user + cek log.
+- Verifikasi HP (build profile, commit d33e96f): scroll stress 16 swipe →
+  0 `Cannot clone`; stress 3×16 swipe → 0 `Cannot clone`, kolom avatar
+  stabil 384px tiap frame; analyze 0; 1919 test hijau.
+- TERBUKA: konfirmasi visual khusus Timeline (navigasi tab via adb tak andal
+  di HP ini — koordinat nav tak terdeteksi, panel notifikasi ikut kerekam —
+  sehingga scroll timeline tak bisa direproduksi mandiri; menunggu repro
+  user + cek log `Cannot clone`).
+- Prinsip: JANGAN klaim selesai sebelum 0 foto-hilang terukur di timeline.
