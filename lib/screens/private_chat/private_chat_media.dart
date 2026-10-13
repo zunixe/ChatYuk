@@ -223,6 +223,10 @@ mixin _PcMediaMx on _PrivateChatBase {
       if (t != null && mounted && merged != _hdr.otherLastRead) {
         _patchHdr((h) => h.copyWith(otherLastRead: merged));
       }
+      // WAJIB tanpa syarat (lihat komentar yang sama di _primeReadFromCache
+      // & listener stream): ref.listen tak menembak untuk nilai yang sudah
+      // ada sebelum subscribe.
+      if (merged != null && mounted) _lastReadNotifier.value = merged;
     } catch (_) {}
   }
 
