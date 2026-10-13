@@ -16,12 +16,11 @@ import 'package:url_launcher/url_launcher.dart';
 /// chat. Bila tile gagal dimuat (offline), latar abu + ikon tetap tampil —
 /// tombol buka Google Maps tetap bisa ditekan.
 ///
-/// COLD-START RINGAN (2026-10-13): bubble chat (non-interaktif) TIDAK
-/// langsung me-mount `FlutterMap` + `TileLayer` (unduh tile OSM = jaringan +
-/// raster berat per lokasi). Placeholder STATIS (pin + label, nol jaringan)
-/// dulu; peta nyata di-mount hanya saat bubble DI-TAP (lalu peta terbuka ala
-/// WhatsApp) atau saat [interactive] (preview composer). Pola sama seperti
-/// video (poster dulu, konten saat diminta).
+/// PETA TAMPIL AWAL (2026-10-14): `FlutterMap` langsung di-mount saat bubble
+/// dibangun (bukan placeholder abu menunggu tap — keluhan user "harus diklik
+/// dulu baru tampil"). Tile OSM diunduh asinkron per bubble yang terlihat
+/// (ListView hanya membangun bubble di viewport + cacheExtent) + terisolasi
+/// `RepaintBoundary`, jadi cold start tetap ringan; tap langsung buka Maps.
 class LocationBubble extends ConsumerStatefulWidget {
   final ChatLocation location;
 
@@ -66,9 +65,6 @@ class LocationBubble extends ConsumerStatefulWidget {
 }
 
 class _LocationBubbleState extends ConsumerState<LocationBubble> {
-  /// Peta NYATA sudah di-mount? False saat cold start (placeholder statis).
-  bool _mapMounted = false;
-
   ChatLocation get location => widget.location;
   bool get interactive => widget.interactive;
   double get width => widget.width;
@@ -149,14 +145,7 @@ class _LocationBubbleState extends ConsumerState<LocationBubble> {
           cb();
           return;
         }
-        // COLD-START RINGAN: bubble chat belum mount peta (placeholder) —
-        // tap pertama me-mount peta di tempat (ala WhatsApp: tap → peta
-        // hidup). Tap berikutnya (peta sudah ada) → buka Google Maps.
-        // Preview composer (interactive) langsung Maps.
-        if (!interactive && !_mapMounted) {
-          setState(() => _mapMounted = true);
-          return;
-        }
+        // Peta tampil sejak awal → tap langsung buka Google Maps.
         _open(context);
       },
       child: SizedBox(
@@ -187,40 +176,43 @@ class _LocationBubbleState extends ConsumerState<LocationBubble> {
                         // ulang tile peta (terukur: buka chat banyak lokasi =
                         // frame raster berat ~58ms tanpa isolasi).
                         child: RepaintBoundary(
-                          child: (interactive || _mapMounted)
-                              ? FlutterMap(
-                          options: MapOptions(
-                            initialCenter: LatLng(location.lat, location.lng),
-                            initialZoom: 15,
-                            interactionOptions: InteractionOptions(
-                              flags: interactive
-                                  ? InteractiveFlag.all &
-                                      ~InteractiveFlag.rotate
-                                  : InteractiveFlag.none,
-                            ),
-                          ),
-                          children: [
-                            TileLayer(
-                              urlTemplate:
-                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                              userAgentPackageName: 'com.chatyuk.chatyuk',
-                              // Offline/gagal → latar netral, jangan kotak merah.
-                              errorTileCallback: (_, _, _) {},
-                            ),
-                            MarkerLayer(
-                              markers: [
-                                Marker(
-                                  point: LatLng(location.lat, location.lng),
-                                  width: 36,
-                                  height: 36,
-                                  alignment: Alignment.topCenter,
-                                  child: const Icon(
-                                    Icons.location_on,
-                                    color: Colors.red,
-                                    size: 36,
-                                  ),
+                          // Latar abu di BAWAH peta: saat tile masih diunduh /
+                          // offline, kartu tetap terlihat berisi (bukan hitam).
+                          child: Container(
+                            color: AppTheme.bgInput,
+                            child: FlutterMap(
+                              options: MapOptions(
+                                initialCenter: LatLng(location.lat, location.lng),
+                                initialZoom: 15,
+                                interactionOptions: InteractionOptions(
+                                  flags: interactive
+                                      ? InteractiveFlag.all &
+                                          ~InteractiveFlag.rotate
+                                      : InteractiveFlag.none,
                                 ),
-                              ],
+                            ),
+                            children: [
+                              TileLayer(
+                                urlTemplate:
+                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName: 'com.chatyuk.chatyuk',
+                                // Offline/gagal → latar netral, jangan kotak merah.
+                                errorTileCallback: (_, _, _) {},
+                              ),
+                              MarkerLayer(
+                                markers: [
+                                  Marker(
+                                    point: LatLng(location.lat, location.lng),
+                                    width: 36,
+                                    height: 36,
+                                    alignment: Alignment.topCenter,
+                                    child: const Icon(
+                                      Icons.location_on,
+                                      color: Colors.red,
+                                      size: 36,
+                                    ),
+                                  ),
+                                ],
                             ),
                             // Badge lokasi LIVE (ala WhatsApp) di pojok kiri atas.
                             if (location.live)
@@ -282,35 +274,11 @@ class _LocationBubbleState extends ConsumerState<LocationBubble> {
                               ),
                             ),
                           ],
-                        )
-                              // PLACEHOLDER STATIS (cold start, nol jaringan):
-                              // latar + pin + koordinat. Peta nyata di-mount
-                              // saat tap / interactive. Nol unduh tile.
-                              : Container(
-                                  color: AppTheme.bgInput,
-                                  alignment: Alignment.center,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.location_on,
-                                        color: Colors.red,
-                                        size: 36,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${location.lat.toStringAsFixed(5)}, '
-                                        '${location.lng.toStringAsFixed(5)}',
-                                        style: AppText.micro.copyWith(
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                      ),
-                    ),
-                    ),
+                        ), // FlutterMap
+                      ), // Container abu (latar saat tile loading/offline)
+                    ), // RepaintBoundary
+                  ), // IgnorePointer
+                ), // Positioned.fill
                     if (location.label.isNotEmpty)
                       Positioned(
                         left: 0,
