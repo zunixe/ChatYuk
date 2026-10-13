@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show Random;
 import 'package:flutter/foundation.dart' show ValueNotifier, ValueListenable;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
@@ -743,9 +744,70 @@ class ChatStreamSession {
         }
       } catch (_) {}
     });
+    // State reconnect realtime (backoff). Lihat _scheduleChannelReconnect.
+    final _rng = Random();
+    final _reconnectDelays = const [2, 4, 8, 16, 32, 60];
+    var _reconnectAttempt = 0;
+    Timer? _reconnectTimer;
+
+    // Reconnect ter-debounce + backoff. Idempoten via flag `_reconnecting`.
+    bool _reconnecting = false;
+    void _scheduleChannelReconnect() {
+      if (_reconnecting || controller.isClosed) return;
+      _reconnecting = true;
+      final base = _reconnectDelays[_reconnectAttempt.clamp(
+        0,
+        _reconnectDelays.length - 1,
+      )];
+      if (_reconnectAttempt < _reconnectDelays.length - 1) _reconnectAttempt++;
+      final ms =
+          (base * 1000 * (0.75 + _rng.nextDouble() * 0.5)).round();
+      dlog('[ChatStream] reconnect dalam ${ms}ms (attempt=$_reconnectAttempt)');
+      _reconnectTimer?.cancel();
+      _reconnectTimer = Timer(Duration(milliseconds: ms), () async {
+        _reconnecting = false;
+        if (controller.isClosed) return;
+        if (!AppForeground.now) return; // jangan bangun proses saat background
+        // Ambil pesan yang mungkin terlewat selama channel putus.
+        unawaited(reload());
+        // Re-subscribe channel yang sama (Supabase: unsubscribe → subscribe).
+        try {
+          await channel.unsubscribe();
+        } catch (_) {}
+        try {
+          channel.subscribe((s, e) {
+            if (e != null) dlog('[ChatStream] realtime error: $e');
+            if (s == RealtimeSubscribeStatus.channelError ||
+                s == RealtimeSubscribeStatus.timedOut ||
+                s == RealtimeSubscribeStatus.closed) {
+              _scheduleChannelReconnect();
+            } else if (s == RealtimeSubscribeStatus.subscribed) {
+              _reconnectAttempt = 0; // sukses → reset backoff
+              lastRealtime = DateTime.now();
+            }
+          });
+        } catch (e) {
+          dlog('[ChatStream] re-subscribe gagal: $e');
+          _scheduleChannelReconnect();
+        }
+      });
+    }
+
     channel.subscribe((status, err) {
       if (err != null) dlog('[ChatStream] realtime error: $err');
+      // REALTIME RESILIENT (2026-10-13): dulu hanya LOG — channel yang mati
+      // (mis. `RealtimeCloseEvent(code: 1002)` saat network blip) TIDAK
+      // pernah hidup lagi → pesan & centang-2 hanya lewat poll (lambat)
+      // sampai user buka-tutup chat. Sekarang: saat error/closed/timeout,
+      // jadwalkan re-subscribe (backoff 2→4→8→16→32→60s + jitter) yang juga
+      // `reload()` untuk menyegarkan pesan yang terlewat selama putus.
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.timedOut ||
+          status == RealtimeSubscribeStatus.closed) {
+        _scheduleChannelReconnect();
+      }
     });
+
     reload();
 
     // Fallback polling: 8s (dulu 30s). Realtime sehat = 0 fetch (dilewati
