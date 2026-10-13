@@ -242,6 +242,10 @@ mixin _PcBuildMx on _PrivateChatBase {
       }
       final best = ReadReceipt.best(candidates);
       if (best != null) _patchHdr((h) => h.copyWith(otherLastRead: best));
+      // WAJIB: prime jalan di initState (sebelum ref.listen terpasang di
+      // build pertama) → tanpa ini notifier list tetap null walau _hdr sudah
+      // terisi → centang-2 tak pernah biru sampai ada read BARU dari network.
+      if (best != null) _lastReadNotifier.value = best;
     } catch (_) {}
   }
 

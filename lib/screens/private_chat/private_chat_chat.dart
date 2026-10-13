@@ -288,6 +288,11 @@ mixin _PcChatMx on _PrivateChatBase {
           // Persist untuk cold start berikutnya.
           if (merged != null) _persistRead(merged);
         }
+        // WAJIB tanpa syarat: ref.listen hanya menembak saat provider BERUBAH
+        // setelah subscribe. Saat prime (initState) sudah mengisi nilai yang
+        // sama, patch di-skip + listen tak menembak → notifier tetap null →
+        // centang-2 tak pernah biru. ValueNotifier mengabaikan nilai identik.
+        if (merged != null) _lastReadNotifier.value = merged;
       },
       onError: (e) {
         // OFFLINE: chat-info stream error → jangan biarkan tak tertangkap.
