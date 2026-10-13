@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,6 +44,28 @@ void main() {
     expect(find.byType(LocationBubble), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'peta LANGSUNG tampil saat cold start (tanpa tap dulu)',
+    (tester) async {
+      // Regresi keluhan user 2026-10-14: kartu peta abu & harus diklik dulu
+      // baru tampil. Sekarang FlutterMap di-mount sejak frame pertama.
+      await tester.pumpWidget(
+        host(
+          const LocationBubble(
+            location: ChatLocation(lat: -6.9, lng: 107.6),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.byType(FlutterMap),
+        findsOneWidget,
+        reason: 'peta harus sudah mount sebelum tap apa pun',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'tap bubble non-interaktif MEMICU aksi (regresi FlutterMap serap gesture)',
