@@ -51,6 +51,7 @@ import 'core/cache/video_file_cache.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/chat_background.dart';
+import 'core/media/link_preview_service.dart';
 import 'core/perf/perf_probe.dart';
 import 'services/meta_analytics_service.dart';
 import 'services/notification_prefs_service.dart';
@@ -759,6 +760,28 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Thumb server-side (transformasi) untuk timeline — hemat data vs unduh full.
   PostPhotoCache.thumbDownloader = (path) =>
       StoragePhotoService.instance.downloadThumbBytes(path, width: 1080, quality: 80);
+  // LP-F: link preview via Edge Function (server-side fetch) — lebih andal
+  // utk situs anti-bot (TikTok/Shopee) & konsisten lintas device. Gagal →
+  // LinkPreviewService fallback ke fetch device (service tetap aman).
+  LinkPreviewService.serverFetch = (url) async {
+    try {
+      final res = await Supabase.instance.client.functions.invoke(
+        'link-preview',
+        body: {'url': url},
+      );
+      final d = res.data;
+      if (d is Map && d['ok'] == true) {
+        return LinkPreviewData(
+          url: url,
+          title: '${d['title'] ?? ''}',
+          description: '${d['description'] ?? ''}',
+          image: '${d['image'] ?? ''}',
+          siteName: '${d['siteName'] ?? ''}',
+        );
+      }
+    } catch (_) {}
+    return null; // → service fallback ke fetch device
+  };
   unawaited(MessageCache.instance.clearLegacyV1Only());
   unawaited(PhotoCache.instance.cleanOldPhotos());
   unawaited(PostPhotoCache.instance.cleanOldPhotos());
