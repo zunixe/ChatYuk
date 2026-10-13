@@ -4293,3 +4293,31 @@ scroll Timeline (kebawah lalu keatas). Juga terlihat di daftar Chat.
   sehingga scroll timeline tak bisa direproduksi mandiri; menunggu repro
   user + cek log `Cannot clone`).
 - Prinsip: JANGAN klaim selesai sebelum 0 foto-hilang terukur di timeline.
+
+---
+
+## §49. Audit respons video/audio private chat (Fase 1-2, 2026-10-13)
+
+Instrumentasi `MediaProbe` (`PerfProbe`, nop di produksi). Skenario private
+chat: tap video cold+cached, buka-tutup viewer 5x, scroll video, 10 voice,
+play/pause 5x. Hasil (HP Xiaomi, build profile):
+
+| Metrik | p50 | p90 | max | Target | Status |
+|---|---|---|---|---|---|
+| voice.tap→play | 20.1 | 25.3 | 25.8 ms | <150 ms | ✅ 7x lebih cepat |
+| video.prepare→push (poster+file) | 0.7 | 3.5 | 3.5 ms | — | ✅ instan |
+| video.tap→play | 99.6 | 142.1 | 228.7 ms | <250 ms | ✅ |
+| video.tap→open | 99.6 | 142.1 | 228.7 ms | <150 ms | ⚠️ max 228 (cold) |
+| frames (4000) | janky build=0 / raster=0 | | | 0 | ✅ |
+| mediaCtrl | videoCtrlLive=0 audioPlayerLive=0 | | | 0 | ✅ nol leak |
+
+**Diagnosis:**
+- **Voice 21ms** & **0 leak** & **0 jank** → SUDAH sekelas Telegram.
+- **H-a (poster blok) TIDAK terbukti** — `video.prepare→push` 3.5ms (poster
+  sudah di-precache).
+- Sisa: `video.tap→open` **max 228ms** (cold) berasal dari
+  `VideoPlayerController.initialize()` (ExoPlayer/plugin), BUKAN kode kita.
+
+**Keputusan:** N1 (audio visualizer/engine), N3 (audio pool), N5 (camera) TIDAK
+diperlukan (voice sangat cepat, 0 leak). Native video frame (N2) hanya bernilai
+bila target <150ms KETAT & termasuk kasus cold — dipertimbangkan terpisah.
