@@ -72,6 +72,21 @@ class _PersonAvatarState extends State<PersonAvatar> {
   /// pemanggil hanya punya uid (mis. header chat private).
   String _src = '';
 
+  /// Generasi resolve — melindungi retry tertunda dari uid yang sudah
+  /// berganti (scroll cepat) supaya tak menimpa foto uid baru.
+  int _resolveGen = 0;
+
+  /// Timer retry tertunda — dibatalkan di dispose agar tak menggantung.
+  Timer? _retryTimer;
+
+  @override
+  void dispose() {
+    _resolveGen++;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    super.dispose();
+  }
+
   AvatarNotifier get _avatarSvc {
     try {
       return ProviderScope.containerOf(context, listen: false)
@@ -114,26 +129,49 @@ class _PersonAvatarState extends State<PersonAvatar> {
 
   Future<void> _resolveUid() async {
     if (widget.uid.isEmpty) return;
+    final gen = ++_resolveGen;
+    final uid = widget.uid;
     // Fast-path sinkron RAM: kalau sudah di RAM, tampil tanpa menunggu async.
-    final sync = _avatarSvc.cachedSync(widget.uid);
+    final sync = _avatarSvc.cachedSync(uid);
     if (sync != null && sync.isNotEmpty) {
-      if (mounted) setState(() => _src = sync);
+      if (mounted && widget.uid == uid && gen == _resolveGen) {
+        setState(() => _src = sync);
+      }
       return;
     }
     // Fast-path sinkron RAM→DISK: byte avatar (MediaDiskCache) bertahan antar
     // sesi → frame pertama sudah foto. Tanpa ini, RAM-miss → async `get()` →
     // list chat "kadang tampil kadang tidak" (race). Disk-read sync murah
     // (file kecil per uid).
-    final disk = _avatarSvc.cachedSyncIncludeDisk(widget.uid);
+    final disk = _avatarSvc.cachedSyncIncludeDisk(uid);
     if (disk != null && disk.isNotEmpty) {
-      if (mounted) setState(() => _src = disk);
+      if (mounted && widget.uid == uid && gen == _resolveGen) {
+        setState(() => _src = disk);
+      }
       return;
     }
     try {
-      final b64 = await _avatarSvc.get(widget.uid);
-      if (!mounted || widget.uid.isEmpty) return;
-      if (b64.isNotEmpty) setState(() => _src = b64);
+      final b64 = await _avatarSvc.get(uid);
+      if (!mounted || widget.uid != uid || gen != _resolveGen) return;
+      if (b64.isNotEmpty) {
+        setState(() => _src = b64);
+        return;
+      }
     } catch (_) {}
+    // Sekali retry tertunda untuk kegagalan transien (mis. RPC timeout saat
+    // boot storm): tanpa ini avatar gagal-sesaat "hilang" sampai widget
+    // rebuild. Guard generasi + uid + _src kosong mencegah loop/timpa.
+    _retryTimer?.cancel();
+    _retryTimer = Timer(const Duration(seconds: 3), () async {
+      _retryTimer = null;
+      if (!mounted || widget.uid != uid || gen != _resolveGen) return;
+      if (_src.isNotEmpty) return;
+      try {
+        final b64 = await _avatarSvc.get(uid);
+        if (!mounted || widget.uid != uid || gen != _resolveGen) return;
+        if (b64.isNotEmpty) setState(() => _src = b64);
+      } catch (_) {}
+    });
   }
 
   @override

@@ -154,7 +154,10 @@ class AvatarB64Service {
     // berikutnya.
     try {
       await MediaDiskCache.instance.waitReady();
-      final disk = MediaDiskCache.instance.readSync('avatars/$uid.jpg');
+      // Pakai readAvatarByUid (uid-only + fallback versioned), konsisten
+      // dengan jalur sinkron cachedSyncIncludeDisk — dulu readSync uid-only
+      // saja sehingga file versioned-only selalu disk-miss di jalur async.
+      final disk = MediaDiskCache.instance.readAvatarByUid(uid);
       if (disk != null && disk.isNotEmpty) {
         final b64 = base64Encode(disk);
         if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
@@ -183,11 +186,18 @@ class AvatarB64Service {
   }
 
   /// Fetch avatar 1 uid dari RPC ber-privacy + download bila path.
+  /// RPC `avatar_for` tanpa timeout bisa menggantung selamanya saat boot
+  /// (koneksi storm) → future in-flight tak pernah selesai → semua pemanggil
+  /// uid itu menunggu selamanya → avatar "hilang" permanen. Karena itu RPC
+  /// dibatasi timeout + 1× retry KHUSUS TimeoutException (retry on-empty
+  /// disengaja TIDAK: '' = jawaban valid "tak ada foto").
+  static const _rpcTimeout = Duration(seconds: 8);
+
   Future<String> _fetchUid(String uid) async {
     try {
       // Kolom profiles.avatar sudah di-revoke dari SELECT publik (hardening
       // 2026-09-22) → baca lewat RPC ber-privacy avatar_for.
-      var avatar = await _sb.rpc('avatar_for', params: {'p_uid': uid}) as String?;
+      var avatar = await _rpcAvatarFor(uid);
       avatar ??= '';
       if (avatar.isNotEmpty &&
           StoragePhotoService.instance.isAvatarPath(avatar)) {
@@ -208,6 +218,18 @@ class AvatarB64Service {
       return avatar;
     } catch (e) {
       return '';
+    }
+  }
+
+  /// Satu panggilan RPC `avatar_for` dengan timeout. Retry 1× HANYA bila
+  /// timeout (hang) — bukan bila hasil kosong ('' = jawaban valid).
+  Future<String?> _rpcAvatarFor(String uid) async {
+    Future<dynamic> call() =>
+        _sb.rpc('avatar_for', params: {'p_uid': uid});
+    try {
+      return await call().timeout(_rpcTimeout) as String?;
+    } on TimeoutException {
+      return await call().timeout(_rpcTimeout) as String?;
     }
   }
 
@@ -279,7 +301,7 @@ class AvatarB64Service {
       await MediaDiskCache.instance.waitReady();
       final missing = <String>[];
       for (final uid in need) {
-        final disk = MediaDiskCache.instance.readSync('avatars/$uid.jpg');
+        final disk = MediaDiskCache.instance.readAvatarByUid(uid);
         if (disk != null && disk.isNotEmpty) {
           final b64 = base64Encode(disk);
           if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);

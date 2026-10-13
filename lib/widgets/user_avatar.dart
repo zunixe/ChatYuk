@@ -81,6 +81,13 @@ class UserAvatar extends StatefulWidget {
 final Map<String, Uint8List> _avatarBytesByUid = {};
 final Map<String, String> _avatarLastSrcByUid = {};
 
+/// Src (base64/path) yang MEMBENTUK provider di [_avatarImageByUid] per-uid.
+/// Dipakai memutuskan apakah provider global masih VALID untuk src saat ini
+/// (bila src berubah = avatar user benar-benar berganti → provider lama boleh
+/// dibuang). Tanpa ini, setiap instance UserAvatar yang _resolve ulang selalu
+/// membuang provider global → instance lain (uid sama) kehilangan foto.
+final Map<String, String> _avatarLastSrcForProvider = {};
+
 // ImageProvider instance STABIL per-UID — dipisahkan total dari data
 // pengguna online yang berganti-ganti tiap event presence. Bitmap di-decode
 // SEKALI per foto; rebuild list berapapun tidak menyentuh bitmap.
@@ -94,11 +101,21 @@ final Map<String, ImageProvider> _avatarImageByUid = {};
 /// di layar 2-3× DPI tanpa blur, ~25× lebih kecil dari decode full-res.
 const int _avatarDecodePx = 96;
 
+/// Pasang provider untuk [uid] + catat [src] pembentuknya (agar keputusan
+/// buang-provider berikutnya tahu apakah masih src yang sama).
+ImageProvider _setAvatarProvider(String uid, String src, ImageProvider p) {
+  _avatarImageByUid[uid] = p;
+  _avatarLastSrcForProvider[uid] = src;
+  _boundAvatarMap(_avatarImageByUid);
+  return p;
+}
+
 
 /// Bersihkan seluruh cache avatar modul ini (dipanggil saat logout/ganti akun).
 void clearAllAvatarCaches() {
   _avatarBytesByUid.clear();
   _avatarLastSrcByUid.clear();
+  _avatarLastSrcForProvider.clear();
   _avatarImageByUid.clear();
   // B: buang juga store bitmap avatar terpisah (dispose ui.Image).
   AvatarImageCache.instance.clear();
@@ -167,12 +184,22 @@ class _UserAvatarState extends State<UserAvatar> {
       dlog('[AVATAR] $_uid8 EMPTY keep-old=${_provider != null}');
       return;
     }
-    // Sumber non-kosong dan BARU (atau provider hilang) → buang bytes +
-    // provider lama milik uid ini. Maps per-uid di bawah memakai `??=` /
-    // `putIfAbsent` yang tidak pernah menimpa — tanpa ini foto lama tersaji
-    // selamanya: user ganti avatar tidak muncul di list online HP lain
-    // sampai restart app (State kartu dipertahankan antar-reorder, jadi
-    // inilah satu-satunya jalur update foto).
+    // Instance MemoryImage stabil per-uid sudah ada di cache GLOBAL → pakai
+    // langsung TANPA membuang bytes/provider. PENTING: map `_avatarBytesByUid`
+    // / `_avatarImageByUid` dibagi SEMUA instance UserAvatar; dulu jalur ini
+    // selalu `remove(uid)` + `_provider=null` → instance LAIN (bubble lain
+    // dengan uid sama) kehilangan provider saat widget ini _resolve ulang
+    // (gejala "foto muncul sebentar lalu hilang"). Karena `src` untuk uid ini
+    // sudah diproses sebelumnya (`_avatarLastSrcByUid[uid]==src`), cache-nya
+    // valid → cukup ambil.
+    final cachedStable = _avatarImageByUid[widget.uid];
+    if (cachedStable != null &&
+        _avatarLastSrcForProvider[widget.uid] == src) {
+      if (_provider != cachedStable) _provider = cachedStable;
+      return;
+    }
+    // Sumber non-kosong dan BARU (avatar user benar-benar berubah) → baru
+    // buang bytes + provider lama milik uid ini agar foto baru terpakai.
     final staleProvider = _avatarImageByUid.remove(widget.uid);
     _avatarBytesByUid.remove(widget.uid);
     _provider = null;
@@ -187,14 +214,16 @@ class _UserAvatarState extends State<UserAvatar> {
       final disk = MediaDiskCache.instance.readSync(src);
       if (disk != null && disk.isNotEmpty) {
         _avatarBytesByUid[widget.uid] ??= disk;
-        _provider = _avatarImageByUid.putIfAbsent(
-          widget.uid,
-          () => AvatarMemoryImage(
-        widget.uid,
-        _avatarBytesByUid[widget.uid]!,
-        width: _avatarDecodePx,
-      ),
-        );
+        _provider = _avatarImageByUid[widget.uid] ??
+            _setAvatarProvider(
+              widget.uid,
+              src,
+              AvatarMemoryImage(
+                widget.uid,
+                _avatarBytesByUid[widget.uid]!,
+                width: _avatarDecodePx,
+              ),
+            );
         _boundAvatarMap(_avatarBytesByUid);
         _boundAvatarMap(_avatarImageByUid);
       }
@@ -236,14 +265,16 @@ class _UserAvatarState extends State<UserAvatar> {
       }
       _avatarBytesByUid[widget.uid] = b;
     }
-    _provider = _avatarImageByUid.putIfAbsent(
-      widget.uid,
-      () => AvatarMemoryImage(
-        widget.uid,
-        _avatarBytesByUid[widget.uid]!,
-        width: _avatarDecodePx,
-      ),
-    );
+    _provider = _avatarImageByUid[widget.uid] ??
+        _setAvatarProvider(
+          widget.uid,
+          src,
+          AvatarMemoryImage(
+            widget.uid,
+            _avatarBytesByUid[widget.uid]!,
+            width: _avatarDecodePx,
+          ),
+        );
     _boundAvatarMap(_avatarBytesByUid);
     _boundAvatarMap(_avatarImageByUid);
   }
@@ -374,8 +405,7 @@ ImageProvider? avatarImageProviderFor(String uid, Uint8List bytes) {
   final ImageProvider p = abcBEnabled
       ? AvatarMemoryImage(uid, bytes, width: _avatarDecodePx)
       : ResizeImage(MemoryImage(bytes), width: _avatarDecodePx);
-  _avatarImageByUid[uid] = p;
-  _boundAvatarMap(_avatarImageByUid);
+  _setAvatarProvider(uid, '', p);
   return p;
 }
 
