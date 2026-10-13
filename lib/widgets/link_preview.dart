@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../core/media/link_preview_service.dart';
 import '../providers/riverpod/locale_provider.dart';
+import 'link_preview_image.dart';
 
 class LinkPreview extends ConsumerStatefulWidget {
   final String text;
@@ -27,6 +28,14 @@ class _LinkPreviewState extends ConsumerState<LinkPreview> {
     final url = LinkPreviewService.instance.extractUrl(widget.text);
     if (url == null) {
       setState(() => _loading = false);
+      return;
+    }
+    // LP-A (anti-kedip/anti-fetch saat scroll balik): ambil dari cache
+    // SINKRON dulu — bila sudah ada (RAM/disk), tampil LANGSUNG tanpa
+    // spinner & tanpa network. fetch() tetap dipanggil (no-op bila cache hit).
+    final cached = LinkPreviewService.instance.peek(url);
+    if (cached != null) {
+      if (mounted) setState(() { _data = cached; _loading = false; });
       return;
     }
     final d = await LinkPreviewService.instance.fetch(url);
@@ -60,9 +69,10 @@ class _LinkPreviewState extends ConsumerState<LinkPreview> {
             if (d.image.isNotEmpty)
               ClipRRect(
                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
-                // Batasi ukuran decode (preview tinggi 140px, x~3 density) —
-                // hemat memori & CPU raster, hindari decode gambar full-res.
-                child: Image.network(d.image, width: double.infinity, height: 140, fit: BoxFit.cover, cacheWidth: 480, cacheHeight: 420, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                // Cache DISK (LP-E): unduh sekali → simpan MediaDiskCache →
+                // frame berikut instan & persist lintas sesi (bukan
+                // Image.network RAW yang hanya RAM + fetch ulang).
+                child: LinkPreviewImage(url: d.image, height: 140),
               ),
             Padding(
               padding: const EdgeInsets.all(8),
