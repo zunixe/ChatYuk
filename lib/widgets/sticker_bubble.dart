@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import 'package:lottie/lottie.dart';
 
-import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../providers/riverpod/storage_provider.dart';
 
@@ -191,61 +190,6 @@ class StickerBytes extends StatelessWidget {
       height: size,
       fit: BoxFit.contain,
       gaplessPlayback: true,
-    );
-  }
-}
-
-/// Stiker + baris jam/centang untuk bubble pesan (private & room).
-/// Dipisah supaya `private_chat_message.dart` tidak tumbuh (file sudah besar).
-class StickerMessageBubble extends StatelessWidget {
-  final String data;
-  final String timeStr;
-  final bool showChecks;
-  final bool isPending;
-  final bool isQueued;
-  final bool isRead;
-  const StickerMessageBubble({
-    super.key,
-    required this.data,
-    required this.timeStr,
-    this.showChecks = false,
-    this.isPending = false,
-    this.isQueued = false,
-    this.isRead = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        StickerBubble(data: data, size: 140),
-        const SizedBox(height: 2),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                timeStr,
-                style: AppText.chatTime.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              if (showChecks) ...[
-                const SizedBox(width: 3),
-                Icon(
-                  (isPending || isQueued) ? Icons.done : Icons.done_all,
-                  size: 12,
-                  color: (isRead && !isPending && !isQueued)
-                      ? AppTheme.primary
-                      : AppTheme.textSecondary,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
