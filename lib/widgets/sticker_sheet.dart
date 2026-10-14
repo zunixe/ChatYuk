@@ -13,6 +13,7 @@ import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import 'emoji_picker_sheet.dart';
 import 'sticker_bubble.dart';
+import 'sticker_editor.dart';
 
 /// Sheet bersama **Emoji | Sticker** untuk composer chat (private & room).
 ///
@@ -82,13 +83,21 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
       debugPrint('[STICKER] png b64 len=${b64?.length}');
       if (b64 == null || b64.isEmpty) return;
       final bytes = _b64(b64);
-      if (bytes == null) return;
-      if (mounted) setState(() => _recent.insert(0, bytes));
+      if (bytes == null || !mounted) return;
+      // Halaman EDIT ala WA (teks + toggle latar) — kirim dari sana.
+      // Batal (back) → tidak terkirim, tidak masuk recent.
+      final edited = await Navigator.of(context).push<Uint8List>(
+        MaterialPageRoute(
+          builder: (_) => StickerEditorPage(cutout: bytes, raw: raw),
+        ),
+      );
+      if (edited == null || edited.isEmpty || !mounted) return;
+      if (mounted) setState(() => _recent.insert(0, edited));
       while (_recent.length > _maxRecent) {
         _recent.removeLast();
       }
       if (mounted) {
-        await widget.onSendSticker(bytes);
+        await widget.onSendSticker(edited);
         // File baru ter-upload oleh handler kirim → segarkan koleksi.
         unawaited(_loadSaved());
         if (mounted) Navigator.of(context).maybePop();
