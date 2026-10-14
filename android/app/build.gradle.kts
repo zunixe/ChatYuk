@@ -224,7 +224,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-common-java8:2.8.7")
     implementation("com.android.installreferrer:installreferrer:2.2")
     // ── ML Kit Subject Segmentation (cut-out background stiker ala WA) ──
-    // On-device, model bundled (tanpa download/network). Dipakai ImageBridge
-    // saat impor stiker galeri: foregroundBitmap (alpha) → PNG transparan.
-    implementation("com.google.mlkit:subject-segmentation:16.0.0")
+    // Varian Play Services (model di-download sekali via Play, APK tak
+    // membengkak). Dipakai ImageBridge saat impor stiker galeri:
+    // foregroundBitmap (alpha) → PNG transparan. Gagal/belum siap → fallback
+    // persegi penuh (tak pernah memblokir kirim stiker).
+    implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0")
 }
