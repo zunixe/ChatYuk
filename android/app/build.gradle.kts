@@ -228,5 +228,5 @@ dependencies {
     // membengkak). Dipakai ImageBridge saat impor stiker galeri:
     // foregroundBitmap (alpha) → PNG transparan. Gagal/belum siap → fallback
     // persegi penuh (tak pernah memblokir kirim stiker).
-    implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0")
+    implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
 }
