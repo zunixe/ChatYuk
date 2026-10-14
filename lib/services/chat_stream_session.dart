@@ -540,7 +540,9 @@ class ChatStreamSession {
         // disisipkan kronologis (bukan selalu di akhir) — realtime bisa
         // datang tidak urut & cache bisa berisi pesan lama di luar window
         // fetch 100 terbaru.
-        final merged = List<MessageModel>.from(server.reversed);
+        // ANTI-KEDIP: cols tak memuat `image_data` → baris server stiker
+        // selalu kosong; pertahankan imageData lama (lihat sticker_fill).
+        final merged = preserveStickerPaths(server.reversed.toList(), _current);
         final seenIds = merged.map((m) => m.id).toSet();
         for (final m in _current) {
           if (seenIds.add(m.id)) {
@@ -881,6 +883,11 @@ class ChatStreamSession {
           } else {
             _current = [...newMsgs, ..._current];
             _trim();
+            // Stiker lama: isi path (halaman lama tak lewat loadPhotosAsync).
+            final oldSk = [for (final m in newMsgs) if (m.type == 'sticker' && m.imageData.isEmpty) m];
+            if (oldSk.isNotEmpty) {
+              unawaited(fillStickerPaths(sb: _sb, table: table, stickers: oldSk, current: _current, isClosed: () => controller.isClosed, emit: _emit, scheduleCacheSave: scheduleCacheSave));
+            }
             // Majukan kursor ke pesan terlama batch ini (lebih tua dari
             // kursor lama) agar paginasi berikutnya lanjut ke belakang.
             final first = newMsgs.first.timestamp;

@@ -106,6 +106,10 @@ class StorageNotifier {
 
   Future<Uint8List?> downloadBytes(String path) => service.downloadBytes(path);
 
+  /// Daftar path stiker milik user (tab Stiker; tahan install ulang).
+  Future<List<String>> listStickers(String uid, {int limit = 24}) =>
+      service.listStickers(uid, limit: limit);
+
   Future<Uint8List?> downloadThumbBytes(
     String path, {
     int width = 160,

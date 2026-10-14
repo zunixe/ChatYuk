@@ -173,6 +173,29 @@ class StoragePhotoService {
     }
   }
 
+  /// Daftar stiker milik user (`stickers/<uid>/...`, terbaru dulu).
+  /// Dipakai tab Stiker supaya koleksi tetap ada walau app di-install ulang
+  /// (file di server; RLS SELECT bucket sudah mengizinkan baca).
+  Future<List<String>> listStickers(String uid, {int limit = 24}) async {
+    try {
+      final objs = await _sb.storage.from(_bucket).list(
+            path: 'stickers/$uid',
+            searchOptions: SearchOptions(
+              limit: limit,
+              sortBy: const SortBy(column: 'created_at', order: 'desc'),
+            ),
+          );
+      return [
+        for (final o in objs)
+          if (o.name.endsWith('.png') || o.name.endsWith('.webp'))
+            'stickers/$uid/${o.name}',
+      ];
+    } catch (e) {
+      dlog('[StoragePhoto] listStickers error: $e');
+      return const [];
+    }
+  }
+
   /// Path video story (slide mp4, maks 15 dtk).
   String storyVideoPath(String uid) =>
       'story/$uid/${_stamp()}.mp4';

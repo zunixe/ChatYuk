@@ -15,6 +15,28 @@ import '../utils.dart';
 /// dilakukan [StickerBubble] sendiri (mem 120 + disk), bukan PhotoCache —
 /// stiker kecil & sering dipakai ulang, tak perlu enkripsi/thumbnail foto.
 ///
+/// ANTI-KEDIP: kembalikan `imageData` lama ke baris server yang kosong.
+///
+/// List pesan tak menyeleksi `image_data`, jadi baris server untuk stiker
+/// selalu `imageData=''`. Tanpa ini tiap reload menimpa path yang sudah
+/// terisi → bubble blank → isi ulang → "ngedip". Hanya untuk id+type sama
+/// (pesan lain tak tersentuh).
+List<MessageModel> preserveStickerPaths(
+  List<MessageModel> fresh,
+  List<MessageModel> old,
+) {
+  final oldById = {for (final m in old) m.id: m};
+  return [
+    for (final s in fresh)
+      if (s.imageData.isEmpty &&
+          oldById[s.id]?.type == s.type &&
+          (oldById[s.id]?.imageData.isNotEmpty ?? false))
+        s.copyWith(imageData: oldById[s.id]!.imageData)
+      else
+        s,
+  ];
+}
+
 /// Idempotent: hanya pesan yang `imageData`-nya masih kosong yang diubah;
 /// aman dipanggil berulang (boot mem → cache → server 3×).
 Future<void> fillStickerPaths({

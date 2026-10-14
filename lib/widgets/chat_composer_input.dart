@@ -57,6 +57,8 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   final void Function(String filePath, int durationMs)? onSendVoice;
   /// Kirim STIKER (bytes PNG 512px) — diisi pemanggil (private/room).
   final Future<void> Function(Uint8List stickerPngBytes)? onSendSticker;
+  /// Kirim stiker koleksi server (path) tanpa upload ulang.
+  final Future<void> Function(String stickerPath)? onSendStickerPath;
   /// Sinyal 'sedang merekam' (private pakai typing kind=recording).
   final VoidCallback? onRecordingSignal;
   /// Sinyal 'sedang mengetik' (private/room beda saluran).
@@ -102,6 +104,7 @@ class ChatComposerInput extends ConsumerStatefulWidget {
     this.onOpenGiftPanel,
     this.onSendVoice,
     this.onSendSticker,
+    this.onSendStickerPath,
     this.onRecordingSignal,
     this.onTyping,
     this.onSendCoin,
@@ -647,6 +650,7 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                       context,
                       widget.controller,
                       onSendSticker: widget.onSendSticker,
+                      onSendStickerPath: widget.onSendStickerPath,
                     ),
                     icon: Icon(Icons.emoji_emotions_outlined, size: 20),
                     color: AppTheme.isDark ? AppTheme.primary : Colors.white,
