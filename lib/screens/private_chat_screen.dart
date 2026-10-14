@@ -313,6 +313,7 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
   void _startLiveLocationUpdates(String messageId, ChatLocation initial);
   void _trimConfirmed(Set<String> ids);
   Future<void> voiceFinishRecording(String path, int recordedMs);
+  Future<void> _sendSticker(Uint8List pngBytes);
   bool get _showCallOverlay;
   void _expandCall();
   void _sendRecordingSignal();

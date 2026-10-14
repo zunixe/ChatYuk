@@ -318,6 +318,28 @@ class NativeImage {
 
   /// Avatar: resize ke [size]x[size] (crop-stretch, sumber sudah persegi) +
   /// JPEG [quality] → base64. Fallback: `dartProcessSquareB64` di isolate.
+  /// STIKER: crop tengah persegi [size]px → PNG base64 (jaga transparansi).
+  /// Fallback Dart bila channel native tak ada. Untuk format Telegram
+  /// (512px, satu sisi penuh). Return base64 PNG / null.
+  static Future<String?> processStickerPng(
+    Uint8List src, {
+    int size = 512,
+  }) async {
+    if (src.isEmpty) return null;
+    if (await isAvailable()) {
+      try {
+        final r = await _ch.invokeMethod<String>('processStickerPng', {
+          'bytes': src,
+          'size': size,
+        });
+        if (r != null && r.isNotEmpty) return r;
+        return null;
+      } catch (_) {}
+    }
+    // Fallback Dart: crop persegi via package:image (tanpa alpha-loss).
+    return compute(dartimg.dartProcessSquareB64, (src, size, 100));
+  }
+
   static Future<String?> processSquare(
     Uint8List src, {
     int size = 640,

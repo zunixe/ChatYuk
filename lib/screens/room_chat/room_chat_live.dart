@@ -192,6 +192,38 @@ mixin _RcLiveMx on _RoomChatBase {
     });
   }
 
+  /// Kirim STIKER di room: upload PNG → pesan type 'sticker'.
+  Future<void> _sendSticker(Uint8List pngBytes) async {
+    if (pngBytes.isEmpty) return;
+    final container = ProviderScope.containerOf(context, listen: false);
+    final auth = container.read(authProvider.notifier);
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
+    final b64 = base64Encode(pngBytes);
+    try {
+      final path = await container
+          .read(storageProvider)
+          .uploadSticker(uid: uid, base64: b64, ext: 'png');
+      if (path == null || path.isEmpty || !mounted) return;
+      await container.read(chatRiverpod.chatProvider.notifier).sendRoomMessage(
+            roomId: widget.room.id,
+            senderId: uid,
+            senderName: profile.nickname,
+            senderGender: profile.gender,
+            text: '',
+            type: 'sticker',
+            imageData: path,
+          );
+      if (mounted) _scrollToBottom();
+    } catch (e) {
+      dlog('[Sticker] room kirim gagal: $e');
+      if (mounted) {
+        showChatSnack(context, container.read(localeProvider).s.stickerSendFail);
+      }
+    }
+  }
+
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
     final auth = ProviderScope.containerOf(
       context,
@@ -450,6 +482,7 @@ mixin _RcLiveMx on _RoomChatBase {
           sendViewOnceFromPicker();
         },
         onSendVoice: _sendVoiceMessage,
+        onSendSticker: _sendSticker,
         // Gift (fitur koin) hanya bila sistem koin aktif — hilang
         // total saat dimatikan admin (ikut flag points.enabled).
         onOpenGiftPanel: points && isPrivateRoom && _myRole != 'owner'

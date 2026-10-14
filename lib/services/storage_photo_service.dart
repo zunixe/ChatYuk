@@ -150,6 +150,27 @@ class StoragePhotoService {
     }
   }
 
+  /// Path STIKER di bucket: `stickers/<uid>/<stamp>.<ext>`.
+  String stickerPath(String uid, {String ext = 'png'}) =>
+      'stickers/$uid/${_stamp()}.$ext';
+
+  /// Upload STIKER (base64 PNG/WebP) → Storage. Return path / null.
+  Future<String?> uploadSticker({
+    required String uid,
+    required String base64,
+    String ext = 'png',
+  }) async {
+    try {
+      final bytes = base64Decode(base64);
+      final path = stickerPath(uid, ext: ext);
+      await _sb.storage.from(_bucket).uploadBinary(path, bytes);
+      return path;
+    } catch (e) {
+      dlog('[StoragePhoto] uploadSticker error: $e');
+      return null;
+    }
+  }
+
   /// Path video story (slide mp4, maks 15 dtk).
   String storyVideoPath(String uid) =>
       'story/$uid/${_stamp()}.mp4';

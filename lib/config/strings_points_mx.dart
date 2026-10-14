@@ -99,6 +99,15 @@ mixin SPointsMx {
   String get storyEmptyTray => isId ? 'Belum ada story' : 'No stories yet';
   String get storyAddToStory => isId ? 'Tambah' : 'Add';
   String get storyUploading => isId ? 'Mengunggah…' : 'Uploading…';
+
+  // ── Sticker (ala Telegram) ──
+  String get stickerTabTitle => isId ? 'Stiker' : 'Stickers';
+  String get stickerAddFromGallery =>
+      isId ? 'Buat dari galeri' : 'Create from gallery';
+  String get stickerEmpty => isId
+      ? 'Belum ada stiker. Buat dari galeri (foto → stiker persegi).'
+      : 'No stickers yet. Create one from your gallery.';
+  String get stickerSendFail => isId ? 'Gagal kirim stiker' : 'Failed to send sticker';
   String get storyPublishFail =>
       isId ? 'Gagal membagikan story' : 'Failed to share story';
   String get storyDeleted =>
