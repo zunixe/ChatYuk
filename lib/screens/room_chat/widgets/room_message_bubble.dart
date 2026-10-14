@@ -18,6 +18,7 @@ import '../../../widgets/person_avatar.dart';
 import '../../../widgets/reply_quote.dart';
 import '../../../widgets/verified_badge.dart';
 import '../../../widgets/voice_bubble.dart';
+import '../../../widgets/sticker_bubble.dart';
 
 class RoomMessageBubble extends StatelessWidget {
   final MessageModel msg;
@@ -112,6 +113,16 @@ class RoomMessageBubble extends StatelessWidget {
             location: parseLocation(msg.text)!,
             timeStr: timeStr,
           ),
+        ],
+      );
+    }
+    if (msg.type == 'sticker') {
+      // Stiker ala Telegram: transparan, tanpa bg bubble.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _replyQuote(context),
+          StickerBubble(data: msg.imageData, size: 140),
         ],
       );
     }

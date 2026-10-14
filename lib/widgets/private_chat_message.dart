@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../utils.dart';
 import 'mention_spans.dart';
 import 'chat_video_bubble.dart';
+import 'sticker_bubble.dart';
 import 'media_caption_time.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -508,6 +509,49 @@ class MessageBubble extends StatelessWidget {
                           isPending: isPending,
                           isQueued: isQueued,
                           isRead: isRead,
+                        )
+                      else if (msg.type == 'sticker')
+                        // STIKER (ala Telegram): kotak transparan tanpa bg
+                        // bubble; sumber path storage ATAU base64 pending.
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            StickerBubble(
+                              data: msg.imageData,
+                              size: 140,
+                            ),
+                            const SizedBox(height: 2),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    timeStr,
+                                    style: AppText.chatTime.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                  if (isMe || showChecksBothSides) ...[
+                                    const SizedBox(width: 3),
+                                    Icon(
+                                      (isPending || isQueued)
+                                          ? Icons.done
+                                          : Icons.done_all,
+                                      size: 12,
+                                      color: (isRead &&
+                                              !isPending &&
+                                              !isQueued)
+                                          ? AppTheme.primary
+                                          : AppTheme.textSecondary,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
                         )
                       else if (msg.type == 'view_once' ||
                           msg.type == 'view_once_expired')
