@@ -8,6 +8,7 @@ import '../core/app_foreground.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/photo_cache.dart';
 import 'storage_photo_service.dart';
+import 'sticker_fill.dart';
 
 // Concurrency limiter: max N operasi paralel, sisanya antri.
 class _Semaphore {
@@ -359,6 +360,12 @@ class ChatStreamSession {
             m.type == 'view_once' ||
             m.type == 'view_once_expired';
       }).toList();
+      // STIKER: path cuma di `image_data` (tak ikut cols) → isi batch.
+      // Tanpa ini bubble kosong usai reload ("muncul lalu ilang").
+      final stickers = [for (final m in models) if (m.type == 'sticker' && m.imageData.isEmpty) m];
+      if (stickers.isNotEmpty) {
+        unawaited(fillStickerPaths(sb: _sb, table: table, stickers: stickers, current: _current, isClosed: () => controller.isClosed, emit: _emit, scheduleCacheSave: scheduleCacheSave));
+      }
       if (photos.isEmpty) return;
       // LAZY PENUH: hanya decrypt upfront untuk foto terbaru yang terlihat
       // saat chat dibuka. Sisanya di-load on-demand saat bubble-nya di-build
