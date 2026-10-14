@@ -95,7 +95,7 @@ void main() {
       expect(spans.where(isMention), isEmpty);
     });
 
-    test('URL tetap jadi link, tidak tumpang tindih dengan mention', () {
+    test('URL tetap jadi link (label diringkas), tidak tumpang tindih mention', () {
       final spans = mentionAwareSpans(
         '@Budi lihat https://contoh.com/x',
         const TextStyle(),
@@ -104,8 +104,22 @@ void main() {
       expect(spans.where(isMention).length, 1);
       final links = spans.where((s) => s.recognizer != null).toList();
       expect(links.length, 1);
-      expect(links.single.text, 'https://contoh.com/x');
-      expect(textOf(spans), '@Budi lihat https://contoh.com/x');
+      // Label diringkas (tanpa skema), tapi tetap hyperlink ke URL penuh.
+      expect(links.single.text, 'contoh.com/x');
+    });
+
+    test('URL panjang diringkas + tetap bisa diklik', () {
+      final spans = mentionAwareSpans(
+        'cek https://www.youtube.com/watch?v=abcdefghijklmnopqrstuvwxyz0123456789',
+        const TextStyle(),
+      );
+      final links = spans.where((s) => s.recognizer != null).toList();
+      expect(links.length, 1);
+      // Tanpa skema & tanpa www.
+      expect(links.single.text!.startsWith('youtube.com'), isTrue);
+      expect(links.single.text!.contains('https://'), isFalse);
+      // Diringkas (ada elipsis) karena melebihi maxLen.
+      expect(links.single.text!.endsWith('…'), isTrue);
     });
 
     test('mention berulang: hanya kemunculan pertama disorot', () {
@@ -115,6 +129,26 @@ void main() {
         mentions: const [budi],
       );
       expect(spans.where(isMention).length, 1);
+    });
+  });
+
+  group('prettyUrlLabel', () {
+    test('buang skema & www', () {
+      expect(prettyUrlLabel('https://www.youtube.com/watch?v=abc'),
+          'youtube.com/watch?v=abc');
+      expect(prettyUrlLabel('http://contoh.com/x'), 'contoh.com/x');
+    });
+
+    test('URL pendek tak dipotong', () {
+      expect(prettyUrlLabel('https://a.com/b'), 'a.com/b');
+    });
+
+    test('URL panjang dipotong + elipsis', () {
+      final label = prettyUrlLabel(
+        'https://example.com/aaa/bbb/ccc/ddd/eee/fff/ggg/hhh/iii/jjj',
+      );
+      expect(label.length, lessThanOrEqualTo(60));
+      expect(label.endsWith('…'), isTrue);
     });
   });
 

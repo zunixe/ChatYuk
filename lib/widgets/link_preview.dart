@@ -8,7 +8,27 @@ import 'link_preview_image.dart';
 
 class LinkPreview extends ConsumerStatefulWidget {
   final String text;
-  const LinkPreview({super.key, required this.text});
+
+  /// Auto-fetch preview saat bubble di-mount.
+  ///
+  /// `true`  → perilaku lama (fetch otomatis). Dipakai HANYA untuk bubble
+  ///           dekat viewport (pesan terbaru) — lihat `autoLinkPreview` di
+  ///           pemanggil (`private_chat_core`, `admin_chat_view_build`,
+  ///           `room_message_chat`).
+  /// `false` → JANGAN fetch saat mount. Tampilkan preview bila sudah ada di
+  ///           cache (sinkron, tanpa network); kalau belum, tampilkan
+  ///           placeholder "ketuk untuk memuat" (pola sama seperti foto
+  ///           deferred / `isImageDeferred`). Fetch baru saat user mengetuk.
+  ///
+  /// Alasan: chat padat URL (khas balasan AI) memicu puluhan HTTP GET +
+  /// parse HTML saat dibuka. Gating viewport memangkas itu ke nol untuk pesan
+  /// yang tidak terlihat.
+  final bool enabled;
+  const LinkPreview({
+    super.key,
+    required this.text,
+    this.enabled = true,
+  });
 
   @override
   ConsumerState<LinkPreview> createState() => _LinkPreviewState();
@@ -17,34 +37,118 @@ class LinkPreview extends ConsumerStatefulWidget {
 class _LinkPreviewState extends ConsumerState<LinkPreview> {
   LinkPreviewData? _data;
   bool _loading = true;
+  // Sudah dicek kandidat URL? Kalau bukan kandidat (gambar/aset) atau tak ada
+  // URL → widget tak menampilkan apa pun (height 0).
+  bool _hasUrl = false;
+  // true setelah user mengetuk placeholder "ketuk untuk memuat".
+  bool _userRequested = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    final url = LinkPreviewService.instance.extractUrl(widget.text);
+    if (url == null) {
+      _hasUrl = false;
+      _loading = false;
+      return;
+    }
+    _hasUrl = true;
+    // LP-A: cache SINKRON dulu — bila sudah ada (RAM/disk sesi ini), tampil
+    // LANGSUNG tanpa spinner & tanpa network, terlepas dari `enabled`.
+    final cached = LinkPreviewService.instance.peek(url);
+    if (cached != null) {
+      _data = cached;
+      _loading = false;
+      return;
+    }
+    // Belum ada di cache: hanya fetch otomatis bila diizinkan (dekat
+    // viewport). Kalau tidak → tunggu ketukan user.
+    if (widget.enabled) {
+      _fetch(url);
+    } else {
+      _loading = false;
+    }
   }
 
-  Future<void> _load() async {
+  @override
+  void didUpdateWidget(covariant LinkPreview old) {
+    super.didUpdateWidget(old);
+    // Bubble yang sama berubah dari non-aktif → aktif (mis. masuk viewport /
+    // `enabled` di-flip oleh parent) dan belum punya data → fetch sekarang.
+    if (widget.enabled &&
+        !old.enabled &&
+        !_userRequested &&
+        _hasUrl &&
+        _data == null) {
+      final url = LinkPreviewService.instance.extractUrl(widget.text);
+      if (url != null) _fetch(url);
+    }
+  }
+
+  Future<void> _fetch(String url) async {
+    if (mounted) setState(() => _loading = true);
+    final d = await LinkPreviewService.instance.fetch(url);
+    if (mounted) {
+      setState(() {
+        _data = d;
+        _loading = false;
+      });
+    }
+  }
+
+  void _onTapLoad() {
+    if (_userRequested) return;
+    _userRequested = true;
     final url = LinkPreviewService.instance.extractUrl(widget.text);
     if (url == null) {
       setState(() => _loading = false);
       return;
     }
-    // LP-A (anti-kedip/anti-fetch saat scroll balik): ambil dari cache
-    // SINKRON dulu — bila sudah ada (RAM/disk), tampil LANGSUNG tanpa
-    // spinner & tanpa network. fetch() tetap dipanggil (no-op bila cache hit).
-    final cached = LinkPreviewService.instance.peek(url);
-    if (cached != null) {
-      if (mounted) setState(() { _data = cached; _loading = false; });
-      return;
-    }
-    final d = await LinkPreviewService.instance.fetch(url);
-    if (mounted) setState(() { _data = d; _loading = false; });
+    _fetch(url);
   }
 
   @override
   Widget build(BuildContext context) {
     final lpv = ref.watch(localeProvider).s;
+    // Tidak ada URL / bukan kandidat preview → tak tampil apa pun.
+    if (!_hasUrl) return const SizedBox.shrink();
+    // Belum ada data & belum dimuat (menunggu ketukan) → placeholder ringan
+    // "ketuk untuk memuat" (pola sama seperti foto deferred). Tak memicu
+    // network sampai diketuk.
+    if (!_loading && _data == null && !_userRequested) {
+      return GestureDetector(
+        onTap: _onTapLoad,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppTheme.bgInput,
+            borderRadius: BorderRadius.circular(8),
+            border: Border(
+              left: BorderSide(color: AppTheme.primary, width: 3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.link_rounded,
+                size: 16,
+                color: AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  lpv.linkPreviewTapToLoad,
+                  style: AppText.chatCaption,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (_loading) {
       return Container(
         margin: const EdgeInsets.only(bottom: 6),

@@ -36,6 +36,13 @@ class RoomMessageBubble extends StatelessWidget {
   /// Highlight `@all` — hanya private room/grup (owner/admin). Global room
   /// selalu false.
   final bool highlightMentionAll;
+  /// Link preview auto-fetch saat mount. `false` untuk pesan lama (jauh dari
+  /// viewport) → preview hanya bila sudah cache / saat diketuk. Pola sama
+  /// dengan private chat & admin monitor (memangkas HTTP saat chat padat URL).
+  final bool autoLinkPreview;
+  /// Batas baris blok kode ``` untuk pesan ini (non-null = pesan jauh dari
+  /// viewport → render ringkas).
+  final int? codeMaxLines;
   const RoomMessageBubble({
     super.key,
     required this.msg,
@@ -48,6 +55,8 @@ class RoomMessageBubble extends StatelessWidget {
     required this.onTapUser,
     this.deletedIds = const {},
     this.highlightMentionAll = false,
+    this.autoLinkPreview = true,
+    this.codeMaxLines,
   });
 
   // Warna teks bubble mengikuti tema (gelap di light mode, terang di dark mode)
@@ -260,7 +269,7 @@ class RoomMessageBubble extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _replyQuote(context),
-        if (LinkPreviewService.instance.extractUrl(msg.text) != null) LinkPreview(text: msg.text),
+                            if (LinkPreviewService.instance.extractUrl(msg.text) != null) LinkPreview(text: msg.text, enabled: autoLinkPreview),
         MessageTextWithTime(
           text: msg.text,
           timeStr: timeStr,
@@ -272,6 +281,7 @@ class RoomMessageBubble extends StatelessWidget {
           alignRight: alignRight,
           mentions: msg.mentions,
           highlightMentionAll: highlightMentionAll,
+          codeMaxLines: codeMaxLines,
         ),
       ],
     );

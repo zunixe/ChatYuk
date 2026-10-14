@@ -80,6 +80,8 @@ mixin SChatMx {
       isId ? 'Gagal simpan foto: ' : 'Failed to save photo: ';
   String get linkPreviewLoading =>
       isId ? 'Memuat pratinjau...' : 'Loading preview...';
+  String get linkPreviewTapToLoad =>
+      isId ? 'Ketuk untuk memuat pratinjau' : 'Tap to load preview';
   String get errPhotoProcess =>
       isId ? 'Gagal proses foto' : 'Failed to process photo';
   String get errPhotoUpload => isId ? 'Gagal upload: ' : 'Failed to upload: ';

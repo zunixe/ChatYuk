@@ -152,6 +152,10 @@ mixin _AcBuildMx on _AdminBase {
                                 msg: msg,
                                 chatKey: _chatKey,
                                 autoVideoPoster: i < 50,
+                                // Link preview sama polanya: hanya 25 terbaru
+                                // yang auto-fetch; sisanya tap-to-load.
+                                autoLinkPreview: i < 25,
+                                codeMaxLines: i < 25 ? null : 40,
                                 isMe: isMe,
                                 isRead: isRead,
                                 isAdminView: true,
