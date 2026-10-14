@@ -35,6 +35,7 @@ import '../widgets/app_gesture.dart';
 import '../widgets/date_chip.dart';
 import 'room_chat/widgets/room_widgets.dart';
 import 'room_chat/widgets/room_message_bubble.dart';
+import '../widgets/sticker_bubble.dart';
 import 'room_chat/widgets/voice_stage_strip.dart';
 import 'room_chat/widgets/broadcast_stage.dart';
 import '../widgets/message/swipe_to_reply.dart';

@@ -35,6 +35,12 @@ class StickerBubble extends StatefulWidget {
   /// Path standar stiker di bucket.
   static const String storagePrefix = 'stickers/';
 
+  /// Titip bytes ke cache RAM (mis. pengirim baru upload) supaya bubble
+  /// langsung tampil tanpa menunggu download. Key = hash path (sama
+  /// seperti [_StickerBubbleState._key]).
+  static void seedCache(String path, Uint8List bytes) =>
+      _StickerBubbleState.seed(path, bytes);
+
   @override
   State<StickerBubble> createState() => _StickerBubbleState();
 }
@@ -93,13 +99,23 @@ class _StickerBubbleState extends State<StickerBubble> {
     _memCache[_key] = b;
   }
 
+  /// Lihat [StickerBubble.seedCache].
+  static void seed(String path, Uint8List bytes) {
+    if (_memCache.length >= _memCap) {
+      _memCache.remove(_memCache.keys.first);
+    }
+    _memCache[hashKey64(path)] = bytes;
+  }
+
   Future<void> _fetch() async {
     try {
       Uint8List? bytes;
       if (_isPath) {
+        debugPrint('[STICKER] fetch download ${widget.data}');
         bytes = await rv.ProviderScope.containerOf(context, listen: false)
             .read(storageProvider)
             .downloadBytes(widget.data);
+        debugPrint('[STICKER] fetch done len=${bytes?.length}');
       } else {
         // base64 pending
         bytes = base64Decode(widget.data);
@@ -112,7 +128,8 @@ class _StickerBubbleState extends State<StickerBubble> {
       _putToMem(bytes);
       unawaited(MediaDiskCache.instance.write(_diskKey, bytes));
       setState(() => _bytes = bytes);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[STICKER] fetch error: $e');
       if (mounted) setState(() => _failed = true);
     }
   }
