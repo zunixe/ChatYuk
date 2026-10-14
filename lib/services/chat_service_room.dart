@@ -35,6 +35,8 @@ mixin ChatServiceRoomMx on ChatBase {
       'video',
       'video_once',
       'video_once_expired',
+      // Stiker (ala Telegram) — sama seperti private.
+      'sticker',
     ].contains(type)) {
       throw Exception('Invalid message type');
     }
