@@ -217,12 +217,49 @@ List<TextSpan> _highlightCodeSpans(String code, String lang) {
 class CodeBlock extends StatelessWidget {
   final String code;
   final String language;
-  const CodeBlock({super.key, required this.code, required this.language});
+
+  /// Jumlah baris maksimum yang dirender inline. Bila kode lebih panjang,
+  /// sisanya dipotong + tombol "tampilkan semua" (perluas inline). Dipakai
+  /// untuk membatasi biaya layout/highlight blok kode sangat panjang pada
+  /// pesan lama (khas balasan AI expert) yang jauh dari viewport.
+  /// `null`/<=0 = tampilkan semua (perilaku lama).
+  final int? maxLines;
+  const CodeBlock({
+    super.key,
+    required this.code,
+    required this.language,
+    this.maxLines,
+  });
+
+  /// Instrumen (Fase 0): jumlah render CodeBlock per sesi — untuk mengukur
+  /// beban chat padat blok kode (khas balasan AI) sebelum/sesudah optimasi.
+  /// Nol biaya di rilis (int counter biasa).
+  @visibleForTesting
+  static int renderCount = 0;
 
   @override
   Widget build(BuildContext context) {
+    renderCount++;
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final normalized = code.replaceAll('\t', '  ');
+    final body = maxLines != null && maxLines! > 0
+        ? _CompactCodeBody(
+            code: normalized,
+            language: language,
+            maxLines: maxLines!,
+          )
+        : Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SelectableText.rich(
+                TextSpan(
+                  style: AppText.chatCode.copyWith(color: _codeBase),
+                  children: codeHighlightSpansMemo(normalized, language),
+                ),
+              ),
+            ),
+          );
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -272,20 +309,92 @@ class CodeBlock extends StatelessWidget {
             ],
           ),
           const Divider(height: 1, color: Color(0x1FFFFFFF)),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SelectableText.rich(
-                TextSpan(
-                  style: AppText.chatCode.copyWith(color: _codeBase),
-                  children: _highlightCodeSpans(normalized, language),
+          body,
+        ],
+      ),
+    );
+  }
+}
+
+/// Memo hasil tokenisasi+highlight kode. Rebuild bubble (ngetik/scroll/reaksi)
+/// tidak lagi men-tokenize ulang blok kode yang sama. Bounded FIFO LRU.
+final _codeHighlightMemo = <String, List<TextSpan>>{};
+const _codeHighlightMemoMax = 64;
+
+/// Versi ber-memo dari [_highlightCodeSpans] — kunci = (teks, bahasa).
+List<TextSpan> codeHighlightSpansMemo(String code, String language) {
+  final key = '$language\u0000$code';
+  final hit = _codeHighlightMemo.remove(key);
+  if (hit != null) {
+    _codeHighlightMemo[key] = hit; // sentuh ulang (LRU).
+    return hit;
+  }
+  final spans = _highlightCodeSpans(code, language);
+  if (_codeHighlightMemo.length >= _codeHighlightMemoMax) {
+    _codeHighlightMemo.remove(_codeHighlightMemo.keys.first);
+  }
+  _codeHighlightMemo[key] = spans;
+  return spans;
+}
+
+/// Isi blok kode dengan batas baris: render `maxLines` baris pertama
+/// (ter-highlight), tombol "+N baris" untuk memperluas inline penuh.
+class _CompactCodeBody extends StatefulWidget {
+  final String code;
+  final String language;
+  final int maxLines;
+  const _CompactCodeBody({
+    required this.code,
+    required this.language,
+    required this.maxLines,
+  });
+
+  @override
+  State<_CompactCodeBody> createState() => _CompactCodeBodyState();
+}
+
+class _CompactCodeBodyState extends State<_CompactCodeBody> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final lines = widget.code.split('\n');
+    final truncated = !_expanded && lines.length > widget.maxLines;
+    final shown = truncated
+        ? lines.take(widget.maxLines).join('\n')
+        : widget.code;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SelectableText.rich(
+              TextSpan(
+                style: AppText.chatCode.copyWith(color: _codeBase),
+                children: codeHighlightSpansMemo(shown, widget.language),
+              ),
+            ),
+          ),
+        ),
+        if (truncated)
+          InkWell(
+            onTap: () => setState(() => _expanded = true),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+              child: Text(
+                s.codeShowAll(lines.length - widget.maxLines),
+                style: AppText.chatCaption.copyWith(
+                  color: const Color(0xFF7EC8FF),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }

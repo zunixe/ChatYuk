@@ -261,6 +261,8 @@ mixin SAuthMx {
       isId ? ' disalin ke clipboard' : ' copied to clipboard';
   String get codeCopy => isId ? 'Salin kode' : 'Copy code';
   String get codeCopied => isId ? 'Kode disalin' : 'Code copied';
+  String codeShowAll(int n) =>
+      isId ? 'Tampilkan $n baris lagi' : 'Show $n more lines';
   String get btnCopyAddress => isId ? 'Salin Alamat ' : 'Copy Address ';
   String get donateSelectHint => isId
       ? 'Pilih network dan salin alamat wallet'

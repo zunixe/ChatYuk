@@ -71,6 +71,11 @@ class MessageTextWithTime extends StatelessWidget {
   final bool highlightMentionAll;
   // Kata kunci search chat — cocoknya di-highlight kuning (kosong = mati).
   final String searchQuery;
+  /// Batas baris untuk blok kode ```. Bila >0, blok kode yang lebih panjang
+  /// dirender ringkas + tombol "tampilkan semua". Dipakai untuk pesan lama
+  /// (jauh dari viewport) agar blok kode panjang (khas balasan AI) tidak
+  /// membebani layout. `null`/<=0 = tampil penuh (perilaku lama).
+  final int? codeMaxLines;
   const MessageTextWithTime({
     super.key,
     required this.text,
@@ -82,6 +87,7 @@ class MessageTextWithTime extends StatelessWidget {
     this.mentions = const [],
     this.highlightMentionAll = false,
     this.searchQuery = '',
+    this.codeMaxLines,
   });
 
   // Poin "1." / "(a)" / "a." di awal baris → baris lanjutan menjorok
@@ -298,7 +304,11 @@ class MessageTextWithTime extends StatelessWidget {
           children: [
             for (final seg in segs)
               if (seg.isCode)
-                CodeBlock(code: seg.content, language: seg.lang)
+                CodeBlock(
+                  code: seg.content,
+                  language: seg.lang,
+                  maxLines: codeMaxLines,
+                )
               else if (seg.content.trim().isNotEmpty)
                 RichText(
                   text: TextSpan(

@@ -51,11 +51,54 @@ class LinkPreviewData {
 /// Telegram menyimpan webPage PER PESAN + fetch di server. Padanan ChatYuk:
 /// cache URL di disk (persist) + simpan ke pesan (lihat MessageModel.linkPreview)
 /// + opsi fetch via Edge Function (LP-F).
+/// Semaphore sederhana: batasi fetch link preview paralel. Tanpa ini, chat
+/// padat URL (mis. balasan AI penuh tautan unik) memicu ledakan HTTP GET
+/// serentak saat dibuka. Pola sama `_Semaphore` di chat_stream_session.
+class _LpSemaphore {
+  _LpSemaphore(this.max);
+  final int max;
+  int _count = 0;
+  final _waiters = <Completer<void>>[];
+  Future<void> acquire() async {
+    if (_count < max) {
+      _count++;
+      return;
+    }
+    final c = Completer<void>();
+    _waiters.add(c);
+    await c.future;
+  }
+
+  void release() {
+    _count--;
+    if (_waiters.isNotEmpty) {
+      _waiters.removeAt(0).complete();
+      _count++;
+    }
+  }
+
+  Future<T> run<T>(Future<T> Function() fn) async {
+    await acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+}
+
 class LinkPreviewService {
   LinkPreviewService._();
   static final instance = LinkPreviewService._();
 
-  static const int _maxEntries = 50;
+  /// Batas fetch jaringan PARALEL (device + edge function). 3 cukup untuk
+  /// mengisi viewport tanpa membebani radio/HTTP pool saat chat padat URL.
+  static const int _maxConcurrentFetches = 3;
+  final _fetchGate = _LpSemaphore(_maxConcurrentFetches);
+
+  /// Cache RAM link preview. Dinaikkan 50 → 200 (LRU) supaya scroll bolak-balik
+  /// di percakapan panjang (banyak URL) tidak memicu fetch ulang.
+  static const int _maxEntries = 200;
   final _cache = <String, LinkPreviewData>{};
   final _inflight = <String, Future<LinkPreviewData?>>{};
 
@@ -69,6 +112,12 @@ class LinkPreviewService {
   @visibleForTesting
   int networkFetchCount = 0;
 
+  /// Hitung berapa kali URL yang diekstrak DILEWATI (bukan kandidat preview,
+  /// mis. tautan gambar/aset) — instrumen Fase 0 untuk mengukur berapa banyak
+  /// fetch yang berhasil dihindari pada chat padat URL (khas balasan AI).
+  @visibleForTesting
+  int urlSkipCount = 0;
+
   @visibleForTesting
   int get cacheLength => _cache.length;
 
@@ -77,6 +126,7 @@ class LinkPreviewService {
     _cache.clear();
     _inflight.clear();
     networkFetchCount = 0;
+    urlSkipCount = 0;
   }
 
   void _put(String url, LinkPreviewData data) {
@@ -94,7 +144,39 @@ class LinkPreviewService {
 
   String? extractUrl(String text) {
     final m = _urlRegex.firstMatch(text);
-    return m?.group(0);
+    final url = m?.group(0);
+    if (url == null) return null;
+    if (!isPreviewCandidate(url)) {
+      urlSkipCount++;
+      return null;
+    }
+    return url;
+  }
+
+  /// Pola URL yang BUKAN kandidat kartu preview: tautan gambar/aset langsung
+  /// (bukan halaman web ber-metadata). Chat yang dipenuhi balasan AI sering
+  /// menyisipkan URL gambar (pollinations/mermaid.ink/ekstensi media) — fetch
+  /// HTML-nya sia-sia (og:title kosong) dan hanya membuang jaringan/CPU.
+  static final _skipHostRe = RegExp(
+    r'(^|\.)((pollinations\.ai)|(mermaid\.ink)|(quickchart\.io)|(placehold\.co))$',
+    caseSensitive: false,
+  );
+  static final _imageExtRe = RegExp(
+    r'\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)(\?|#|$)',
+    caseSensitive: false,
+  );
+
+  /// True bila [url] layak dijadikan kartu preview (halaman web, bukan aset).
+  /// Murni + static supaya bisa di-unit-test tanpa network.
+  static bool isPreviewCandidate(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty) return false;
+    if (_skipHostRe.hasMatch(host)) return false;
+    // Path berakhiran ekstensi gambar → aset, bukan halaman.
+    if (_imageExtRe.hasMatch(uri.path.toLowerCase())) return false;
+    return true;
   }
 
   String _diskKey(String url) => 'linkpreview:$url';
@@ -131,7 +213,9 @@ class LinkPreviewService {
     } catch (_) {}
 
     // NETWORK: server-side (LP-F) dulu, lalu fallback device.
-    final data = await _fetchNetwork(url);
+    // Semaphore: batasi fetch paralel supaya chat padat URL (khas balasan AI)
+    // tidak memicu ledakan HTTP serentak saat dibuka.
+    final data = await _fetchGate.run(() => _fetchNetwork(url));
     if (data != null) {
       _put(url, data);
       // Simpan ke disk (fire-and-forget) — preview kecil (JSON).

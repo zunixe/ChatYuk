@@ -113,7 +113,9 @@ List<TextSpan> mentionAwareSpans(
       final url = seg;
       spans.add(
         TextSpan(
-          text: seg,
+          // Rapi: tampilkan label pendek (host + path singkat), bukan URL
+          // mentah yang panjang. Klik tetap membuka URL PENUH.
+          text: prettyUrlLabel(seg),
           style: urlStyle,
           recognizer: TapGestureRecognizer()
             ..onTap = () async {
@@ -135,6 +137,33 @@ List<TextSpan> mentionAwareSpans(
     spans.add(TextSpan(text: text.substring(cursor), style: base));
   }
   return spans;
+}
+
+/// Label URL yang RAPI untuk ditampilkan sebagai hyperlink: buang skema
+/// (`https://`), buang `www.`, dan potong path panjang. Teks yang diklik tetap
+/// membuka URL PENUH (lihat `recognizer`).
+///
+/// Contoh:
+///   https://www.youtube.com/watch?v=abc123  → youtube.com/watch?v=abc123
+///   https://example.com/a/b/c/d/e/fghijklm  → example.com/a/b/c/d/e/fg…
+///
+/// Murni + testable (tanpa context).
+String prettyUrlLabel(String url, {int maxLen = 44}) {
+  var s = url;
+  // Buang skema.
+  s = s.replaceFirst(RegExp(r'^https?://', caseSensitive: false), '');
+  // Buang 'www.'.
+  s = s.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '');
+  // Buang query/hash yang panjang? Pertahankan (YouTube butuh ?v=), tapi
+  // batasi total panjang agar tidak menelan baris.
+  if (s.length <= maxLen) return s;
+  // Potong di batas '/' paling akhir yang masih <= maxLen agar lebih rapi.
+  final cut = s.substring(0, maxLen);
+  final lastSlash = cut.lastIndexOf('/');
+  if (lastSlash > maxLen ~/ 2) {
+    return '${cut.substring(0, lastSlash)}/…';
+  }
+  return '${cut.trimRight()}…';
 }
 
 enum _MarkKind { mention, url }

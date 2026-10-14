@@ -159,6 +159,10 @@ mixin _RcBuildMx on _RoomChatBase {
                                         ),
                                         isQueued: _queuedIds.contains(m.id),
                                         isSelected: selected,
+                                        // Link preview hanya auto-fetch untuk 25
+                                        // pesan terbaru; sisanya tap-to-load.
+                                        autoLinkPreview: i < 25,
+                                        codeMaxLines: i < 25 ? null : 40,
                                         color: Color(
                                           userColorPalette[colorHashForUid(
                                                 m.senderId,

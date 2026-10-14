@@ -808,6 +808,15 @@ mixin _PcCoreMx on _PrivateChatBase {
                                         // auto-load (hemat kuota); tap memuat.
                                         // Pola sama seperti isImageDeferred foto.
                                         autoVideoPoster: di < 50,
+                                        // Link preview di luar 25 terbaru →
+                                        // tidak auto-fetch (hemat HTTP/parse).
+                                        // Pesan lama: preview hanya bila sudah
+                                        // cache, atau saat diketuk. Chat padat
+                                        // URL (mis. balasan AI) jadi ringan.
+                                        autoLinkPreview: di < 25,
+                                        // Blok kode di luar 25 terbaru → render
+                                        // ringkas (40 baris + "tampilkan semua").
+                                        codeMaxLines: di < 25 ? null : 40,
                                         onLongPressMenu: onMessageLongPress,
                                         // Mode seleksi: tap = tambah/kurangi seleksi.
                                         onTapSelect: inSelection

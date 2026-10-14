@@ -72,6 +72,14 @@ class MessageBubble extends StatelessWidget {
   // generate otomatis; tampil placeholder + tap untuk memuat (pola sama
   // seperti isImageDeferred untuk foto).
   final bool autoVideoPoster;
+  /// Link preview: auto-fetch saat bubble ini di-mount. `false` (pesan lama
+  /// / jauh dari viewport) → preview hanya muncul bila sudah di cache, jika
+  /// belum user mengetuk untuk memuat. Memangkas puluhan HTTP GET saat chat
+  /// padat URL (khas balasan AI) dibuka.
+  final bool autoLinkPreview;
+  /// Batas baris blok kode ``` untuk pesan ini. Non-null saat pesan jauh dari
+  /// viewport → blok kode panjang dirender ringkas.
+  final int? codeMaxLines;
   // Admin monitor: view-once yang sudah expired tetap bisa dilihat admin.
   final bool isAdminView;
   // Room chat pakai tabel 'messages' untuk clear view-once.
@@ -114,6 +122,8 @@ class MessageBubble extends StatelessWidget {
     this.isImageDeferred = false,
     this.onRetryImage,
     this.autoVideoPoster = true,
+    this.autoLinkPreview = true,
+    this.codeMaxLines,
     this.isAdminView = false,
     this.showChecksBothSides = false,
     this.isRoom = false,
@@ -481,6 +491,7 @@ class MessageBubble extends StatelessWidget {
                           isQueued: isQueued,
                           showChecksBothSides: showChecksBothSides,
                           highlightMentionAll: highlightMentionAll,
+                          autoLinkPreview: autoLinkPreview,
                         )
                       else if (msg.type == 'image' &&
                           msg.imageData.isEmpty &&
@@ -727,7 +738,10 @@ class MessageBubble extends StatelessWidget {
                                 null)
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
-                                child: LinkPreview(text: msg.text),
+                                child: LinkPreview(
+                                  text: msg.text,
+                                  enabled: autoLinkPreview,
+                                ),
                               ),
                             MessageTextWithTime(
                               text: msg.text,
@@ -743,6 +757,7 @@ class MessageBubble extends StatelessWidget {
                               mentions: msg.mentions,
                               highlightMentionAll: highlightMentionAll,
                               searchQuery: searchQuery,
+                              codeMaxLines: codeMaxLines,
                               trailing: isMe
                                   ? Tooltip(
                                       message: isQueued
@@ -854,6 +869,7 @@ class _PhotoBubble extends StatefulWidget {
   final bool isQueued;
   final bool showChecksBothSides;
   final bool highlightMentionAll;
+  final bool autoLinkPreview;
 
   const _PhotoBubble({
     required this.msg,
@@ -865,6 +881,7 @@ class _PhotoBubble extends StatefulWidget {
     required this.isQueued,
     required this.showChecksBothSides,
     required this.highlightMentionAll,
+    this.autoLinkPreview = true,
   });
 
   @override
@@ -952,7 +969,10 @@ class _PhotoBubbleState extends State<_PhotoBubble> {
             padding: const EdgeInsets.only(top: 4),
             child: SizedBox(
               width: _imgW,
-              child: LinkPreview(text: msg.text),
+              child: LinkPreview(
+                text: msg.text,
+                enabled: widget.autoLinkPreview,
+              ),
             ),
           ),
         if (hasCaption)

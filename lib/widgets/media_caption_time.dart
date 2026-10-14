@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
+import 'mention_spans.dart';
 
 /// Caption + jam di bawah media (foto/video/maps) dengan aturan SAMA seperti
 /// bubble teks: caption pendek → caption di kiri, jam **rata kanan sejajar
@@ -66,13 +67,21 @@ class MediaCaptionTime extends StatelessWidget {
     );
   }
 
+  /// Caption sebagai span yang LINK-AWARE (URL diringkas + bisa diklik, ala
+  /// bubble teks) — tanpa ini caption foto menampilkan URL mentah panjang dan
+  /// tidak bisa diketuk. Dipakai di semua jalur render caption di bawah.
+  TextSpan _captionSpan() => TextSpan(
+        style: textStyle,
+        children: mentionAwareSpans(text, textStyle),
+      );
+
   @override
   Widget build(BuildContext context) {
     // Tanpa jam: caption polos.
     if (timeStr.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(left: leftInset),
-        child: Text(text, style: textStyle),
+        child: RichText(text: _captionSpan()),
       );
     }
     return LayoutBuilder(
@@ -105,9 +114,8 @@ class MediaCaptionTime extends StatelessWidget {
                     maxWidth: (available - leftInset - timeRowW)
                         .clamp(0.0, available),
                   ),
-                  child: Text(
-                    text,
-                    style: textStyle,
+                  child: RichText(
+                    text: _captionSpan(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -129,7 +137,7 @@ class MediaCaptionTime extends StatelessWidget {
           children: [
             Padding(
               padding: EdgeInsets.only(left: leftInset),
-              child: Text(text, style: textStyle),
+              child: RichText(text: _captionSpan()),
             ),
             Padding(
               padding: const EdgeInsets.only(top: 2),
