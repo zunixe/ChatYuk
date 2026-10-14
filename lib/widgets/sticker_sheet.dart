@@ -36,6 +36,7 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
   bool _busy = false;
 
   Future<void> _pickFromGallery() async {
+    debugPrint('[STICKER] pickFromGallery tapped busy=$_busy');
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -45,11 +46,14 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
         maxHeight: 1024,
         imageQuality: 95,
       );
+      debugPrint('[STICKER] picked=${picked?.path}');
       if (picked == null) return;
       final raw = await picked.readAsBytes();
+      debugPrint('[STICKER] raw len=${raw.length}');
       if (raw.isEmpty) return;
       // Crop tengah → 512px PNG (jaga transparansi) via native, fallback Dart.
       final b64 = await NativeImage.processStickerPng(raw, size: 512);
+      debugPrint('[STICKER] png b64 len=${b64?.length}');
       if (b64 == null || b64.isEmpty) return;
       final bytes = _b64(b64);
       if (bytes == null) return;
@@ -61,8 +65,8 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
         await widget.onSendSticker(bytes);
         if (mounted) Navigator.of(context).maybePop();
       }
-    } catch (_) {
-      // Gagal impor → diamkan (sheet tetap terbuka).
+    } catch (e) {
+      debugPrint('[STICKER] pick/impor error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
