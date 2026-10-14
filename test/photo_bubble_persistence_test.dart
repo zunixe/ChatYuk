@@ -231,5 +231,61 @@ void main() {
       );
       expect(t.getSize(find.byType(MessageImage)), first);
     });
+
+    testWidgets(
+      'ANTI-KEDIP: path → base64 (isi sama) TIDAK decode ulang & TIDAK fade',
+      (t) async {
+        // Alur nyata (terbukti dari log HP 2026-10-14): frame-1 imageData =
+        // PATH storage (thumb dari cache decode by messageId → foto tampil),
+        // lalu ~100ms batch menimpa ke base64. Dulu: _fadeNext=true +
+        // setState → foto yang sudah tampil "kedip". Sekarang: cukup re-key.
+        final im = img.Image(width: 300, height: 300);
+        final b64 = base64Encode(
+          Uint8List.fromList(img.encodeJpg(im, quality: 75)),
+        );
+        final bytes = base64Decode(b64);
+        final dims = parseImageDimensions(bytes)!;
+        final stable = DecodedImage(bytes, dims.width, dims.height);
+        // Thumb sudah ada di cache memori by messageId (seperti precache tap).
+        putDecodedCache('thumb:antikip-1'.hashCode, stable);
+
+        await t.pumpWidget(
+          ProviderScope(child: MaterialApp(
+            home: Scaffold(
+              body: MessageImage(
+                imageData: 'chat/x.jpg', // PATH (belum base64)
+                chatKey: 'private_a_b',
+                messageId: 'antikip-1',
+              ),
+            ),
+          )),
+        );
+        await t.pump();
+        // Frame-1: bitmap dari thumb-cache → langsung ada gambar.
+        final before = find.byType(RawImage).evaluate().isNotEmpty ||
+            find.byType(Image).evaluate().isNotEmpty;
+        expect(before, isTrue, reason: 'frame-1 harus sudah ada gambar');
+
+        // Batch menimpa ke base64 (isi sama) — TIDAK boleh fade (Opacity<1)
+        // dan TIDAK boleh kehilangan gambar.
+        await t.pumpWidget(
+          ProviderScope(child: MaterialApp(
+            home: Scaffold(
+              body: MessageImage(
+                imageData: b64,
+                chatKey: 'private_a_b',
+                messageId: 'antikip-1',
+              ),
+            ),
+          )),
+        );
+        await t.pump();
+        final after = find.byType(RawImage).evaluate().isNotEmpty ||
+            find.byType(Image).evaluate().isNotEmpty;
+        expect(after, isTrue, reason: 'foto harus tetap tampil setelah update');
+        // Tidak ada Opacity yang memudar (fade) — cek tak ada TweenAnimationBuilder.
+        expect(find.byType(TweenAnimationBuilder<double>), findsNothing);
+      },
+    );
   });
 }
