@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
+import 'package:lottie/lottie.dart';
 
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
@@ -123,16 +124,41 @@ class _StickerBubbleState extends State<StickerBubble> {
       // Placeholder ukuran SAMA (anti layout shift).
       return SizedBox(width: s, height: s);
     }
-    return Image.memory(
-      _bytes!,
-      width: s,
-      height: s,
-      fit: BoxFit.contain,
-      gaplessPlayback: true,
-      errorBuilder: (_, __, ___) => SizedBox(width: s, height: s),
-    );
+    return stickerWidget(_bytes!, widget.data, s);
   }
 }
+
+/// Deteksi format stiker dari PATH/nama & bytes, render sesuai jenis:
+///  - `.tgs`/bytes gzip-Lottie → [Lottie.memory] (animasi vektor).
+///  - `.webm` → [StickerVideoPlaceholder] (video; dipisah, butuh controller).
+///  - sisanya (png/jpg/webp statis atau ANIMATED webp) → [Image.memory]
+///    (Flutter dukung animated webp secara native — gratis).
+Widget stickerWidget(Uint8List bytes, String src, double size) {
+  final lower = src.toLowerCase();
+  if (lower.endsWith('.tgs') || _looksLikeTgs(bytes)) {
+    return Lottie.memory(
+      bytes,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => SizedBox(width: size, height: size),
+    );
+  }
+  // .webm & selainnya → Image.memory (webm akan gagal decode → placeholder
+  // kosong; jalur video webm ditangani terpisah bila diaktifkan).
+  return Image.memory(
+    bytes,
+    width: size,
+    height: size,
+    fit: BoxFit.contain,
+    gaplessPlayback: true,
+    errorBuilder: (_, __, ___) => SizedBox(width: size, height: size),
+  );
+}
+
+/// Heuristik .tgs: gzip (magic 1f 8b) dan bukan gambar.
+bool _looksLikeTgs(Uint8List b) =>
+    b.length > 2 && b[0] == 0x1f && b[1] == 0x8b;
 
 /// Stiker dari bytes mentah (mis. preview di picker/impor).
 class StickerBytes extends StatelessWidget {
