@@ -108,6 +108,13 @@ mixin SPointsMx {
       ? 'Belum ada stiker. Buat dari galeri (foto → stiker persegi).'
       : 'No stickers yet. Create one from your gallery.';
   String get stickerSendFail => isId ? 'Gagal kirim stiker' : 'Failed to send sticker';
+  String get stickerEditTitle => isId ? 'Edit stiker' : 'Edit sticker';
+  String get stickerEditSend => isId ? 'Kirim stiker' : 'Send sticker';
+  String get stickerEditAddText => isId ? 'Teks' : 'Text';
+  String get stickerEditTextTitle => isId ? 'Tulis teks' : 'Write text';
+  String get stickerEditTextHint => isId ? 'Ketik di sini…' : 'Type here…';
+  String get stickerEditBgOn => isId ? 'Latar: ada' : 'Background: on';
+  String get stickerEditBgOff => isId ? 'Latar: hapus' : 'Background: off';
   String get storyPublishFail =>
       isId ? 'Gagal membagikan story' : 'Failed to share story';
   String get storyDeleted =>
