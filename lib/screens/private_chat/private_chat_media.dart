@@ -142,6 +142,8 @@ mixin _PcMediaMx on _PrivateChatBase {
           .uploadSticker(uid: uid, base64: b64, ext: 'png');
       debugPrint('[STICKER] upload path=$path');
       if (path == null || path.isEmpty || !mounted) return;
+      // Titip bytes ke cache bubble: pengirim langsung lihat tanpa download.
+      StickerBubble.seedCache(path, pngBytes);
       await container.read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
             chatId: widget.chatId,
             senderId: uid,

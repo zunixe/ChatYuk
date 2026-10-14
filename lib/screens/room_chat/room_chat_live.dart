@@ -206,6 +206,10 @@ mixin _RcLiveMx on _RoomChatBase {
           .read(storageProvider)
           .uploadSticker(uid: uid, base64: b64, ext: 'png');
       if (path == null || path.isEmpty || !mounted) return;
+      // Titip bytes ke cache bubble (lihat private).
+      try {
+        StickerBubble.seedCache(path, pngBytes);
+      } catch (_) {}
       await container.read(chatRiverpod.chatProvider.notifier).sendRoomMessage(
             roomId: widget.room.id,
             senderId: uid,
