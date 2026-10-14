@@ -36,3 +36,32 @@ Lisensi GPL-2.0.
 - MTProto socket permanen → ChatYuk pakai Supabase realtime + FCM (gate baterai §46).
 - GL/Choreographer double-buffer video → tersembunyi di ExoPlayer/Impeller.
 - Native VoIP sendiri → ChatYuk `flutter_webrtc`.
+
+---
+
+## WhatsApp — CLOSED-SOURCE (tidak ada source app)
+
+**Tidak ada** source code aplikasi WhatsApp (Android/iOS) di GitHub. App-nya
+**proprietary**. Org resmi `github.com/WhatsApp` hanya berisi **library/alat
+pendukung**, BUKAN app-nya.
+
+| Repo resmi WhatsApp | Isi | Bahasa / Lisensi |
+|---|---|---|
+| `WhatsApp/stickers` | API + sample app untuk **sticker pack** pihak ketiga | Java · NOASSERTION |
+| `WhatsApp/StringPacks` | Ekstrak string Android → format efisien | Java · Apache-2.0 |
+| `WhatsApp/erlfmt` | Formatter kode Erlang | Erlang |
+| `WhatsApp/power_shell` | Erlang shell lanjutan | Erlang |
+| `WhatsApp/stud` | Scalable TLS Unwrapping Daemon | C |
+| `WhatsApp/erl_img` | Pemrosesan gambar (Erlang) | Erlang |
+| `WhatsApp/snappy-erlang-nif` | NIF Erlang utk kompresor Snappy | C++ |
+| `WhatsApp/WADebug` | CLI troubleshooting WhatsApp Business API | Python · MIT |
+| `WhatsApp/WhatsApp-Business-API-Setup-Scripts` | Skrip setup Business Cloud API | — |
+
+**Konsekuensi untuk ChatYuk:**
+- **WhatsApp** = referensi **perilaku/UX** saja (chat list, centang, gaya M3) —
+  implementasinya **tak bisa dibaca**.
+- **Telegram** (`DrKLO/Telegram`) = referensi **kode** nyata (sudah dipakai:
+  cap cache adaptif §48, pool bitmap §48, link preview §50).
+- Berguna bila nanti mau fitur **sticker**: `WhatsApp/stickers` = API/sample
+  resmi yang bisa ditiru (format pack + payload intent Android).
+
