@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../providers/riverpod/locale_provider.dart';
+import 'dart:typed_data';
+
 import '../config/theme.dart';
+import 'sticker_sheet.dart';
 
 // Sheet emoji bersama untuk input chat (private chat & room chat).
 class EmojiPickerSheet {
@@ -64,7 +67,12 @@ class EmojiPickerSheet {
     '🫶',
   ];
 
-  static void show(BuildContext context, TextEditingController controller) {
+  static void show(
+    BuildContext context,
+    TextEditingController controller, {
+    /// Bila diisi → sheet menampilkan TAB STIKER (kirim sticker) selain emoji.
+    Future<void> Function(Uint8List stickerPngBytes)? onSendSticker,
+  }) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showModalBottomSheet(
       context: context,
@@ -72,42 +80,55 @@ class EmojiPickerSheet {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 10),
-            Text(s.btnEmoji, style: AppText.bodyStrong),
-            const SizedBox(height: 4),
-            Flexible(
-              child: GridView.builder(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 8,
-                  mainAxisSpacing: 2,
-                  crossAxisSpacing: 2,
-                ),
-                itemCount: _emojis.length,
-                itemBuilder: (_, i) => InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => insertAtCursor(controller, _emojis[i]),
-                  child: Center(
-                    child: Text(
-                      _emojis[i],
-                      style: const TextStyle(fontSize: AppGlyph.md),
-                    ),
-                  ),
-                ),
+      // contains: tinggi tetap; tab sticker butuh ruang lebih.
+      isScrollControlled: onSendSticker != null,
+      builder: (ctx) => onSendSticker == null
+          ? SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 10),
+                  Text(s.btnEmoji, style: AppText.bodyStrong),
+                  const SizedBox(height: 4),
+                  Flexible(child: _emojiGrid(controller)),
+                ],
               ),
+            )
+          : StickerEmojiSheet(
+              controller: controller,
+              onSendSticker: onSendSticker,
             ),
-          ],
+    );
+  }
+
+  static Widget _emojiGrid(TextEditingController controller) {
+    return GridView.builder(
+      shrinkWrap: true,
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 8,
+        mainAxisSpacing: 2,
+        crossAxisSpacing: 2,
+      ),
+      itemCount: _emojis.length,
+      itemBuilder: (_, i) => InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => insertAtCursor(controller, _emojis[i]),
+        child: Center(
+          child: Text(
+            _emojis[i],
+            style: const TextStyle(fontSize: AppGlyph.md),
+          ),
         ),
       ),
     );
   }
 
   // Sisipkan emoji di posisi kursor, seleksi terpilih diganti emoji.
+  /// Akses daftar emoji utk grid di sheet lain (tab bersama).
+  static int get emojiCount => _emojis.length;
+  static String emojiAt(int i) => _emojis[i];
+
   static void insertAtCursor(TextEditingController controller, String emoji) {
     final text = controller.text;
     final sel = controller.selection;

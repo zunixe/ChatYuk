@@ -55,6 +55,8 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   final ValueChanged<int?>? onViewTimerChanged;
   final VoidCallback? onOpenGiftPanel;
   final void Function(String filePath, int durationMs)? onSendVoice;
+  /// Kirim STIKER (bytes PNG 512px) — diisi pemanggil (private/room).
+  final Future<void> Function(Uint8List stickerPngBytes)? onSendSticker;
   /// Sinyal 'sedang merekam' (private pakai typing kind=recording).
   final VoidCallback? onRecordingSignal;
   /// Sinyal 'sedang mengetik' (private/room beda saluran).
@@ -99,6 +101,7 @@ class ChatComposerInput extends ConsumerStatefulWidget {
     this.onViewTimerChanged,
     this.onOpenGiftPanel,
     this.onSendVoice,
+    this.onSendSticker,
     this.onRecordingSignal,
     this.onTyping,
     this.onSendCoin,
@@ -643,6 +646,7 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                     onPressed: () => EmojiPickerSheet.show(
                       context,
                       widget.controller,
+                      onSendSticker: widget.onSendSticker,
                     ),
                     icon: Icon(Icons.emoji_emotions_outlined, size: 20),
                     color: AppTheme.isDark ? AppTheme.primary : Colors.white,

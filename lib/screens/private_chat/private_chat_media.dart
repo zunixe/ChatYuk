@@ -125,6 +125,41 @@ mixin _PcMediaMx on _PrivateChatBase {
         );
   }
 
+  /// Kirim STIKER: upload PNG 512px ke bucket `stickers/` → pesan type
+  /// 'sticker' (imageData = path storage).
+  Future<void> _sendSticker(Uint8List pngBytes) async {
+    if (pngBytes.isEmpty) return;
+    final container = ProviderScope.containerOf(context, listen: false);
+    final auth = container.read(authProvider.notifier);
+    final uid = auth.uid;
+    if (uid == null) return;
+    final prof = auth.profile;
+    final b64 = base64Encode(pngBytes);
+    try {
+      final path = await container
+          .read(storageProvider)
+          .uploadSticker(uid: uid, base64: b64, ext: 'png');
+      if (path == null || path.isEmpty || !mounted) return;
+      await container.read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
+            chatId: widget.chatId,
+            senderId: uid,
+            senderName: prof?.nickname ?? 'Anon',
+            senderGender: prof?.gender ?? 'other',
+            text: '',
+            type: 'sticker',
+            imageData: path,
+          );
+    } catch (e) {
+      dlog('[Sticker] kirim gagal: $e');
+      if (mounted) {
+        showChatSnack(
+          context,
+          container.read(localeProvider).s.stickerSendFail,
+        );
+      }
+    }
+  }
+
   /// Izinkan → ambil posisi → sheet pilihan (lokasi saat ini / live / tempat
   /// sekitar) → LANGSUNG terkirim ke chat (tanpa preview/caption).
   Future<void> _sendLocation() async {

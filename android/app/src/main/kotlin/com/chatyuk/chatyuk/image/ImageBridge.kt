@@ -205,6 +205,12 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                         val out = processStory(raw, maxPx, quality)
                         main.post { result.success(out) }
                     }
+                    "processStickerPng" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val size = call.argument<Int>("size") ?: 512
+                        val r = processStickerPng(bytes, size)
+                        main.post { result.success(r) }
+                    }
                     "processSquare" -> {
                         val raw = call.argument<ByteArray>("bytes")
                         val size = call.argument<Int>("size") ?: 640
@@ -439,6 +445,42 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
          * — sumber sudah di-crop persegi oleh UI) + JPEG [quality] → base64.
          * Paritas dgn Dart `img.copyResize(width:640,height:640)`.
          */
+        /**
+         * STIKER (ala Telegram): crop TENGAH persegi [size]px → PNG (jaga
+         * transparansi; JPEG tak bisa alpha). Base64 PNG hasilnya dipakai
+         * sebagai `image_data`/di-upload ke bucket `stickers/`.
+         */
+        private fun processStickerPng(bytes: ByteArray?, size: Int): String? {
+            if (bytes == null || bytes.isEmpty()) return null
+            val decoded = try {
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (_: Throwable) {
+                null
+            } ?: return null
+            var square: Bitmap? = null
+            return try {
+                val side = minOf(decoded.width, decoded.height)
+                val x = (decoded.width - side) / 2
+                val y = (decoded.height - side) / 2
+                val cropped = if (side == decoded.width && side == decoded.height)
+                    decoded
+                else Bitmap.createBitmap(decoded, x, y, side, side)
+                val resized = if (side == size) cropped
+                    else Bitmap.createScaledBitmap(cropped, size, size, true)
+                square = resized
+                val out = baosPool.get()!!
+                out.reset()
+                val ok = resized.compress(Bitmap.CompressFormat.PNG, 100, out)
+                if (!ok) null
+                else Base64.encodeToString(out.buffer(), 0, out.length(), Base64.NO_WRAP)
+            } catch (t: Throwable) {
+                null
+            } finally {
+                if (square !== null && square !== decoded) runCatching { square!!.recycle() }
+                runCatching { decoded.recycle() }
+            }
+        }
+
         private fun processSquare(bytes: ByteArray?, size: Int, quality: Int): String? {
             if (bytes == null || bytes.isEmpty()) return null
             val decoded = try {

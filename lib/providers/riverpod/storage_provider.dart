@@ -44,6 +44,13 @@ class StorageNotifier {
   }) =>
       service.uploadStoryVideo(uid: uid, bytes: bytes);
 
+  Future<String?> uploadSticker({
+    required String uid,
+    required String base64,
+    String ext = 'png',
+  }) =>
+      service.uploadSticker(uid: uid, base64: base64, ext: ext);
+
   String storyVideoPath(String uid) => service.storyVideoPath(uid);
   bool isStoryVideoPath(String v) => service.isStoryVideoPath(v);
 

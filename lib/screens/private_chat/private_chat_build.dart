@@ -671,6 +671,7 @@ mixin _PcBuildMx on _PrivateChatBase {
                     sendViewOnceFromPicker();
                   },
                   onSendVoice: (path, ms) => voiceFinishRecording(path, ms),
+                  onSendSticker: _sendSticker,
                   onRecordingSignal: _sendRecordingSignal,
                   onTyping: _sendTypingSignal,
                   // Koin & hadiah hanya bila sistem koin aktif —
