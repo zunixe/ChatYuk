@@ -8,21 +8,27 @@ import 'package:image_picker/image_picker.dart';
 
 import '../config/theme.dart';
 import '../core/media/native_image.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/storage_provider.dart';
 import 'emoji_picker_sheet.dart';
 import 'sticker_bubble.dart';
 
 /// Sheet bersama **Emoji | Sticker** untuk composer chat (private & room).
 ///
 /// Tab Sticker: impor dari GALERI (S3) → crop 512px PNG (ImageBridge) →
-/// kirim. Grid menampilkan item terbaru (preview bytes sebelum terkirim).
+/// kirim. Grid = koleksi SERVER (tahan install ulang) + impor sesi ini.
 class StickerEmojiSheet extends ConsumerStatefulWidget {
   final TextEditingController controller;
   final Future<void> Function(Uint8List stickerPngBytes) onSendSticker;
+  /// Kirim stiker yang SUDAH ada di server (tanpa upload ulang).
+  /// null = fallback download lalu [onSendSticker].
+  final Future<void> Function(String stickerPath)? onSendStickerPath;
   const StickerEmojiSheet({
     super.key,
     required this.controller,
     required this.onSendSticker,
+    this.onSendStickerPath,
   });
 
   @override
@@ -33,7 +39,27 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
   // Bounded: preview sticker terbaru (bytes PNG) — bukan cache permanen.
   static final List<Uint8List> _recent = [];
   static const int _maxRecent = 24;
+  // Koleksi server (`stickers/<uid>/...`) — TAHAN install ulang.
+  List<String> _paths = const [];
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSaved();
+  }
+
+  /// Muat koleksi stiker dari server (fire-and-forget; grid menyusul).
+  Future<void> _loadSaved() async {
+    try {
+      final uid = ref.read(authProvider.notifier).uid;
+      if (uid == null || !mounted) return;
+      final paths =
+          await ref.read(storageProvider).listStickers(uid, limit: 24);
+      if (!mounted) return;
+      setState(() => _paths = paths);
+    } catch (_) {}
+  }
 
   Future<void> _pickFromGallery() async {
     debugPrint('[STICKER] pickFromGallery tapped busy=$_busy');
@@ -63,6 +89,8 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
       }
       if (mounted) {
         await widget.onSendSticker(bytes);
+        // File baru ter-upload oleh handler kirim → segarkan koleksi.
+        unawaited(_loadSaved());
         if (mounted) Navigator.of(context).maybePop();
       }
     } catch (e) {
@@ -78,6 +106,21 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Kirim stiker koleksi server: langsung pakai path bila handler
+  /// mendukung (tanpa upload ulang); fallback download → bytes.
+  Future<void> _sendSaved(String path) async {
+    final viaPath = widget.onSendStickerPath;
+    if (viaPath != null) {
+      await viaPath(path);
+      return;
+    }
+    try {
+      final bytes = await ref.read(storageProvider).downloadBytes(path);
+      if (bytes == null || bytes.isEmpty) return;
+      await widget.onSendSticker(bytes);
+    } catch (_) {}
   }
 
   @override
@@ -152,7 +195,7 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
           ),
         ),
         Expanded(
-          child: _recent.isEmpty
+          child: _paths.isEmpty && _recent.isEmpty
               ? Center(
                   child: Text(
                     s.stickerEmpty,
@@ -169,14 +212,28 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
                     mainAxisSpacing: 6,
                     crossAxisSpacing: 6,
                   ),
-                  itemCount: _recent.length,
-                  itemBuilder: (_, i) => GestureDetector(
-                    onTap: () async {
-                      await widget.onSendSticker(_recent[i]);
-                      if (mounted) Navigator.of(context).maybePop();
-                    },
-                    child: StickerBytes(bytes: _recent[i], size: 72),
-                  ),
+                  // Koleksi server dulu (tahan install ulang), lalu sesi ini.
+                  itemCount: _paths.length + _recent.length,
+                  itemBuilder: (_, i) {
+                    if (i < _paths.length) {
+                      final path = _paths[i];
+                      return GestureDetector(
+                        onTap: () async {
+                          await _sendSaved(path);
+                          if (mounted) Navigator.of(context).maybePop();
+                        },
+                        child: StickerBubble(data: path, size: 72),
+                      );
+                    }
+                    final bytes = _recent[i - _paths.length];
+                    return GestureDetector(
+                      onTap: () async {
+                        await widget.onSendSticker(bytes);
+                        if (mounted) Navigator.of(context).maybePop();
+                      },
+                      child: StickerBytes(bytes: bytes, size: 72),
+                    );
+                  },
                 ),
         ),
       ],

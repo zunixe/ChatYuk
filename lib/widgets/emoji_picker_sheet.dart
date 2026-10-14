@@ -72,6 +72,8 @@ class EmojiPickerSheet {
     TextEditingController controller, {
     /// Bila diisi → sheet menampilkan TAB STIKER (kirim sticker) selain emoji.
     Future<void> Function(Uint8List stickerPngBytes)? onSendSticker,
+    /// Kirim stiker koleksi server tanpa upload ulang (terus ke sheet).
+    Future<void> Function(String stickerPath)? onSendStickerPath,
   }) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     showModalBottomSheet(
@@ -97,6 +99,7 @@ class EmojiPickerSheet {
           : StickerEmojiSheet(
               controller: controller,
               onSendSticker: onSendSticker,
+              onSendStickerPath: onSendStickerPath,
             ),
     );
   }
