@@ -74,7 +74,12 @@ class _MessageImageState extends State<MessageImage> {
     }
     if (_decoded == null) {
       _loading = true;
-      _fadeNext = true;
+      // Fade HANYA bila nanti benar-benar diunduh dari jaringan (lihat
+      // _decode: di-set sesuai sumber). Untuk thumb yang sudah ada di
+      // disk/cache, `_fadeNext` tetap false → foto muncul UTUH di frame
+      // selesainya (bukan memudar 180ms = "kedip"). User: cold start yang
+      // sudah pernah diload tidak boleh kedip.
+      _fadeNext = false;
       _reservePlaceholder(widget.imageData);
       _decode(key, ++_gen);
     } else {
@@ -102,14 +107,37 @@ class _MessageImageState extends State<MessageImage> {
     // imageData berubah (fetch awal kosong → photo download selesai) → re-decode
     if (widget.imageData != oldWidget.imageData &&
         widget.imageData.isNotEmpty) {
+      final key = widget.imageData.hashCode;
+      final hit = getDecodedCache(key);
+      // ANTI-KEDIP (2026-10-14, terbukti dari log HP): alur nyata saat buka
+      // chat = frame-1 `imageData` masih PATH storage (initState ambil thumb
+      // via `thumb:<id>` → foto SUDAH tampil), lalu ~100ms kemudian batch
+      // `loadPhotosAsync` menimpa `imageData` → base64 thumb yang isinya SAMA.
+      // Dulu: hit!=null → _fadeNext=true + setState → foto yang sudah tampil
+      // "kedip" (fade ulang 180ms). Sekarang: bila bitmap yang SEDANG tampil
+      // sudah ada (`_decoded != null`) & belum berubah besar, cukup re-key
+      // cache ke kunci baru — NOL setState, NOL fade, NOL decode ulang.
+      if (_decoded != null &&
+          _decoded!.width > 0 &&
+          _decoded!.height > 0 &&
+          !_decoded!.disposed) {
+        // Thumb yang sedang tampil = resolusi sama dgn thumb yang akan
+        // di-inject (batch mengisi thumb, bukan full-res) → aman dipertahankan.
+        if (hit == null) putDecodedCache(key, _decoded!);
+        // Re-key juga jalur thumb:id agar konsisten ke depan.
+        if (widget.messageId.isNotEmpty) {
+          putDecodedCache('thumb:${widget.messageId}'.hashCode, _decoded!);
+        }
+        _reservePlaceholder(widget.imageData);
+        return;
+      }
       // Cadangkan aspek baru segera (sinkron) bila base64; path → ukuran lama
       // dipertahankan (gapless) sampai download memberi aspek sebenarnya.
       _reservePlaceholder(widget.imageData);
-      final key = widget.imageData.hashCode;
-      final hit = getDecodedCache(key);
       if (hit != null) {
         _gen++;
-        _fadeNext = true;
+        // Konten lama sudah di memori → tampil langsung (tanpa fade).
+        _fadeNext = false;
         if (mounted) {
           setState(() {
             _decoded = hit;
@@ -213,7 +241,8 @@ class _MessageImageState extends State<MessageImage> {
                 setState(() {});
               }
             }));
-            _fadeNext = true;
+            // Thumb dari DISK (sudah pernah diload) → tampil UTUH, tanpa fade.
+            _fadeNext = false;
             setState(() {
               _decoded = td;
               _loading = false;
@@ -240,6 +269,8 @@ class _MessageImageState extends State<MessageImage> {
     if (contentHit != null && contentHit.width > 0 && contentHit.height > 0) {
       putDecodedCache(key, contentHit);
       if (!mounted || gen != _gen) return;
+      // Isi sama sudah ada di memori → tampil langsung (tanpa fade).
+      _fadeNext = false;
       setState(() {
         _decoded = contentHit;
         _loading = false;
@@ -296,6 +327,10 @@ class _MessageImageState extends State<MessageImage> {
       }
     }));
     if (!mounted || gen != _gen) return;
+    // Piksel BARU didecode (belum pernah tampil di layar ini) → fade-in halus
+    // supaya kemunculan tidak "pop". Bila ini sekadar re-decode isi yang sama
+    // (sudah ditangani `contentHit`/`_decoded!=null` di atas), tak sampai sini.
+    _fadeNext = true;
     setState(() {
       _decoded = decoded;
       _loading = false;

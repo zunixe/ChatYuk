@@ -321,11 +321,11 @@ class _MainNavState extends ConsumerState<_MainNav>
       // Prewarm juga daftar grup (tab Grup) — klik tab instant.
       if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).loadMyGroups(refresh: true);
     });
-    // WARMUP FOTO (anti-kedip cold start, insiden 2026-10-11): 4 dtk setelah
-    // frame pertama (timeline prewarm + tab prewarm jalan dulu), decode thumb
-    // 3 chat terbaru di latar → bubble foto langsung gambar saat chat dibuka
-    // dari MANA PUN (list/online/notif), tanpa berpacu dengan SQLCipher
-    // dingin di timeout tap. Fire-and-forget, bounded, tak menahan apa pun.
+    // WARMUP FOTO (anti-kedip cold start): decode thumb chat terbaru di latar
+    // SETELAH frame pertama, supaya buka chat dari mana pun langsung gambar
+    // (bukan abu → fade). 1.2 dtk (dulu 4 dtk): 4 dtk terlalu lambat — user
+    // sudah buka chat sebelum warmup jalan → masih kedip ("sudah pernah
+    // diload tapi tetap kedip"). Tetap di background, bounded, tak menahan.
     _schedulePhotoWarmup();
     // Gaya Telegram: halaman tab lain dibangun diam-diam SAAT IDLE (bukan
     // saat diklik) supaya tap pertama terasa instan. Bertahap 1 tab per
@@ -362,11 +362,11 @@ class _MainNavState extends ConsumerState<_MainNav>
   /// (metrik `tab{N} tap→frame` + `janky(build)`).
   bool _photoWarmScheduled = false;
 
-  /// Warmup thumb foto 3 chat terbaru (lihat initState). Sekali per sesi.
+  /// Warmup thumb foto chat terbaru (lihat initState). Sekali per sesi.
   void _schedulePhotoWarmup() {
     if (_photoWarmScheduled) return;
     _photoWarmScheduled = true;
-    Future<void>.delayed(const Duration(seconds: 4), () async {
+    Future<void>.delayed(const Duration(milliseconds: 1200), () async {
       if (!mounted) return;
       try {
         final uid = ProviderScope.containerOf(context, listen: false)
@@ -377,12 +377,12 @@ class _MainNavState extends ConsumerState<_MainNav>
             .read(chatProvider.notifier)
             .lastPrivateChatsSnapshot(uid);
         final keys = (snap ?? const [])
-            .take(3)
+            .take(5)
             .map((c) => 'private_${c.chatId}')
             .toList();
         if (keys.isEmpty || !mounted) return;
-        await PhotoPrefetch.precacheRecentChats(keys)
-            .timeout(const Duration(seconds: 25));
+        await PhotoPrefetch.precacheRecentChats(keys, maxChats: 5)
+            .timeout(const Duration(seconds: 30));
       } catch (_) {}
     });
   }
