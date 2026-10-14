@@ -115,6 +115,8 @@ mixin SPointsMx {
   String get stickerEditTextHint => isId ? 'Ketik di sini…' : 'Type here…';
   String get stickerEditBgOn => isId ? 'Latar: ada' : 'Background: on';
   String get stickerEditBgOff => isId ? 'Latar: hapus' : 'Background: off';
+  String get stickerPackMine => isId ? 'Koleksiku' : 'My pack';
+  String get stickerPackArt => isId ? 'Emoji Art' : 'Emoji Art';
   String get storyPublishFail =>
       isId ? 'Gagal membagikan story' : 'Failed to share story';
   String get storyDeleted =>
