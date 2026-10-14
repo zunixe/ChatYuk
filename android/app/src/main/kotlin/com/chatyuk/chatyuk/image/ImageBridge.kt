@@ -10,6 +10,11 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import com.google.android.gms.tasks.Tasks
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.segmentation.Segmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentationOptions
 import kotlin.math.roundToInt
 
 /**
@@ -208,7 +213,8 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                     "processStickerPng" -> {
                         val bytes = call.argument<ByteArray>("bytes")
                         val size = call.argument<Int>("size") ?: 512
-                        val r = processStickerPng(bytes, size)
+                        val removeBg = call.argument<Boolean>("removeBg") ?: true
+                        val r = processStickerPng(bytes, size, removeBg)
                         main.post { result.success(r) }
                     }
                     "processSquare" -> {
@@ -449,8 +455,12 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
          * STIKER (ala Telegram): crop TENGAH persegi [size]px → PNG (jaga
          * transparansi; JPEG tak bisa alpha). Base64 PNG hasilnya dipakai
          * sebagai `image_data`/di-upload ke bucket `stickers/`.
+         *
+         * [removeBg] = cut-out subjek ala WA (ML Kit Subject Segmentation
+         * on-device). Gagal → fallback diam-diam ke persegi penuh (null
+         * hanya bila decode/encode gagal total).
          */
-        private fun processStickerPng(bytes: ByteArray?, size: Int): String? {
+        private fun processStickerPng(bytes: ByteArray?, size: Int, removeBg: Boolean): String? {
             if (bytes == null || bytes.isEmpty()) return null
             val decoded = try {
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
@@ -458,6 +468,7 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                 null
             } ?: return null
             var square: Bitmap? = null
+            var cutout: Bitmap? = null
             return try {
                 val side = minOf(decoded.width, decoded.height)
                 val x = (decoded.width - side) / 2
@@ -468,16 +479,45 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
                 val resized = if (side == size) cropped
                     else Bitmap.createScaledBitmap(cropped, size, size, true)
                 square = resized
+                var finalBmp: Bitmap = resized
+                if (removeBg) {
+                    cutout = runCatching { cutoutForeground(resized) }.getOrNull()
+                    if (cutout != null) finalBmp = cutout!!
+                }
                 val out = baosPool.get()!!
                 out.reset()
-                val ok = resized.compress(Bitmap.CompressFormat.PNG, 100, out)
+                val ok = finalBmp.compress(Bitmap.CompressFormat.PNG, 100, out)
                 if (!ok) null
                 else Base64.encodeToString(out.buffer(), 0, out.length(), Base64.NO_WRAP)
             } catch (t: Throwable) {
                 null
             } finally {
+                if (cutout !== null && cutout !== square) runCatching { cutout!!.recycle() }
                 if (square !== null && square !== decoded) runCatching { square!!.recycle() }
                 runCatching { decoded.recycle() }
+            }
+        }
+
+        /**
+         * Cut-out subjek (hapus background): ML Kit Subject Segmentation
+         * on-device, model bundled (tanpa network). Return foregroundBitmap
+         * (ber-alpha) / null bila gagal. Blocking (Tasks.await) — HANYA
+         * dipanggil dari executor io (lihat handle()).
+         */
+        private fun cutoutForeground(src: Bitmap): Bitmap? {
+            return try {
+                val options = SubjectSegmentationOptions.Builder()
+                    .enableForegroundBitmap()
+                    .build()
+                val client = Segmentation.getClient(options)
+                try {
+                    val result = Tasks.await(client.process(InputImage.fromBitmap(src, 0)), 20, TimeUnit.SECONDS)
+                    result?.foregroundBitmap
+                } finally {
+                    runCatching { client.close() }
+                }
+            } catch (_: Throwable) {
+                null
             }
         }
 
