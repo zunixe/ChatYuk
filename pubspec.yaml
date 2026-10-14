@@ -68,6 +68,8 @@ dependencies:
   timeago: ^3.7.0
   http: ^1.2.0
   image_picker: ^1.1.2
+  # Stiker .tgs (Lottie, format Telegram) — render animasi vektor.
+  lottie: ^3.3.1
   image: ^4.3.0
   # EKSPERIMEN branch experiment/agp9: 9.1.0 → 12.2.1 (compileSdk 33 → 36;
   # AGP 9 menolak AAR metadata plugin yang compileSdk-nya < 34).
