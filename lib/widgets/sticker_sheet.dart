@@ -14,6 +14,7 @@ import '../providers/riverpod/storage_provider.dart';
 import 'emoji_picker_sheet.dart';
 import 'sticker_bubble.dart';
 import 'sticker_editor.dart';
+import 'sticker_packs.dart';
 
 /// Sheet bersama **Emoji | Sticker** untuk composer chat (private & room).
 ///
@@ -42,6 +43,8 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
   static const int _maxRecent = 24;
   // Koleksi server (`stickers/<uid>/...`) — TAHAN install ulang.
   List<String> _paths = const [];
+  // Sub-tab stiker: 0 = koleksiku, 1 = Emoji Art (Twemoji, CC-BY 4.0).
+  int _pack = 0;
   bool _busy = false;
 
   @override
@@ -114,6 +117,32 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
       return const Base64Decoder().convert(s);
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Kirim karya Emoji Art: upscale 72px → 512 PNG via pipeline impor
+  /// (tanpa hapus latar — karya sudah transparan), lalu kirim + koleksi.
+  Future<void> _sendArt(Uint8List art72) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final b64 = await NativeImage.processStickerPng(
+        art72,
+        size: 512,
+        removeBackground: false,
+      );
+      final bytes = b64 == null ? null : _b64(b64);
+      if (bytes == null || !mounted) return;
+      setState(() => _recent.insert(0, bytes));
+      while (_recent.length > _maxRecent) {
+        _recent.removeLast();
+      }
+      await widget.onSendSticker(bytes);
+      unawaited(_loadSaved());
+      if (mounted) Navigator.of(context).maybePop();
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -203,50 +232,81 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
             ],
           ),
         ),
+        // Sub-tab: koleksiku | Emoji Art (paket bawaan, CC-BY 4.0).
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+          child: SegmentedButton<int>(
+            segments: [
+              ButtonSegment(
+                value: 0,
+                label: Text(s.stickerPackMine),
+                icon: const Icon(Icons.collections_bookmark_outlined, size: 16),
+              ),
+              ButtonSegment(
+                value: 1,
+                label: Text(s.stickerPackArt),
+                icon: const Icon(Icons.emoji_emotions_outlined, size: 16),
+              ),
+            ],
+            selected: {_pack},
+            onSelectionChanged: (v) => setState(() => _pack = v.first),
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ),
         Expanded(
-          child: _paths.isEmpty && _recent.isEmpty
-              ? Center(
-                  child: Text(
-                    s.stickerEmpty,
-                    style: AppText.bodySmall.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    mainAxisSpacing: 6,
-                    crossAxisSpacing: 6,
-                  ),
-                  // Koleksi server dulu (tahan install ulang), lalu sesi ini.
-                  itemCount: _paths.length + _recent.length,
-                  itemBuilder: (_, i) {
-                    if (i < _paths.length) {
-                      final path = _paths[i];
-                      return GestureDetector(
-                        onTap: () async {
-                          await _sendSaved(path);
-                          if (mounted) Navigator.of(context).maybePop();
-                        },
-                        child: StickerBubble(data: path, size: 72),
-                      );
-                    }
-                    final bytes = _recent[i - _paths.length];
-                    return GestureDetector(
-                      onTap: () async {
-                        await widget.onSendSticker(bytes);
-                        if (mounted) Navigator.of(context).maybePop();
-                      },
-                      child: StickerBytes(bytes: bytes, size: 72),
-                    );
-                  },
-                ),
+          child: _pack == 1
+              ? TwemojiGrid(onPick: _sendArt)
+              : _mineGrid(s),
         ),
       ],
     );
+  }
+
+  /// Grid koleksiku (server + sesi ini).
+  Widget _mineGrid(dynamic s) {
+    return _paths.isEmpty && _recent.isEmpty
+        ? Center(
+            child: Text(
+              s.stickerEmpty,
+              style: AppText.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          )
+        : GridView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+            gridDelegate:
+                const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
+            ),
+            // Koleksi server dulu (tahan install ulang), lalu sesi ini.
+            itemCount: _paths.length + _recent.length,
+            itemBuilder: (_, i) {
+              if (i < _paths.length) {
+                final path = _paths[i];
+                return GestureDetector(
+                  onTap: () async {
+                    await _sendSaved(path);
+                    if (mounted) Navigator.of(context).maybePop();
+                  },
+                  child: StickerBubble(data: path, size: 72),
+                );
+              }
+              final bytes = _recent[i - _paths.length];
+              return GestureDetector(
+                onTap: () async {
+                  await widget.onSendSticker(bytes);
+                  if (mounted) Navigator.of(context).maybePop();
+                },
+                child: StickerBytes(bytes: bytes, size: 72),
+              );
+            },
+          );
   }
 }
 
