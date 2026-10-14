@@ -155,6 +155,8 @@ class MessageBubble extends StatelessWidget {
             .read(localeProvider)
             .s;
     final timeStr = formatBubbleTime(msg.timestamp);
+    // Stiker ala Telegram: melayang TANPA card bubble & TANPA jam/centang.
+    final isSticker = msg.type == 'sticker';
     // Pesan yang dihapus (soft delete).
     // - Chat biasa: cukup teks redup "Pesan ini telah dihapus".
     // - Monitor admin: TETAP tampilkan ISI ASLI (teks/foto/video) + banner
@@ -207,14 +209,16 @@ class MessageBubble extends StatelessWidget {
                   constraints: BoxConstraints(
                     maxWidth: MediaQuery.sizeOf(context).width * 0.8,
                   ),
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  // Stiker melayang: tanpa padding card.
+                  padding: isSticker ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
                     // Bubble lawan (other) pakai bgCard (putih di light mode) + shadow
                     // halus supaya tetap kontras di atas wallpaper chat apa pun.
                     // Terpilih: tint primary 0.20 di atas warna dasar — senada
                     // kartu terpilih di list Pesan + toolbar seleksi.
-                    color: Color.alphaBlend(
+                    // Stiker: transparan (kecuali dipilih → tint seleksi).
+                    color: isSticker && !selected ? Colors.transparent : Color.alphaBlend(
                       AppTheme.primary.withValues(
                         alpha: selected ? 0.20 : 0.0,
                       ),
@@ -227,13 +231,7 @@ class MessageBubble extends StatelessWidget {
                                   )
                                 : AppTheme.bgCard),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.22),
-                        blurRadius: 6,
-                        offset: const Offset(0, 1.5),
-                      ),
-                    ],
+                    boxShadow: isSticker ? null : [BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 6, offset: const Offset(0, 1.5))],
                     border: selected
                         ? Border.all(color: AppTheme.primary, width: 2)
                         : null,
@@ -511,14 +509,8 @@ class MessageBubble extends StatelessWidget {
                           isRead: isRead,
                         )
                       else if (msg.type == 'sticker')
-                        StickerMessageBubble(
-                          data: msg.imageData,
-                          timeStr: timeStr,
-                          showChecks: isMe || showChecksBothSides,
-                          isPending: isPending,
-                          isQueued: isQueued,
-                          isRead: isRead,
-                        )
+                        // Melayang ala Telegram: gambar saja, tanpa jam/centang.
+                        StickerBubble(data: msg.imageData, size: 140)
                       else if (msg.type == 'view_once' ||
                           msg.type == 'view_once_expired')
                         Column(
