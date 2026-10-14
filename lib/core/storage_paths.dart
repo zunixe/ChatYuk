@@ -15,22 +15,27 @@ bool isGalleryPathValue(String v) => v.startsWith('gallery/');
 /// `voice/...m4a` — path pesan suara.
 bool isVoicePathValue(String v) => v.startsWith('voice/') && v.contains('.m4a');
 
-/// path storage umum (chat/posts/timeline/voice/story/room-icons + ekstensi
-/// dikenal). Cerminan `StoragePhotoService.isPath`.
+/// path storage umum (chat/posts/timeline/voice/story/stickers/room-icons +
+/// ekstensi dikenal). Cerminan `StoragePhotoService.isPath`.
 bool isStoragePathValue(String value) =>
     (value.startsWith('chat/') ||
         value.startsWith('posts/') ||
         value.startsWith('timeline/') ||
         value.startsWith('voice/') ||
         value.startsWith('story/') ||
+        value.startsWith('stickers/') ||
         value.startsWith('room-icons/')) &&
     (value.contains('.jpg') ||
         value.contains('.jpeg') ||
         value.contains('.png') ||
+        value.contains('.webp') ||
         value.contains('.m4a') ||
         value.contains('.mp3') ||
         value.contains('.mp4') ||
         value.contains('.mov'));
+
+/// `stickers/...` — path stiker (ala Telegram).
+bool isStickerPathValue(String v) => v.startsWith('stickers/');
 
 /// `chat/...mp4|mov` — path video chat. Cerminan `isChatVideoPath`.
 bool isChatVideoPathValue(String v) =>

@@ -48,10 +48,12 @@ class StoragePhotoService {
           value.startsWith('timeline/') ||
           value.startsWith('voice/') ||
           value.startsWith('story/') ||
+          value.startsWith('stickers/') ||
           value.startsWith('room-icons/')) &&
       (value.contains('.jpg') ||
           value.contains('.jpeg') ||
           value.contains('.png') ||
+          value.contains('.webp') ||
           value.contains('.m4a') ||
           value.contains('.mp3') ||
           // VIDEO (chat + story) — tanpa ini path .mp4 dikira base64 →

@@ -192,6 +192,8 @@ mixin ChatServicePrivateMx on ChatBase {
       'video',
       'video_once',
       'video_once_expired',
+      // Stiker (ala Telegram) — path `stickers/...` atau base64 pending.
+      'sticker',
     ].contains(type)) {
       throw Exception('Invalid message type');
     }
