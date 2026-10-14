@@ -15,8 +15,8 @@ import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.common.moduleinstall.ModuleInstall
 import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.segmentation.Segmentation
-import com.google.mlkit.vision.segmentation.subject.SubjectSegmentationOptions
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import kotlin.math.roundToInt
 
 /**
@@ -75,10 +75,10 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
      */
     private fun prefetchSegmentationModel() {
         try {
-            val options = SubjectSegmentationOptions.Builder()
+            val options = SubjectSegmenterOptions.Builder()
                 .enableForegroundBitmap()
                 .build()
-            val client = Segmentation.getClient(options)
+            val client = SubjectSegmentation.getClient(options)
             val request = ModuleInstallRequest.newBuilder()
                 .addApi(client)
                 .build()
@@ -534,10 +534,10 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
          */
         private fun cutoutForeground(src: Bitmap): Bitmap? {
             return try {
-                val options = SubjectSegmentationOptions.Builder()
+                val options = SubjectSegmenterOptions.Builder()
                     .enableForegroundBitmap()
                     .build()
-                val client = Segmentation.getClient(options)
+                val client = SubjectSegmentation.getClient(options)
                 try {
                     val result = Tasks.await(client.process(InputImage.fromBitmap(src, 0)), 20, TimeUnit.SECONDS)
                     result?.foregroundBitmap
