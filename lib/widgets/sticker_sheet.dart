@@ -65,8 +65,53 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
     } catch (_) {}
   }
 
-  Future<void> _pickFromGallery() async {
-    debugPrint('[STICKER] pickFromGallery tapped busy=$_busy');
+  /// Impor VIDEO pendek (≤6 dtk, ≤8 MB) → upload mp4/mov → kirim langsung
+  /// (tanpa halaman edit; editor hanya untuk gambar). Masuk koleksi juga.
+  Future<void> _pickVideo() async {
+    debugPrint('[STICKER] pickVideo tapped busy=$_busy');
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final picked = await ImagePicker().pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(seconds: 6),
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      debugPrint('[STICKER] video len=${bytes.length}');
+      if (bytes.isEmpty) return;
+      if (bytes.length > 8 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ref.read(localeProvider).s.stickerTooBig),
+            ),
+          );
+        }
+        return;
+      }
+      var ext = picked.path.split('.').last.toLowerCase();
+      if (ext != 'mp4' && ext != 'mov' && ext != 'webm') ext = 'mp4';
+      final uid = ref.read(authProvider.notifier).uid;
+      if (uid == null || !mounted) return;
+      final path = await ref
+          .read(storageProvider)
+          .uploadSticker(uid: uid, base64: base64Encode(bytes), ext: ext);
+      debugPrint('[STICKER] video upload path=$path');
+      if (path == null || path.isEmpty || !mounted) return;
+      final viaPath = widget.onSendStickerPath;
+      if (viaPath == null) return;
+      await viaPath(path);
+      unawaited(_loadSaved());
+      if (mounted) Navigator.of(context).maybePop();
+    } catch (e) {
+      debugPrint('[STICKER] pick video error: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pickFromGallery() async {    debugPrint('[STICKER] pickFromGallery tapped busy=$_busy');
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -228,6 +273,12 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
                       : const Icon(Icons.add_photo_alternate_outlined, size: 18),
                   label: Text(s.stickerAddFromGallery),
                 ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                onPressed: _busy ? null : _pickVideo,
+                tooltip: s.stickerPickVideo,
+                icon: const Icon(Icons.videocam_outlined, size: 18),
               ),
             ],
           ),
