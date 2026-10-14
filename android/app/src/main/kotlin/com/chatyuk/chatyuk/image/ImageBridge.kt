@@ -12,6 +12,8 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import com.google.android.gms.tasks.Tasks
+import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.Segmentation
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentationOptions
@@ -50,6 +52,7 @@ import kotlin.math.roundToInt
  * `lib/core/media/native_image.dart`.
  */
 class ImageBridge(context: android.content.Context, private val channel: MethodChannel) {
+    private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newFixedThreadPool(2)
 
@@ -61,6 +64,31 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
 
     fun attach() {
         channel.setMethodCallHandler { call, result -> handle(call, result) }
+        // Prefetch model segmentasi sekali (background): impor stiker
+        // pertama langsung bisa cut-out tanpa menunggu download model.
+        io.execute { runCatching { prefetchSegmentationModel() } }
+    }
+
+    /**
+     * Minta Play Services mengunduh model Subject Segmentation lebih awal.
+     * Fire-and-forget; gagal (tanpa Play/offline) → cutout fallback persegi.
+     */
+    private fun prefetchSegmentationModel() {
+        try {
+            val options = SubjectSegmentationOptions.Builder()
+                .enableForegroundBitmap()
+                .build()
+            val client = Segmentation.getClient(options)
+            val request = ModuleInstallRequest.newBuilder()
+                .addApi(client)
+                .build()
+            Tasks.await(
+                ModuleInstall.getClient(appContext).installModules(request),
+                60, TimeUnit.SECONDS,
+            )
+            runCatching { client.close() }
+        } catch (_: Throwable) {
+        }
     }
 
     /**
