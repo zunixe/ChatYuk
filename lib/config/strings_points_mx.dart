@@ -117,6 +117,9 @@ mixin SPointsMx {
   String get stickerEditBgOff => isId ? 'Latar: hapus' : 'Background: off';
   String get stickerPackMine => isId ? 'Koleksiku' : 'My pack';
   String get stickerPackArt => isId ? 'Emoji Art' : 'Emoji Art';
+  String get stickerPickVideo => isId ? 'Video pendek' : 'Short video';
+  String get stickerTooBig =>
+      isId ? 'Video maksimal 8 MB' : 'Video max 8 MB';
   String get storyPublishFail =>
       isId ? 'Gagal membagikan story' : 'Failed to share story';
   String get storyDeleted =>

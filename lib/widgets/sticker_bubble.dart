@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import 'package:lottie/lottie.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:video_player/video_player.dart';
 
 import '../core/cache/media_disk_cache.dart';
+import '../core/cache/video_file_cache.dart';
 import '../providers/riverpod/storage_provider.dart';
 
 /// Stiker chat (ala Telegram) — kotak transparan TANPA background bubble,
@@ -48,6 +52,10 @@ class _StickerBubbleState extends State<StickerBubble> {
   // Cap RAM kecil (bounded) — sama pola AsyncPhotoThumbnail.
   static final _memCache = <String, Uint8List>{};
   static const int _memCap = 120;
+
+  /// Video bisa MB-an — jangan tahan di RAM (temp file + VideoFileCache
+  /// yang menanganinya). PNG stiker (~200KB) tetap di-cache.
+  static const int _memMaxBytes = 2 * 1024 * 1024;
 
   Uint8List? _bytes;
   bool _failed = false;
@@ -92,6 +100,7 @@ class _StickerBubbleState extends State<StickerBubble> {
   }
 
   void _putToMem(Uint8List b) {
+    if (b.length > _memMaxBytes) return;
     if (_memCache.length >= _memCap) {
       _memCache.remove(_memCache.keys.first);
     }
@@ -100,6 +109,7 @@ class _StickerBubbleState extends State<StickerBubble> {
 
   /// Lihat [StickerBubble.seedCache].
   static void seed(String path, Uint8List bytes) {
+    if (bytes.length > _memMaxBytes) return;
     if (_memCache.length >= _memCap) {
       _memCache.remove(_memCache.keys.first);
     }
@@ -110,11 +120,29 @@ class _StickerBubbleState extends State<StickerBubble> {
     try {
       Uint8List? bytes;
       if (_isPath) {
-        debugPrint('[STICKER] fetch download ${widget.data}');
-        bytes = await rv.ProviderScope.containerOf(context, listen: false)
-            .read(storageProvider)
-            .downloadBytes(widget.data);
-        debugPrint('[STICKER] fetch done len=${bytes?.length}');
+        // Video (mp4/webm): cache PERSISTEN VideoFileCache (kuota 1GB LRU),
+        // bukan mem/disk foto — file bisa MB-an & grid scroll memutar ulang.
+        if (_looksLikeVideo(widget.data)) {
+          var f = await VideoFileCache.instance.fileFor(widget.data);
+          if (f == null) {
+            debugPrint('[STICKER] fetch download ${widget.data}');
+            final dl = await rv.ProviderScope.containerOf(context,
+                    listen: false)
+                .read(storageProvider)
+                .downloadBytes(widget.data);
+            if (dl != null && dl.isNotEmpty) {
+              f = await VideoFileCache.instance.put(widget.data, dl);
+            }
+          }
+          if (f != null) bytes = await f.readAsBytes();
+          debugPrint('[STICKER] fetch video done len=${bytes?.length}');
+        } else {
+          debugPrint('[STICKER] fetch download ${widget.data}');
+          bytes = await rv.ProviderScope.containerOf(context, listen: false)
+              .read(storageProvider)
+              .downloadBytes(widget.data);
+          debugPrint('[STICKER] fetch done len=${bytes?.length}');
+        }
       } else {
         // base64 pending
         bytes = base64Decode(widget.data);
@@ -144,6 +172,12 @@ class _StickerBubbleState extends State<StickerBubble> {
   }
 }
 
+/// True bila sumber stiker adalah video pendek (mp4/mov/webm).
+bool _looksLikeVideo(String src) {
+  final l = src.toLowerCase();
+  return l.endsWith('.mp4') || l.endsWith('.mov') || l.endsWith('.webm');
+}
+
 /// Deteksi format stiker dari PATH/nama & bytes, render sesuai jenis:
 ///  - `.tgs`/bytes gzip-Lottie → [Lottie.memory] (animasi vektor).
 ///  - `.webm` → [StickerVideoPlaceholder] (video; dipisah, butuh controller).
@@ -151,6 +185,9 @@ class _StickerBubbleState extends State<StickerBubble> {
 ///    (Flutter dukung animated webp secara native — gratis).
 Widget stickerWidget(Uint8List bytes, String src, double size) {
   final lower = src.toLowerCase();
+  // .webm/.mp4 → video bisu loop (S5). Animated webp/gif → Image.memory
+  // (Flutter native). .tgs → Lottie.
+  if (_looksLikeVideo(src)) return StickerVideo(bytes: bytes, size: size);
   if (lower.endsWith('.tgs') || _looksLikeTgs(bytes)) {
     return Lottie.memory(
       bytes,
@@ -190,6 +227,95 @@ class StickerBytes extends StatelessWidget {
       height: size,
       fit: BoxFit.contain,
       gaplessPlayback: true,
+    );
+  }
+}
+
+/// Stiker VIDEO pendek (mp4/mov/webm): bisu + loop + autoplay, tanpa
+/// kontrol — ala stiker video Telegram. File ditulis ke temp sekali per
+/// konten (nama hash) lalu controller file; dispose saat bubble lepas.
+class StickerVideo extends StatefulWidget {
+  final Uint8List bytes;
+  final double size;
+  const StickerVideo({super.key, required this.bytes, this.size = 140});
+
+  @override
+  State<StickerVideo> createState() => _StickerVideoState();
+}
+
+class _StickerVideoState extends State<StickerVideo> {
+  VideoPlayerController? _ctl;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  @override
+  void didUpdateWidget(StickerVideo old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.bytes, widget.bytes)) {
+      _disposeCtl();
+      _init();
+    }
+  }
+
+  Future<void> _init() async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final ext = '.mp4';
+      final f = File(
+        '${dir.path}/sticker_vid_${widget.bytes.hashCode.abs()}$ext',
+      );
+      if (!await f.exists()) {
+        await f.writeAsBytes(widget.bytes, flush: true);
+      }
+      if (!mounted) return;
+      final c = VideoPlayerController.file(f);
+      await c.initialize();
+      await c.setLooping(true);
+      await c.setVolume(0);
+      if (!mounted) {
+        await c.dispose();
+        return;
+      }
+      setState(() => _ctl = c);
+      await c.play();
+    } catch (_) {}
+  }
+
+  void _disposeCtl() {
+    try {
+      _ctl?.dispose();
+    } catch (_) {}
+    _ctl = null;
+  }
+
+  @override
+  void dispose() {
+    _disposeCtl();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _ctl;
+    // Placeholder ukuran SAMA (anti layout shift) selama init.
+    if (c == null || !c.value.isInitialized) {
+      return SizedBox(width: widget.size, height: widget.size);
+    }
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(
+          width: c.value.size.width,
+          height: c.value.size.height,
+          child: VideoPlayer(c),
+        ),
+      ),
     );
   }
 }

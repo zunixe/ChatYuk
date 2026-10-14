@@ -12,6 +12,10 @@ import '../providers/riverpod/locale_provider.dart';
 /// Ukuran kerja stiker (px). Sama seperti impor galeri (512, format Telegram).
 const int _kStickerSize = 512;
 
+/// Tinggi huruf teks overlay (px pada kanvas 512). Konstanta KONTEN artwork
+/// (bukan tipografi UI) — preview & raster berbagi nilai agar WYSIWYG.
+const double _kTextPx = 44;
+
 /// Satu teks overlay di stiker. Posisi fraksional 0..1 terhadap sisi stiker.
 class StickerTextItem {
   String text;
@@ -284,7 +288,7 @@ class _StickerEditorPageState extends ConsumerState<StickerEditorPage> {
                               _texts[i].text,
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 44 * scale,
+                                fontSize: _kTextPx * scale,
                                 fontWeight: FontWeight.w800,
                                 color: _texts[i].color,
                                 shadows: const [
@@ -368,7 +372,7 @@ Future<Uint8List> renderStickerWithTexts(
       );
       pb.pushStyle(
         ui.TextStyle(
-          fontSize: 44,
+          fontSize: _kTextPx,
           fontWeight: ui.FontWeight.w800,
           foreground: ui.Paint()
             ..color = color
