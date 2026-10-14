@@ -511,47 +511,13 @@ class MessageBubble extends StatelessWidget {
                           isRead: isRead,
                         )
                       else if (msg.type == 'sticker')
-                        // STIKER (ala Telegram): kotak transparan tanpa bg
-                        // bubble; sumber path storage ATAU base64 pending.
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            StickerBubble(
-                              data: msg.imageData,
-                              size: 140,
-                            ),
-                            const SizedBox(height: 2),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    timeStr,
-                                    style: AppText.chatTime.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                  if (isMe || showChecksBothSides) ...[
-                                    const SizedBox(width: 3),
-                                    Icon(
-                                      (isPending || isQueued)
-                                          ? Icons.done
-                                          : Icons.done_all,
-                                      size: 12,
-                                      color: (isRead &&
-                                              !isPending &&
-                                              !isQueued)
-                                          ? AppTheme.primary
-                                          : AppTheme.textSecondary,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
+                        StickerMessageBubble(
+                          data: msg.imageData,
+                          timeStr: timeStr,
+                          showChecks: isMe || showChecksBothSides,
+                          isPending: isPending,
+                          isQueued: isQueued,
+                          isRead: isRead,
                         )
                       else if (msg.type == 'view_once' ||
                           msg.type == 'view_once_expired')

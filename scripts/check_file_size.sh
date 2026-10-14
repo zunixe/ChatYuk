@@ -18,7 +18,12 @@ cd "$(dirname "$0")/.."
 LIMIT=1000
 
 # Format: "<path>:<max_baris>"  (max = ukuran SAAT PENDAFTARAN; hanya boleh turun)
-ALLOWLIST=()  # KOSONG: seluruh lib/ sudah < LIMIT 🎉
+# 2026-10-13: private_chat_message.dart menembus 1000 lewat kerja lain
+# (commit c7e8bf7: gate link preview viewport + memo kode) = 1004, lalu +10
+# baris cabang stiker (1 pemanggilan StickerMessageBubble). Utang teknis:
+# pecah widget bubble (voice/video/foto/sticker) ke file terpisah. Angka =
+# ukuran SAAT pendaftaran (hanya boleh TURUN).
+ALLOWLIST=(lib/widgets/private_chat_message.dart:1014)
 
 fail=0
 # 1) File > LIMIT yang TIDAK ada di allowlist = penambahan baru → tolak.
