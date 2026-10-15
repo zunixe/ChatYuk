@@ -18,7 +18,6 @@ import '../config/strings.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/riverpod/device_info_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
@@ -82,10 +81,6 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
   // sesi dummy ⇄ admin (ProfileScreen hidup di IndexedStack, initState
   // tidak jalan lagi saat swap), supaya foto/hashtag/avatar ikut ganti.
   String? _loadedUid;
-  // Future label versi dibuat SEKALI (bukan di build) — dulu `FutureBuilder(future:
-  // ProviderScope.containerOf(context, listen: false).read(deviceInfoProvider).appVersionLabel())` membuat Future BARU
-  // tiap build → FutureBuilder re-subscribe → "setState() called during build".
-  Future<String>? _appVersionFuture;
 
   // Kontrak lintas-mixin.
   Widget _buildBodySliver(

@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../config/theme.dart';
 import '../utils.dart';
+import '../core/media/image_cache_hygiene.dart';
 import '../core/media/native_image.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
@@ -44,11 +45,30 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
   // Bounded: preview sticker terbaru (bytes PNG) — bukan cache permanen.
   static final List<Uint8List> _recent = [];
   static const int _maxRecent = 24;
+  // Register hygiene logout sekali (lazy): bytes stiker user lama tidak boleh
+  // tinggal di RAM saat ganti akun. Lihat core/media/image_cache_hygiene.dart.
+  static bool _hygieneRegistered = false;
   // Koleksi server (`stickers/<uid>/...`) — TAHAN install ulang.
   List<String> _paths = const [];
   // Sub-tab stiker: 0 = koleksiku, 1 = Emoji Art (Twemoji, CC-BY 4.0).
   int _pack = 0;
   bool _busy = false;
+
+  static void _registerHygiene() {
+    if (_hygieneRegistered) return;
+    _hygieneRegistered = true;
+    ImageCacheHygiene.registerAppCache(_recent.clear);
+  }
+
+  /// Sisipkan bytes ke daftar "terbaru" (bounded) + pastikan pembersih
+  /// hygiene logout terdaftar.
+  void _rememberRecent(Uint8List bytes) {
+    _registerHygiene();
+    _recent.insert(0, bytes);
+    while (_recent.length > _maxRecent) {
+      _recent.removeLast();
+    }
+  }
 
   @override
   void initState() {
@@ -207,10 +227,7 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
         ),
       );
       if (edited == null || edited.isEmpty || !mounted) return;
-      if (mounted) setState(() => _recent.insert(0, edited));
-      while (_recent.length > _maxRecent) {
-        _recent.removeLast();
-      }
+      if (mounted) setState(() => _rememberRecent(edited));
       if (mounted) {
         await widget.onSendSticker(edited);
         // File baru ter-upload oleh handler kirim → segarkan koleksi.
@@ -245,10 +262,7 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
       );
       final bytes = b64 == null ? null : _b64(b64);
       if (bytes == null || !mounted) return;
-      setState(() => _recent.insert(0, bytes));
-      while (_recent.length > _maxRecent) {
-        _recent.removeLast();
-      }
+      setState(() => _rememberRecent(bytes));
       await widget.onSendSticker(bytes);
       unawaited(_loadSaved());
       if (mounted) Navigator.of(context).maybePop();
@@ -432,6 +446,8 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
                     await _sendSaved(path);
                     if (mounted) Navigator.of(context).maybePop();
                   },
+                  // Tahan (long-press) = hapus stiker dari koleksi server.
+                  onLongPress: () => _confirmDeleteSticker(path),
                   child: StickerBubble(data: path, size: 72),
                 );
               }
@@ -445,6 +461,51 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
               );
             },
           );
+  }
+
+  /// Konfirmasi + hapus stiker koleksi server (long-press tile).
+  Future<void> _confirmDeleteSticker(String path) async {
+    if (_busy) return;
+    final s = ref.read(localeProvider).s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.stickerDeleteTitle, style: AppText.title),
+        content: Text(s.stickerDeleteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(s.btnDelete),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final uid = ref.read(authProvider.notifier).uid;
+    if (uid == null) return;
+    setState(() => _busy = true);
+    try {
+      final done = await ref
+          .read(storageProvider)
+          .deleteSticker(uid: uid, path: path);
+      if (!mounted) return;
+      if (done) {
+        setState(() => _paths = _paths.where((p) => p != path).toList());
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.stickerDeleted)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.stickerDeleteFail)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }
 

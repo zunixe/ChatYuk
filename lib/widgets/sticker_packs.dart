@@ -75,6 +75,8 @@ class _TwemojiCell extends StatefulWidget {
 class _TwemojiCellState extends State<_TwemojiCell> {
   static final _mem = <String, Uint8List>{};
   Uint8List? _bytes;
+  bool _loading = false;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -99,36 +101,74 @@ class _TwemojiCellState extends State<_TwemojiCell> {
   }
 
   Future<void> _fetch() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
     try {
       final r = await http
           .get(Uri.parse(TwemojiPack.url(widget.code)))
           .timeout(const Duration(seconds: 15));
       if (!mounted) return;
-      if (r.statusCode != 200 || r.bodyBytes.isEmpty) return;
+      if (r.statusCode != 200 || r.bodyBytes.isEmpty) {
+        setState(() {
+          _loading = false;
+          _failed = true;
+        });
+        return;
+      }
       final bytes = r.bodyBytes;
       if (_mem.length > 200) _mem.remove(_mem.keys.first);
       _mem[widget.code] = bytes;
       unawaited(
         MediaDiskCache.instance.write(TwemojiPack.diskKey(widget.code), bytes),
       );
-      setState(() => _bytes = bytes);
-    } catch (_) {}
+      setState(() {
+        _bytes = bytes;
+        _loading = false;
+      });
+    } catch (_) {
+      // Offline / jaringan gagal → tampilkan ikon retry (bukan sel kosong).
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _failed = true;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final b = _bytes;
     return GestureDetector(
-      onTap: b == null ? null : () => widget.onPick(b),
+      onTap: b == null ? (_failed ? _fetch : null) : () => widget.onPick(b),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(10),
         ),
         padding: const EdgeInsets.all(8),
-        child: b == null
-            ? const SizedBox.shrink()
-            : Image.memory(b, fit: BoxFit.contain),
+        child: b != null
+            ? Image.memory(b, fit: BoxFit.contain)
+            : _loading
+                ? const Center(
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : _failed
+                    ? const Center(
+                        child: Icon(
+                          Icons.refresh,
+                          size: 18,
+                          color: Colors.white54,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
       ),
     );
   }

@@ -3,8 +3,64 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 
 import '../../../config/theme.dart';
 import '../../../models/user_photo.dart';
+import '../../../providers/riverpod/device_info_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
 import '../../../widgets/async_photo.dart';
+
+/// Footer "Tentang": versi app (tap → halaman lisensi) + atribusi Emoji Art
+/// (Twemoji, CC-BY 4.0). Dipisah dari profile_body agar file itu tetap di
+/// bawah batas 1000 baris (gate scripts/check_file_size.sh).
+class AboutVersionFooter extends ConsumerStatefulWidget {
+  const AboutVersionFooter({super.key});
+
+  @override
+  ConsumerState<AboutVersionFooter> createState() => _AboutVersionFooterState();
+}
+
+class _AboutVersionFooterState extends ConsumerState<AboutVersionFooter> {
+  Future<String>? _version;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ref.watch(localeProvider).s;
+    _version ??= ref.read(deviceInfoProvider).appVersionLabel();
+    return Column(
+      children: [
+        FutureBuilder<String>(
+          future: _version,
+          builder: (_, snap) {
+            if (!snap.hasData || snap.data!.isEmpty) {
+              return const SizedBox.shrink();
+            }
+            return GestureDetector(
+              onTap: () => showLicensePage(
+                context: context,
+                applicationName: 'ChatYuk',
+                applicationVersion: snap.data!,
+              ),
+              child: Center(
+                child: Text(
+                  'ChatYuk ${snap.data}',
+                  style: AppText.caption.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 4),
+        Center(
+          child: Text(
+            s.stickerArtCredit,
+            textAlign: TextAlign.center,
+            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// Chip kecil di header profil (mis. "Online"/verified) — putih transparan.
 class ProfileHeaderChip extends StatelessWidget {
