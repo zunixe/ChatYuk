@@ -29,6 +29,8 @@ bool isStoragePathValue(String value) =>
         value.contains('.jpeg') ||
         value.contains('.png') ||
         value.contains('.webp') ||
+        value.contains('.tgs') ||
+        value.contains('.gif') ||
         value.contains('.m4a') ||
         value.contains('.mp3') ||
         value.contains('.mp4') ||

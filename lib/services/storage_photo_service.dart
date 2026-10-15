@@ -54,6 +54,9 @@ class StoragePhotoService {
           value.contains('.jpeg') ||
           value.contains('.png') ||
           value.contains('.webp') ||
+          // Stiker animasi (S6): .tgs Lottie + .gif.
+          value.contains('.tgs') ||
+          value.contains('.gif') ||
           value.contains('.m4a') ||
           value.contains('.mp3') ||
           // VIDEO (chat + story) — tanpa ini path .mp4 dikira base64 →

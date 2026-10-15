@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -107,6 +109,70 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
       if (mounted) Navigator.of(context).maybePop();
     } catch (e) {
       dlog('[STICKER] pick video error: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Impor BERKAS stiker jadi (.tgs Lottie / .gif / .webp / .png, ≤8 MB) →
+  /// upload ext asli → kirim LANGSUNG (tanpa editor; editor membunuh
+  /// animasi). Masuk koleksi juga.
+  Future<void> _pickFile() async {
+    dlog('[STICKER] pickFile tapped busy=$_busy');
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final res = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['tgs', 'gif', 'webp', 'png'],
+        allowMultiple: false,
+        withData: true,
+      );
+      final f = res?.files.singleOrNull;
+      Uint8List? bytes = f?.bytes;
+      if ((bytes == null || bytes.isEmpty) && f?.path != null) {
+        try {
+          bytes = await File(f!.path!).readAsBytes();
+        } catch (_) {}
+      }
+      if (bytes == null || bytes.isEmpty || !mounted) return;
+      var data = bytes;
+      dlog('[STICKER] file len=${data.length} ext=${f?.extension}');
+      if (data.length > 8 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ref.read(localeProvider).s.stickerTooBig),
+            ),
+          );
+        }
+        return;
+      }
+      var ext = (f?.extension ?? 'png').toLowerCase();
+      if (ext != 'tgs' && ext != 'gif' && ext != 'webp') ext = 'png';
+      // .tgs = JSON Lottie ter-gzip → buka dulu supaya render langsung baca.
+      if (ext == 'tgs' &&
+          data.length > 2 &&
+          data[0] == 0x1f &&
+          data[1] == 0x8b) {
+        try {
+          data = Uint8List.fromList(gzip.decode(data));
+        } catch (_) {}
+      }
+      final uid = ref.read(authProvider.notifier).uid;
+      if (uid == null || !mounted) return;
+      final path = await ref
+          .read(storageProvider)
+          .uploadSticker(uid: uid, base64: base64Encode(data), ext: ext);
+      dlog('[STICKER] file upload path=$path');
+      if (path == null || path.isEmpty || !mounted) return;
+      final viaPath = widget.onSendStickerPath;
+      if (viaPath == null) return;
+      await viaPath(path);
+      unawaited(_loadSaved());
+      if (mounted) Navigator.of(context).maybePop();
+    } catch (e) {
+      dlog('[STICKER] pick file error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -280,6 +346,12 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
                 onPressed: _busy ? null : _pickVideo,
                 tooltip: s.stickerPickVideo,
                 icon: const Icon(Icons.videocam_outlined, size: 18),
+              ),
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                onPressed: _busy ? null : _pickFile,
+                tooltip: s.stickerPickFile,
+                icon: const Icon(Icons.folder_open_outlined, size: 18),
               ),
             ],
           ),
