@@ -70,6 +70,10 @@ class RoomMessageBubble extends StatelessWidget {
       msg.type == 'view_once_expired' ||
       msg.type == 'location';
 
+  /// Stiker ala Telegram: TANPA card bubble (transparan, tanpa shadow/pad)
+  /// & tanpa baris jam — sama seperti private chat.
+  bool get _isSticker => msg.type == 'sticker';
+
   // Konten bubble: foto / view-once / teks — dipakai untuk pesan sendiri & orang lain.
   Widget _replyQuote(BuildContext context) {
     return ReplyQuote.fromMessage(
@@ -117,14 +121,8 @@ class RoomMessageBubble extends StatelessWidget {
       );
     }
     if (msg.type == 'sticker') {
-      // Stiker ala Telegram: transparan, tanpa bg bubble.
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _replyQuote(context),
-          StickerBubble(data: msg.imageData, size: 140),
-        ],
-      );
+      // Stiker ala Telegram: transparan, tanpa bg bubble & TANPA jam.
+      return StickerBubble(data: msg.imageData, size: 140);
     }
     if (msg.type == 'image' && msg.imageData.isNotEmpty) {
       return Column(
@@ -327,11 +325,18 @@ class RoomMessageBubble extends StatelessWidget {
                 constraints: BoxConstraints(
                   maxWidth: MediaQuery.sizeOf(context).width * 0.8,
                 ),
-                padding: _isMedia
-                    ? const EdgeInsets.all(4)
-                    : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                padding: _isSticker
+                    ? EdgeInsets.zero
+                    : (_isMedia
+                          ? const EdgeInsets.all(4)
+                          : const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 5,
+                            )),
                 decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.25),
+                  color: _isSticker && !isSelected
+                      ? Colors.transparent
+                      : AppTheme.primary.withValues(alpha: 0.25),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(10),
                     topRight: Radius.circular(10),
@@ -343,13 +348,15 @@ class RoomMessageBubble extends StatelessWidget {
                   border: isSelected
                       ? Border.all(color: AppTheme.primary, width: 2)
                       : null,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 2,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
+                  boxShadow: _isSticker
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 2,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -444,11 +451,18 @@ class RoomMessageBubble extends StatelessWidget {
                   constraints: BoxConstraints(
                     maxWidth: MediaQuery.sizeOf(context).width * 0.8 - 40,
                   ),
-                  padding: _isMedia
-                      ? EdgeInsets.all(4)
-                      : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                  padding: _isSticker
+                      ? EdgeInsets.zero
+                      : (_isMedia
+                            ? const EdgeInsets.all(4)
+                            : const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 5,
+                              )),
                   decoration: BoxDecoration(
-                    color: AppTheme.bgInput,
+                    color: _isSticker && !isSelected
+                        ? Colors.transparent
+                        : AppTheme.bgInput,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(10),
                       topRight: Radius.circular(10),
@@ -459,13 +473,15 @@ class RoomMessageBubble extends StatelessWidget {
                     border: isSelected
                         ? Border.all(color: AppTheme.primary, width: 2)
                         : null,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 2,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
+                    boxShadow: _isSticker
+                        ? null
+                        : [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

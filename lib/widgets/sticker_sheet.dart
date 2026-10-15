@@ -50,6 +50,10 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
   static bool _hygieneRegistered = false;
   // Koleksi server (`stickers/<uid>/...`) — TAHAN install ulang.
   List<String> _paths = const [];
+  // Paging koleksi: +24 tiap "muat lagi" (server urut terbaru dulu).
+  int _page = 24;
+  bool _mayHaveMore = true;
+  bool _loadingMore = false;
   // Sub-tab stiker: 0 = koleksiku, 1 = Emoji Art (Twemoji, CC-BY 4.0).
   int _pack = 0;
   bool _busy = false;
@@ -82,10 +86,25 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
       final uid = ref.read(authProvider.notifier).uid;
       if (uid == null || !mounted) return;
       final paths =
-          await ref.read(storageProvider).listStickers(uid, limit: 24);
+          await ref.read(storageProvider).listStickers(uid, limit: _page);
       if (!mounted) return;
-      setState(() => _paths = paths);
+      setState(() {
+        _paths = paths;
+        _mayHaveMore = paths.length >= _page;
+      });
     } catch (_) {}
+  }
+
+  /// Muat halaman berikutnya (koleksi > _page).
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_mayHaveMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      _page += 24;
+      await _loadSaved();
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   /// Impor VIDEO pendek (≤6 dtk, ≤8 MB) → upload mp4/mov → kirim langsung
@@ -249,6 +268,30 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
     }
   }
 
+  /// Kirim stiker dari sumber eksternal (GIPHY): bytes + ext apa adanya.
+  /// Upload ext asli (webp/gif) → kirim via path (tanpa editor).
+  Future<void> _pickExternal(Uint8List bytes, String ext) async {
+    if (_busy || bytes.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final uid = ref.read(authProvider.notifier).uid;
+      if (uid == null || !mounted) return;
+      final path = await ref
+          .read(storageProvider)
+          .uploadSticker(uid: uid, base64: base64Encode(bytes), ext: ext);
+      if (path == null || path.isEmpty || !mounted) return;
+      final viaPath = widget.onSendStickerPath;
+      if (viaPath == null) return;
+      await viaPath(path);
+      unawaited(_loadSaved());
+      if (mounted) Navigator.of(context).maybePop();
+    } catch (e) {
+      dlog('[STICKER] pick external error: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// Kirim karya Emoji Art: upscale 72px → 512 PNG via pipeline impor
   /// (tanpa hapus latar — karya sudah transparan), lalu kirim + koleksi.
   Future<void> _sendArt(Uint8List art72) async {
@@ -385,6 +428,12 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
                 label: Text(s.stickerPackArt),
                 icon: const Icon(Icons.emoji_emotions_outlined, size: 16),
               ),
+              if (GiphyTab.enabled)
+                const ButtonSegment(
+                  value: 2,
+                  label: Text('GIPHY'),
+                  icon: Icon(Icons.gif_box_outlined, size: 16),
+                ),
             ],
             selected: {_pack},
             onSelectionChanged: (v) => setState(() => _pack = v.first),
@@ -395,23 +444,25 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
           ),
         ),
         Expanded(
-          child: _pack == 1
-              ? Column(
-                  children: [
-                    Expanded(child: TwemojiGrid(onPick: _sendArt)),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        s.stickerArtCredit,
-                        style: AppText.caption.copyWith(
-                          color: AppTheme.textSecondary,
+          child: _pack == 2
+              ? GiphyTab(onPick: _pickExternal)
+              : _pack == 1
+                  ? Column(
+                      children: [
+                        Expanded(child: TwemojiGrid(onPick: _sendArt)),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            s.stickerArtCredit,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                )
-              : _mineGrid(s),
+                      ],
+                    )
+                  : _mineGrid(s),
         ),
       ],
     );
@@ -437,7 +488,9 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
               crossAxisSpacing: 6,
             ),
             // Koleksi server dulu (tahan install ulang), lalu sesi ini.
-            itemCount: _paths.length + _recent.length,
+            // +1 tile "muat lagi" bila server mungkin punya lebih.
+            itemCount:
+                _paths.length + _recent.length + (_mayHaveMore ? 1 : 0),
             itemBuilder: (_, i) {
               if (i < _paths.length) {
                 final path = _paths[i];
@@ -451,13 +504,35 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
                   child: StickerBubble(data: path, size: 72),
                 );
               }
-              final bytes = _recent[i - _paths.length];
+              final ri = i - _paths.length;
+              if (ri < _recent.length) {
+                final bytes = _recent[ri];
+                return GestureDetector(
+                  onTap: () async {
+                    await widget.onSendSticker(bytes);
+                    if (mounted) Navigator.of(context).maybePop();
+                  },
+                  child: StickerBytes(bytes: bytes, size: 72),
+                );
+              }
+              // Tile terakhir: muat halaman berikutnya.
               return GestureDetector(
-                onTap: () async {
-                  await widget.onSendSticker(bytes);
-                  if (mounted) Navigator.of(context).maybePop();
-                },
-                child: StickerBytes(bytes: bytes, size: 72),
+                onTap: _loadingMore ? null : _loadMore,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: _loadingMore
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.more_horiz),
+                  ),
+                ),
               );
             },
           );

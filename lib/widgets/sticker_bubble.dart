@@ -207,7 +207,9 @@ Widget stickerWidget(Uint8List bytes, String src, double size) {
   final lower = src.toLowerCase();
   // .webm/.mp4 → video bisu loop (S5). Animated webp/gif → Image.memory
   // (Flutter native). .tgs → Lottie.
-  if (_looksLikeVideo(src)) return StickerVideo(bytes: bytes, size: size);
+  if (_looksLikeVideo(src)) {
+    return StickerVideo(bytes: bytes, size: size);
+  }
   if (lower.endsWith('.tgs') || _looksLikeTgs(bytes)) {
     return Lottie.memory(
       bytes,
@@ -266,6 +268,12 @@ class StickerVideo extends StatefulWidget {
 class _StickerVideoState extends State<StickerVideo> {
   VideoPlayerController? _ctl;
 
+  /// Batas controller video AKTIF global (bubble chat + grid). Bila kuota
+  /// penuh, yang paling lama hidup mem-pause + lepas controller — mencegah
+  /// puluhan VideoPlayer hidup saat scroll koleksi (jank + RAM).
+  static const int _maxActive = 6;
+  static final List<_StickerVideoState> _active = [];
+
   @override
   void initState() {
     super.initState();
@@ -276,22 +284,44 @@ class _StickerVideoState extends State<StickerVideo> {
   void didUpdateWidget(StickerVideo old) {
     super.didUpdateWidget(old);
     if (!identical(old.bytes, widget.bytes)) {
+      _releaseSlot();
       _disposeCtl();
       _init();
     }
   }
 
+  void _claimSlot() {
+    _active.remove(this);
+    _active.add(this);
+    while (_active.length > _maxActive) {
+      final victim = _active.removeAt(0);
+      victim._pauseAndRelease();
+    }
+  }
+
+  void _pauseAndRelease() {
+    final c = _ctl;
+    if (c == null) return;
+    try {
+      c.pause();
+    } catch (_) {}
+    _disposeCtl();
+    if (mounted) setState(() {});
+  }
+
+  void _releaseSlot() => _active.remove(this);
+
   Future<void> _init() async {
     try {
       final dir = await getTemporaryDirectory();
-      final ext = '.mp4';
       final f = File(
-        '${dir.path}/sticker_vid_${widget.bytes.hashCode.abs()}$ext',
+        '${dir.path}/sticker_vid_${widget.bytes.hashCode.abs()}.mp4',
       );
       if (!await f.exists()) {
         await f.writeAsBytes(widget.bytes, flush: true);
       }
       if (!mounted) return;
+      _claimSlot();
       final c = VideoPlayerController.file(f);
       await c.initialize();
       await c.setLooping(true);
@@ -314,6 +344,7 @@ class _StickerVideoState extends State<StickerVideo> {
 
   @override
   void dispose() {
+    _releaseSlot();
     _disposeCtl();
     super.dispose();
   }
@@ -321,9 +352,13 @@ class _StickerVideoState extends State<StickerVideo> {
   @override
   Widget build(BuildContext context) {
     final c = _ctl;
-    // Placeholder ukuran SAMA (anti layout shift) selama init.
+    // Placeholder ukuran SAMA (anti layout shift): belum siap ATAU kuota
+    // controller penuh (di-pause) → kotak kosong; tap ulang memicu muat.
     if (c == null || !c.value.isInitialized) {
-      return SizedBox(width: widget.size, height: widget.size);
+      return GestureDetector(
+        onTap: mounted ? _init : null,
+        child: SizedBox(width: widget.size, height: widget.size),
+      );
     }
     return SizedBox(
       width: widget.size,
