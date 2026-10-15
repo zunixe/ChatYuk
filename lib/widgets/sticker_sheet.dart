@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config/theme.dart';
+import '../utils.dart';
 import '../core/media/native_image.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
@@ -68,7 +69,7 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
   /// Impor VIDEO pendek (≤6 dtk, ≤8 MB) → upload mp4/mov → kirim langsung
   /// (tanpa halaman edit; editor hanya untuk gambar). Masuk koleksi juga.
   Future<void> _pickVideo() async {
-    debugPrint('[STICKER] pickVideo tapped busy=$_busy');
+    dlog('[STICKER] pickVideo tapped busy=$_busy');
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -78,7 +79,7 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
       );
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
-      debugPrint('[STICKER] video len=${bytes.length}');
+      dlog('[STICKER] video len=${bytes.length}');
       if (bytes.isEmpty) return;
       if (bytes.length > 8 * 1024 * 1024) {
         if (mounted) {
@@ -97,7 +98,7 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
       final path = await ref
           .read(storageProvider)
           .uploadSticker(uid: uid, base64: base64Encode(bytes), ext: ext);
-      debugPrint('[STICKER] video upload path=$path');
+      dlog('[STICKER] video upload path=$path');
       if (path == null || path.isEmpty || !mounted) return;
       final viaPath = widget.onSendStickerPath;
       if (viaPath == null) return;
@@ -105,13 +106,13 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
       unawaited(_loadSaved());
       if (mounted) Navigator.of(context).maybePop();
     } catch (e) {
-      debugPrint('[STICKER] pick video error: $e');
+      dlog('[STICKER] pick video error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _pickFromGallery() async {    debugPrint('[STICKER] pickFromGallery tapped busy=$_busy');
+  Future<void> _pickFromGallery() async {    dlog('[STICKER] pickFromGallery tapped busy=$_busy');
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -121,14 +122,14 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
         maxHeight: 1024,
         imageQuality: 95,
       );
-      debugPrint('[STICKER] picked=${picked?.path}');
+      dlog('[STICKER] picked=${picked?.path}');
       if (picked == null) return;
       final raw = await picked.readAsBytes();
-      debugPrint('[STICKER] raw len=${raw.length}');
+      dlog('[STICKER] raw len=${raw.length}');
       if (raw.isEmpty) return;
       // Crop tengah → 512px PNG (jaga transparansi) via native, fallback Dart.
       final b64 = await NativeImage.processStickerPng(raw, size: 512);
-      debugPrint('[STICKER] png b64 len=${b64?.length}');
+      dlog('[STICKER] png b64 len=${b64?.length}');
       if (b64 == null || b64.isEmpty) return;
       final bytes = _b64(b64);
       if (bytes == null || !mounted) return;
@@ -151,7 +152,7 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
         if (mounted) Navigator.of(context).maybePop();
       }
     } catch (e) {
-      debugPrint('[STICKER] pick/impor error: $e');
+      dlog('[STICKER] pick/impor error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -309,7 +310,21 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
         ),
         Expanded(
           child: _pack == 1
-              ? TwemojiGrid(onPick: _sendArt)
+              ? Column(
+                  children: [
+                    Expanded(child: TwemojiGrid(onPick: _sendArt)),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        s.stickerArtCredit,
+                        style: AppText.caption.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                )
               : _mineGrid(s),
         ),
       ],
