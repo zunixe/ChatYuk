@@ -105,3 +105,6 @@ tmp_cap/
 /*.gif
 /*.webp
 /*.bmp
+
+# Supabase CLI local state (linked project, versi) — jangan commit
+supabase/.temp/
