@@ -155,6 +155,14 @@ class StoragePhotoService {
     }
   }
 
+  /// Ekstensi stiker yang DIDUKUNG (render + impor). Dipakai bersama oleh
+  /// [uploadSticker]/[stickerPath] & [listStickers] supaya koleksi tidak
+  /// "kehilangan" jenis tertentu setelah reload (mis. video/.tgs/.gif yang
+  /// dulu tak ikut terdaftar karena filter hanya png/webp).
+  static const Set<String> stickerExts = {
+    'png', 'webp', 'gif', 'tgs', 'mp4', 'mov', 'webm',
+  };
+
   /// Path STIKER di bucket: `stickers/<uid>/<stamp>.<ext>`.
   String stickerPath(String uid, {String ext = 'png'}) =>
       'stickers/$uid/${_stamp()}.$ext';
@@ -190,12 +198,29 @@ class StoragePhotoService {
           );
       return [
         for (final o in objs)
-          if (o.name.endsWith('.png') || o.name.endsWith('.webp'))
+          // Semua ekstensi stiker yang didukung (bukan hanya png/webp) —
+          // video/.tgs/.gif juga harus muncul di koleksi setelah reload.
+          if (stickerExts.contains(o.name.split('.').last.toLowerCase()))
             'stickers/$uid/${o.name}',
       ];
     } catch (e) {
       dlog('[StoragePhoto] listStickers error: $e');
       return const [];
+    }
+  }
+
+  /// Hapus satu stiker milik user dari Storage. Hanya path di bawah
+  /// `stickers/<uid>/` yang boleh (guard owner). Return true bila sukses.
+  Future<bool> deleteSticker({required String uid, required String path}) async {
+    try {
+      if (uid.isEmpty || path.isEmpty) return false;
+      final prefix = 'stickers/$uid/';
+      if (!path.startsWith(prefix)) return false;
+      await _sb.storage.from(_bucket).remove([path]);
+      return true;
+    } catch (e) {
+      dlog('[StoragePhoto] deleteSticker error: $e');
+      return false;
     }
   }
 

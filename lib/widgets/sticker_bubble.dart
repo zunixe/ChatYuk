@@ -12,6 +12,7 @@ import 'package:video_player/video_player.dart';
 
 import '../core/cache/media_disk_cache.dart';
 import '../core/cache/video_file_cache.dart';
+import '../core/media/image_cache_hygiene.dart';
 import '../providers/riverpod/storage_provider.dart';
 
 /// Stiker chat (ala Telegram) — kotak transparan TANPA background bubble,
@@ -45,6 +46,10 @@ class StickerBubble extends StatefulWidget {
   static void seedCache(String path, Uint8List bytes) =>
       _StickerBubbleState.seed(path, bytes);
 
+  /// Kosongkan cache RAM stiker (dipanggil saat logout/ganti akun lewat
+  /// [ImageCacheHygiene]) — bytes stiker user lama tidak boleh tinggal di RAM.
+  static void clearCache() => _StickerBubbleState.clearMem();
+
   @override
   State<StickerBubble> createState() => _StickerBubbleState();
 }
@@ -53,6 +58,12 @@ class _StickerBubbleState extends State<StickerBubble> {
   // Cap RAM kecil (bounded) — sama pola AsyncPhotoThumbnail.
   static final _memCache = <String, Uint8List>{};
   static const int _memCap = 120;
+  // Daftarkan pembersih ke hygiene logout sekali (lazy, saat cache pertama
+  // diisi) — lihat core/media/image_cache_hygiene.dart.
+  static bool _hygieneRegistered = false;
+
+  /// Kosongkan cache RAM (lihat [StickerBubble.clearCache]).
+  static void clearMem() => _memCache.clear();
 
   /// Video bisa MB-an — jangan tahan di RAM (temp file + VideoFileCache
   /// yang menanganinya). PNG stiker (~200KB) tetap di-cache.
@@ -102,15 +113,23 @@ class _StickerBubbleState extends State<StickerBubble> {
 
   void _putToMem(Uint8List b) {
     if (b.length > _memMaxBytes) return;
+    _registerHygiene();
     if (_memCache.length >= _memCap) {
       _memCache.remove(_memCache.keys.first);
     }
     _memCache[_key] = b;
   }
 
+  static void _registerHygiene() {
+    if (_hygieneRegistered) return;
+    _hygieneRegistered = true;
+    ImageCacheHygiene.registerAppCache(clearMem);
+  }
+
   /// Lihat [StickerBubble.seedCache].
   static void seed(String path, Uint8List bytes) {
     if (bytes.length > _memMaxBytes) return;
+    _registerHygiene();
     if (_memCache.length >= _memCap) {
       _memCache.remove(_memCache.keys.first);
     }

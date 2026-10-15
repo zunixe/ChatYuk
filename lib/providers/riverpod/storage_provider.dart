@@ -110,6 +110,10 @@ class StorageNotifier {
   Future<List<String>> listStickers(String uid, {int limit = 24}) =>
       service.listStickers(uid, limit: limit);
 
+  /// Hapus satu stiker milik user (path harus di bawah `stickers/<uid>/`).
+  Future<bool> deleteSticker({required String uid, required String path}) =>
+      service.deleteSticker(uid: uid, path: path);
+
   Future<Uint8List?> downloadThumbBytes(
     String path, {
     int width = 160,

@@ -124,6 +124,16 @@ mixin SPointsMx {
       isId ? 'Video maksimal 8 MB' : 'Video max 8 MB';
   String get stickerArtCredit =>
       isId ? 'Emoji Art oleh Twemoji (Twitter, CC-BY 4.0)' : 'Emoji Art by Twemoji (Twitter, CC-BY 4.0)';
+  String get stickerDeleteTitle =>
+      isId ? 'Hapus stiker?' : 'Delete sticker?';
+  String get stickerDeleteBody => isId
+      ? 'Stiker ini akan dihapus dari koleksimu.'
+      : 'This sticker will be removed from your pack.';
+  String get stickerDeleted => isId ? 'Stiker dihapus' : 'Sticker deleted';
+  String get stickerDeleteFail =>
+      isId ? 'Gagal hapus stiker' : 'Failed to delete sticker';
+  String get stickerDeleteHint =>
+      isId ? 'Tahan untuk hapus' : 'Long-press to delete';
   String get storyPublishFail =>
       isId ? 'Gagal membagikan story' : 'Failed to share story';
   String get storyDeleted =>

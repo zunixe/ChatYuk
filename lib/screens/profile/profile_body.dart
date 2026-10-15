@@ -963,25 +963,7 @@ mixin _ProfileBodyMx on _ProfileBase {
               ),
             ),
             SizedBox(height: 8),
-            FutureBuilder<String>(
-              future: _appVersionFuture ??= ProviderScope.containerOf(
-                context,
-                listen: false,
-              ).read(deviceInfoProvider).appVersionLabel(),
-              builder: (_, snap) {
-                if (!snap.hasData || snap.data!.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return Center(
-                  child: Text(
-                    'ChatYuk ${snap.data}',
-                    style: AppText.caption.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                );
-              },
-            ),
+            const AboutVersionFooter(),
           ],
         ),
       ),
