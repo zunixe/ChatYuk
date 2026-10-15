@@ -118,6 +118,8 @@ mixin SPointsMx {
   String get stickerPackMine => isId ? 'Koleksiku' : 'My pack';
   String get stickerPackArt => isId ? 'Emoji Art' : 'Emoji Art';
   String get stickerPickVideo => isId ? 'Video pendek' : 'Short video';
+  String get stickerPickFile =>
+      isId ? 'Berkas .tgs/.gif' : '.tgs/.gif file';
   String get stickerTooBig =>
       isId ? 'Video maksimal 8 MB' : 'Video max 8 MB';
   String get stickerArtCredit =>
