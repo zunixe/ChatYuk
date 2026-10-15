@@ -128,7 +128,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   /// Kirim STIKER: upload PNG 512px ke bucket `stickers/` → pesan type
   /// 'sticker' (imageData = path storage).
   Future<void> _sendSticker(Uint8List pngBytes) async {
-    debugPrint('[STICKER] _sendSticker len=${pngBytes.length}');
+    dlog('[STICKER] _sendSticker len=${pngBytes.length}');
     if (pngBytes.isEmpty) return;
     final container = ProviderScope.containerOf(context, listen: false);
     final auth = container.read(authProvider.notifier);
@@ -140,7 +140,7 @@ mixin _PcMediaMx on _PrivateChatBase {
       final path = await container
           .read(storageProvider)
           .uploadSticker(uid: uid, base64: b64, ext: 'png');
-      debugPrint('[STICKER] upload path=$path');
+      dlog('[STICKER] upload path=$path');
       if (path == null || path.isEmpty || !mounted) return;
       // Titip bytes ke cache bubble: pengirim langsung lihat tanpa download.
       StickerBubble.seedCache(path, pngBytes);
@@ -154,7 +154,7 @@ mixin _PcMediaMx on _PrivateChatBase {
             imageData: path,
           );
     } catch (e) {
-      debugPrint('[STICKER] kirim gagal: $e');
+      dlog('[STICKER] kirim gagal: $e');
       dlog('[Sticker] kirim gagal: $e');
       if (mounted) {
         showChatSnack(

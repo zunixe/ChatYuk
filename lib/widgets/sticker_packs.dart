@@ -42,6 +42,7 @@ class TwemojiPack {
 
 /// Grid Emoji Art: sel lazy-load (hanya yang terlihat yang diunduh),
 /// cache mem + disk. Tap sel berisi → [onPick] dengan bytes 72px.
+/// Atribusi CC-BY 4.0 tampil sebagai caption di bawah grid (lihat pemakai).
 class TwemojiGrid extends StatelessWidget {
   final Future<void> Function(Uint8List pngBytes) onPick;
   const TwemojiGrid({super.key, required this.onPick});

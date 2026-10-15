@@ -8,7 +8,7 @@ mixin _PcBuildMx on _PrivateChatBase {
   /// Di mixin ini (satu file dengan pemakai di composer) supaya resolve
   /// nama selalu dalam satu unit part.
   Future<void> _sendStickerPath(String path) async {
-    debugPrint('[STICKER] _sendStickerPath $path');
+    dlog('[STICKER] _sendStickerPath $path');
     if (path.isEmpty) return;
     final container = ProviderScope.containerOf(context, listen: false);
     final auth = container.read(authProvider.notifier);
@@ -31,7 +31,7 @@ mixin _PcBuildMx on _PrivateChatBase {
             imageData: path,
           );
     } catch (e) {
-      debugPrint('[STICKER] kirim path gagal: $e');
+      dlog('[STICKER] kirim path gagal: $e');
       if (mounted) {
         showChatSnack(
           context,

@@ -120,6 +120,8 @@ mixin SPointsMx {
   String get stickerPickVideo => isId ? 'Video pendek' : 'Short video';
   String get stickerTooBig =>
       isId ? 'Video maksimal 8 MB' : 'Video max 8 MB';
+  String get stickerArtCredit =>
+      isId ? 'Emoji Art oleh Twemoji (Twitter, CC-BY 4.0)' : 'Emoji Art by Twemoji (Twitter, CC-BY 4.0)';
   String get storyPublishFail =>
       isId ? 'Gagal membagikan story' : 'Failed to share story';
   String get storyDeleted =>

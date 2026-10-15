@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
+import '../utils.dart';
 import 'package:lottie/lottie.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
@@ -125,7 +126,7 @@ class _StickerBubbleState extends State<StickerBubble> {
         if (_looksLikeVideo(widget.data)) {
           var f = await VideoFileCache.instance.fileFor(widget.data);
           if (f == null) {
-            debugPrint('[STICKER] fetch download ${widget.data}');
+            dlog('[STICKER] fetch download ${widget.data}');
             final dl = await rv.ProviderScope.containerOf(context,
                     listen: false)
                 .read(storageProvider)
@@ -135,13 +136,13 @@ class _StickerBubbleState extends State<StickerBubble> {
             }
           }
           if (f != null) bytes = await f.readAsBytes();
-          debugPrint('[STICKER] fetch video done len=${bytes?.length}');
+          dlog('[STICKER] fetch video done len=${bytes?.length}');
         } else {
-          debugPrint('[STICKER] fetch download ${widget.data}');
+          dlog('[STICKER] fetch download ${widget.data}');
           bytes = await rv.ProviderScope.containerOf(context, listen: false)
               .read(storageProvider)
               .downloadBytes(widget.data);
-          debugPrint('[STICKER] fetch done len=${bytes?.length}');
+          dlog('[STICKER] fetch done len=${bytes?.length}');
         }
       } else {
         // base64 pending
@@ -156,7 +157,7 @@ class _StickerBubbleState extends State<StickerBubble> {
       unawaited(MediaDiskCache.instance.write(_diskKey, bytes));
       setState(() => _bytes = bytes);
     } catch (e) {
-      debugPrint('[STICKER] fetch error: $e');
+      dlog('[STICKER] fetch error: $e');
       if (mounted) setState(() => _failed = true);
     }
   }
