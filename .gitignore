@@ -94,3 +94,17 @@ threads_*.png
 tmp_capture/
 # Artefak debug sesi (screenshot/dump/adb) — jangan commit
 tmp_cap/
+
+# Screenshot/debug di AKAR repo — jangan commit. Aset resmi ada di folder:
+# assets/, store_assets/, android/, ios/, web/, macos/, third_party/
+# (pola ber-`/` di depan = HANYA akar repo, folder aset tak terpengaruh).
+# Dijaga juga oleh test/repo_hygiene_test.dart.
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.bmp
+
+# Supabase CLI local state (linked project, versi) — jangan commit
+supabase/.temp/

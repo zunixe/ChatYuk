@@ -4386,3 +4386,27 @@ nilai sedang; LP-D tak berguna di bubble lebar-tetap (rekomendasi: skip).
 **Verifikasi:** `flutter analyze lib/`=0; guard OK; test
 (`link_preview_disk_test`, `link_preview_cache_test`) hijau; build profile +
 install. **Belum:** ukur `networkFetchCount` saat scroll chat di device.
+
+## §52. Stiker: audit & perbaikan (2026-10-15)
+
+**Temuan & fix (semua dari review kode, sebagian terukur di device):**
+
+1. **Room sticker masih ber-card**: `room_message_bubble._isMedia` tak
+   memuat `'sticker'` → stiker room dibungkus bubble biru + baris jam.
+   Fix: `_isSticker` (padding 0, bg transparan kecuali seleksi, tanpa
+   shadow) + `_content` untuk stiker mengembalikan `StickerBubble` saja
+   (tanpa `MessageTextWithTime`) → konsisten dengan private.
+2. **Controller video tak dibatasi** (risiko jank scroll koleksi): grid
+   72px membuat `VideoPlayerController` per tile. Fix: kuota global
+   `_maxActive=6` di `StickerVideo`; yang tertua di-pause + lepas
+   controller; tap ulang memuat lagi (placeholder ukuran sama, anti
+   layout-shift).
+3. **Koleksi > 24 tak terjangkau**: `listStickers` limit 24 tanpa paging.
+   Fix: paging +24 via tile "muat lagi" (ikon `more_horiz`) di grid.
+4. **GIPHY**: integrasi siap di belakang `--dart-define=GIPHY_API_KEY`
+   (tab muncul hanya bila key diisi). Tanpa key → tak ada regresi.
+
+**Disiplin:** ekstensi stiker dijaga sinkron di dua tempat
+(`stickerExts` ↔ `storage_paths.dart`) — unit test `sticker_test.dart`
+menjaganya. Semua jalur render (png/webp/gif/tgs/video) punya placeholder
+ukuran sama supaya tak ada layout shift saat bytes tiba.

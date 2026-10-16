@@ -208,7 +208,7 @@ Widget stickerWidget(Uint8List bytes, String src, double size) {
   // .webm/.mp4 → video bisu loop (S5). Animated webp/gif → Image.memory
   // (Flutter native). .tgs → Lottie.
   if (_looksLikeVideo(src)) {
-    return StickerVideo(bytes: bytes, size: size, src: src);
+    return StickerVideo(bytes: bytes, size: size);
   }
   if (lower.endsWith('.tgs') || _looksLikeTgs(bytes)) {
     return Lottie.memory(
@@ -259,17 +259,7 @@ class StickerBytes extends StatelessWidget {
 class StickerVideo extends StatefulWidget {
   final Uint8List bytes;
   final double size;
-
-  /// Path/sumber asli (mis. `stickers/u1/x.webm`) — dipakai menentukan
-  /// ekstensi file temp; `video_player` menolak kalau ekstensi salah
-  /// (mis. file .webm dinamai .mp4). Kosong → fallback `.mp4`.
-  final String src;
-  const StickerVideo({
-    super.key,
-    required this.bytes,
-    this.size = 140,
-    this.src = '',
-  });
+  const StickerVideo({super.key, required this.bytes, this.size = 140});
 
   @override
   State<StickerVideo> createState() => _StickerVideoState();
@@ -277,7 +267,12 @@ class StickerVideo extends StatefulWidget {
 
 class _StickerVideoState extends State<StickerVideo> {
   VideoPlayerController? _ctl;
-  bool _failed = false;
+
+  /// Batas controller video AKTIF global (bubble chat + grid). Bila kuota
+  /// penuh, yang paling lama hidup mem-pause + lepas controller — mencegah
+  /// puluhan VideoPlayer hidup saat scroll koleksi (jank + RAM).
+  static const int _maxActive = 6;
+  static final List<_StickerVideoState> _active = [];
 
   @override
   void initState() {
@@ -289,33 +284,44 @@ class _StickerVideoState extends State<StickerVideo> {
   void didUpdateWidget(StickerVideo old) {
     super.didUpdateWidget(old);
     if (!identical(old.bytes, widget.bytes)) {
+      _releaseSlot();
       _disposeCtl();
-      _failed = false;
       _init();
     }
   }
 
-  /// Ekstensi dari sumber (mp4/mov/webm); fallback .mp4.
-  String _ext() {
-    final l = widget.src.toLowerCase();
-    for (final e in const ['webm', 'mov', 'mp4']) {
-      if (l.endsWith('.$e')) return '.$e';
+  void _claimSlot() {
+    _active.remove(this);
+    _active.add(this);
+    while (_active.length > _maxActive) {
+      final victim = _active.removeAt(0);
+      victim._pauseAndRelease();
     }
-    return '.mp4';
   }
+
+  void _pauseAndRelease() {
+    final c = _ctl;
+    if (c == null) return;
+    try {
+      c.pause();
+    } catch (_) {}
+    _disposeCtl();
+    if (mounted) setState(() {});
+  }
+
+  void _releaseSlot() => _active.remove(this);
 
   Future<void> _init() async {
     try {
       final dir = await getTemporaryDirectory();
       final f = File(
-        '${dir.path}/sticker_vid_${widget.bytes.hashCode.abs()}${_ext()}',
+        '${dir.path}/sticker_vid_${widget.bytes.hashCode.abs()}.mp4',
       );
-      // Selalu tulis ulang bila kosong/berbeda ukuran (hash collision jarang,
-      // tapi aman). File lama bernama sama dianggap valid.
-      if (!await f.exists() || (await f.length()) != widget.bytes.length) {
+      if (!await f.exists()) {
         await f.writeAsBytes(widget.bytes, flush: true);
       }
       if (!mounted) return;
+      _claimSlot();
       final c = VideoPlayerController.file(f);
       await c.initialize();
       await c.setLooping(true);
@@ -324,15 +330,9 @@ class _StickerVideoState extends State<StickerVideo> {
         await c.dispose();
         return;
       }
-      setState(() {
-        _ctl = c;
-        _failed = false;
-      });
+      setState(() => _ctl = c);
       await c.play();
-    } catch (e) {
-      dlog('[STICKER] video init gagal src=${widget.src}: $e');
-      if (mounted) setState(() => _failed = true);
-    }
+    } catch (_) {}
   }
 
   void _disposeCtl() {
@@ -344,6 +344,7 @@ class _StickerVideoState extends State<StickerVideo> {
 
   @override
   void dispose() {
+    _releaseSlot();
     _disposeCtl();
     super.dispose();
   }
@@ -351,23 +352,13 @@ class _StickerVideoState extends State<StickerVideo> {
   @override
   Widget build(BuildContext context) {
     final c = _ctl;
-    // Gagal init → tampilkan placeholder (bukan kosong tanpa tanda).
-    if (_failed) {
-      return SizedBox(
-        width: widget.size,
-        height: widget.size,
-        child: const Center(
-          child: Icon(
-            Icons.movie_outlined,
-            color: Colors.white38,
-            size: 32,
-          ),
-        ),
-      );
-    }
-    // Placeholder ukuran SAMA (anti layout shift) selama init.
+    // Placeholder ukuran SAMA (anti layout shift): belum siap ATAU kuota
+    // controller penuh (di-pause) → kotak kosong; tap ulang memicu muat.
     if (c == null || !c.value.isInitialized) {
-      return SizedBox(width: widget.size, height: widget.size);
+      return GestureDetector(
+        onTap: mounted ? _init : null,
+        child: SizedBox(width: widget.size, height: widget.size),
+      );
     }
     return SizedBox(
       width: widget.size,

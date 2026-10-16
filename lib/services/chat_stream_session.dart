@@ -364,7 +364,7 @@ class ChatStreamSession {
       // Tanpa ini bubble kosong usai reload ("muncul lalu ilang").
       final stickers = [for (final m in models) if (m.type == 'sticker' && m.imageData.isEmpty) m];
       if (stickers.isNotEmpty) {
-        unawaited(fillStickerPaths(sb: _sb, table: table, stickers: stickers, currentGetter: () => _current, isClosed: () => controller.isClosed, emit: _emit, scheduleCacheSave: scheduleCacheSave));
+        unawaited(fillStickerPaths(sb: _sb, table: table, stickers: stickers, current: _current, isClosed: () => controller.isClosed, emit: _emit, scheduleCacheSave: scheduleCacheSave));
       }
       if (photos.isEmpty) return;
       // LAZY PENUH: hanya decrypt upfront untuk foto terbaru yang terlihat
@@ -886,7 +886,7 @@ class ChatStreamSession {
             // Stiker lama: isi path (halaman lama tak lewat loadPhotosAsync).
             final oldSk = [for (final m in newMsgs) if (m.type == 'sticker' && m.imageData.isEmpty) m];
             if (oldSk.isNotEmpty) {
-              unawaited(fillStickerPaths(sb: _sb, table: table, stickers: oldSk, currentGetter: () => _current, isClosed: () => controller.isClosed, emit: _emit, scheduleCacheSave: scheduleCacheSave));
+              unawaited(fillStickerPaths(sb: _sb, table: table, stickers: oldSk, current: _current, isClosed: () => controller.isClosed, emit: _emit, scheduleCacheSave: scheduleCacheSave));
             }
             // Majukan kursor ke pesan terlama batch ini (lebih tua dari
             // kursor lama) agar paginasi berikutnya lanjut ke belakang.

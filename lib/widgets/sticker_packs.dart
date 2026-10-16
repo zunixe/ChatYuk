@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../config/env.dart';
 import '../core/cache/media_disk_cache.dart';
 
 /// Paket stiker bawaan "Emoji Art" (S11): Twemoji Twitter (CC-BY 4.0) via
@@ -170,6 +172,141 @@ class _TwemojiCellState extends State<_TwemojiCell> {
                       )
                     : const SizedBox.shrink(),
       ),
+    );
+  }
+}
+
+/// Sub-tab GIPHY (S9/S10): cari GIF via GIPHY API → tap → dijadikan stiker
+/// (webp/gif di-upload apa adanya; GIPHY kirim URL gambar, kita unduh bytes).
+///
+/// AKTIF hanya bila `--dart-define=GIPHY_API_KEY=...` diisi (lihat AppEnv).
+/// Tanpa key → widget ini tak pernah ditampilkan (tab disembunyikan).
+class GiphyTab extends StatefulWidget {
+  final Future<void> Function(Uint8List bytes, String ext) onPick;
+  const GiphyTab({super.key, required this.onPick});
+
+  static bool get enabled => AppEnv.giphyEnabled;
+
+  @override
+  State<GiphyTab> createState() => _GiphyTabState();
+}
+
+class _GiphyTabState extends State<GiphyTab> {
+  final _ctrl = TextEditingController();
+  List<String> _urls = const [];
+  bool _loading = false;
+  bool _failed = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search(String q) async {
+    if (q.trim().isEmpty) return;
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    try {
+      final uri = Uri.parse(
+        'https://api.giphy.com/v1/gifs/search'
+        '?api_key=${AppEnv.giphyApiKey}&q=${Uri.encodeQueryComponent(q)}'
+        '&limit=24&rating=pg-13&bundle=messaging_non_clips',
+      );
+      final r = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      if (r.statusCode != 200) {
+        setState(() {
+          _loading = false;
+          _failed = true;
+        });
+        return;
+      }
+      final json = jsonDecode(r.body) as Map<String, dynamic>;
+      final data = (json['data'] as List?) ?? const [];
+      final urls = <String>[
+        for (final g in data)
+          if ((g['images']?['fixed_height']?['url'] as String?) != null)
+            g['images']['fixed_height']['url'] as String,
+      ];
+      setState(() {
+        _urls = urls;
+        _loading = false;
+        _failed = urls.isEmpty;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _failed = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _pick(String url) async {
+    try {
+      final r = await http.get(Uri.parse(url));
+      if (r.statusCode == 200 && r.bodyBytes.isNotEmpty) {
+        final ext = url.contains('.webp') ? 'webp' : 'gif';
+        await widget.onPick(r.bodyBytes, ext);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+          child: TextField(
+            controller: _ctrl,
+            textInputAction: TextInputAction.search,
+            onSubmitted: _search,
+            decoration: const InputDecoration(
+              isDense: true,
+              prefixIcon: Icon(Icons.search, size: 18),
+              hintText: 'GIPHY…',
+            ),
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _urls.isEmpty
+                  ? Center(
+                      child: Icon(
+                        _failed ? Icons.wifi_off : Icons.gif_box_outlined,
+                        color: Colors.white38,
+                      ),
+                    )
+                  : GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 6,
+                        crossAxisSpacing: 6,
+                      ),
+                      itemCount: _urls.length,
+                      itemBuilder: (_, i) => GestureDetector(
+                        onTap: () => _pick(_urls[i]),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            _urls[i],
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                const SizedBox.shrink(),
+                          ),
+                        ),
+                      ),
+                    ),
+        ),
+      ],
     );
   }
 }

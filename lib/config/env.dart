@@ -17,6 +17,7 @@ class AppEnv {
   static const String _kKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   static const String _kTikTokToken =
       String.fromEnvironment('TIKTOK_ACCESS_TOKEN');
+  static const String _kGiphyKey = String.fromEnvironment('GIPHY_API_KEY');
 
   /// Aktifkan log DEBUG TikTok SDK (EventName/batch terkirim) saat build:
   ///   --dart-define=TIKTOK_DEBUG=true
@@ -35,6 +36,11 @@ class AppEnv {
   /// manifest) tapi tanpa access token (pelacakan mungkin terbatas).
   static String get tiktokAccessToken => _kTikTokToken;
 
+  /// API key GIPHY (fitur stiker GIPHY/GIF). Disuntik saat build:
+  ///   --dart-define=GIPHY_API_KEY=...
+  /// Tidak di-hardcode di repo. Kosong → sub-tab GIPHY disembunyikan.
+  static String get giphyApiKey => _kGiphyKey;
+  static bool get giphyEnabled => _kGiphyKey.isNotEmpty;
   static bool get isDev => _kEnv == 'dev';
 
   static String get supabaseUrl {

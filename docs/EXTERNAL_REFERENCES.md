@@ -65,3 +65,20 @@ pendukung**, BUKAN app-nya.
 - Berguna bila nanti mau fitur **sticker**: `WhatsApp/stickers` = API/sample
   resmi yang bisa ditiru (format pack + payload intent Android).
 
+
+## Referensi stiker (fitur ChatYuk, 2026-10-15)
+
+| Sumber | Isi | Lisensi / catatan |
+|---|---|---|
+| `twitter/twemoji` (Twemoji) | Paket **Emoji Art** bawaan (S11), diambil 72px dari CDN jsdelivr | **CC-BY 4.0** — WAJIB cantumkan atribusi ("Emoji Art by Twemoji (Twitter, CC-BY 4.0)") |
+| Google ML Kit `subject-segmentation` | Hapus background otomatis saat impor stiker | `play-services-mlkit-subject-segmentation:16.0.0-beta1` (model via Play, on-device) |
+| `lottie` (Flutter) | Render stiker `.tgs` (Lottie JSON) | Apache-2.0 |
+| GIPHY API | Pencarian GIF (S9/S10) | Butuh API key; `--dart-define=GIPHY_API_KEY=...`; tanpa key tab disembunyikan |
+
+**Format stiker yang didukung:** PNG, WebP (statis+animasi), GIF, `.tgs`
+(Lottie), MP4/MOV/WebM (video bisu loop). Ekstensi dijaga sinkron di
+`StoragePhotoService.stickerExts` ↔ `core/storage_paths.dart`.
+
+**Keputusan:** WhatsApp closed-source → hanya rujukan UX; cut-out & pack
+diimplementasi sendiri (ML Kit + CDN), tidak menyalin kode pihak ketiga
+ber-lisensi ketat.
