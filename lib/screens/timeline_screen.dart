@@ -164,49 +164,56 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       // Header ringkas ala Instagram: 52px, gelap muda, garis bawah tipis,
-      // tanpa elevation. Judul "ChatYuk" + panah → menu scope feed.
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(52),
-        child: Container(
-          height: 52,
-          decoration: const BoxDecoration(
-            color: _kHeaderBg,
-            border: Border(bottom: BorderSide(color: _kHeaderBorder, width: 1)),
-          ),
-          child: SafeArea(
-            bottom: false,
-            child: _isSearching
-                ? _buildSearchField(s)
-                : Row(
-                    children: [
-                      const SizedBox(width: 12),
-                      // Judul scope + panah → PopupMenuButton ganti feed.
-                      _buildTitleMenu(s),
-                      const Spacer(),
-                      // Kanan: buat postingan, cari, notifikasi.
-                      IconButton(
-                        tooltip: s.postAddTooltip,
-                        icon: const Icon(
-                          Icons.add_box_outlined,
-                          color: _kHeaderText,
-                          size: 26,
-                        ),
-                        onPressed: _openComposer,
-                      ),
-                      IconButton(
-                        tooltip: s.searchHint,
-                        icon: const Icon(
-                          Icons.search_rounded,
-                          color: _kHeaderText,
-                          size: 26,
-                        ),
-                        onPressed: () => setState(() => _isSearching = true),
-                      ),
-                      _buildNotifButton(),
-                      const SizedBox(width: 4),
-                    ],
+      // tanpa elevation. Pakai AppBar (bukan PreferredSize + SafeArea manual)
+      // supaya status bar tidak menutup judul.
+      appBar: AppBar(
+        backgroundColor: _kHeaderBg,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: 52,
+        centerTitle: false,
+        titleSpacing: _isSearching ? 0 : 12,
+        automaticallyImplyLeading: false,
+        leading: _isSearching
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: _kHeaderText),
+                onPressed: () {
+                  setState(() {
+                    _isSearching = false;
+                    _searchCtrl.clear();
+                    _search = '';
+                    _appliedSearch = '';
+                  });
+                },
+              )
+            : null,
+        title: _isSearching ? _buildSearchField(s) : _buildTitleMenu(s),
+        actions: _isSearching
+            ? null
+            : [
+                IconButton(
+                  tooltip: s.postAddTooltip,
+                  icon: const Icon(
+                    Icons.add_box_outlined,
+                    color: _kHeaderText,
+                    size: 26,
                   ),
-          ),
+                  onPressed: _openComposer,
+                ),
+                IconButton(
+                  tooltip: s.searchHint,
+                  icon: const Icon(
+                    Icons.search_rounded,
+                    color: _kHeaderText,
+                    size: 26,
+                  ),
+                  onPressed: () => setState(() => _isSearching = true),
+                ),
+                _buildNotifButton(),
+                const SizedBox(width: 4),
+              ],
+        shape: const Border(
+          bottom: BorderSide(color: _kHeaderBorder, width: 1),
         ),
       ),
       body: _buildFeed(_current),
@@ -285,68 +292,47 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     );
   }
 
-  /// Field pencarian dalam header (menggantikan judul saat mode cari).
+  /// Field pencarian dalam header (jadi title AppBar saat mode cari).
   Widget _buildSearchField(S s) {
-    return Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back, color: _kHeaderText),
-          onPressed: () {
-            setState(() {
-              _isSearching = false;
-              _searchCtrl.clear();
-              _search = '';
-              _appliedSearch = '';
-            });
-          },
-        ),
-        Expanded(
-          child: TextField(
-            controller: _searchCtrl,
-            autofocus: true,
-            onChanged: (v) {
-              _search = v;
-              // Debounce 250ms — filter berat hanya jalan setelah user
-              // berhenti mengetik, bukan tiap keystroke.
-              _searchDebounce?.cancel();
-              _searchDebounce = Timer(const Duration(milliseconds: 250), () {
-                if (mounted) setState(() => _appliedSearch = _search);
-              });
-              setState(() {});
-            },
-            style: const TextStyle(color: _kHeaderText, fontSize: 15),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: s.searchHint,
-              hintStyle: const TextStyle(color: Colors.white54, fontSize: 15),
-              suffixIcon: _search.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear,
-                          size: 18, color: Colors.white70),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        setState(() => _search = '');
-                      },
-                    )
-                  : null,
-              filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.10),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: _kMenuBorder)),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-      ],
+    return TextField(
+      controller: _searchCtrl,
+      autofocus: true,
+      onChanged: (v) {
+        _search = v;
+        // Debounce 250ms — filter berat hanya jalan setelah user
+        // berhenti mengetik, bukan tiap keystroke.
+        _searchDebounce?.cancel();
+        _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+          if (mounted) setState(() => _appliedSearch = _search);
+        });
+        setState(() {});
+      },
+      style: const TextStyle(color: _kHeaderText, fontSize: 15),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: s.searchHint,
+        hintStyle: const TextStyle(color: Colors.white54, fontSize: 15),
+        suffixIcon: _search.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear, size: 18, color: Colors.white70),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() => _search = '');
+                },
+              )
+            : null,
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.10),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _kMenuBorder)),
+      ),
     );
   }
 

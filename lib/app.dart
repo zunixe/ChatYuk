@@ -42,6 +42,7 @@ import 'screens/online_users_screen.dart';
 import 'screens/reset_password_screen.dart';
 import 'screens/timeline_screen.dart';
 import 'screens/chats_screen.dart';
+import 'screens/post_composer_screen.dart';
 import 'widgets/anon_prompt_dialog.dart';
 import 'widgets/offline_banner.dart';
 import 'widgets/render_heartbeat.dart';
@@ -838,8 +839,51 @@ class _MainNavState extends ConsumerState<_MainNav>
             ),
         ],
       ),
-      // FAB "+" DIHAPUS — tombol buat postingan sudah dipindah ke header
-      // Timeline (add_box_outlined), lihat lib/screens/timeline_screen.dart.
+      // FAB "+" (centerDocked) — tombol cepat buat postingan, tetap
+      // dipertahankan (bagian navigasi bawah, bukan sekadar aksi timeline).
+      floatingActionButton: SizedBox(
+        width: 52,
+        height: 52,
+        child: FloatingActionButton(
+          onPressed: () {
+            final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+            if (!(auth.profile?.isRegistered ?? false)) {
+              showAnonPromptDialog(context);
+              return;
+            }
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PostComposerScreen()),
+            );
+          },
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.primaryDark,
+                  AppTheme.primary,
+                  AppTheme.accent,
+                ],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 26),
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: AppBottomNav(currentIndex: tab, onTap: _onNavTap),
     ),
       ),
