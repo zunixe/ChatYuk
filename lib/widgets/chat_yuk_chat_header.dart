@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../config/theme.dart';
+
 /// Bagian (section) halaman Chat — menggantikan TabBar "Pesan / Grup /
 /// Global Room". Dipakai [ChatYukChatHeader] & halaman pemanggil.
 enum ChatSection { messages, groups, rooms }
@@ -38,9 +40,13 @@ class ChatYukChatHeader extends StatelessWidget
   final VoidCallback onSearch;
   final VoidCallback onMore;
 
-  /// Aksi tombol compose (edit_square) — dipindah dari FAB supaya tidak
-  /// menutupi daftar chat.
-  final VoidCallback? onCompose;
+  /// Mode cari: field muncul sebagai TITLE header (ala halaman Timeline),
+  /// tombol aksi kanan disembunyikan & diganti tombol back (leading).
+  final bool isSearching;
+  final TextEditingController? searchController;
+  final ValueChanged<String>? onSearchChanged;
+  final VoidCallback? onCloseSearch;
+  final String searchHint;
 
   const ChatYukChatHeader({
     super.key,
@@ -49,7 +55,11 @@ class ChatYukChatHeader extends StatelessWidget
     required this.unreadCounts,
     required this.onSearch,
     required this.onMore,
-    this.onCompose,
+    this.isSearching = false,
+    this.searchController,
+    this.onSearchChanged,
+    this.onCloseSearch,
+    this.searchHint = 'Cari',
   });
 
   @override
@@ -76,6 +86,7 @@ class ChatYukChatHeader extends StatelessWidget
 
   @override
   Widget build(BuildContext context) {
+    final searching = isSearching;
     return Container(
       decoration: const BoxDecoration(
         color: kChatHeaderBg,
@@ -88,47 +99,120 @@ class ChatYukChatHeader extends StatelessWidget
         surfaceTintColor: Colors.transparent,
         toolbarHeight: 52,
         centerTitle: false,
-        titleSpacing: 16,
+        titleSpacing: searching ? 0 : 16,
         automaticallyImplyLeading: false,
-        title: _titleMenu(context),
-        iconTheme: const IconThemeData(color: kChatHeaderText),
-        actions: [
-          _actionBtn(
-            icon: Icons.edit_square,
-            tooltip: 'Tulis',
-            onPressed: onCompose,
+        leading: searching
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: kChatHeaderText),
+                onPressed: onCloseSearch,
+              )
+            : null,
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: SizeTransition(
+              sizeFactor: anim,
+              axis: Axis.horizontal,
+              axisAlignment: -1,
+              child: child,
+            ),
           ),
-          _actionBtn(
-            icon: Icons.search_rounded,
-            tooltip: 'Cari',
-            onPressed: onSearch,
-          ),
-          _actionBtn(
-            icon: Icons.more_vert_rounded,
-            tooltip: 'Menu',
-            onPressed: onMore,
-          ),
-          const SizedBox(width: 4),
-        ],
+          child: searching
+              ? KeyedSubtree(key: const ValueKey('search'), child: _searchField())
+              : KeyedSubtree(key: const ValueKey('title'), child: _titleMenu(context)),
+        ),        iconTheme: const IconThemeData(color: kChatHeaderText),
+        actions: searching
+            ? null
+            : [
+                _actionBtn(
+                  icon: Icons.search_rounded,
+                  tooltip: 'Cari',
+                  onPressed: onSearch,
+                ),
+                _actionBtn(
+                  icon: Icons.more_vert_rounded,
+                  tooltip: 'Menu',
+                  onPressed: onMore,
+                ),
+                const SizedBox(width: 4),
+              ],
       ),
     );
   }
+
+  /// Field cari jadi title header — ukuran & bentuk SAMA dengan menu Online
+  /// (tinggi 40, radius 12, prefix ikon), plus border biru aksen + animasi
+  /// AnimatedSwitcher (lihat build()).
+  Widget _searchField() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 14),
+      child: SizedBox(
+        height: 40,
+        width: double.infinity,
+        child: TextField(
+          controller: searchController,
+          autofocus: true,
+          onChanged: onSearchChanged,
+          style: AppText.body.copyWith(color: kChatHeaderText),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: searchHint,
+            hintStyle: AppText.body.copyWith(color: Colors.white54),
+            prefixIcon: const Icon(
+              Icons.search,
+              color: Colors.white70,
+              size: 20,
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 36,
+              minHeight: 0,
+            ),
+            suffixIcon: (searchController?.text.isNotEmpty ?? false)
+                ? IconButton(
+                    icon: const Icon(
+                      Icons.clear,
+                      size: 18,
+                      color: Colors.white70,
+                    ),
+                    onPressed: () {
+                      searchController?.clear();
+                      onSearchChanged?.call('');
+                    },
+                  )
+                : null,
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.10),
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 10,
+              horizontal: 12,
+            ),
+            border: _searchBorder(kChatAccentBlue),
+            enabledBorder: _searchBorder(Colors.white24),
+            focusedBorder: _searchBorder(kChatAccentBlue, width: 1.5),
+          ),
+        ),
+      ),
+    );
+  }
+
+  OutlineInputBorder _searchBorder(Color color, {double width = 1}) =>
+      OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: color, width: width),
+      );
 
   Widget _actionBtn({
     required IconData icon,
     required String tooltip,
     required VoidCallback? onPressed,
   }) {
-    return SizedBox(
-      width: 44,
-      height: 44,
-      child: IconButton(
-        tooltip: tooltip,
-        iconSize: 22,
-        padding: EdgeInsets.zero,
-        icon: Icon(icon),
-        onPressed: onPressed,
-      ),
+    // Ukuran ikon & tombol SAMA dengan halaman Timeline (IconButton standar,
+    // iconSize default 24, tanpa kotak 44 eksplisit) supaya konsisten.
+    return IconButton(
+      tooltip: tooltip,
+      icon: Icon(icon),
+      onPressed: onPressed,
     );
   }
 
@@ -154,12 +238,7 @@ class ChatYukChatHeader extends StatelessWidget
         children: [
           Text(
             _label(section),
-            style: const TextStyle(
-              fontSize: 23,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-              color: kChatHeaderText,
-            ),
+            style: AppText.title.copyWith(color: kChatHeaderText),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

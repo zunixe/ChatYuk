@@ -5,12 +5,10 @@ import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../services/chat_service.dart';
 import '../widgets/chat_yuk_chat_header.dart';
-import '../widgets/anon_prompt_dialog.dart';
 import 'group_screen.dart';
 import 'private_chats_screen.dart';
 import 'lobby_screen.dart';
 import 'call_history_screen.dart';
-import 'post_composer_screen.dart';
 import '../config/theme.dart';
 
 /// Menu "Chat" gabungan: section Pesan (private) + Grup + Room.
@@ -47,7 +45,6 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
   Widget build(BuildContext context) {
     final s = ref.watch(localeProvider).s;
     final isPesan = _section == ChatSection.messages;
-    final showSearch = _isSearching;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -55,62 +52,27 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
         section: _section,
         onSectionChanged: _changeSection,
         unreadCounts: _unreadCounts(),
-        onSearch: () => setState(() => _isSearching = !_isSearching),
+        onSearch: () => setState(() => _isSearching = true),
+        onCloseSearch: () {
+          setState(() {
+            _isSearching = false;
+            _searchCtrl.clear();
+            _query = '';
+          });
+        },
+        isSearching: _isSearching,
+        searchController: _searchCtrl,
+        onSearchChanged: (v) =>
+            setState(() => _query = v.trim().toLowerCase()),
+        searchHint: isPesan ? s.searchHint : s.searchRoomHint,
         onMore: _openMoreMenu,
-        onCompose: _openCompose,
       ),
-      body: Column(
+      body: IndexedStack(
+        index: _section.index,
         children: [
-          // Field cari tampil di bawah header saat mode cari (pola lama:
-          // query dibawa pindah section, tidak di-reset).
-          if (showSearch)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-              child: SizedBox(
-                height: 40,
-                child: TextField(
-                  controller: _searchCtrl,
-                  autofocus: true,
-                  onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
-                  style: AppText.body.copyWith(color: Colors.white),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: isPesan ? s.searchHint : s.searchRoomHint,
-                    hintStyle: AppText.body.copyWith(color: Colors.white54),
-                    prefixIcon: const Icon(Icons.search, color: Colors.white70, size: 20),
-                    prefixIconConstraints:
-                        const BoxConstraints(minWidth: 36, minHeight: 0),
-                    suffixIcon: _query.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18, color: Colors.white70),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              setState(() => _query = '');
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: Colors.white24,
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          Expanded(
-            child: IndexedStack(
-              index: _section.index,
-              children: [
-                PrivateChatsScreen(embedded: true, externalQuery: _query),
-                GroupScreen(externalQuery: _query),
-                LobbyScreen(embedded: true, externalQuery: _query),
-              ],
-            ),
-          ),
+          PrivateChatsScreen(embedded: true, externalQuery: _query),
+          GroupScreen(externalQuery: _query),
+          LobbyScreen(embedded: true, externalQuery: _query),
         ],
       ),
     );
@@ -129,17 +91,6 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
       unread += (c.unreadCounts[uid] ?? 0);
     }
     return {ChatSection.messages: unread};
-  }
-
-  void _openCompose() {
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-    if (!(auth.profile?.isRegistered ?? false)) {
-      showAnonPromptDialog(context);
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const PostComposerScreen()),
-    );
   }
 
   Future<void> _openMoreMenu() async {
