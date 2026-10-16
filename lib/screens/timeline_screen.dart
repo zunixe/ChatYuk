@@ -5,13 +5,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../widgets/post_card.dart';
 import '../widgets/post/post_prefetch.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/skeleton_card.dart';
-import 'friend_requests_screen.dart';
 import 'post_composer_screen.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
@@ -21,10 +19,8 @@ import '../config/strings.dart';
 
 // ── Warna header ringkas ala Instagram (spesifik, tak ikut tema) ──
 const Color _kHeaderBg = Color(0xFF0F1115);
-const Color _kHeaderBorder = Color(0xFF1C2028);
 const Color _kHeaderText = Color(0xFFF2F4F7);
 const Color _kAccentBlue = Color(0xFF4FB3F6);
-const Color _kNotifDot = Color(0xFFFF5A5F);
 const Color _kMenuBg = Color(0xFF1A1E26);
 const Color _kMenuBorder = Color(0xFF2A2F3A);
 const Color _kMenuText = Color(0xFFD5D9E0);
@@ -192,27 +188,31 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         actions: _isSearching
             ? null
             : [
-                IconButton(
-                  tooltip: s.postAddTooltip,
-                  icon: const Icon(
-                    Icons.add_box_outlined,
-                    color: _kHeaderText,
+                // Padding kanan 8 — samakan dengan menu Online (jarak ikon
+                // ke tepi layar konsisten antar halaman).
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: s.postAddTooltip,
+                        icon: const Icon(Icons.add_box_outlined),
+                        onPressed: _openComposer,
+                      ),
+                      IconButton(
+                        tooltip: s.searchHint,
+                        icon: const Icon(Icons.search_rounded),
+                        onPressed: () =>
+                            setState(() => _isSearching = true),
+                      ),
+                    ],
                   ),
-                  onPressed: _openComposer,
                 ),
-                IconButton(
-                  tooltip: s.searchHint,
-                  icon: const Icon(
-                    Icons.search_rounded,
-                    color: _kHeaderText,
-                  ),
-                  onPressed: () => setState(() => _isSearching = true),
-                ),
-                _buildNotifButton(),
-                const SizedBox(width: 4),
               ],
         shape: const Border(
-          bottom: BorderSide(color: _kHeaderBorder, width: 1),
+          // Tanpa garis bawah: PostCard pertama sudah punya Divider di
+          // atasnya — kalau ditambah di sini jadi garis dobel.
         ),
       ),
       body: _buildFeed(_current),
@@ -287,81 +287,52 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
 
   /// Field pencarian dalam header (jadi title AppBar saat mode cari).
   Widget _buildSearchField(S s) {
-    return TextField(
-      controller: _searchCtrl,
-      autofocus: true,
-      onChanged: (v) {
-        _search = v;
-        // Debounce 250ms — filter berat hanya jalan setelah user
-        // berhenti mengetik, bukan tiap keystroke.
-        _searchDebounce?.cancel();
-        _searchDebounce = Timer(const Duration(milliseconds: 250), () {
-          if (mounted) setState(() => _appliedSearch = _search);
-        });
-        setState(() {});
-      },
-      style: const TextStyle(color: _kHeaderText, fontSize: 15),
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: s.searchHint,
-        hintStyle: const TextStyle(color: Colors.white54, fontSize: 15),
-        suffixIcon: _search.isNotEmpty
-            ? IconButton(
-                icon: const Icon(Icons.clear, size: 18, color: Colors.white70),
-                onPressed: () {
-                  _searchCtrl.clear();
-                  setState(() => _search = '');
-                },
-              )
-            : null,
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.10),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: _kMenuBorder)),
-      ),
-    );
-  }
-
-  /// Tombol notifikasi (hati) + titik merah bila ada permintaan teman belum
-  /// dibaca. Tap → halaman Permintaan Teman.
-  Widget _buildNotifButton() {
-    final count = ref.watch(socialProvider.select((s) => s.friendRequestCount));
-    final hasUnread = count > 0;
-    return IconButton(
-      tooltip: ref.watch(localeProvider).s.friendRequestTitle,
-      onPressed: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const FriendRequestsScreen()),
-        );
-      },
-      icon: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const Icon(
-            Icons.favorite_border_rounded,
-            color: _kHeaderText,
-          ),
-          if (hasUnread)
-            Positioned(
-              right: -1,
-              top: -1,
-              child: Container(
-                width: 9,
-                height: 9,
-                decoration: const BoxDecoration(
-                  color: _kNotifDot,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-        ],
+    // Padding kanan supaya field tidak menempel ke tepi layar
+    // (titleSpacing saat searching = 0, ikon clear paling kanan).
+    return Padding(
+      padding: const EdgeInsets.only(right: 14),
+      child: TextField(
+        controller: _searchCtrl,
+        autofocus: true,
+        onChanged: (v) {
+          _search = v;
+          // Debounce 250ms — filter berat hanya jalan setelah user
+          // berhenti mengetik, bukan tiap keystroke.
+          _searchDebounce?.cancel();
+          _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+            if (mounted) setState(() => _appliedSearch = _search);
+          });
+          setState(() {});
+        },
+        style: const TextStyle(color: _kHeaderText, fontSize: 15),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: s.searchHint,
+          hintStyle: const TextStyle(color: Colors.white54, fontSize: 15),
+          suffixIcon: _search.isNotEmpty
+              ? IconButton(
+                  icon:
+                      const Icon(Icons.clear, size: 18, color: Colors.white70),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _search = '');
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: Colors.white.withValues(alpha: 0.10),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: _kMenuBorder)),
+        ),
       ),
     );
   }
