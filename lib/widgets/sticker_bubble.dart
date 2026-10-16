@@ -208,7 +208,7 @@ Widget stickerWidget(Uint8List bytes, String src, double size) {
   // .webm/.mp4 → video bisu loop (S5). Animated webp/gif → Image.memory
   // (Flutter native). .tgs → Lottie.
   if (_looksLikeVideo(src)) {
-    return StickerVideo(bytes: bytes, size: size);
+    return StickerVideo(bytes: bytes, size: size, src: src);
   }
   if (lower.endsWith('.tgs') || _looksLikeTgs(bytes)) {
     return Lottie.memory(
@@ -259,7 +259,16 @@ class StickerBytes extends StatelessWidget {
 class StickerVideo extends StatefulWidget {
   final Uint8List bytes;
   final double size;
-  const StickerVideo({super.key, required this.bytes, this.size = 140});
+
+  /// Sumber asli (mis. `stickers/u1/x.webm`) — menentukan ekstensi file temp.
+  /// `video_player` gagal kalau ekstensi salah (file .webm dinamai .mp4).
+  final String src;
+  const StickerVideo({
+    super.key,
+    required this.bytes,
+    this.size = 140,
+    this.src = '',
+  });
 
   @override
   State<StickerVideo> createState() => _StickerVideoState();
@@ -311,13 +320,24 @@ class _StickerVideoState extends State<StickerVideo> {
 
   void _releaseSlot() => _active.remove(this);
 
+  /// Ekstensi dari sumber (mp4/mov/webm); fallback .mp4.
+  String _ext() {
+    final l = widget.src.toLowerCase();
+    for (final e in const ['webm', 'mov', 'mp4']) {
+      if (l.endsWith('.$e')) return '.$e';
+    }
+    return '.mp4';
+  }
+
   Future<void> _init() async {
     try {
       final dir = await getTemporaryDirectory();
       final f = File(
-        '${dir.path}/sticker_vid_${widget.bytes.hashCode.abs()}.mp4',
+        '${dir.path}/sticker_vid_${widget.bytes.hashCode.abs()}${_ext()}',
       );
-      if (!await f.exists()) {
+      // Tulis ulang bila belum ada / ukuran beda (hindari file rusak bentrok
+      // hash) — ekstensi kini mengikuti sumber, jadi tak menimpa file jenis lain.
+      if (!await f.exists() || (await f.length()) != widget.bytes.length) {
         await f.writeAsBytes(widget.bytes, flush: true);
       }
       if (!mounted) return;
@@ -332,7 +352,9 @@ class _StickerVideoState extends State<StickerVideo> {
       }
       setState(() => _ctl = c);
       await c.play();
-    } catch (_) {}
+    } catch (e) {
+      dlog('[STICKER] video init gagal src=${widget.src}: $e');
+    }
   }
 
   void _disposeCtl() {

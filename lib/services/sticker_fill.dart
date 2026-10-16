@@ -39,11 +39,16 @@ List<MessageModel> preserveStickerPaths(
 
 /// Idempotent: hanya pesan yang `imageData`-nya masih kosong yang diubah;
 /// aman dipanggil berulang (boot mem → cache → server 3×).
+///
+/// [currentGetter] mengembalikan list pesan TERKINI (bukan snapshot). Saat boot
+/// `_current` di-REASSIGN (merge server, lihat chat_stream_session) setelah
+/// panggilan async ini dimulai — kalau memakai referensi tetap, pengisian path
+/// kena instance lama → hilang → **stiker lama tetap kosong walau baru muncul**.
 Future<void> fillStickerPaths({
   required SupabaseClient sb,
   required String table,
   required List<MessageModel> stickers,
-  required List<MessageModel> current,
+  required List<MessageModel> Function() currentGetter,
   required bool Function() isClosed,
   required void Function() emit,
   required void Function() scheduleCacheSave,
@@ -58,6 +63,8 @@ Future<void> fillStickerPaths({
           .inFilter('id', [for (final m in batch) m.id]);
       if (isClosed()) return;
       var changed = false;
+      // Ambil list TERKINI tiap batch (bisa sudah berbeda dari saat panggil).
+      final current = currentGetter();
       for (final r in rows) {
         final path = (r['image_data'] as String? ?? '');
         if (path.isEmpty) continue;
