@@ -5,16 +5,29 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../widgets/post_card.dart';
 import '../widgets/post/post_prefetch.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/skeleton_card.dart';
+import 'friend_requests_screen.dart';
 import 'post_composer_screen.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import '../core/perf/perf_probe.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
+
+// ── Warna header ringkas ala Instagram (spesifik, tak ikut tema) ──
+const Color _kHeaderBg = Color(0xFF0F1115);
+const Color _kHeaderBorder = Color(0xFF1C2028);
+const Color _kHeaderText = Color(0xFFF2F4F7);
+const Color _kAccentBlue = Color(0xFF4FB3F6);
+const Color _kNotifDot = Color(0xFFFF5A5F);
+const Color _kMenuBg = Color(0xFF1A1E26);
+const Color _kMenuBorder = Color(0xFF2A2F3A);
+const Color _kMenuText = Color(0xFFD5D9E0);
 
 /// Timeline feed: tab Semua / Mengikuti + infinite scroll + refresh.
 class TimelineScreen extends ConsumerStatefulWidget {
@@ -25,11 +38,9 @@ class TimelineScreen extends ConsumerStatefulWidget {
 }
 
 class _TimelineScreenState extends ConsumerState<TimelineScreen>
-    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
-  late final TabController _tab = TabController(length: 3, vsync: this);
-  // Satu ScrollController PER scope (Semua/Mengikuti/Postinganku) — dibutuhkan
-  // karena body kini TabBarView: tiap halaman punya scroll terpisah sehingga
-  // swipe antar-tab tidak mengganggu posisi scroll scope lain.
+    with AutomaticKeepAliveClientMixin {
+  // Satu ScrollController PER scope (Semua/Mengikuti/Postinganku) — posisi
+  // scroll tiap scope terjaga saat user ganti scope dari menu header.
   final List<ScrollController> _scrolls =
       List.generate(3, (_) => ScrollController());
   ScrollController get _scroll => _scrolls[_current];
@@ -72,7 +83,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
   @override
   void initState() {
     super.initState();
-    _tab.addListener(_onTabChanged);
     for (final c in _scrolls) {
       c.addListener(_onScroll);
     }
@@ -83,35 +93,12 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
   void dispose() {
     _searchDebounce?.cancel();
     _scrollDebounce?.cancel();
-    _tab.removeListener(_onTabChanged);
-    _tab.dispose();
     for (final c in _scrolls) {
       c.removeListener(_onScroll);
       c.dispose();
     }
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  void _onTabChanged() {
-    if (_tab.indexIsChanging) return;
-    if (_tab.index != _current) {
-      // Tiap scope punya ScrollController sendiri → posisi scroll sudah
-      // otomatis terjaga, tak perlu simpan/pulihkan manual.
-      setState(() => _current = _tab.index);
-      // Reset search saat ganti tab — filter basi dari tab lama tidak
-      // boleh membawa hasil ke scope baru.
-      _searchCtrl.clear();
-      _searchDebounce?.cancel();
-      if (_search.isNotEmpty || _appliedSearch.isNotEmpty) {
-        setState(() {
-          _search = '';
-          _appliedSearch = '';
-        });
-      }
-      // Ganti tab: tampilkan cache instan; RPC hanya bila cache basi.
-      _load(refresh: true, skipIfFresh: true);
-    }
   }
 
   void _onScroll() {
@@ -176,141 +163,265 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
-      appBar: AppBar(
-        backgroundColor: AppTheme.headerGradient.colors.first,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
-        ),
-        leading: IconButton(
-          tooltip: s.searchHint,
-          icon: Icon(_isSearching ? Icons.close : Icons.search_rounded),
-          color: Colors.white,
-          onPressed: () {
-            setState(() {
-              _isSearching = !_isSearching;
-              if (!_isSearching) {
-                _searchCtrl.clear();
-                _search = '';
-              }
-            });
-          },
-        ),
-        title: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          transitionBuilder: (child, anim) => FadeTransition(
-            opacity: anim,
-            child: SizeTransition(
-              sizeFactor: anim,
-              axis: Axis.horizontal,
-              axisAlignment: -1,
-              child: child,
-            ),
+      // Header ringkas ala Instagram: 52px, gelap muda, garis bawah tipis,
+      // tanpa elevation. Judul "ChatYuk" + panah → menu scope feed.
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(52),
+        child: Container(
+          height: 52,
+          decoration: const BoxDecoration(
+            color: _kHeaderBg,
+            border: Border(bottom: BorderSide(color: _kHeaderBorder, width: 1)),
           ),
-          child: _isSearching
-              ? SizedBox(
-                  key: const ValueKey('search'),
-                  height: 40,
-                  child: TextField(
-                    controller: _searchCtrl,
-                    autofocus: true,
-                    onChanged: (v) {
-                      _search = v;
-                      // Debounce 250ms — filter berat hanya jalan setelah
-                      // user berhenti mengetik, bukan tiap keystroke.
-                      _searchDebounce?.cancel();
-                      _searchDebounce = Timer(
-                        const Duration(milliseconds: 250),
-                        () {
-                          if (mounted) {
-                            setState(() => _appliedSearch = _search);
-                          }
-                        },
-                      );
-                      setState(() {});
-                    },
-                    style: AppText.body.copyWith(color: Colors.white),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: s.searchHint,
-                      hintStyle: AppText.body.copyWith(color: Colors.white54),
-                      prefixIcon: const Icon(Icons.search, color: Colors.white70, size: 20),
-                      prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 0),
-                      suffixIcon: _search.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 18, color: Colors.white70),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                setState(() => _search = '');
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.15),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white, width: 1)),
-                    ),
+          child: SafeArea(
+            bottom: false,
+            child: _isSearching
+                ? _buildSearchField(s)
+                : Row(
+                    children: [
+                      const SizedBox(width: 12),
+                      // Judul scope + panah → PopupMenuButton ganti feed.
+                      _buildTitleMenu(s),
+                      const Spacer(),
+                      // Kanan: buat postingan, cari, notifikasi.
+                      IconButton(
+                        tooltip: s.postAddTooltip,
+                        icon: const Icon(
+                          Icons.add_box_outlined,
+                          color: _kHeaderText,
+                          size: 26,
+                        ),
+                        onPressed: _openComposer,
+                      ),
+                      IconButton(
+                        tooltip: s.searchHint,
+                        icon: const Icon(
+                          Icons.search_rounded,
+                          color: _kHeaderText,
+                          size: 26,
+                        ),
+                        onPressed: () => setState(() => _isSearching = true),
+                      ),
+                      _buildNotifButton(),
+                      const SizedBox(width: 4),
+                    ],
                   ),
-                )
-              : Column(
-                  key: const ValueKey('title'),
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('ChatYuk', style: AppText.title.copyWith(color: Colors.white)),
-                    Text(s.titleTimeline, style: AppText.bodySmall.copyWith(color: Colors.white70)),
-                  ],
-                ),
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        // Tombol + kanan-atas (seperti Online): ke halaman Post.
-        // Anon: popup lengkapi email (pola sama dengan CTA empty-state).
-        actions: [
-          IconButton(
-            tooltip: s.postAddTooltip,
-            icon: const Icon(Icons.add_circle_outline),
-            color: Colors.white,
-            onPressed: () {
-              final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-              if (!(auth.profile?.isRegistered ?? false)) {
-                showAnonPromptDialog(context);
-                return;
-              }
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const PostComposerScreen(),
-                ),
-              );
-            },
           ),
-        ],
-        bottom: TabBar(
-          controller: _tab,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: [
-            Tab(text: s.tabAll),
-            Tab(text: s.tabFollowing),
-            Tab(text: s.tabMine),
-          ],
         ),
       ),
-      // Swipe antar-tab (Semua/Mengikuti/Postinganku) seperti halaman Grup.
-      // Tiap halaman punya ScrollController sendiri (lihat _scrolls).
-      body: TabBarView(
-        controller: _tab,
+      body: _buildFeed(_current),
+    );
+  }
+
+  /// Judul header + menu scope feed (Semua / Mengikuti / Postinganku).
+  Widget _buildTitleMenu(S s) {
+    final title = switch (_current) {
+      1 => s.tabFollowing,
+      2 => s.tabMine,
+      _ => 'ChatYuk',
+    };
+    return PopupMenuButton<int>(
+      tooltip: '',
+      onSelected: _selectScope,
+      color: _kMenuBg,
+      elevation: 8,
+      offset: const Offset(0, 44),
+      constraints: const BoxConstraints(minWidth: 230),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: _kMenuBorder),
+      ),
+      itemBuilder: (_) => [
+        _scopeMenuItem(0, s.tabAll),
+        _scopeMenuItem(1, s.tabFollowing),
+        _scopeMenuItem(2, s.tabMine),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildFeed(0),
-          _buildFeed(1),
-          _buildFeed(2),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              color: _kHeaderText,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const Icon(
+            Icons.keyboard_arrow_down,
+            color: _kHeaderText,
+            size: 24,
+          ),
         ],
       ),
     );
   }
 
-  /// Body feed untuk satu scope (index tab). Dipakai ketiga halaman TabBarView.
+  PopupMenuItem<int> _scopeMenuItem(int index, String label) {
+    final active = _current == index;
+    return PopupMenuItem<int>(
+      value: index,
+      height: 46,
+      child: Row(
+        children: [
+          if (active)
+            const Icon(Icons.check, color: _kAccentBlue, size: 20)
+          else
+            const SizedBox(width: 20),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              color: active ? _kHeaderText : _kMenuText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Field pencarian dalam header (menggantikan judul saat mode cari).
+  Widget _buildSearchField(S s) {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back, color: _kHeaderText),
+          onPressed: () {
+            setState(() {
+              _isSearching = false;
+              _searchCtrl.clear();
+              _search = '';
+              _appliedSearch = '';
+            });
+          },
+        ),
+        Expanded(
+          child: TextField(
+            controller: _searchCtrl,
+            autofocus: true,
+            onChanged: (v) {
+              _search = v;
+              // Debounce 250ms — filter berat hanya jalan setelah user
+              // berhenti mengetik, bukan tiap keystroke.
+              _searchDebounce?.cancel();
+              _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+                if (mounted) setState(() => _appliedSearch = _search);
+              });
+              setState(() {});
+            },
+            style: const TextStyle(color: _kHeaderText, fontSize: 15),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: s.searchHint,
+              hintStyle: const TextStyle(color: Colors.white54, fontSize: 15),
+              suffixIcon: _search.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear,
+                          size: 18, color: Colors.white70),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() => _search = '');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.10),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _kMenuBorder)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+      ],
+    );
+  }
+
+  /// Tombol notifikasi (hati) + titik merah bila ada permintaan teman belum
+  /// dibaca. Tap → halaman Permintaan Teman.
+  Widget _buildNotifButton() {
+    final count = ref.watch(socialProvider.select((s) => s.friendRequestCount));
+    final hasUnread = count > 0;
+    return IconButton(
+      tooltip: ref.watch(localeProvider).s.friendRequestTitle,
+      onPressed: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const FriendRequestsScreen()),
+        );
+      },
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(
+            Icons.favorite_border_rounded,
+            color: _kHeaderText,
+            size: 26,
+          ),
+          if (hasUnread)
+            Positioned(
+              right: -1,
+              top: -1,
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: const BoxDecoration(
+                  color: _kNotifDot,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Buka composer postingan (anon → popup lengkapi email).
+  void _openComposer() {
+    final auth = ProviderScope.containerOf(context, listen: false)
+        .read(authProvider.notifier);
+    if (!(auth.profile?.isRegistered ?? false)) {
+      showAnonPromptDialog(context);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const PostComposerScreen()),
+    );
+  }
+
+  /// Ganti scope feed (0=Semua, 1=Mengikuti, 2=Postinganku) dari menu header.
+  /// Menggantikan TabBar: set _current, reset scroll/search, lalu muat ulang
+  /// feed dengan logika filter scope yang SUDAH ada.
+  void _selectScope(int index) {
+    if (index == _current) return;
+    setState(() => _current = index);
+    // Reset search — filter basi dari scope lama tidak boleh terbawa.
+    _searchCtrl.clear();
+    _searchDebounce?.cancel();
+    if (_search.isNotEmpty || _appliedSearch.isNotEmpty) {
+      setState(() {
+        _search = '';
+        _appliedSearch = '';
+      });
+    }
+    // Tampilkan cache instan; RPC hanya bila cache basi (logika lama).
+    _load(refresh: true, skipIfFresh: true);
+  }
+
+  /// Body feed untuk scope aktif (`_current`). Feed tunggal — scope diganti
+  /// dari menu header (dulu TabBarView 3 halaman).
   Widget _buildFeed(int scopeIndex) {
     final s = ref.watch(localeProvider).s;
     final postsRaw = ref.watch(timelineProvider.select((t) => t.posts));
@@ -322,36 +433,24 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         ref.watch(authProvider.select((a) => a.anonTimelineBlocked));
     final scope =
         scopeIndex == 0 ? 'all' : (scopeIndex == 1 ? 'following' : 'mine');
-    // Hanya scope AKTIF yang menampilkan data provider (data provider = scope
-    // aktif). Scope lain ditandai "loading" → tampil SKELETON, bukan empty
-    // state "ketuk +". Ini penting saat swipe: TabBarView membangun halaman
-    // tujuan SEBELUM _current ter-update, jadi tanpa ini halaman baru
-    // sekejap menampilkan CTA "ketuk untuk membuat postingan" walau ada isinya.
-    final isActive = scopeIndex == _current;
-    final List<Map<String, dynamic>> posts =
-        isActive ? _computeFiltered(postsRaw) : const [];
+    // Feed tunggal: halaman yang dibangun SELALU scope aktif.
+    final List<Map<String, dynamic>> posts = _computeFiltered(postsRaw);
     // PREFETCH (contek perilaku chat foto: begitu chat terbuka, thumb sudah
     // di-cache → tampil instan). Di sini: begitu daftar post tiba, hangatkan
     // thumb N post teratas di LATAR supaya kartu berikutnya langsung gambar,
     // bukan "item dulu baru gambar". Fire-and-forget, bounded, dedupe.
-    if (isActive && posts.isNotEmpty) {
+    if (posts.isNotEmpty) {
       PostPrefetch.warmPosts(posts);
     }
-    final effectiveSearch = isActive ? _appliedSearch : '';
-    final effectiveLoading = isActive ? loading : true;
+    final effectiveSearch = _appliedSearch;
+    final effectiveLoading = loading;
     final ctrl = _scrolls[scopeIndex];
 
     return RefreshIndicator(
-              onRefresh: () async {
-                if (scopeIndex != _current) {
-                  // Swipe ke scope lain dulu baru refresh scope itu.
-                  _tab.animateTo(scopeIndex);
-                }
-                await _load(refresh: true);
-              },
+              onRefresh: () => _load(refresh: true),
               // Empty state HANYA saat fetch selesai & benar-benar kosong. Saat
-              // loading pertama kali (atau tab switch) tampilkan spinner — jangan
-              // blink ke "Belum ada postingan" kalau sebenarnya ada data.
+              // loading pertama kali tampilkan skeleton — jangan blink ke
+              // "Belum ada postingan" kalau sebenarnya ada data.
               child: anonBlocked
                       // Gerbang Timeline absolut: anon tidak bisa lihat feed.
                       // Tampilkan ajakan daftar (bukan error retry dari RPC
