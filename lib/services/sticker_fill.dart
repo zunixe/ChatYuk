@@ -39,11 +39,16 @@ List<MessageModel> preserveStickerPaths(
 
 /// Idempotent: hanya pesan yang `imageData`-nya masih kosong yang diubah;
 /// aman dipanggil berulang (boot mem → cache → server 3×).
+///
+/// [currentGetter] mengembalikan list pesan TERKINI (bukan snapshot) supaya
+/// pengisian path selalu kena ke instance `_current` yang aktif — kalau
+/// memakai referensi tetap, race dengan penggantian `_current` (merge server)
+/// membuat stiker lama tetap kosong.
 Future<void> fillStickerPaths({
   required SupabaseClient sb,
   required String table,
   required List<MessageModel> stickers,
-  required List<MessageModel> current,
+  required List<MessageModel> Function() currentGetter,
   required bool Function() isClosed,
   required void Function() emit,
   required void Function() scheduleCacheSave,
@@ -57,7 +62,10 @@ Future<void> fillStickerPaths({
           .select('id,image_data')
           .inFilter('id', [for (final m in batch) m.id]);
       if (isClosed()) return;
+      dlog('[sticker fill] t=$table req=${batch.length} got=${rows.length}');
       var changed = false;
+      // Ambil list TERKINI tiap batch (bisa sudah berbeda dari saat panggil).
+      final current = currentGetter();
       for (final r in rows) {
         final path = (r['image_data'] as String? ?? '');
         if (path.isEmpty) continue;

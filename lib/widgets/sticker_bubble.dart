@@ -207,7 +207,9 @@ Widget stickerWidget(Uint8List bytes, String src, double size) {
   final lower = src.toLowerCase();
   // .webm/.mp4 → video bisu loop (S5). Animated webp/gif → Image.memory
   // (Flutter native). .tgs → Lottie.
-  if (_looksLikeVideo(src)) return StickerVideo(bytes: bytes, size: size);
+  if (_looksLikeVideo(src)) {
+    return StickerVideo(bytes: bytes, size: size, src: src);
+  }
   if (lower.endsWith('.tgs') || _looksLikeTgs(bytes)) {
     return Lottie.memory(
       bytes,
@@ -257,7 +259,17 @@ class StickerBytes extends StatelessWidget {
 class StickerVideo extends StatefulWidget {
   final Uint8List bytes;
   final double size;
-  const StickerVideo({super.key, required this.bytes, this.size = 140});
+
+  /// Path/sumber asli (mis. `stickers/u1/x.webm`) — dipakai menentukan
+  /// ekstensi file temp; `video_player` menolak kalau ekstensi salah
+  /// (mis. file .webm dinamai .mp4). Kosong → fallback `.mp4`.
+  final String src;
+  const StickerVideo({
+    super.key,
+    required this.bytes,
+    this.size = 140,
+    this.src = '',
+  });
 
   @override
   State<StickerVideo> createState() => _StickerVideoState();
@@ -265,6 +277,7 @@ class StickerVideo extends StatefulWidget {
 
 class _StickerVideoState extends State<StickerVideo> {
   VideoPlayerController? _ctl;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -277,18 +290,29 @@ class _StickerVideoState extends State<StickerVideo> {
     super.didUpdateWidget(old);
     if (!identical(old.bytes, widget.bytes)) {
       _disposeCtl();
+      _failed = false;
       _init();
     }
+  }
+
+  /// Ekstensi dari sumber (mp4/mov/webm); fallback .mp4.
+  String _ext() {
+    final l = widget.src.toLowerCase();
+    for (final e in const ['webm', 'mov', 'mp4']) {
+      if (l.endsWith('.$e')) return '.$e';
+    }
+    return '.mp4';
   }
 
   Future<void> _init() async {
     try {
       final dir = await getTemporaryDirectory();
-      final ext = '.mp4';
       final f = File(
-        '${dir.path}/sticker_vid_${widget.bytes.hashCode.abs()}$ext',
+        '${dir.path}/sticker_vid_${widget.bytes.hashCode.abs()}${_ext()}',
       );
-      if (!await f.exists()) {
+      // Selalu tulis ulang bila kosong/berbeda ukuran (hash collision jarang,
+      // tapi aman). File lama bernama sama dianggap valid.
+      if (!await f.exists() || (await f.length()) != widget.bytes.length) {
         await f.writeAsBytes(widget.bytes, flush: true);
       }
       if (!mounted) return;
@@ -300,9 +324,15 @@ class _StickerVideoState extends State<StickerVideo> {
         await c.dispose();
         return;
       }
-      setState(() => _ctl = c);
+      setState(() {
+        _ctl = c;
+        _failed = false;
+      });
       await c.play();
-    } catch (_) {}
+    } catch (e) {
+      dlog('[STICKER] video init gagal src=${widget.src}: $e');
+      if (mounted) setState(() => _failed = true);
+    }
   }
 
   void _disposeCtl() {
@@ -321,6 +351,20 @@ class _StickerVideoState extends State<StickerVideo> {
   @override
   Widget build(BuildContext context) {
     final c = _ctl;
+    // Gagal init → tampilkan placeholder (bukan kosong tanpa tanda).
+    if (_failed) {
+      return SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: const Center(
+          child: Icon(
+            Icons.movie_outlined,
+            color: Colors.white38,
+            size: 32,
+          ),
+        ),
+      );
+    }
     // Placeholder ukuran SAMA (anti layout shift) selama init.
     if (c == null || !c.value.isInitialized) {
       return SizedBox(width: widget.size, height: widget.size);
