@@ -839,9 +839,11 @@ class _MainNavState extends ConsumerState<_MainNav>
             ),
         ],
       ),
-      // FAB "+" (centerDocked) — tombol cepat buat postingan, tetap
-      // dipertahankan (bagian navigasi bawah, bukan sekadar aksi timeline).
-      floatingActionButton: SizedBox(
+      // FAB "+" (centerDocked) — tombol cepat buat postingan. DISEMBUNYIKAN
+      // di tab Chat (index 1): halaman Chat sudah punya tombol compose di
+      // header ringkasnya, dan FAB akan menutupi daftar chat. Tab lain
+      // (Online/Timeline/Profil) tetap memakainya.
+      floatingActionButton: tab == 1 ? null : SizedBox(
         width: 52,
         height: 52,
         child: FloatingActionButton(

@@ -9,59 +9,56 @@ mixin _PcFilterMx on _PcBase {
     >(
       valueListenable: _countsNotifier,
       builder: (_, counts, __) {
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
-          child: Row(
-            children: [
-              _filterChip(s.filterAllCount(counts.all), ChatFilter.all),
-              const SizedBox(width: 6),
-              _filterChip(
-                s.filterUnreadCount(counts.unread),
-                ChatFilter.unread,
-              ),
-              const SizedBox(width: 6),
-              _filterChip(
-                s.filterFriendsCount(counts.friends),
-                ChatFilter.friends,
-              ),
-              const SizedBox(width: 6),
-              _filterChip(s.filterAnonCount(counts.anon), ChatFilter.anon),
-              const SizedBox(width: 6),
-              _filterChip(
-                s.filterRegisteredCount(counts.registered),
-                ChatFilter.registered,
-              ),
-            ],
-          ),
+        return ChatFilterChipBar(
+          items: [
+            ChatFilterChipItem(
+              label: s.filterAllCount(counts.all),
+              active: _chatFilter == ChatFilter.all,
+              onTap: () => _selectFilter(ChatFilter.all),
+            ),
+            ChatFilterChipItem(
+              label: s.filterUnreadCount(counts.unread),
+              active: _chatFilter == ChatFilter.unread,
+              onTap: () => _selectFilter(ChatFilter.unread),
+            ),
+            ChatFilterChipItem(
+              label: s.filterFriendsCount(counts.friends),
+              active: _chatFilter == ChatFilter.friends,
+              onTap: () => _selectFilter(ChatFilter.friends),
+            ),
+            ChatFilterChipItem(
+              label: s.filterAnonCount(counts.anon),
+              active: _chatFilter == ChatFilter.anon,
+              onTap: () => _selectFilter(ChatFilter.anon),
+            ),
+            ChatFilterChipItem(
+              label: s.filterRegisteredCount(counts.registered),
+              active: _chatFilter == ChatFilter.registered,
+              onTap: () => _selectFilter(ChatFilter.registered),
+            ),
+          ],
         );
       },
     );
   }
 
-  Widget _filterChip(String label, ChatFilter value) {
-    return FilterChipPill(
-      label: label,
-      active: _chatFilter == value,
-      onTap: () {
-        if (_chatFilter == value) return;
-        setState(() {
-          _chatFilter = value;
-          _page = 1;
-          _selected.clear();
-        });
-        // Hitung ulang memakai data yang sudah ada (tanpa fetch).
-        _recomputeDirty = true;
-        _recomputeFiltered(
-          myUid:
-              ProviderScope.containerOf(
-                context,
-                listen: false,
-              ).read(authProvider.notifier).uid ??
-              '',
-          query: widget.externalQuery ?? _query,
-        );
-      },
+  void _selectFilter(ChatFilter value) {
+    if (_chatFilter == value) return;
+    setState(() {
+      _chatFilter = value;
+      _page = 1;
+      _selected.clear();
+    });
+    // Hitung ulang memakai data yang sudah ada (tanpa fetch).
+    _recomputeDirty = true;
+    _recomputeFiltered(
+      myUid:
+          ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(authProvider.notifier).uid ??
+          '',
+      query: widget.externalQuery ?? _query,
     );
   }
 
