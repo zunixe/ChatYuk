@@ -188,6 +188,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
               )
             : null,
         title: _isSearching ? _buildSearchField(s) : _buildTitleMenu(s),
+        iconTheme: const IconThemeData(color: _kHeaderText),
         actions: _isSearching
             ? null
             : [
@@ -196,7 +197,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                   icon: const Icon(
                     Icons.add_box_outlined,
                     color: _kHeaderText,
-                    size: 26,
                   ),
                   onPressed: _openComposer,
                 ),
@@ -205,7 +205,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                   icon: const Icon(
                     Icons.search_rounded,
                     color: _kHeaderText,
-                    size: 26,
                   ),
                   onPressed: () => setState(() => _isSearching = true),
                 ),
@@ -248,19 +247,13 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 23,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-              color: _kHeaderText,
-            ),
+            style: AppText.title.copyWith(color: _kHeaderText),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           const Icon(
             Icons.keyboard_arrow_down,
             color: _kHeaderText,
-            size: 24,
           ),
         ],
       ),
@@ -354,7 +347,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
           const Icon(
             Icons.favorite_border_rounded,
             color: _kHeaderText,
-            size: 26,
           ),
           if (hasUnread)
             Positioned(
