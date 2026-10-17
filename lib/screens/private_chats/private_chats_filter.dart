@@ -21,6 +21,16 @@ mixin _PcFilterMx on _PcBase {
               active: _chatFilter == ChatFilter.unread,
               onTap: () => _selectFilter(ChatFilter.unread),
             ),
+            // GRUP (tepat setelah Belum dibaca): item grup di daftar Pesan yang sama.
+            ChatFilterChipItem(
+              label: s.filterGroupsCount(
+                ref.watch(
+                  roomProvider.select((r) => r.myGroups.length),
+                ),
+              ),
+              active: _chatFilter == ChatFilter.groups,
+              onTap: () => _selectFilter(ChatFilter.groups),
+            ),
             ChatFilterChipItem(
               label: s.filterFriendsCount(counts.friends),
               active: _chatFilter == ChatFilter.friends,
@@ -35,16 +45,6 @@ mixin _PcFilterMx on _PcBase {
               label: s.filterRegisteredCount(counts.registered),
               active: _chatFilter == ChatFilter.registered,
               onTap: () => _selectFilter(ChatFilter.registered),
-            ),
-            // GRUP: item grup tampil di daftar Pesan yang sama.
-            ChatFilterChipItem(
-              label: s.filterGroupsCount(
-                ref.watch(
-                  roomProvider.select((r) => r.myGroups.length),
-                ),
-              ),
-              active: _chatFilter == ChatFilter.groups,
-              onTap: () => _selectFilter(ChatFilter.groups),
             ),
           ],
         );
