@@ -20,131 +20,141 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
         ),
         SizedBox(
           height: 116,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              // Tile Tambah
-              InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: _loadingPhotos ? null : _pickGalleryFromSource,
-                child: Container(
-                  width: 92,
-                  height: 116,
-                  decoration: BoxDecoration(
+          child: LayoutBuilder(
+            builder: (ctx, cons) {
+              // Kartu "Belum ada foto" mengisi SISA lebar (rata kanan dengan
+              // kartu Akun/Lainnya di bawahnya), bukan lebar tetap.
+              final restW = (cons.maxWidth - 16 * 2 - 92 - 8).clamp(
+                120.0,
+                420.0,
+              );
+              return ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  // Tile Tambah
+                  InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _Pc.border),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.add_rounded,
-                        size: 24,
-                        color: AppTheme.primary,
+                    onTap: _loadingPhotos ? null : _pickGalleryFromSource,
+                    child: Container(
+                      width: 92,
+                      height: 116,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _Pc.border),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        s.photoAddLabel,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              if (_photos.isEmpty)
-                Container(
-                  width: 220,
-                  height: 116,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: _Pc.card,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        s.photoEmptyTitle,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        s.photoEmptyBody,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          height: 1.35,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                for (final ph in _photos) ...[
-                  SizedBox(
-                    width: 92,
-                    height: 116,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ProfilePhotoViewerScreen(
-                                  photos: _photos,
-                                  initialIndex: _photos.indexOf(ph),
-                                ),
-                              ),
-                            ),
-                            onLongPress: () => _confirmDeletePhoto(ph),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: AsyncPhotoThumbnail(base64: ph.photo),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.add_rounded,
+                            size: 24,
+                            color: AppTheme.primary,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            s.photoAddLabel,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textSecondary,
                             ),
                           ),
-                        ),
-                        // Tombol HAPUS per foto (pojok kanan atas) — tetap ada
-                        // di samping long-press supaya jelas & mudah ditemukan.
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: GestureDetector(
-                            onTap: () => _confirmDeletePhoto(ph),
-                            child: Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.55),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close_rounded,
-                                size: 14,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
+                  if (_photos.isEmpty)
+                    Container(
+                      width: restW,
+                      height: 116,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _Pc.card,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            s.photoEmptyTitle,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            s.photoEmptyBody,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              height: 1.35,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    for (final ph in _photos) ...[
+                      SizedBox(
+                        width: 92,
+                        height: 116,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ProfilePhotoViewerScreen(
+                                      photos: _photos,
+                                      initialIndex: _photos.indexOf(ph),
+                                    ),
+                                  ),
+                                ),
+                                onLongPress: () => _confirmDeletePhoto(ph),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: AsyncPhotoThumbnail(base64: ph.photo),
+                                ),
+                              ),
+                            ),
+                            // Tombol HAPUS per foto (pojok kanan atas) — tetap ada
+                            // di samping long-press supaya jelas & mudah ditemukan.
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: GestureDetector(
+                                onTap: () => _confirmDeletePhoto(ph),
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.55),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close_rounded,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                 ],
-            ],
+              );
+            },
           ),
         ),
       ],
@@ -274,6 +284,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
           Icon(icon, size: 22, color: AppTheme.textSecondary),
           const SizedBox(width: 14),
           Expanded(
+            flex: 3,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,10 +293,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: AppTheme.textPrimary,
-                  ),
+                  style: TextStyle(fontSize: 15, color: AppTheme.textPrimary),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -298,7 +306,18 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
               ],
             ),
           ),
-          if (trailing != null) trailing else const SizedBox(width: 14),
+          if (trailing != null)
+            // Batasi lebar trailing + jarak kanan supaya tidak menabrak
+            // nilai/label saat teks panjang (mis. email panjang).
+            Flexible(
+              fit: FlexFit.loose,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8),
+                child: trailing,
+              ),
+            )
+          else
+            const SizedBox(width: 14),
         ],
       ),
     );
@@ -388,11 +407,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: AppTheme.textSecondary,
-            ),
+            Icon(Icons.chevron_right, size: 20, color: AppTheme.textSecondary),
             const SizedBox(width: 10),
           ],
         ),
@@ -427,10 +442,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                 'YukCoin: $points${v2 ? ' · v2' : ''} · slot foto +$extraSlots',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                ),
+                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
               ),
             ),
             InkWell(
@@ -501,8 +513,6 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
       ),
     );
   }
-
-
 
   /// Versi aplikasi dari package_info_plus (cache 1x).
   Future<String> _appVersion() async {
