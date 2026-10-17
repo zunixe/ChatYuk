@@ -399,6 +399,9 @@ mixin _RcBuildMx on _RoomChatBase {
           PopupMenuButton<String>(
             tooltip: s.menuMore,
             icon: const Icon(Icons.more_vert),
+            // Menu menempel di bawah ikon titik-3 (bukan di tengah layar).
+            position: PopupMenuPosition.under,
+            offset: const Offset(-8, 4),
             onSelected: _onGroupMenu,
             itemBuilder: (_) => [
               if (canModerate)

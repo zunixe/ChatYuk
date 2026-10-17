@@ -384,6 +384,12 @@ mixin _PcCoreMx on _PrivateChatBase {
                   PopupMenuButton(
                     padding: EdgeInsets.zero,
                     iconSize: 24,
+                    // Menu MENEMPEL di bawah ikon titik-3, bukan melayang di
+                    // tengah layar. `under` = sisi bawah tombol; offset kecil
+                    // negatif ke kanan agar tepi kanan menu sejajar tepi
+                    // layar (tidak terpotong).
+                    position: PopupMenuPosition.under,
+                    offset: const Offset(-8, 4),
                     style: IconButton.styleFrom(
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(32, 44),
