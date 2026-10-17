@@ -49,6 +49,9 @@ class ChatYukChatHeader extends StatelessWidget
   final Map<ChatSection, int> unreadCounts;
   final VoidCallback onSearch;
   final VoidCallback onMore;
+  /// Buka sidebar notifikasi room/grup (badge bila [notificationCount] > 0).
+  final VoidCallback? onNotifications;
+  final int notificationCount;
 
   /// Mode cari: field muncul sebagai TITLE header (ala halaman Timeline),
   /// tombol aksi kanan disembunyikan & diganti tombol back (leading).
@@ -65,6 +68,8 @@ class ChatYukChatHeader extends StatelessWidget
     required this.unreadCounts,
     required this.onSearch,
     required this.onMore,
+    this.onNotifications,
+    this.notificationCount = 0,
     this.isSearching = false,
     this.searchController,
     this.onSearchChanged,
@@ -140,6 +145,23 @@ class ChatYukChatHeader extends StatelessWidget
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (onNotifications != null)
+                        Tooltip(
+                          message: 'Notifikasi',
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: onNotifications,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 3,
+                              ),
+                              child: _BellWithBadge(
+                                count: notificationCount,
+                                color: kChatHeaderText,
+                              ),
+                            ),
+                          ),
+                        ),
                       Tooltip(
                         message: 'Cari',
                         child: GestureDetector(
@@ -384,4 +406,51 @@ class ChatFilterChipItem {
     required this.active,
     required this.onTap,
   });
+}
+
+/// Ikon lonceng + badge angka (biru) bila ada notifikasi belum dibaca.
+class _BellWithBadge extends StatelessWidget {
+  final int count;
+  final Color color;
+  const _BellWithBadge({required this.count, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 26,
+      height: 26,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Center(
+            child: Icon(Icons.notifications_outlined, size: 24, color: color),
+          ),
+          if (count > 0)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                constraints: const BoxConstraints(minWidth: 15),
+                decoration: BoxDecoration(
+                  color: kChatBadgeBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: kChatHeaderBg, width: 1.2),
+                ),
+                child: Text(
+                  count > 99 ? '99+' : '$count',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

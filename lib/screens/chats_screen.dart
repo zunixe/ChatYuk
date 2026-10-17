@@ -4,7 +4,13 @@ import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../services/chat_service.dart';
+import '../core/nav_guard.dart';
+import '../models/room_model.dart';
+import '../providers/riverpod/room_notifications_provider.dart';
+import '../providers/riverpod/room_provider.dart';
 import '../widgets/chat_yuk_chat_header.dart';
+import '../widgets/room_notif_sidebar.dart';
+import 'room_chat_screen.dart';
 import 'group_screen.dart';
 import 'private_chats_screen.dart';
 import 'lobby_screen.dart';
@@ -29,6 +35,28 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
   final _searchCtrl = TextEditingController();
   String _query = '';
   final _moreBtnKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    // Notifikasi room/grup: muat data global room sekali (TTL di provider).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(roomProvider.notifier).loadMyGlobalRooms(refresh: true);
+      }
+    });
+  }
+
+  /// Buka room/grup dari sidebar notifikasi (langsung, dengan nav guard).
+  /// Notifikasi hanya muncul untuk room yang PERNAH dibuka user, jadi gate
+  /// password/kuota join tidak relevan lagi.
+  void _openNotifRoom(RoomModel room) {
+    final navKey = navKeyRoom(room.id);
+    if (!tryClaimNav(navKey)) return;
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)))
+        .then((_) => releaseNav(navKey));
+  }
 
   @override
   void dispose() {
@@ -66,6 +94,11 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
             setState(() => _query = v.trim().toLowerCase()),
         searchHint: isPesan ? s.searchHint : s.searchRoomHint,
         onMore: _openMoreMenu,
+        notificationCount: ref.watch(roomNotifCountProvider),
+        onNotifications: () => showRoomNotifSidebar(
+          context,
+          onOpenRoom: _openNotifRoom,
+        ),
       ),
       body: IndexedStack(
         index: _section.index,

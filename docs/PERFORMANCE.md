@@ -4410,3 +4410,31 @@ install. **Belum:** ukur `networkFetchCount` saat scroll chat di device.
 (`stickerExts` ↔ `storage_paths.dart`) — unit test `sticker_test.dart`
 menjaganya. Semua jalur render (png/webp/gif/tgs/video) punya placeholder
 ukuran sama supaya tak ada layout shift saat bytes tiba.
+
+## §53. Notifikasi room/grup di tab Chat (2026-10-17)
+
+**Fitur:** ikon 🔔 di header Chat (badge angka) → sidebar slide-dari-kanan
+berisi room/grup yang punya pesan belum dibaca + cuplikan pengirim/pesan.
+Tap baris → buka room; "Tandai semua dibaca" di header sidebar.
+
+**Sumber data (server-side, akurat & tahan reinstall):**
+- `list_my_groups` — ditambah `unread` + `last_sender_name/last_text/
+  last_type/last_at` (pola SAMA dengan `list_room_explore` yang terbukti).
+- `list_my_global_rooms` (BARU) — room `is_private = false` yang punya baris
+  `room_reads` (= pernah dibuka). Room yang belum pernah dibuka sengaja
+  TIDAK dianggap notifikasi.
+- Unread dihitung dari `room_reads.last_read_at` → sinkron antar-device &
+  tidak bergantung cache lokal (`_readRoomIds` hanya jaring lokal).
+
+**Biaya render (dijaga):**
+- `roomNotificationsProvider` murni turunan state; logika di
+  `buildRoomNotifications()` (fungsi murni → unit-test tanpa I/O).
+- `roomNotifCountProvider` hanya ANGKA → header tidak rebuild saat
+  presence/last-seen berubah.
+- `loadMyGlobalRooms` TTL 30 dtk + dedupe in-flight + cache disk
+  (`my_grooms_<uid>`), pola sama `loadMyGroups` — tidak ada polling baru.
+- Sidebar dibangun on-demand (`showGeneralDialog`), bukan widget permanen.
+
+**Perilaku baca:** `RoomChatScreen` sudah memanggil `markRoomRead` otomatis
+(`room_chat_core.dart`), dan `markRoomRead` kini juga menol-kan `unread` di
+`_myGroups` & `_myGlobalRooms` → badge hilang seketika setelah masuk room.

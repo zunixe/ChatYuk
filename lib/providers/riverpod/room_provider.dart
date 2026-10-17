@@ -24,6 +24,8 @@ class RoomState {
   final String? error;
   final bool hasLoaded;
   final List<RoomModel> myGroups;
+  /// Global room non-private yang pernah dibuka (notifikasi tab Chat).
+  final List<RoomModel> myGlobalRooms;
   final bool myGroupsLoading;
   final String exploreCategory;
   final List<RoomModel> explore;
@@ -37,6 +39,7 @@ class RoomState {
     this.error,
     this.hasLoaded = false,
     this.myGroups = const [],
+    this.myGlobalRooms = const [],
     this.myGroupsLoading = false,
     this.exploreCategory = 'rame',
     this.explore = const [],
@@ -55,6 +58,7 @@ class RoomState {
       listEquals(other.rooms, rooms) &&
       listEquals(other.privateRooms, privateRooms) &&
       listEquals(other.myGroups, myGroups) &&
+      listEquals(other.myGlobalRooms, myGlobalRooms) &&
       listEquals(other.explore, explore) &&
       setEquals(other.memberRoomIds, memberRoomIds);
 
@@ -69,6 +73,7 @@ class RoomState {
         Object.hashAll(rooms),
         Object.hashAll(privateRooms),
         Object.hashAll(myGroups),
+        Object.hashAll(myGlobalRooms),
         Object.hashAll(explore),
         Object.hashAllUnordered(memberRoomIds),
       );
@@ -138,6 +143,12 @@ class RoomNotifier extends Notifier<RoomState> {
   bool _hasLoaded = false;
 
   List<RoomModel> _myGroups = [];
+  /// Global room (non-private) yang pernah dibuka user — notifikasi tab Chat.
+  List<RoomModel> _myGlobalRooms = [];
+  DateTime? _myGlobalRoomsAt;
+  String? _myGlobalRoomsUid;
+  bool _myGlobalRoomsLoading = false;
+  static const _myGlobalRoomsTtl = Duration(seconds: 30);
   DateTime? _myGroupsAt;
   String? _myGroupsUid;
   bool _myGroupsLoading = false;
@@ -186,6 +197,7 @@ class RoomNotifier extends Notifier<RoomState> {
       error: _error,
       hasLoaded: _hasLoaded,
       myGroups: List.unmodifiable(_myGroups),
+      myGlobalRooms: List.unmodifiable(_myGlobalRooms),
       myGroupsLoading: _myGroupsLoading,
       exploreCategory: _exploreCategory,
       explore: List.unmodifiable(_explore),
@@ -196,6 +208,7 @@ class RoomNotifier extends Notifier<RoomState> {
   // ── Getter kompat ──
   List<RoomModel> get rooms => _rooms;
   List<RoomModel> get privateRooms => _privateRooms;
+  List<RoomModel> get myGlobalRooms => _myGlobalRooms;
   Set<String> get memberRoomIds => _memberRoomIds;
   String get country => _country;
   String? get error => _error;
@@ -282,6 +295,13 @@ class RoomNotifier extends Notifier<RoomState> {
       _readRoomIds.remove(_readRoomIds.first);
     }
     _explore = _explore
+        .map((r) => r.id == roomId ? r.copyWith(unread: 0) : r)
+        .toList();
+    // Notifikasi tab Chat: badge global room juga harus hilang segera.
+    _myGlobalRooms = _myGlobalRooms
+        .map((r) => r.id == roomId ? r.copyWith(unread: 0) : r)
+        .toList();
+    _myGroups = _myGroups
         .map((r) => r.id == roomId ? r.copyWith(unread: 0) : r)
         .toList();
     _emit();
@@ -386,6 +406,47 @@ class RoomNotifier extends Notifier<RoomState> {
       _myGroupsLoading = false;
       _emit();
     }
+  }
+
+  /// Muat global room yang pernah dibuka user (notifikasi tab Chat).
+  /// TTL 30 dtk + dedupe in-flight + cache disk — pola sama loadMyGroups.
+  Future<void> loadMyGlobalRooms({bool refresh = false}) async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null || _myGlobalRoomsLoading) return;
+    final fresh = !refresh &&
+        _myGlobalRoomsAt != null &&
+        _myGlobalRoomsUid == uid &&
+        DateTime.now().difference(_myGlobalRoomsAt!) < _myGlobalRoomsTtl;
+    if (fresh) return;
+    _myGlobalRoomsLoading = true;
+    if (_myGlobalRooms.isEmpty) await _loadMyGlobalRoomsDisk(uid);
+    try {
+      final rows = await PrivateRoomService.instance.listMyGlobalRooms();
+      _myGlobalRooms = rows
+          .map((e) => RoomModel.fromMap('${e['id'] ?? ''}', snakeToCamel(e)))
+          .toList();
+      _myGlobalRoomsAt = DateTime.now();
+      _myGlobalRoomsUid = uid;
+      _emit();
+    } catch (e) {
+      dlog('[RoomProvider] load my global rooms error: $e');
+    } finally {
+      _myGlobalRoomsLoading = false;
+      _emit();
+    }
+  }
+
+  Future<void> _loadMyGlobalRoomsDisk(String uid) async {
+    try {
+      final obj = await MessageCache.instance.loadRawObj('my_grooms_$uid');
+      final raw = obj['rooms'];
+      if (raw is! List || raw.isEmpty) return;
+      if (_myGlobalRooms.isNotEmpty) return;
+      _myGlobalRooms = raw
+          .map((e) => RoomModel.fromMap(
+              '${(e as Map)['id'] ?? ''}', Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (_) {}
   }
 
   Future<void> _loadMyGroupsDisk(String uid) async {

@@ -220,8 +220,31 @@ class PrivateRoomService {
     }
   }
 
-  // ── Signaling (room_signals) ──
+  /// Global room (NON-private) yang pernah dibuka user ini — dipakai
+  /// notifikasi tab Chat bersama [listMyRooms] (grup). Server menghitung
+  /// `unread` dari `room_reads` + cuplikan pesan terakhir.
+  Future<List<Map<String, dynamic>>> listMyGlobalRooms() async {
+    try {
+      final res = await measuredRpc(
+        _sb,
+        'list_my_global_rooms',
+        params: {'p_uid': uid},
+      );
+      if (res is List) {
+        return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      if (res is Map && res['data'] is List) {
+        return (res['data'] as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      }
+      return const [];
+    } catch (_) {
+      return const [];
+    }
+  }
 
+  // ── Signaling (room_signals) ──
   /// Subscribe semua signal untuk satu room (INSERT saja — ephemeral).
   Stream<Map<String, dynamic>> onSignal(String roomId) {
     final controller = StreamController<Map<String, dynamic>>.broadcast();
