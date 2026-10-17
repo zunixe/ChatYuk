@@ -17,13 +17,16 @@ import '../core/perf/perf_probe.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 
-// ── Warna header ringkas ala Instagram (spesifik, tak ikut tema) ──
-const Color _kHeaderBg = Color(0xFF0F1115);
-const Color _kHeaderText = Color(0xFFF2F4F7);
+// ── Warna header ringkas ala Instagram (DINAMIS mengikuti tema) ──
+Color get _kHeaderBg => AppTheme.isDark ? const Color(0xFF0F1115) : Colors.white;
+Color get _kHeaderText =>
+    AppTheme.isDark ? const Color(0xFFF2F4F7) : const Color(0xFF14171C);
 const Color _kAccentBlue = Color(0xFF4FB3F6);
-const Color _kMenuBg = Color(0xFF1A1E26);
-const Color _kMenuBorder = Color(0xFF2A2F3A);
-const Color _kMenuText = Color(0xFFD5D9E0);
+Color get _kMenuBg => AppTheme.isDark ? const Color(0xFF1A1E26) : Colors.white;
+Color get _kMenuBorder =>
+    AppTheme.isDark ? const Color(0xFF2A2F3A) : const Color(0xFFD5D9E0);
+Color get _kMenuText =>
+    AppTheme.isDark ? const Color(0xFFD5D9E0) : const Color(0xFF3A3F47);
 
 /// Timeline feed: tab Semua / Mengikuti + infinite scroll + refresh.
 class TimelineScreen extends ConsumerStatefulWidget {
@@ -172,7 +175,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         automaticallyImplyLeading: false,
         leading: _isSearching
             ? IconButton(
-                icon: const Icon(Icons.arrow_back, color: _kHeaderText),
+                icon: Icon(Icons.arrow_back, color: _kHeaderText),
                 onPressed: () {
                   setState(() {
                     _isSearching = false;
@@ -183,8 +186,28 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                 },
               )
             : null,
-        title: _isSearching ? _buildSearchField(s) : _buildTitleMenu(s),
-        iconTheme: const IconThemeData(color: _kHeaderText),
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: SizeTransition(
+              sizeFactor: anim,
+              axis: Axis.horizontal,
+              axisAlignment: -1,
+              child: child,
+            ),
+          ),
+          child: _isSearching
+              ? KeyedSubtree(
+                  key: const ValueKey('search'),
+                  child: _buildSearchField(s),
+                )
+              : KeyedSubtree(
+                  key: const ValueKey('title'),
+                  child: _buildTitleMenu(s),
+                ),
+        ),
+        iconTheme: IconThemeData(color: _kHeaderText),
         actions: _isSearching
             ? null
             : [
@@ -235,7 +258,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
       constraints: const BoxConstraints(minWidth: 230),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: _kMenuBorder),
+        side: BorderSide(color: _kMenuBorder),
       ),
       itemBuilder: (_) => [
         _scopeMenuItem(0, s.tabAll),
@@ -251,7 +274,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const Icon(
+          Icon(
             Icons.keyboard_arrow_down,
             color: _kHeaderText,
           ),
@@ -285,57 +308,74 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     );
   }
 
-  /// Field pencarian dalam header (jadi title AppBar saat mode cari).
+  /// Field pencarian dalam header (jadi title AppBar saat mode cari) —
+  /// ukuran, border biru & bentuk SAMA dengan menu Online.
   Widget _buildSearchField(S s) {
-    // Padding kanan supaya field tidak menempel ke tepi layar
-    // (titleSpacing saat searching = 0, ikon clear paling kanan).
     return Padding(
       padding: const EdgeInsets.only(right: 14),
-      child: TextField(
-        controller: _searchCtrl,
-        autofocus: true,
-        onChanged: (v) {
-          _search = v;
-          // Debounce 250ms — filter berat hanya jalan setelah user
-          // berhenti mengetik, bukan tiap keystroke.
-          _searchDebounce?.cancel();
-          _searchDebounce = Timer(const Duration(milliseconds: 250), () {
-            if (mounted) setState(() => _appliedSearch = _search);
-          });
-          setState(() {});
-        },
-        style: const TextStyle(color: _kHeaderText, fontSize: 15),
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: s.searchHint,
-          hintStyle: const TextStyle(color: Colors.white54, fontSize: 15),
-          suffixIcon: _search.isNotEmpty
-              ? IconButton(
-                  icon:
-                      const Icon(Icons.clear, size: 18, color: Colors.white70),
-                  onPressed: () {
-                    _searchCtrl.clear();
-                    setState(() => _search = '');
-                  },
-                )
-              : null,
-          filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.10),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none),
-          enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none),
-          focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: _kMenuBorder)),
+      child: SizedBox(
+        height: 40,
+        width: double.infinity,
+        child: TextField(
+          controller: _searchCtrl,
+          autofocus: true,
+          onChanged: (v) {
+            _search = v;
+            // Debounce 250ms — filter berat hanya jalan setelah user
+            // berhenti mengetik, bukan tiap keystroke.
+            _searchDebounce?.cancel();
+            _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+              if (mounted) setState(() => _appliedSearch = _search);
+            });
+            setState(() {});
+          },
+          style: AppText.body.copyWith(color: _kHeaderText),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: s.searchHint,
+            hintStyle: AppText.body.copyWith(color: Colors.white54),
+            prefixIcon: const Icon(
+              Icons.search,
+              color: Colors.white70,
+              size: 20,
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 36,
+              minHeight: 0,
+            ),
+            suffixIcon: _search.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(
+                      Icons.clear,
+                      size: 18,
+                      color: Colors.white70,
+                    ),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _search = '');
+                    },
+                  )
+                : null,
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.10),
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 10,
+              horizontal: 12,
+            ),
+            border: _tlSearchBorder(_kAccentBlue),
+            enabledBorder: _tlSearchBorder(Colors.white24),
+            focusedBorder: _tlSearchBorder(_kAccentBlue, width: 1.5),
+          ),
         ),
       ),
     );
   }
+
+  OutlineInputBorder _tlSearchBorder(Color color, {double width = 1}) =>
+      OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: color, width: width),
+      );
 
   /// Buka composer postingan (anon → popup lengkapi email).
   void _openComposer() {

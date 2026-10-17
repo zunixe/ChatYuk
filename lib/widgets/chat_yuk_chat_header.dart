@@ -7,20 +7,30 @@ import '../config/theme.dart';
 enum ChatSection { messages, groups, rooms }
 
 /// Warna header disamakan dengan halaman Timeline (ChatYukHeader) supaya
-/// konsisten antar halaman.
-const Color kChatHeaderBg = Color(0xFF0F1115);
-const Color kChatHeaderText = Color(0xFFF2F4F7);
-const Color kChatHeaderLine = Color(0xFF1C2028);
+/// konsisten antar halaman. DINAMIS mengikuti tema (mode terang ≠ hitam).
+Color get kChatHeaderBg =>
+    AppTheme.isDark ? const Color(0xFF0F1115) : Colors.white;
+Color get kChatHeaderText =>
+    AppTheme.isDark ? const Color(0xFFF2F4F7) : const Color(0xFF14171C);
+Color get kChatHeaderLine =>
+    AppTheme.isDark ? const Color(0xFF1C2028) : const Color(0xFFE4E7EC);
+Color get kChatMenuBg =>
+    AppTheme.isDark ? const Color(0xFF1A1E26) : Colors.white;
+Color get kChatMenuBorder =>
+    AppTheme.isDark ? const Color(0xFF2A2F3A) : const Color(0xFFD5D9E0);
+Color get kChatMenuText =>
+    AppTheme.isDark ? const Color(0xFFD5D9E0) : const Color(0xFF3A3F47);
+Color get kChatChipText =>
+    AppTheme.isDark ? const Color(0xFFC9CDD3) : const Color(0xFF3A3F47);
 const Color kChatAccentBlue = Color(0xFF4FB3F6);
-const Color kChatMenuBg = Color(0xFF1A1E26);
-const Color kChatMenuBorder = Color(0xFF2A2F3A);
-const Color kChatMenuText = Color(0xFFD5D9E0);
 const Color kChatUnreadDot = Color(0xFFFF5A5F);
 const Color kChatBadgeBg = Color(0xFF2F95E8);
-const Color kChatChipActiveBg = Color(0xFFF2F4F7);
-const Color kChatChipActiveText = Color(0xFF0F1115);
-const Color kChatChipBorder = Color(0xFF2E3440);
-const Color kChatChipText = Color(0xFFC9CDD3);
+Color get kChatChipActiveBg =>
+    AppTheme.isDark ? const Color(0xFFF2F4F7) : const Color(0xFF14171C);
+Color get kChatChipActiveText =>
+    AppTheme.isDark ? const Color(0xFF0F1115) : Colors.white;
+Color get kChatChipBorder =>
+    AppTheme.isDark ? const Color(0xFF2E3440) : const Color(0xFFD5D9E0);
 
 /// Header ringkas halaman Chat — konsisten dengan [TimelineScreen].
 ///
@@ -88,7 +98,7 @@ class ChatYukChatHeader extends StatelessWidget
   Widget build(BuildContext context) {
     final searching = isSearching;
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: kChatHeaderBg,
         border: Border(bottom: BorderSide(color: kChatHeaderLine)),
       ),
@@ -103,7 +113,7 @@ class ChatYukChatHeader extends StatelessWidget
         automaticallyImplyLeading: false,
         leading: searching
             ? IconButton(
-                icon: const Icon(Icons.arrow_back, color: kChatHeaderText),
+                icon: Icon(Icons.arrow_back, color: kChatHeaderText),
                 onPressed: onCloseSearch,
               )
             : null,
@@ -121,7 +131,7 @@ class ChatYukChatHeader extends StatelessWidget
           child: searching
               ? KeyedSubtree(key: const ValueKey('search'), child: _searchField())
               : KeyedSubtree(key: const ValueKey('title'), child: _titleMenu(context)),
-        ),        iconTheme: const IconThemeData(color: kChatHeaderText),
+        ),        iconTheme: IconThemeData(color: kChatHeaderText),
         actions: searching
             ? null
             : [
@@ -226,7 +236,7 @@ class ChatYukChatHeader extends StatelessWidget
       constraints: const BoxConstraints(minWidth: 230),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: kChatMenuBorder),
+        side: BorderSide(color: kChatMenuBorder),
       ),
       itemBuilder: (_) => [
         _menuItem(ChatSection.messages),
@@ -242,7 +252,7 @@ class ChatYukChatHeader extends StatelessWidget
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const Icon(Icons.keyboard_arrow_down, color: kChatHeaderText),
+          Icon(Icons.keyboard_arrow_down, color: kChatHeaderText),
           // Titik merah: section LAIN punya unread.
           if (_othersHaveUnread)
             Container(

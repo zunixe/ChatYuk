@@ -110,7 +110,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
       color: kChatMenuBg,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: kChatMenuBorder),
+        side: BorderSide(color: kChatMenuBorder),
       ),
       items: [
         PopupMenuItem(
@@ -119,8 +119,9 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.call_rounded, size: 20, color: kChatMenuText),
-            title: Text(s.menuRecentCalls),
+            leading: Icon(Icons.call_rounded, size: 20, color: kChatMenuText),
+            title: Text(s.menuRecentCalls,
+                style: TextStyle(color: kChatMenuText, fontSize: 15)),
           ),
         ),
         PopupMenuItem(
@@ -129,8 +130,9 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.group_add_rounded, size: 20, color: kChatMenuText),
-            title: Text(s.menuNewGroup),
+            leading: Icon(Icons.group_add_rounded, size: 20, color: kChatMenuText),
+            title: Text(s.menuNewGroup,
+                style: TextStyle(color: kChatMenuText, fontSize: 15)),
           ),
         ),
         PopupMenuItem(
@@ -139,8 +141,9 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.done_all_rounded, size: 20, color: kChatMenuText),
-            title: Text(s.menuReadAll),
+            leading: Icon(Icons.done_all_rounded, size: 20, color: kChatMenuText),
+            title: Text(s.menuReadAll,
+                style: TextStyle(color: kChatMenuText, fontSize: 15)),
           ),
         ),
       ],
