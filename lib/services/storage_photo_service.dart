@@ -571,6 +571,35 @@ class StoragePhotoService {
     }
   }
 
+  /// Upload file chat DARI PATH (STREAMING) — tidak memuat isi file ke RAM.
+  /// Jalur utama untuk file besar (≤ [chatFileMaxBytes]) agar cold start /
+  /// HP kelas menengah tidak OOM karena `readAsBytes()` 50MB.
+  Future<String?> uploadChatFileFromPath({
+    required String chatId,
+    required String fileName,
+    required String filePath,
+    String? contentType,
+  }) async {
+    try {
+      final f = File(filePath);
+      if (!f.existsSync()) return null;
+      final len = await f.length();
+      if (len <= 0 || len > chatFileMaxBytes) return null;
+      final path = chatFilePath(chatId, fileName);
+      await _sb.storage.from(_bucket).upload(
+            path,
+            f,
+            fileOptions: FileOptions(
+              contentType: contentType ?? 'application/octet-stream',
+            ),
+          );
+      return path;
+    } catch (e) {
+      dlog('[StoragePhoto] uploadChatFileFromPath error: $e');
+      return null;
+    }
+  }
+
   /// Unduh file chat (timeout panjang — file bisa puluhan MB).
   Future<Uint8List?> downloadChatFile(String path) async {
     try {

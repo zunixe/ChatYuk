@@ -93,6 +93,20 @@ class StorageNotifier {
         contentType: contentType,
       );
 
+  /// Upload file chat dari PATH (streaming, tanpa muat ke RAM).
+  Future<String?> uploadChatFileFromPath({
+    required String chatId,
+    required String fileName,
+    required String filePath,
+    String? contentType,
+  }) =>
+      service.uploadChatFileFromPath(
+        chatId: chatId,
+        fileName: fileName,
+        filePath: filePath,
+        contentType: contentType,
+      );
+
   Future<Uint8List?> downloadChatFile(String path) =>
       service.downloadChatFile(path);
   bool isChatVideoPath(String v) => service.isChatVideoPath(v);

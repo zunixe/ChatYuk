@@ -107,13 +107,15 @@ mixin ChatFileSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
     }
 
     try {
-      final bytes = await File(path).readAsBytes();
-      final storagePath = await container.read(storageProvider).uploadChatFile(
-        chatId: photoUploadChatId,
-        fileName: name,
-        bytes: bytes,
-        contentType: ChatFile.mimeOf(name),
-      );
+      // STREAMING dari disk — JANGAN `readAsBytes()` (file ≤50MB → RAM spike).
+      final storagePath = await container
+          .read(storageProvider)
+          .uploadChatFileFromPath(
+            chatId: photoUploadChatId,
+            fileName: name,
+            filePath: path,
+            contentType: ChatFile.mimeOf(name),
+          );
       if (storagePath == null || storagePath.isEmpty) {
         throw Exception('upload failed');
       }
