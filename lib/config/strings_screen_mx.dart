@@ -399,6 +399,8 @@ mixin SScreenMx {
   String get msgPhoto => isId ? '[Foto]' : '[Photo]';
   // ── Kirim Lokasi (ala WhatsApp) ──
   String get menuSendLocation => isId ? 'Lokasi' : 'Location';
+  String get galleryAllowAccess =>
+      isId ? 'Izinkan akses galeri' : 'Allow gallery access';
   String get msgLocation => isId ? '[Lokasi]' : '[Location]';
   String get locSendTitle => isId ? 'Kirim Lokasi' : 'Send Location';
   String get locFetching =>

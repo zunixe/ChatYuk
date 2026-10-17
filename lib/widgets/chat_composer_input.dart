@@ -16,6 +16,7 @@ import '../utils/mention.dart';
 import 'media/video_player_screen.dart';
 import 'mic_record_button.dart';
 import 'mention_autocomplete.dart';
+import 'chat_attach_panel.dart';
 import 'chat_ui_shared.dart';
 import 'composer_link_preview.dart';
 import 'emoji_picker_sheet.dart';
@@ -78,6 +79,9 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   /// private chat yang punya background foto (scaffold transparan). Room/grup
   /// memakai scaffold `bgCard`, jadi kirim `bgInput` supaya pill tetap kontras.
   final Color? inputFillColor;
+  /// Foto dari strip galeri panel lampiran diketuk (bytes asli) → preview.
+  /// null = panel tanpa galeri.
+  final ValueChanged<Uint8List>? onPickGalleryPhoto;
   const ChatComposerInput({
     required this.controller,
     this.focusNode,
@@ -115,6 +119,7 @@ class ChatComposerInput extends ConsumerStatefulWidget {
     this.mentionAllowAll = false,
     this.mentionAllExpansion = const [],
     this.inputFillColor,
+    this.onPickGalleryPhoto,
   });
 
   @override
@@ -296,8 +301,13 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
   Widget build(BuildContext context) {
     PerfProbe.buildCount('Composer');
     final s = ref.watch(localeProvider).s;
-    return Container(
-      padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
+    // Panel lampiran DI LUAR padding composer → full lebar menempel bawah
+    // layar ala WhatsApp (SafeArea bawah ditangani panel sendiri).
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+    Container(
+      padding: EdgeInsets.fromLTRB(8, 4, 8, widget.showAttachRow ? 6 : 4),
       decoration: BoxDecoration(
         // Transparan: background chat (gambar/blur) tetap terlihat di
         // belakang composer. Header card di dalam tetap bgCard.
@@ -311,6 +321,7 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
         ],
       ),
       child: SafeArea(
+        bottom: !widget.showAttachRow,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -900,11 +911,18 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    ),
             AnimatedSize(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
               child: widget.showAttachRow
                   ? ChatAttachPanel(
+                      onClose: widget.onToggleAttach,
+                      onPickGalleryPhoto: widget.onPickGalleryPhoto,
+                      allowGalleryLabel: s.galleryAllowAccess,
                       children: [
                           ChatAttachChip(
                             icon: Icons.image_rounded,
@@ -950,9 +968,7 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                     )
                   : const SizedBox.shrink(),
             ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 }

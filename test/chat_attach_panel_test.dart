@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/config/theme.dart';
-import 'package:chatyuk/widgets/chat_ui_shared.dart';
+import 'package:chatyuk/widgets/chat_attach_panel.dart';
 
 void main() {
   testWidgets('panel lampiran: latar solid, grid 4 kolom, tap berfungsi', (
@@ -42,5 +42,60 @@ void main() {
     expect(y[4], greaterThan(y[0]));
     await t.tap(find.text('Item 2'));
     expect(taps, 1);
+  });
+
+  testWidgets('geser ke bawah menutup panel (onClose)', (t) async {
+    var closed = 0;
+    await t.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: ChatAttachPanel(
+              onClose: () => closed++,
+              children: [
+                ChatAttachChip(
+                  icon: Icons.image_rounded,
+                  color: Colors.blue,
+                  label: 'A',
+                  onTap: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await t.fling(find.byType(ChatAttachPanel), const Offset(0, 300), 1500);
+    await t.pumpAndSettle();
+    expect(closed, 1);
+  });
+
+  testWidgets('geser ke atas membesarkan panel galeri', (t) async {
+    await t.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: ChatAttachPanel(
+              onPickGalleryPhoto: (_) {},
+              children: [
+                ChatAttachChip(
+                  icon: Icons.image_rounded,
+                  color: Colors.blue,
+                  label: 'A',
+                  onTap: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final before = t.getSize(find.byType(ChatAttachPanel)).height;
+    await t.fling(find.byType(ChatAttachPanel), const Offset(0, -300), 1500);
+    await t.pumpAndSettle();
+    final after = t.getSize(find.byType(ChatAttachPanel)).height;
+    expect(after, greaterThan(before));
   });
 }
