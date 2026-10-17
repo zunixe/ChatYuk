@@ -11,6 +11,26 @@ mixin SChatMx {
   String get labelStatus => isId ? 'Status' : 'Status';
   String get labelUserId => isId ? 'User ID' : 'User ID';
   String get labelHashtags => isId ? 'Hashtag' : 'Hashtags';
+  // ── Halaman Profil (redesign) ──
+  String get hashtagAdd => isId ? 'Tambah hashtag' : 'Add hashtag';
+  String get hashtagAddShort => isId ? 'Tambah' : 'Add';
+  String get titleMyPhotos => isId ? 'Foto Saya' : 'My Photos';
+  String get photoAddLabel => isId ? 'Tambah' : 'Add';
+  String get photoEmptyTitle => isId ? 'Belum ada foto' : 'No photos yet';
+  String get photoEmptyBody => isId
+      ? 'Profil dengan foto lebih sering disapa. Foto ini tampil besar di profilmu.'
+      : 'Profiles with photos get more greetings. Photos appear large on your profile.';
+  String get ofLabel => isId ? 'dari' : 'of';
+  String get titleOthers => isId ? 'Lainnya' : 'Others';
+  String get titleContactUs => isId ? 'Hubungi Kami' : 'Contact Us';
+  String get contactUsSubtitle =>
+      isId ? 'Bantuan, masukan & laporan' : 'Help, feedback & reports';
+  String get contactUsBody => isId
+      ? 'Kirim email ke support@chatyuk.app — kami balas maksimal 2×24 jam kerja.'
+      : 'Email support@chatyuk.app — we reply within 2 business days.';
+  String get settingsSubtitle => isId
+      ? 'Akun, privasi, notifikasi & lainnya'
+      : 'Account, privacy, notifications & more';
   String get hintHashtag =>
       isId ? 'Tambah hashtag lalu Enter' : 'Add hashtag and press Enter';
   String get errHashtagMax =>

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Consumer;
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../core/media/native_image.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
@@ -25,6 +27,7 @@ import '../providers/riverpod/timeline_provider.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
 import 'settings_screen.dart';
+import 'user_info_screen.dart';
 import 'contact_screen.dart';
 import 'donate_screen.dart';
 import '../core/admin_gate.dart';
@@ -42,6 +45,8 @@ part 'profile/profile_core.dart';
 part 'profile/profile_photos.dart';
 part 'profile/profile_build.dart';
 part 'profile/profile_body.dart';
+part 'profile/profile_ui.dart';
+part 'profile/profile_ui2.dart';
 
 // Avatar profil (resize 640×640 + JPEG q85) kini di NATIVE via
 // `NativeImage.processSquare` (fallback Dart di chat_photo_helper.dart).
@@ -72,6 +77,11 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
   List<String> _hashtags = [];
   // About diedit inline di tempat (tanpa bottom sheet).
   bool _editingAbout = false;
+  /// Chip hashtag "+ Tambah" sedang jadi TextField (edit inline).
+  bool _editingHashtag = false;
+  /// Salinan slot foto ekstra (dibaca seksi Foto tanpa watch provider).
+  int _extraSlotsCache = 0;
+  String? _appVersionCache;
   bool _savingAbout = false;
   final TextEditingController _aboutCtrl = TextEditingController();
   bool _savingHashtags = false;
@@ -102,6 +112,21 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
   Color _statusColor(String status);
   // ignore: unused_element
   String _statusLabel(String status, S s);
+  Future<String> _appVersion();
+  // Seksi UI baru (stub di base — pola sama `_buildBodySliver`).
+  Widget _anonBanner(BuildContext context, S s);
+  Widget _topSection(BuildContext context, S s, UserModel? profile,
+      Uint8List? avatarBytes, Color avatarColor, String genderLabel,
+      bool emailConfirmed);
+  Widget _hashtagSection(BuildContext context, S s);
+  Widget _actionButtons(BuildContext context, S s, UserModel? profile);
+  Widget _friendRequestBanner(BuildContext context, S s);
+  Widget _photosSection(BuildContext context, S s);
+  Widget _accountSection(BuildContext context, S s, UserModel? profile,
+      String? uid, String? userEmail, bool emailConfirmed);
+  Widget _otherSection(BuildContext context, S s);
+  Widget _pointsInfo(int points, int extraSlots, bool v2);
+  Widget _footer(BuildContext context, S s);
   Future<void> _editProfile();
   Future<void> _saveAbout();
   // ignore: unused_element
@@ -119,4 +144,13 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
 }
 
 class _ProfileScreenState extends _ProfileBase
-    with _ProfileCoreMx, _ProfilePhotosMx, _ProfileBuildMx, _ProfileBodyMx {}
+    with
+        _ProfileCoreMx,
+        _ProfilePhotosMx,
+        // Penyedia helper data (status/kartu lama) — TIDAK dirender lagi.
+        _ProfileBuildMx,
+        _ProfileBodyMx,
+        // UI baru halaman Profil.
+        _ProfileUiMx,
+        _ProfileUiSectionsMx,
+        _ProfileUiSections2Mx {}
