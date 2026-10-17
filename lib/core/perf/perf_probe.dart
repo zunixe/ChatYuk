@@ -211,6 +211,18 @@ class PerfProbe {
         'janky(build)=$janky janky(raster)=$jankyR';
   }
 
+  /// Ukur fase BUKA layar: reset → [settle] kemudian cetak ringkasan frame
+  /// (fase buka) lalu reset lagi → laporan berikutnya (mis. saat app
+  /// ke background) = fase SCROLL saja. Nol overhead tanpa PERF_PROBE.
+  static void routeOpen(String label, {Duration settle = const Duration(seconds: 2)}) {
+    if (!measuring) return;
+    reset();
+    Timer(settle, () {
+      report('buka $label (${settle.inMilliseconds}ms)');
+      reset();
+    });
+  }
+
   /// Reset semua hitungan (untuk membandingkan periode tertentu).
   static void reset() {
     if (!measuring) return;

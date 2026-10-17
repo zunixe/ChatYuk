@@ -32,6 +32,7 @@ mixin _PcChatMx on _PrivateChatBase {
   @override
   void initState() {
     super.initState();
+    PerfProbe.routeOpen('private-chat');
     _openedAt = DateTime.now();
     // Ukuran font chat berubah (slider) → rebuild bubble & composer langsung.
     ChatTextScale.notifier.addListener(_onFontScaleChanged);
