@@ -67,11 +67,8 @@ class WhatsNewRow extends ConsumerWidget {
             ),
           ),
         ),
-        Divider(
-          height: 1,
-          thickness: 0.5,
-          color: AppTheme.textSecondary.withValues(alpha: 0.25),
-        ),
+        // Sama persis dengan pemisah antar PostCard.
+        const Divider(height: 1, thickness: 0.5),
       ],
     );
   }
