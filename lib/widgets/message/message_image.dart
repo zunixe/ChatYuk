@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/strings.dart';
 import '../../config/theme.dart';
+import '../../core/cache/chat_poster_cache.dart';
 import '../../core/cache/photo_aspect_cache.dart';
 import '../../core/cache/photo_cache.dart';
 import '../../core/media/chat_photo_helper.dart';
@@ -79,6 +80,10 @@ class _MessageImageState extends State<MessageImage> {
   // selesai sebelum spinner sempat tampil → tak ada kilatan spinner.
   bool _showSpinner = false;
   Timer? _spinnerTimer;
+
+  /// Poster kecil (blur) yang dibaca SINKRON di initState → frame pertama
+  /// sudah bergambar (tidak kotak kosong), foto tajam menyusul.
+  Uint8List? _poster;
 
   static const Duration _spinnerDelay = Duration(milliseconds: 250);
 
@@ -157,6 +162,9 @@ class _MessageImageState extends State<MessageImage> {
       _scheduleSpinner();
       // Aspek yang PERNAH diketahui (cache persisten) → kotak frame pertama
       // sudah final (tidak kotak persegi lalu melompat).
+      _poster = widget.messageId.isEmpty
+          ? null
+          : ChatPosterCache.instance.posterSync(widget.messageId);
       final known = widget.messageId.isEmpty
           ? null
           : PhotoAspectCache.instance.aspectOf(widget.messageId);
@@ -322,6 +330,7 @@ class _MessageImageState extends State<MessageImage> {
               thumbDims.width,
               thumbDims.height,
             );
+            _savePosterFrom(thumbBytes);
             // Bitmap thumb di latar → RawImage pada render berikutnya.
             unawaited(attachDecodedImage(td, targetWidth: 720).then((_) {
               if (mounted &&
@@ -407,6 +416,7 @@ class _MessageImageState extends State<MessageImage> {
       decoded.width,
       decoded.height,
     );
+    _savePosterFrom(decoded.bytes);
     // Set state SEKARANG (fallback Image.memory render instan), lalu decode
     // bitmap di latar → begitu siap, RawImage dipakai (nol decode) pada render
     // berikutnya. TIDAK menunggu (agar tak gantung bila codec lambat/gagal).
@@ -429,6 +439,24 @@ class _MessageImageState extends State<MessageImage> {
       _phW = s.width;
       _phH = s.height;
     });
+  }
+
+  /// Simpan poster kecil dari bytes gambar (fire-and-forget, di luar jalur
+  /// render). Poster dipakai sebagai placeholder sinkron pada buka berikutnya.
+  void _savePosterFrom(Uint8List src) {
+    if (widget.messageId.isEmpty || src.isEmpty) return;
+    unawaited(() async {
+      try {
+        final p = await NativeImage.downscaleBytes(
+          src,
+          targetWidth: ChatPosterCache.maxPx,
+          quality: 40,
+        );
+        if (p != null && p.isNotEmpty) {
+          await ChatPosterCache.instance.save(widget.messageId, p);
+        }
+      } catch (_) {}
+    }());
   }
 
   void _retry() {
@@ -462,11 +490,40 @@ class _MessageImageState extends State<MessageImage> {
     // baru saja diperbarui dari MediaQuery).
     _syncSizes();
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
-      // Foto biasa: belum keload = spinner; gagal = "ketuk untuk memuat".
-      // JANGAN pakai tulisan expired di sini — itu hanya untuk view-once.
-      // Ukuran = cadangan aspek foto (bukan kotak 200×200) + lebar dilaporkan
-      // ke parent supaya caption langsung pas dari frame pertama.
+      // Foto biasa: belum keload = spinner (ditunda 250ms); gagal = "ketuk
+      // untuk memuat". Ukuran = cadangan aspek foto supaya caption pas dari
+      // frame pertama.
       _reportWidth(_phW);
+
+      // POSTER (blur, sinkron) → frame pertama SUDAH bergambar, tanpa spinner
+      // (sumber kesan "kedip" hilang). Foto tajam menggantikan dengan ukuran
+      // sama → tidak ada lompatan.
+      final poster = _poster;
+      if (poster != null) {
+        return GestureDetector(
+          onTap: _loading ? null : _retry,
+          child: widget.fill
+              ? SizedBox.expand(
+                  child: Image.memory(
+                    poster,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.low,
+                  ),
+                )
+              : SizedBox(
+                  width: _phW,
+                  height: _phH,
+                  child: Image.memory(
+                    poster,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.low,
+                  ),
+                ),
+        );
+      }
+
       return GestureDetector(
         onTap: _loading ? null : _retry,
         child: Container(
@@ -476,8 +533,8 @@ class _MessageImageState extends State<MessageImage> {
           alignment: Alignment.center,
           child: _loading
               ? ((widget._albumTile || !_showSpinner)
-                    // Album ATAU masih <250ms → placeholder SENYAP (kotak
-                    // warna saja, tanpa spinner) supaya tidak ada kilatan.
+                    // Album ATAU masih <250ms → placeholder SENYAP (tanpa
+                    // spinner beranimasi) supaya tidak ada kilatan.
                     ? const SizedBox.shrink()
                     : const SizedBox(
                         width: 24,
