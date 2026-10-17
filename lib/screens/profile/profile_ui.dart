@@ -110,14 +110,22 @@ mixin _ProfileUiMx on _ProfileBase {
         actions: [
           IconButton(
             tooltip: s.btnShareApp,
-            icon: const Icon(Icons.share_outlined, size: 21),
+            icon: Icon(
+              Icons.share_outlined,
+              size: 21,
+              color: AppTheme.textPrimary,
+            ),
             onPressed: () async {
               await Share.share(s.msgShareApp);
             },
           ),
           IconButton(
             tooltip: s.titleSettings,
-            icon: const Icon(Icons.settings_outlined, size: 21),
+            icon: Icon(
+              Icons.settings_outlined,
+              size: 21,
+              color: AppTheme.textPrimary,
+            ),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SettingsScreen()),

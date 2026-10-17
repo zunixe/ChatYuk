@@ -264,19 +264,12 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
-  /// Pill "Terverifikasi" RINGKAS — ikon saja (tooltip), supaya email
-  /// mendapat lebar maksimal dan tidak pernah tertutup.
+  /// Badge "Terverifikasi" — ikon polos 22px (SAMA ukuran & perataan dengan
+  /// ikon kolom kiri: mail, @, badge) supaya sejajar; hanya berbeda warna.
   Widget _verifiedPill() {
     return Tooltip(
       message: 'Email terverifikasi',
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: AppTheme.online.withValues(alpha: 0.12),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(Icons.verified, size: 16, color: AppTheme.online),
-      ),
+      child: Icon(Icons.verified, size: 22, color: AppTheme.online),
     );
   }
 
