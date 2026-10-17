@@ -4483,6 +4483,34 @@ Audi + perbaikan pipeline foto feed (upload → simpan → render → viewer).
   kontrak no-upscale, `photo_bubble_persistence_test.dart`).
 - `check_migrations.sh --all` OK; snapshot `list_posts` diff = +1 field saja.
 
-### TERBUKA (belum diukur di HP)
-- Angka nyata FPS/RAM/bandwidth & dimensi byte transform di perangkat fisik
-  BELUM diukur pada sesi ini — tidak diklaim. Ukur di build profile bila perlu.
+### Hasil ukur DI HP (build `--profile`, Xiaomi 24129PN74G, 1200×2670 dpr 3.25)
+
+Instrumentasi sementara (`[TL-STATS]`, dilepas setelah ukur) + `dumpsys gfxinfo`.
+
+Scroll timeline (foto) oleh user; delta tiap 3 dtk:
+
+| Fase | ram | disk | **net** | **decode** | imgCache |
+|---|---|---|---|---|---|
+| load awal | 2 | 8 | 0 | 0 | 8 ent / 10,6MB |
+| scroll masuk area foto | 12 | 9 | **0** | **0** | 7 ent / 30,4MB |
+| lanjut scroll | 15 | 0 | **0** | **0** | 10 ent / 29,2MB (pend 2) |
+| scroll berikut | 4 | 0 | **0** | **0** | 9 ent / 28,6MB |
+| setelah settle | 0 | 0 | **0** | **0** | 9 ent / 28,6MB (stabil) |
+
+- **net = 0 sepanjang sesi** → thumbnail TIDAK pernah diunduh ulang (cache disk/RAM
+  efektif) — target "foto yang sudah dimuat tidak diunduh ulang" TERPENUHI.
+- **decode = 0** → tidak ada regenerasi thumb dari full-res.
+- **imgCache stabil di 9 ent / 28,6MB** (cap perangkat ~48MB) → bitmap yang sudah
+  didecode TIDAK di-evict → **tidak ada decode ulang = tidak kedip** saat scroll balik.
+- Ukuran per gambar ≈ 4,3MB (single full-width 4:5 di dpr 3.25; decode sesuai
+  ukuran tampil, bukan 1080 tetap = 5,8MB). Tile carousel memakai varian 400px
+  (jauh lebih kecil).
+- `dumpsys gfxinfo`: **0 janky / 0 missed vsync**; 50th 5ms, 90th 12ms,
+  99th 14ms, GPU 50th 2ms (sampel 37 frame). `Number Slow bitmap uploads: 0`.
+
+### TERBUKA (jujur)
+- Sampel gfxinfo kecil (37 frame) — bukan benchmark panjang.
+- Di HP RAM kecil (2–3GB, cap ImageCache 16–24MB) eviction MASIH mungkin terjadi
+  (≈4–6 gambar muat); belum diukur di kelas perangkat itu.
+- Dimensi byte hasil transform Storage (width 400 vs 1080) belum diverifikasi
+  per-request; hanya dibuktikan tidak ada unduhan ulang & decode ulang.
