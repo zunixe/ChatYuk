@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import '../providers/riverpod/nav_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
+import '../core/media/blurhash.dart';
+import '../core/media/chat_photo_helper.dart';
 import '../core/media/native_image.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
@@ -38,6 +40,11 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
   // Dimensi (w,h) sejajar dengan _images — dikirim ke server supaya feed
   // bisa menampilkan rasio asli tanpa layout shift.
   final List<({int w, int h})> _imageDims = [];
+  // BlurHash sejajar _images (placeholder instan di feed). '' = tak tersedia.
+  final List<String> _imageBlurhashes = [];
+  // Progress upload (per-foto selesai / total).
+  int _uploadDone = 0;
+  int _uploadTotal = 0;
   String _visibility = 'public';
   bool _posting = false;
   bool _picking = false;
@@ -51,6 +58,31 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
   void dispose() {
     _textCtrl.dispose();
     super.dispose();
+  }
+
+  /// Proses foto pilih → (bytes, w, h, blurhash). Bila kompresi GAGAL,
+  /// pakai file ASLI (jangan hilangkan foto user) dan tetap hitung metadata.
+  /// BlurHash dihitung dari versi kecil (32px) agar ringan.
+  Future<({Uint8List bytes, int w, int h, String blurhash})?> _prepare(
+    Uint8List raw,
+  ) async {
+    var bytes = raw;
+    var w = 0;
+    var h = 0;
+    final processed = await NativeImage.processPost(raw);
+    if (processed != null) {
+      bytes = processed.bytes;
+      w = processed.width;
+      h = processed.height;
+    }
+    if (w <= 0 || h <= 0) {
+      final dims = parseImageDimensions(bytes);
+      w = dims?.width ?? 0;
+      h = dims?.height ?? 0;
+    }
+    if (w <= 0 || h <= 0) return null;
+    final bh = await computeBlurHash(bytes) ?? '';
+    return (bytes: bytes, w: w, h: h, blurhash: bh);
   }
 
   /// Ambil foto dari galeri — multi-pick sekaligus (maks 10 total).
@@ -68,18 +100,24 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       final results = await Future.wait(
         picked.map((p) async {
           final bytes = await p.readAsBytes();
-          return NativeImage.processPost(bytes);
+          return _prepare(bytes);
         }),
       );
       if (!mounted) return;
-      setState(() {
-        for (final r in results) {
-          if (r != null && _images.length < _maxImages) {
-            _images.add(r.bytes);
-            _imageDims.add((w: r.width, h: r.height));
-          }
+      var failed = 0;
+      for (final r in results) {
+        if (r == null) {
+          failed++;
+          continue;
         }
-      });
+        if (_images.length < _maxImages) {
+          _images.add(r.bytes);
+          _imageDims.add((w: r.w, h: r.h));
+          _imageBlurhashes.add(r.blurhash);
+        }
+      }
+      setState(() {});
+      if (failed > 0) _toast(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errPreparePhoto);
     } finally {
       if (mounted) setState(() => _picking = false);
     }
@@ -97,14 +135,17 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       );
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
-      final processed = await NativeImage.processPost(bytes);
+      final prepared = await _prepare(bytes);
       if (!mounted) return;
-      setState(() {
-        if (processed != null && _images.length < _maxImages) {
-          _images.add(processed.bytes);
-          _imageDims.add((w: processed.width, h: processed.height));
-        }
-      });
+      if (prepared != null && _images.length < _maxImages) {
+        setState(() {
+          _images.add(prepared.bytes);
+          _imageDims.add((w: prepared.w, h: prepared.h));
+          _imageBlurhashes.add(prepared.blurhash);
+        });
+      } else if (prepared == null) {
+        _toast(ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errPreparePhoto);
+      }
     } finally {
       if (mounted) setState(() => _picking = false);
     }
@@ -241,20 +282,44 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       final uid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
       final paths = <String>[];
       if (uid != null && _images.isNotEmpty) {
-        final uploads = _images.map(
-          (b64) => ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadPostImage(
-            uid: uid,
-            base64: base64Encode(b64),
-          ),
-        );
-        final results = await Future.wait(uploads);
+        final storage =
+            ProviderScope.containerOf(context, listen: false).read(storageProvider);
+        final total = _images.length;
+        if (mounted) {
+          setState(() {
+            _uploadTotal = total;
+            _uploadDone = 0;
+          });
+        }
+        // Hasil per-indeks → urutan paths sejajar _images/_imageDims/_imageBlurhashes.
+        final results = List<String?>.filled(total, null);
+        // Konkurensi DIBATASI (3) — dulu semua foto serentak → lonjakan
+        // memori/bandwidth di HP kelas menengah.
+        var next = 0;
+        Future<void> worker() async {
+          while (true) {
+            final i = next++;
+            if (i >= total) return;
+            try {
+              results[i] = await storage.uploadPostImage(
+                uid: uid,
+                base64: base64Encode(_images[i]),
+              );
+            } catch (_) {
+              results[i] = null;
+            }
+            if (mounted) setState(() => _uploadDone = i + 1);
+          }
+        }
+
+        await Future.wait(List.generate(total.clamp(0, 3), (_) => worker()));
         // Seed cache lokal tiap foto yang sukses diupload (fire-and-forget)
         // supaya feed refresh langsung tampil tanpa re-download.
         for (var i = 0; i < results.length; i++) {
-          final p = results[i];
-          if (p != null) {
-            paths.add(p);
-            PostPhotoCache.instance.save(p, _images[i]);
+          final r = results[i];
+          if (r != null) {
+            paths.add(r);
+            PostPhotoCache.instance.save(r, _images[i]);
           }
         }
         // Foto gagal upload → jangan naikkan post diam-diam dengan foto
@@ -270,6 +335,7 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
         text: text,
         imagePaths: paths,
         imageDims: [for (final d in _imageDims) {'w': d.w, 'h': d.h}],
+        imageBlurhashes: List<String>.from(_imageBlurhashes),
         visibility: _visibility,
       );
       if (!mounted) return;
@@ -282,6 +348,8 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       final label = msg.contains('limit') ? s.errPostLimit : s.errGeneric;
       messenger.showSnackBar(SnackBar(content: Text(label)));
       setState(() => _posting = false);
+    } finally {
+      if (mounted) setState(() => _uploadTotal = 0);
     }
   }
 
@@ -641,7 +709,23 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         child: SafeArea(
           top: false,
-          child: SizedBox(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Progress upload (determinatif, berbasis foto selesai/total).
+              if (_posting && _uploadTotal > 0) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: _uploadDone / _uploadTotal,
+                    minHeight: 4,
+                    backgroundColor: AppTheme.bgInput,
+                    color: AppTheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              SizedBox(
             width: double.infinity,
             height: 52,
             child: ElevatedButton.icon(
@@ -670,6 +754,8 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
                 ),
               ),
             ),
+              ),
+            ],
           ),
         ),
       ),
@@ -710,6 +796,9 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
                   onTap: () => setState(() {
                     _images.removeAt(idx);
                     if (idx < _imageDims.length) _imageDims.removeAt(idx);
+                    if (idx < _imageBlurhashes.length) {
+                      _imageBlurhashes.removeAt(idx);
+                    }
                   }),
                   child: Container(
                     width: 24,

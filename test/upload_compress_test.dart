@@ -41,15 +41,18 @@ void main() {
       expect(out.height, 2160); // 2400/1200 * 1080
     });
 
-    test('gambar kecil → DIPERBESAR ke lebar 1080 (semantik copyResize)', () async {
+    test('gambar kecil → TIDAK diperbesar (lebar tetap 400)', () async {
+      // FASE 2 A.4: jangan memperbesar foto < batas (dulu selalu 1080).
       final out = (await NativeImage.processPost(_jpeg(400, 300)))!;
-      expect(out.width, 1080);
+      expect(out.width, 400);
+      expect(out.height, 300);
     });
 
-    test('lebar hasil selalu tepat 1080 (kontrak ukuran)', () async {
+    test('lebar hasil = min(1080, lebar sumber)', () async {
       for (final dim in [(2000, 1500), (4000, 3000), (800, 600)]) {
         final out = (await NativeImage.processPost(_jpeg(dim.$1, dim.$2)))!;
-        expect(out.width, 1080, reason: 'sumber ${dim.$1}x${dim.$2}');
+        final expected = dim.$1 < 1080 ? dim.$1 : 1080;
+        expect(out.width, expected, reason: 'sumber ${dim.$1}x${dim.$2}');
       }
     });
 

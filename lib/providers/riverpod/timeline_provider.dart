@@ -190,6 +190,7 @@ class TimelineNotifier extends Notifier<TimelineState> {
     required String text,
     List<String> imagePaths = const [],
     List<Map<String, int>> imageDims = const [],
+    List<String> imageBlurhashes = const [],
     String visibility = 'public',
   }) =>
       PerfProbe.timed(
@@ -198,6 +199,7 @@ class TimelineNotifier extends Notifier<TimelineState> {
           text: text,
           imagePaths: imagePaths,
           imageDims: imageDims,
+          imageBlurhashes: imageBlurhashes,
           visibility: visibility,
         ),
       );
@@ -392,6 +394,8 @@ class TimelineNotifier extends Notifier<TimelineState> {
       'imageW': (row['image_w'] as num?)?.toInt() ?? 0,
       'imageH': (row['image_h'] as num?)?.toInt() ?? 0,
       'imageDims': row['image_dims'] is List ? row['image_dims'] : null,
+      'imageBlurhashes':
+          row['image_blurhashes'] is List ? row['image_blurhashes'] : null,
       'visibility': row['visibility'] ?? 'public',
       'likeCount': row['like_count'] ?? 0,
       'commentCount': row['comment_count'] ?? 0,

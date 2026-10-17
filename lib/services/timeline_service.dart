@@ -17,6 +17,7 @@ class TimelineService {
     required String text,
     List<String> imagePaths = const [],
     List<Map<String, int>> imageDims = const [],
+    List<String> imageBlurhashes = const [],
     String visibility = 'public',
   }) async {
     for (final p in imagePaths) {
@@ -31,6 +32,7 @@ class TimelineService {
         'p_image_paths': imagePaths,
         'p_visibility': visibility,
         'p_image_dims': imageDims,
+        'p_image_blurhashes': imageBlurhashes,
       },
     );
     return _map(res);

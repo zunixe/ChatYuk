@@ -405,14 +405,18 @@ String? dartProcessStoryB64((Uint8List, int, int) args) {
 /// Return `(bytes, w, h)?`.
 (Uint8List, int, int)? dartProcessPostDim((Uint8List, int, int) args) {
   final (bytes, maxW, quality) = args;
-  final img.Image? decoded;
+  final img.Image? decodedRaw;
   try {
-    decoded = img.decodeImage(bytes);
+    decodedRaw = img.decodeImage(bytes);
   } catch (_) {
     return null;
   }
-  if (decoded == null) return null;
-  final resized = img.copyResize(decoded, width: maxW);
+  if (decodedRaw == null) return null;
+  // Bakar orientasi EXIF (foto kamera jangan miring) — paritas native.
+  final decoded = img.bakeOrientation(decodedRaw);
+  // JANGAN upscale: hanya perkecil bila melebihi maxW (paritas native).
+  final resized =
+      (maxW > 0 && decoded.width > maxW) ? img.copyResize(decoded, width: maxW) : decoded;
   return (
     Uint8List.fromList(img.encodeJpg(resized, quality: quality)),
     resized.width,

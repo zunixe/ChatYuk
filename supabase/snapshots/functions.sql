@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-10-10T13:25:23Z
+-- Timestamp: 2026-10-17T06:06:13Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -1251,7 +1251,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: list_posts @ 20260927000000_posts_image_dims.sql
+-- snapshot-fn: list_posts @ 20261017130000_posts_blurhash.sql
 CREATE OR REPLACE FUNCTION public.list_posts(p_scope text DEFAULT 'all'::text, p_limit integer DEFAULT 30, p_cursor timestamp with time zone DEFAULT NULL::timestamp with time zone, p_cursor_boosted boolean DEFAULT false, p_country text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1328,6 +1328,7 @@ begin
       'imageW', coalesce(v.image_w, 0),
       'imageH', coalesce(v.image_h, 0),
       'imageDims', coalesce(v.image_dims, '[]'::jsonb),
+      'imageBlurhashes', coalesce(v.image_blurhashes, '[]'::jsonb),
       'visibility', v.visibility,
       'likeCount', v.like_count,
       'commentCount', v.comment_count,

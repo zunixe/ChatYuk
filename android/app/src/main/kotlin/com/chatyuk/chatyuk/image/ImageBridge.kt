@@ -804,25 +804,24 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
          * [targetWidth] <= 0 → tanpa resize.
          */
         private fun downscaleBytes(bytes: ByteArray?, targetWidth: Int, quality: Int): ByteArray? {
-            if (bytes == null || bytes.isEmpty()) return null
-            val decoded = try {
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            } catch (_: Throwable) {
-                null
-            } ?: return null
+            if (bytes == null || bytes.isEmpty() || targetWidth <= 0) return null
+            // inSampleSize (hemat memori) — dulu decode FULL lalu perkecil.
+            val decoded = decodeSampledArgb(bytes, targetWidth) ?: return null
+            // JANGAN upscale foto kecil (paritas lama: hanya bila lebih besar).
+            val resized = if (decoded.width > targetWidth) {
+                scaleToWidth(decoded, targetWidth)
+            } else {
+                decoded
+            }
             return try {
-                val resized = if (targetWidth > 0 && decoded.width > targetWidth) {
-                    val nh = Math.round(decoded.height.toDouble() * targetWidth / decoded.width)
-                        .toInt().coerceAtLeast(1)
-                    Bitmap.createScaledBitmap(decoded, targetWidth, nh, true)
-                } else decoded
-                val out = encodeJpeg(resized, quality)
-                if (resized !== decoded) resized.recycle()
-                decoded.recycle()
-                out
+                encodeJpeg(resized, quality)
             } catch (_: Throwable) {
-                runCatching { decoded.recycle() }
                 null
+            } finally {
+                // `resized` bila objek BARU harus dibebaskan; recycle() idempoten
+                // sehingga aman juga saat resized === decoded.
+                runCatching { resized.recycle() }
+                runCatching { decoded.recycle() }
             }
         }
 
@@ -833,36 +832,32 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
         }
 
         /**
-         * Foto POST timeline: resize ke LEBAR tetap [maxW] (rasio dipertahankan,
-         * paritas dgn Dart `img.copyResize(width: 1080)`) + JPEG [quality],
+         * Foto POST timeline: BAKAR orientasi EXIF, perkecil ke LEBAR <= [maxW]
+         * (rasio dipertahankan; TIDAK memperbesar foto kecil) + JPEG [quality],
          * sekaligus kembalikan w/h hasil. Return {bytes,w,h} atau null.
          */
         private fun processPost(bytes: ByteArray?, maxW: Int, quality: Int): Map<String, Any>? {
-            if (bytes == null) return null
-            val decoded = try {
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            if (bytes == null || bytes.isEmpty() || maxW <= 0) return null
+            // ARGB_8888 (bukan RGB_565) — upload butuh warna utuh.
+            // inSampleSize membatasi bitmap transien (dulu decode penuh).
+            val decoded = decodeSampledArgb(bytes, maxW) ?: return null
+            // Bakar orientasi EXIF (foto kamera jangan miring). applyExif
+            // membebaskan `decoded` bila memutar.
+            val oriented = applyExif(bytes, decoded)
+            // JANGAN upscale: hanya perkecil bila melebihi maxW.
+            val resized = if (oriented.width <= maxW) oriented else scaleToWidth(oriented, maxW)
+            return try {
+                val out = encodeJpeg(resized, quality)
+                if (out == null) null
+                else mapOf("bytes" to out, "w" to resized.width, "h" to resized.height)
             } catch (_: Throwable) {
                 null
-            } ?: return null
-            return try {
-                val w = decoded.width
-                val h = decoded.height
-                if (w <= 0 || h <= 0) return null
-                val nh = Math.round(h.toDouble() * maxW / w).toInt().coerceAtLeast(1)
-                val resized = if (w == maxW) decoded else Bitmap.createScaledBitmap(decoded, maxW, nh, true)
-                val out = encodeJpeg(resized, quality)
-                val rw = resized.width
-                val rh = resized.height
-                if (resized !== decoded) resized.recycle()
-                decoded.recycle()
-                if (out == null) null else mapOf(
-                    "bytes" to out,
-                    "w" to rw,
-                    "h" to rh,
-                )
-            } catch (t: Throwable) {
+            } finally {
+                // recycle() idempoten (aman dipanggil ulang bila applyExif
+                // sudah membebaskan sumbernya).
+                runCatching { resized.recycle() }
+                runCatching { oriented.recycle() }
                 runCatching { decoded.recycle() }
-                null
             }
         }
 
@@ -873,6 +868,36 @@ class ImageBridge(context: android.content.Context, private val channel: MethodC
          * & tekanan GC Dart/ART. Thread-local (executor IO = 2 thread).
          */
         private val optionsPool = ThreadLocal.withInitial { BitmapFactory.Options() }
+
+        /**
+         * Sama seperti [decodeSampled] tetapi ARGB_8888 (BUKAN RGB_565).
+         * Dipakai jalur UPLOAD/proses ulang foto post: kualitas warna harus
+         * utuh — RGB_565 (16-bit) memangkas gradasi → banding pada hasil
+         * JPEG. Thumbnail (bubble/avatar) tetap pakai RGB_565 (hemat memori).
+         */
+        private fun decodeSampledArgb(bytes: ByteArray, maxPx: Int): Bitmap? {
+            return try {
+                val bounds = optionsPool.get()!!.apply {
+                    inJustDecodeBounds = true
+                    inSampleSize = 1
+                    inPreferredConfig = null
+                }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                var sample = 1
+                val longest = maxOf(bounds.outWidth, bounds.outHeight)
+                if (longest > 0) {
+                    while (longest / (sample * 2) >= maxPx) sample *= 2
+                }
+                val opts = optionsPool.get()!!.apply {
+                    inJustDecodeBounds = false
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+            } catch (_: Throwable) {
+                null
+            }
+        }
 
         /** Decode dengan inSampleSize (hemat memori) tanpa memuat full-res. */
         private fun decodeSampled(bytes: ByteArray, maxPx: Int): Bitmap? {

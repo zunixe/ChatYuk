@@ -65,6 +65,8 @@ class _PostCardState extends ConsumerState<PostCard> {
   // Rasio asli (w/h) per foto — sumber: payload `imageDims`/`imageW`/`imageH`
   // (akurat, tanpa shift) atau fallback decode bytes thumbnail.
   final List<double?> _imageAspect = [];
+  // BlurHash sejajar _imageThumbs ('' = tidak ada).
+  final List<String> _imageBlurhashes = [];
   final Set<String> _failedPaths = {};
   // GlobalKey untuk akses CommentsListState saat kirim komentar (optimistic).
   final GlobalKey<CommentsListState> _commentsKey =
@@ -77,6 +79,7 @@ class _PostCardState extends ConsumerState<PostCard> {
     super.initState();
     final paths = _imagePaths();
     _imageThumbs.addAll(List.filled(paths.length, null));
+    _imageBlurhashes.addAll(_blurhashesOf(_p));
     _initAspects(paths);
     // ANTI-KEDIP: thumb yang SUDAH ada di RAM/disk dibaca SINKRON dulu (frame
     // pertama Timeline langsung foto). Tanpa ini placeholder tampil dulu →
@@ -117,6 +120,9 @@ class _PostCardState extends ConsumerState<PostCard> {
         ..clear()
         ..addAll(List.filled(newPaths.length, null));
       _imageAspect.clear();
+      _imageBlurhashes
+        ..clear()
+        ..addAll(_blurhashesOf(widget.post));
       _initAspects(newPaths);
       _failedPaths.clear();
       if (newPaths.isNotEmpty) _loadImages(newPaths);
@@ -173,6 +179,14 @@ class _PostCardState extends ConsumerState<PostCard> {
     return single.isNotEmpty ? [single] : [];
   }
 
+  List<String> _blurhashesOf(Map<String, dynamic> post) {
+    final arr = post['imageBlurhashes'];
+    if (arr is List) {
+      return arr.map((e) => e == null ? '' : '$e').toList();
+    }
+    return const [];
+  }
+
   List<String> _imagePaths() {
     final arr = _p['images'];
     if (arr is List && arr.isNotEmpty) {
@@ -201,45 +215,13 @@ class _PostCardState extends ConsumerState<PostCard> {
         if (_failedPaths.add(paths[i])) changed = true;
       }
     }
-    // Fallback rasio: post lama tanpa dimensi payload → decode rasio dari
-    // bytes thumbnail (thumb = copyResize(width:1024) → rasio asli terjaga).
-    // SATU setState untuk thumb + rasio (dulu 2 rebuild per kartu), dan
-    // lewati rebuild sama sekali bila tidak ada yang berubah (mis. notify
-    // provider yang me-reload kartu saat scroll).
-    if (await _fillAspectsFromThumbs(paths)) changed = true;
+    // NO-SHIFT: rasio TIDAK dihitung ulang dari thumb. Dulu rasio diisi
+    // setelah thumb tiba → kotak foto berubah = layout shift (dan lebar item
+    // carousel ikut berubah). Kini rasio hanya dari metadata dimensi; post
+    // lama memakai fallback konsisten (4:5 / 1:1).
     if (!mounted) return;
     if (!changed) return;
     setState(() {});
-  }
-
-  /// Isi rasio yang MASIH null dengan SATU compute isolate untuk semua foto
-  /// (dulu satu isolate per foto → spawn berulang saat scroll cepat).
-  /// Return true bila ada rasio yang terisi. Tanpa setState sendiri —
-  /// pemanggil me-rebuild sekali setelahnya.
-  Future<bool> _fillAspectsFromThumbs(List<String> paths) async {
-    final idx = <int>[];
-    final jobs = <Uint8List>[];
-    for (var i = 0; i < paths.length; i++) {
-      if (i < _imageAspect.length &&
-          _imageAspect[i] == null &&
-          i < _imageThumbs.length &&
-          _imageThumbs[i] != null) {
-        idx.add(i);
-        jobs.add(_imageThumbs[i]!);
-      }
-    }
-    if (jobs.isEmpty) return false;
-    final computed = await NativeImage.aspectRatios(jobs);
-    var filled = false;
-    for (var k = 0; k < idx.length && k < computed.length; k++) {
-      final a = computed[k];
-      final i = idx[k];
-      if (a != null && a > 0 && i < _imageAspect.length && _imageAspect[i] == null) {
-        _imageAspect[i] = a;
-        filled = true;
-      }
-    }
-    return filled;
   }
 
   Future<void> _like() async {
@@ -803,11 +785,14 @@ class _PostCardState extends ConsumerState<PostCard> {
   Widget _photoGrid() => PostPhotoGrid(
     thumbs: _imageThumbs,
     aspects: _imageAspect,
+    blurhashes: _imageBlurhashes,
     paths: _imagePaths(),
     onOpenViewer: _openViewer,
     // Kanan 0: carousel meluber ke tepi layar (padding kanan 16 di dalam
     // list). Media tunggal tetap 16 (gutter) — diatur lewat rightInset.
     rightInset: 16,
+    // Lebar decode dihitung dari ukuran tampil × DPR (hemat RAM/GPU).
+    devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
   );
 
 

@@ -4438,3 +4438,51 @@ Tap baris → buka room; "Tandai semua dibaca" di header sidebar.
 **Perilaku baca:** `RoomChatScreen` sudah memanggil `markRoomRead` otomatis
 (`room_chat_core.dart`), dan `markRoomRead` kini juga menol-kan `unread` di
 `_myGroups` & `_myGlobalRooms` → badge hilang seketika setelah masuk room.
+
+## §54. Pipeline foto Timeline — orientasi, kualitas, cache, blurhash (2026-10-17)
+
+Audi + perbaikan pipeline foto feed (upload → simpan → render → viewer).
+
+### Akar masalah yang DIBUKTIKAN dari kode
+- **A1 Orientasi**: `ImageBridge.applyExif` hanya dipakai `processGalleryPhoto`;
+  `processPost` memakai `BitmapFactory` (abaikan EXIF) + `Bitmap.compress`
+  (hapus EXIF) → foto kamera bisa tersimpan miring. `image_picker` hanya
+  menyalin TAG orientasi (`ImageResizer.copyExif`), tidak memutar piksel.
+- **A2 Upscale**: `processPost` memaksa lebar `maxW` (`createScaledBitmap`),
+  termasuk foto < 1080 → diperbesar tanpa menambah detail.
+- **C1 Decode terlalu besar**: `imageProviderFor` memaku `ResizeImage(width:1080)`
+  → item carousel ~200–320lp di-decode 1080 (oversampling 3–5×).
+- **C2 Cache thrash**: `ImageCache` global 16–48MB; foto 1080px ARGB ≈ 5,6MB →
+  hanya ~3–4 muat → scroll balik = decode ulang (kedip).
+- **C3 Layout shift**: rasio diisi dari thumb SETELAH tiba (`_fillAspectsFromThumbs`)
+  → kotak berubah (single & lebar item carousel).
+- **C5 `_memBytes` leak**: `_memPut` membuang hasil `remove()` → penghitung
+  membengkak saat re-put → LRU membuang terlalu dini.
+
+### Perubahan
+- **Upload (`ImageBridge.processPost` + `dartProcessPostDim`)**: bakaran EXIF
+  (`applyExif`/`bakeOrientation`), TIDAK upscale, `inSampleSize` + ARGB_8888
+  (kualitas upload), `downscaleBytes` pakai `inSampleSize`.
+- **Metadata**: `blurhash` dihitung dari versi 32px (`core/media/blurhash.dart`,
+  pure Dart, teruji vs oracle `flutter_blurhash`), dikirim `p_image_blurhashes`,
+  dikembalikan `imageBlurhashes` (`list_posts`/`get_post`), kolom
+  `posts.image_blurhashes`.
+- **Cache (`PostPhotoCache`)**: varian `feed`(1080)/`tile`(400) dengan key
+  terpisah; `imageProviderFor(decodeWidth:)`; perbaikan akuntansi `_memBytes`.
+- **Render (`PostPhotoGrid`)**: lebar decode = ukuran tampil × DPR (cap varian);
+  carousel pakai varian `tile`; placeholder `BlurHash` (fallback `#1E1E1E`);
+  preload item carousel berikutnya; **rasio tidak lagi dihitung dari thumb**
+  (fallback konsisten 4:5/1:1) → NOL layout shift.
+- **Viewer**: `maxScale` 4; preload foto tetangga (kiri/kanan) via cache.
+- **Prefetch**: semua foto post (bounded 4/post) — utama `feed`, sisanya `tile`.
+
+### Bukti uji (otomatis)
+- `flutter analyze` 0 error/0 warning.
+- `flutter test` **1986 hijau** (termasuk `blurhash_test.dart` dengan oracle
+  decoder referensi, `post_media_pipeline_test.dart`, `upload_compress_test.dart`
+  kontrak no-upscale, `photo_bubble_persistence_test.dart`).
+- `check_migrations.sh --all` OK; snapshot `list_posts` diff = +1 field saja.
+
+### TERBUKA (belum diukur di HP)
+- Angka nyata FPS/RAM/bandwidth & dimensi byte transform di perangkat fisik
+  BELUM diukur pada sesi ini — tidak diklaim. Ukur di build profile bila perlu.

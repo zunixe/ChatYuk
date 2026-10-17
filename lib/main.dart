@@ -758,8 +758,9 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Wiring downloader foto post (core/ tidak boleh import services/).
   PostPhotoCache.downloader = StoragePhotoService.instance.downloadBytes;
   // Thumb server-side (transformasi) untuk timeline — hemat data vs unduh full.
-  PostPhotoCache.thumbDownloader = (path) =>
-      StoragePhotoService.instance.downloadThumbBytes(path, width: 1080, quality: 80);
+  PostPhotoCache.thumbDownloader = (path, width) =>
+      StoragePhotoService.instance
+          .downloadThumbBytes(path, width: width, quality: 80);
   // LP-F: link preview via Edge Function (server-side fetch) — lebih andal
   // utk situs anti-bot (TikTok/Shopee) & konsisten lintas device. Gagal →
   // LinkPreviewService fallback ke fetch device (service tetap aman).

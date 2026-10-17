@@ -20,6 +20,9 @@ class PostPrefetch {
   /// Maks post di-prefetch per batch (bounded — hemat data/CPU).
   static const int maxPosts = 8;
 
+  /// Maks foto per post yang di-prefetch (feed = foto utama, sisa = tile).
+  static const int maxPhotosPerPost = 4;
+
   static final Set<String> _done = {};
   static final Set<String> _inflight = {};
   static const int _doneCap = 500;
@@ -37,7 +40,9 @@ class PostPrefetch {
     return single.isNotEmpty ? [single] : const [];
   }
 
-  /// Prefetch thumb [posts] teratas (maks [maxPosts] post, satu foto/post).
+  /// Prefetch thumb [posts] teratas (maks [maxPosts] post). Foto PERTAMA
+  /// (tampil di feed) = varian [PostImageVariant.feed]; foto carousel lain =
+  /// varian [PostImageVariant.tile] (kecil) — bounded per post.
   /// Dari CACHE DISK dulu (instan) → baru download bila belum ada.
   static void warmPosts(List<Map<String, dynamic>> posts) {
     final store = PostPhotoCache.instance;
@@ -46,21 +51,34 @@ class PostPrefetch {
       if (n >= maxPosts) break;
       final paths = pathsOf(p);
       if (paths.isEmpty) continue;
-      // Ambil foto pertama (foto utama yang tampil di kartu feed).
-      final path = paths.first;
       n++;
-      if (_done.contains(path) || _inflight.contains(path)) continue;
-      // Sudah ada di RAM/disk → tandai selesai, nol I/O.
-      if (store.thumbSync(path) != null) {
-        _markDone(path);
-        continue;
+      // Foto utama feed.
+      _warmOne(store, paths.first, PostImageVariant.feed);
+      // Sisa foto (carousel) → tile, bounded.
+      for (var i = 1; i < paths.length && i < maxPhotosPerPost; i++) {
+        _warmOne(store, paths[i], PostImageVariant.tile);
       }
-      _inflight.add(path);
-      // `thumb()` baca disk dulu, lalu download bila perlu — fire-and-forget.
-      unawaited(store.thumb(path).then((b) {
-        if (b != null) _markDone(path);
-      }).whenComplete(() => _inflight.remove(path)));
     }
+  }
+
+  /// Hangatkan satu (path, varian) — dedupe via _done/_inflight.
+  static void _warmOne(
+    PostPhotoCache store,
+    String path,
+    PostImageVariant variant,
+  ) {
+    final key = '${variant.tag}:$path';
+    if (_done.contains(key) || _inflight.contains(key)) return;
+    if (store.thumbSync(path, variant: variant) != null) {
+      _markDone(key);
+      return;
+    }
+    _inflight.add(key);
+    unawaited(
+      store.thumb(path, variant: variant).then((b) {
+        if (b != null) _markDone(key);
+      }).whenComplete(() => _inflight.remove(key)),
+    );
   }
 
   /// Prefetch thumb [ahead] post DI DEPAN index [from] — dipakai `itemBuilder`

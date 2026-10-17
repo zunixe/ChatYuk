@@ -7,13 +7,33 @@ import 'package:path_provider/path_provider.dart';
 import '../media/native_image.dart';
 import 'media_disk_cache.dart';
 
-// Thumbnail JPEG (~1024px) dari bytes asli — kini di NATIVE
-// (`NativeImage.downscaleBytes`, fallback Dart) supaya decode+encode tidak
-// memakai heap Dart. 512px terlihat blur saat foto single di-upscale selebar
-// layar (1080px fisik).
+/// Varian gambar post (FASE 4) — server & cache memakai lebar berbeda per
+/// konteks supaya tidak mengunduh/menyimpan 1080px untuk tile kecil:
+///  - [feed] : ±1080px untuk foto tunggal / full-bleed (kualitas tampil).
+///  - [tile] : ±400px untuk item carousel/grid (kecil, hemat data & RAM).
+/// Viewer tetap memakai [PostPhotoCache.full] (original).
+enum PostImageVariant {
+  feed(1080, 'f'),
+  tile(400, 't');
+
+  const PostImageVariant(this.width, this.tag);
+  final int width;
+  final String tag;
+}
+
+// Thumbnail JPEG dari bytes asli — NATIVE (`NativeImage.downscaleBytes`,
+// fallback Dart) supaya decode+encode tidak memakai heap Dart. Lebar mengikuti
+// varian (feed 1080 / tile 400) — JANGAN upscale.
 @visibleForTesting
-Future<Uint8List?> genPostThumb(Uint8List bytes) =>
-    NativeImage.downscaleBytes(bytes, targetWidth: 1024, quality: 82);
+Future<Uint8List?> genPostThumb(
+  Uint8List bytes, {
+  int targetWidth = 1080,
+  int quality = 82,
+}) => NativeImage.downscaleBytes(
+  bytes,
+  targetWidth: targetWidth,
+  quality: quality,
+);
 
 /// Apakah total byte LRU melebihi cap (harus buang yang tertua)? Murni &
 /// top-level supaya kontrak cap bisa dikunci tanpa filesystem/plugin.
@@ -45,8 +65,9 @@ class PostPhotoCache {
   /// Downloader THUMB server-side (transformasi resize di Storage) — jauh
   /// lebih hemat data/CPU dari unduh full lalu downscale. Bila null / gagal,
   /// jatuh ke [downloader] (perilaku lama). Wired di main.dart ke
-  /// `StoragePhotoService.downloadThumbBytes`.
-  static PostPhotoDownloader? thumbDownloader;
+  /// `StoragePhotoService.downloadThumbBytes`. Parameter [width] = lebar
+  /// varian (feed 1080 / tile 400).
+  static Future<Uint8List?> Function(String path, int width)? thumbDownloader;
 
   static const _folderName = 'post_photos_v2';
 
@@ -72,7 +93,11 @@ class PostPhotoCache {
   final Map<String, Future<Uint8List?>> _jobs = {};
 
   void _memPut(String path, Uint8List bytes) {
-    _mem.remove(path);
+    // Kurangi panjang LAMA bila entri ini sudah ada — dulu hasil `remove`
+    // dibuang sehingga `_memBytes` membengkak tiap re-put → LRU membuang entri
+    // terlalu dini → baca disk & decode ulang (kedip).
+    final old = _mem.remove(path);
+    if (old != null) _memBytes -= old.length;
     _mem[path] = bytes;
     _memBytes += bytes.length;
     while (lruShouldEvict(_memBytes, _memMaxBytes) && _mem.isNotEmpty) {
@@ -113,14 +138,27 @@ class PostPhotoCache {
   /// `ImageProvider` STABIL untuk [bytes] pada [path] — instance yang sama
   /// dipakai ulang tiap remount sehingga `ImageCache` selalu HIT (anti decode
   /// ulang saat scroll). Di-cap FIFO agar map tak tumbuh tanpa batas.
-  ImageProvider imageProviderFor(String path, Uint8List bytes) {
-    final existing = _providerByPath[path];
+  ImageProvider imageProviderFor(
+    String path,
+    Uint8List bytes, {
+    int? decodeWidth,
+  }) {
+    // Beberapa pemakai bisa meminta lebar decode berbeda untuk path yang sama
+    // (single full-bleed vs tile carousel) → key provider per (path, lebar).
+    final key = decodeWidth == null ? path : '$path@$decodeWidth';
+    final existing = _providerByPath[key];
     if (existing != null) return existing;
     if (_providerByPath.length >= _providerMaxEntries) {
       _providerByPath.remove(_providerByPath.keys.first);
     }
-    final p = ResizeImage(MemoryImage(bytes), width: 1080);
-    _providerByPath[path] = p;
+    final p = decodeWidth != null && decodeWidth > 0
+        ? ResizeImage(
+            MemoryImage(bytes),
+            width: decodeWidth,
+            allowUpscaling: false,
+          )
+        : ResizeImage(MemoryImage(bytes), width: 1080);
+    _providerByPath[key] = p;
     return p;
   }
 
@@ -172,9 +210,10 @@ class PostPhotoCache {
   /// Thumb SINKRON (RAM → disk) — dipakai `PostCard` di initState supaya frame
   /// pertama Timeline sudah foto (nol kedip), bukan placeholder lalu thumb
   /// menyusul. null bila belum ada (fallback jalur async `thumb()`).
-  Uint8List? thumbSync(String path) {
+  Uint8List? thumbSync(String path, {PostImageVariant variant = PostImageVariant.feed}) {
     if (path.isEmpty) return null;
-    final mem = _memGet(path);
+    final key = _key(path, variant);
+    final mem = _memGet(key);
     if (mem != null) {
       statRam++;
       return mem;
@@ -182,20 +221,25 @@ class PostPhotoCache {
     final docs = _docs;
     if (docs == null) return null;
     try {
-      final f = File('$docs/$_folderName/${hashKey64(path)}.jpg');
+      final f = File('$docs/$_folderName/${hashKey64(key)}.jpg');
       if (!f.existsSync()) return null;
       final bytes = f.readAsBytesSync();
       if (bytes.isEmpty) return null;
       statDisk++;
-      _memPut(path, bytes);
+      _memPut(key, bytes);
       return bytes;
     } catch (_) {
       return null;
     }
   }
 
-  File _fileFor(Directory folder, String path) =>
-      File('${folder.path}/${hashKey64(path)}.jpg');
+  /// Key internal cache: varian + path (file & memori tidak boleh tercampur
+  /// antara feed 1080 dan tile 400).
+  static String _key(String path, PostImageVariant variant) =>
+      '${variant.tag}:$path';
+
+  File _fileFor(Directory folder, String path, [PostImageVariant variant = PostImageVariant.feed]) =>
+      File('${folder.path}/${hashKey64(_key(path, variant))}.jpg');
 
   // Full-res disimpan terpisah (suffix .full) supaya thumbnail & full bisa
   // punya umur berbeda dan tidak saling menimpa.
@@ -204,37 +248,42 @@ class PostPhotoCache {
 
   /// Ambil thumbnail foto post. [path] adalah path storage (mis. `posts/uid/ts.jpg`).
   /// Penelepon paralel untuk path sama menunggu job yang sama (bukan gagal).
-  Future<Uint8List?> thumb(String path) {
+  Future<Uint8List?> thumb(
+    String path, {
+    PostImageVariant variant = PostImageVariant.feed,
+  }) {
     if (path.isEmpty) return Future.value(null);
-    final mem = _memGet(path);
+    final key = _key(path, variant);
+    final mem = _memGet(key);
     if (mem != null) return Future.value(mem);
-    final existing = _jobs[path];
+    final existing = _jobs[key];
     if (existing != null) return existing;
-    final job = _fetchThumb(path);
-    _jobs[path] = job;
+    final job = _fetchThumb(path, variant);
+    _jobs[key] = job;
     return job.whenComplete(() {
       // Hapus HANYA job ini (job pengganti tak boleh ikut terhapus).
-      if (identical(_jobs[path], job)) _jobs.remove(path);
+      if (identical(_jobs[key], job)) _jobs.remove(key);
     });
   }
 
-  Future<Uint8List?> _fetchThumb(String path) async {
+  Future<Uint8List?> _fetchThumb(String path, PostImageVariant variant) async {
+    final key = _key(path, variant);
     try {
       final folder = await _folder();
-      final f = _fileFor(folder, path);
+      final f = _fileFor(folder, path, variant);
       if (await f.exists()) {
         final bytes = await f.readAsBytes();
         statDisk++;
-        _memPut(path, bytes);
+        _memPut(key, bytes);
         return bytes;
       }
       statNetwork++;
-      // PRIORITAS: thumb server-side (kecil). Fallback full+downscale bila
-      // transform tak didukung server (null).
-      final serverThumb = await (thumbDownloader?.call(path) ??
+      // PRIORITAS: thumb server-side (kecil, sesuai lebar varian). Fallback
+      // full+downscale bila transform tak didukung server (null).
+      final serverThumb = await (thumbDownloader?.call(path, variant.width) ??
           Future<Uint8List?>.value());
       if (serverThumb != null && serverThumb.isNotEmpty) {
-        _memPut(path, serverThumb);
+        _memPut(key, serverThumb);
         _writeFileAsync(folder, f, serverThumb);
         return serverThumb;
       }
@@ -244,9 +293,9 @@ class PostPhotoCache {
       // ui.instantiateImageCodec butuh root isolate engine. Downscale saat
       // decode = alokasi RGBA ~3.7MB, bukan full-res ~48MB.
       statDecode++;
-      final thumb = await genPostThumb(full);
+      final thumb = await genPostThumb(full, targetWidth: variant.width);
       if (thumb != null) {
-        _memPut(path, thumb);
+        _memPut(key, thumb);
         _writeFileAsync(folder, f, thumb);
       }
       return thumb;
@@ -258,12 +307,15 @@ class PostPhotoCache {
 
   /// Ambil banyak thumbnail sekaligus — miss download paralel (maks 4).
   /// Return Map path → thumbBytes; yang gagal tidak masuk.
-  Future<Map<String, Uint8List>> loadMany(List<String> paths) async {
+  Future<Map<String, Uint8List>> loadMany(
+    List<String> paths, {
+    PostImageVariant variant = PostImageVariant.feed,
+  }) async {
     final result = <String, Uint8List>{};
     if (paths.isEmpty) return result;
     final missing = <String>[];
     for (final p in paths) {
-      final mem = _memGet(p);
+      final mem = _memGet(_key(p, variant));
       if (mem != null) {
         result[p] = mem;
       } else {
@@ -281,7 +333,7 @@ class PostPhotoCache {
         if (idx >= missing.length) return;
         final p = missing[idx];
         try {
-          final t = await thumb(p);
+          final t = await thumb(p, variant: variant);
           if (t != null) result[p] = t;
         } catch (_) {}
       }
@@ -333,9 +385,13 @@ class PostPhotoCache {
     try {
       final thumb = await genPostThumb(fullBytes);
       if (thumb == null) return null;
-      _memPut(path, thumb);
+      _memPut(_key(path, PostImageVariant.feed), thumb);
       final folder = await _folder();
-      _writeFileAsync(folder, _fileFor(folder, path), thumb);
+      _writeFileAsync(
+        folder,
+        _fileFor(folder, path, PostImageVariant.feed),
+        thumb,
+      );
       return thumb;
     } catch (e) {
       dlog('[PostPhotoCache] save error: $e');

@@ -56,15 +56,20 @@ void main() {
     });
   });
 
-  group('PostPhotoCache.genPostThumb — thumbnail post 1024px', () {
-    test('gambar besar → 1024px JPEG', () async {
+  group('PostPhotoCache.genPostThumb — thumbnail post (varian)', () {
+    test('gambar besar → lebar varian feed 1080 JPEG', () async {
       final out = await genPostThumb(_jpeg(3000, 2000));
       expect(out, isNotNull);
       final decoded = img.decodeImage(out!)!;
-      expect(decoded.width, 1024);
-      // 3000×2000 (3:2) → tinggi ±683. Skia targetWidth floor → 682;
-      // toleransi 1px agar tidak rapuh terhadap pembulatan codec.
-      expect(decoded.height, inInclusiveRange(682, 683));
+      expect(decoded.width, 1080);
+      // 3000×2000 (3:2) → tinggi 720 (toleransi 1px pembulatan codec).
+      expect(decoded.height, inInclusiveRange(719, 720));
+    });
+
+    test('varian tile → lebar 400 JPEG', () async {
+      final out = await genPostThumb(_jpeg(3000, 2000), targetWidth: 400);
+      expect(out, isNotNull);
+      expect(img.decodeImage(out!)!.width, 400);
     });
 
     test('gambar kecil → TIDAK diperbesar (lebih hemat; thumbnail cukup kecil)',

@@ -1,6 +1,16 @@
 # Catatan Migrasi via API (Playwright fallback) — untuk AI lain
 
 > WAJIB dibaca sebelum `supabase db push`
+
+## 2026-10-17 — BlurHash foto post (Timeline)
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261017130000_posts_blurhash.sql`.
+- **Kolom:** `posts.image_blurhashes jsonb default '[]'`.
+- **Fungsi disentuh:** `create_post` (arg baru `p_image_blurhashes`), `list_posts`
+  (FROZEN, output `imageBlurhashes`), `get_post` (output `imageBlurhashes`).
+- **Snapshot:** `supabase/snapshots/functions.sql` diupdate (diff = +1 baris output).
+- **Verifikasi:** `check_migrations.sh --all` OK; `list_posts` mengandung
+  `imageBlurhashes`; versi tercatat di `supabase_migrations.schema_migrations`.
 ## 2026-10-11 — Admin Timeline (menu moderasi post)
 
 - **Status:** SUDAH TERAPPLIED via Management API — `20261011170000_admin_timeline.sql`.

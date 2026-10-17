@@ -2503,3 +2503,18 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - **Secret edge function** (`play-topup-verify`): `GOOGLE_PLAY_SA_JSON`
   (isi `fastlane/google-play.json`), `ANDROID_PACKAGE_NAME=com.chatyuk.chatyuk`.
 - **Verifikasi:** kelima produk `state=ACTIVE` + harga IDR sesuai.
+
+## 20261017130000_posts_blurhash
+
+- **Status:** TERAPPLIED via Management API — `20261017130000_posts_blurhash.sql`.
+- **Kolom baru:** `posts.image_blurhashes jsonb not null default '[]'` (array hash
+  sejajar `images[]`; post lama = `[]` → client fallback alas `#1E1E1E`).
+- **Fungsi:**
+  - `create_post(...)` → argumen baru `p_image_blurhashes` (overload 4-arg di-drop).
+  - `list_posts(...)` (FROZEN) → output `imageBlurhashes` (satu field ditambah,
+    cabang lain IDENTIK; header `-- menyentuh: list_posts`).
+  - `get_post(...)` → output `imageBlurhashes` (dipakai layar detail).
+- **Verifikasi:** kolom ada; `list_posts` mengandung `imageBlurhashes`;
+  `create_post` 5-arg; snapshot `functions.sql` diupdate; `check_migrations --all` OK.
+- **Klien:** composer menghitung BlurHash (`core/media/blurhash.dart`, 32px) saat
+  upload; `PostCard`/`PostPhotoGrid` menampilkan `BlurHash` placeholder.

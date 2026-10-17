@@ -355,6 +355,9 @@ mixin SSocialMx {
       : 'Boost this post to the top of the feed?';
   String get msgBoosted => isId ? 'Postingan di-boost' : 'Post boosted';
   String get msgPosted => isId ? 'Berhasil diposting' : 'Posted';
+  String get errPreparePhoto => isId
+      ? 'Sebagian foto gagal diproses'
+      : 'Some photos failed to process';
   String get msgCommented => isId ? 'Komentar terkirim' : 'Comment posted';
   String get commentDeleteTitle =>
       isId ? 'Hapus komentar?' : 'Delete comment?';

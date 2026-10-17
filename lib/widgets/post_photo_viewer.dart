@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter/foundation.dart';
@@ -66,6 +67,24 @@ class _ViewerBodyState extends ConsumerState<_ViewerBody> {
   late int _index = _safeInitial;
 
   @override
+  void initState() {
+    super.initState();
+    _warmNeighbors(_safeInitial);
+  }
+
+  /// Preload foto TETANGGA (depan/belakang) ke cache disk lewat mekanisme
+  /// cache yang sudah ada — geser carousel jadi instan (bukan unduh saat
+  /// swipe). Bounded (hanya 1 kiri + 1 kanan), fire-and-forget.
+  void _warmNeighbors(int i) {
+    final cache = PostPhotoCache.instance;
+    for (final j in [i - 1, i + 1]) {
+      if (j >= 0 && j < widget.paths.length) {
+        unawaited(cache.full(widget.paths[j]));
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _page.dispose();
     super.dispose();
@@ -82,7 +101,10 @@ class _ViewerBodyState extends ConsumerState<_ViewerBody> {
             PageView.builder(
               controller: _page,
               itemCount: widget.paths.length,
-              onPageChanged: (i) => setState(() => _index = i),
+              onPageChanged: (i) {
+                setState(() => _index = i);
+                _warmNeighbors(i);
+              },
               itemBuilder: (_, i) => _ViewerPage(
                 path: widget.paths[i],
                 thumb: i < widget.thumbs.length ? widget.thumbs[i] : Uint8List(0),
@@ -274,7 +296,7 @@ class _ViewerPageState extends State<_ViewerPage> {
         Center(
           child: InteractiveViewer(
             transformationController: _transform,
-            maxScale: 5,
+            maxScale: 4,
             panEnabled: _zoomed,
             onInteractionUpdate: (_) => setState(() {}),
             child: image,
