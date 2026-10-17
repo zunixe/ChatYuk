@@ -24,6 +24,10 @@ SnackBar buildChatSnackBar(
     margin: EdgeInsets.only(left: 16, right: 16, bottom: kb + 76),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     duration: duration,
+    // PENTING (Flutter 3.4x): `persist = persist ?? action != null` → SnackBar
+    // ber-ACTION (mis. UNDO hapus pesan) PERSIST selamanya kalau tidak di-set.
+    // Set false supaya tetap hilang otomatis setelah `duration`.
+    persist: false,
     action: action,
     backgroundColor: backgroundColor,
   );
