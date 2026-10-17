@@ -8,8 +8,29 @@ import '../models/message_model.dart';
 class ChatItem {
   final MessageModel? msg;
   final String? dateLabel;
-  const ChatItem.message(this.msg) : dateLabel = null;
-  const ChatItem.date(String label) : msg = null, dateLabel = label;
+
+  /// Foto-foto satu album (bundle multi-foto). Kosong = bukan album.
+  final List<MessageModel> album;
+
+  const ChatItem.message(this.msg)
+    : dateLabel = null,
+      album = const [];
+
+  const ChatItem.date(String label)
+    : msg = null,
+      dateLabel = label,
+      album = const [];
+
+  /// Satu bubble grid untuk [photos] (urutan kronologis).
+  ChatItem.album(List<MessageModel> photos)
+    : msg = null,
+      dateLabel = null,
+      album = List.unmodifiable(photos);
+
+  bool get isAlbum => album.isNotEmpty;
+
+  /// Pesan acuan (album → foto pertama).
+  MessageModel? get primary => msg ?? (album.isEmpty ? null : album.first);
 }
 
 /// Label chip tanggal — Hari ini/Kemarin, selain itu tanggal lengkap.

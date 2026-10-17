@@ -4561,3 +4561,25 @@ error resource native. (Kuantitas bitmap yang di-reload tidak diukur visual.)
   blurhash gagal→'', bytes invalid→null, konkurensi maks 3 tidak terlampaui.
   Yang BELUM diuji otomatis: interaksi UI ImagePicker + indikator progress
   (butuh device/manual).
+
+## §54. Album foto / bundle multi-foto (2026-10-18)
+
+**Fitur:** kirim 2–10 foto sekaligus dari galeri → tampil sebagai SATU bubble
+grid ala WhatsApp (2 = berdampingan, 3–4 = grid 2×2, >4 = 4 tile + overlay
+"+N"). Caption di foto terakhir, balasan di foto pertama, jam/centang sekali.
+
+**Data:** kolom `album_id uuid` (nullable) di `private_messages` & `messages`
++ index parsial `where album_id is not null`. Pesan lama `NULL` → jalur lama
+persis (1 pesan = 1 bubble) — **nol regresi**.
+
+**Biaya render (dijaga):**
+- Pengelompokan dilakukan di `_deriveItems()` (sudah punya cache berbasis
+  revisi pesan) → tidak ada perhitungan per-frame.
+- Album = **1 widget** untuk N foto (bukan N bubble): lebih sedikit widget,
+  padding, RepaintBoundary, dan lookup reaksi.
+- Thumbnail tetap decode per-foto & lazy (Image.memory di tile); viewer
+  full-res baru dibuka saat diketuk.
+- Upload berurutan (bukan 10 paralel) agar tidak membanjiri storage/CPU.
+
+**Catatan:** HD (`photoHd`) diterapkan ke SEMUA foto batch dengan memproses
+ulang dari berkas aslinya, bukan mengompres ulang hasil preview.

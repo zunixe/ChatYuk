@@ -69,6 +69,7 @@ class ChatNotifier extends Notifier<ChatState> {
     bool isForwarded = false,
     List<Mention> mentions = const [],
     String videoPoster = '',
+    String? albumId,
   }) => _service.sendRoomMessage(
     roomId: roomId,
     senderId: senderId,
@@ -84,6 +85,7 @@ class ChatNotifier extends Notifier<ChatState> {
     isForwarded: isForwarded,
     mentions: mentions,
     videoPoster: videoPoster,
+    albumId: albumId,
   );
 
   /// Perbarui payload lokasi live di room.
@@ -203,6 +205,7 @@ class ChatNotifier extends Notifier<ChatState> {
     bool isForwarded = false,
     List<Mention> mentions = const [],
     String videoPoster = '',
+    String? albumId,
   }) => _service.sendPrivateMessage(
     chatId: chatId,
     senderId: senderId,
@@ -218,6 +221,7 @@ class ChatNotifier extends Notifier<ChatState> {
     isForwarded: isForwarded,
     mentions: mentions,
     videoPoster: videoPoster,
+    albumId: albumId,
   );
 
   Future<void> markAsRead(String chatId, String uid) async {

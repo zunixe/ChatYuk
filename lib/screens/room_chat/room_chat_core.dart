@@ -53,6 +53,7 @@ mixin _RcCoreMx on _RoomChatBase {
     // tetap diterima demi kontrak mixin bersama.
     int? videoDurationMs,
     String videoPoster = '',
+    String? albumId,
   }) async {
     return _chat.sendRoomMessage(
       roomId: widget.room.id,
@@ -67,6 +68,7 @@ mixin _RcCoreMx on _RoomChatBase {
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
       videoPoster: videoPoster,
+      albumId: albumId,
     );
   }
 
@@ -247,15 +249,39 @@ mixin _RcCoreMx on _RoomChatBase {
     };
     final items = <ChatItem>[];
     String? prevDateKey;
+    // ALBUM: foto berurutan dengan albumId sama → satu bubble grid.
+    final albumBuf = <MessageModel>[];
+    String? albumKey;
+    void flushAlbum() {
+      if (albumBuf.isEmpty) return;
+      items.add(
+        albumBuf.length == 1
+            ? ChatItem.message(albumBuf.first)
+            : ChatItem.album(List.of(albumBuf)),
+      );
+      albumBuf.clear();
+      albumKey = null;
+    }
+
     for (final m in all) {
       final local = m.timestamp.toLocal();
       final dateKey = '${local.year}-${local.month}-${local.day}';
       if (prevDateKey != dateKey) {
+        flushAlbum();
         items.add(ChatItem.date(dateChipLabel(m.timestamp, s)));
       }
       prevDateKey = dateKey;
+      final aid = m.albumId;
+      if (aid != null && aid.isNotEmpty && m.type == 'image' && !m.isDeleted) {
+        if (albumKey != null && albumKey != aid) flushAlbum();
+        albumKey = aid;
+        albumBuf.add(m);
+        continue;
+      }
+      flushAlbum();
       items.add(ChatItem.message(m));
     }
+    flushAlbum();
     _cacheItemsMsgsSrc = msgsSrc;
     _cacheItemsPendingLen = _pending.length;
     _cacheItemsLocale = locale;

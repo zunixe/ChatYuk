@@ -160,15 +160,45 @@ void _drainImageQueue() {
     };
     final items = <ChatItem>[];
     String? prevDateKey;
+    // ALBUM: gabungkan foto berurutan dengan albumId sama (satu batch kirim)
+    // jadi SATU bubble grid. Buffer kecil — album maks 10 foto.
+    final albumBuf = <MessageModel>[];
+    String? albumKey;
+
+    void flushAlbum() {
+      if (albumBuf.isEmpty) return;
+      if (albumBuf.length == 1) {
+        items.add(ChatItem.message(albumBuf.first));
+      } else {
+        items.add(ChatItem.album(List.of(albumBuf)));
+      }
+      albumBuf.clear();
+      albumKey = null;
+    }
+
     for (final m in all) {
       final local = m.timestamp.toLocal();
       final dateKey = '${local.year}-${local.month}-${local.day}';
       if (prevDateKey != dateKey) {
+        // Album tidak boleh melintasi batas hari (chip tanggal di tengah).
+        flushAlbum();
         items.add(ChatItem.date(dateChipLabel(m.timestamp, s)));
       }
       prevDateKey = dateKey;
+
+      final aid = m.albumId;
+      final isAlbumPhoto =
+          aid != null && aid.isNotEmpty && m.type == 'image' && !m.isDeleted;
+      if (isAlbumPhoto) {
+        if (albumKey != null && albumKey != aid) flushAlbum();
+        albumKey = aid;
+        albumBuf.add(m);
+        continue;
+      }
+      flushAlbum();
       items.add(ChatItem.message(m));
     }
+    flushAlbum();
     _cacheItemsRevision = _msgsRevision;
     _cacheItemsPendingLen = _pending.length;
     _cacheItemsLocale = locale;

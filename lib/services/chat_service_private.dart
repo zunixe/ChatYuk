@@ -177,6 +177,8 @@ mixin ChatServicePrivateMx on ChatBase {
     bool isForwarded = false,
     List<Mention> mentions = const [],
     String videoPoster = '',
+    /// Bundle multi-foto: semua pesan batch berbagi id yang sama.
+    String? albumId,
   }) async {
     // Validasi tipe pesan
     if (![
@@ -227,6 +229,7 @@ mixin ChatServicePrivateMx on ChatBase {
       'text': text,
       'type': type,
       'image_data': type == 'voice' ? '' : imageData,
+      if (albumId != null && albumId.isNotEmpty) 'album_id': albumId,
       if (type == 'voice') 'voice_path': imageData,
       if (type == 'voice' && durationMs != null) 'duration_ms': durationMs,
       // Durasi view-once (detik; 0 = sampai ditutup). Voice pakai ms.

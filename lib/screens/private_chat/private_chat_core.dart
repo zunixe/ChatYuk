@@ -760,6 +760,50 @@ mixin _PcCoreMx on _PrivateChatBase {
                                     if (item.dateLabel != null) {
                                       return DateChip(label: item.dateLabel!);
                                     }
+                                    // ALBUM: satu bubble grid untuk semua foto
+                                    // batch (bukan N bubble). Data & aksi pesan
+                                    // tidak berubah — hanya presentasi.
+                                    if (item.isAlbum) {
+                                      final f = item.album;
+                                      final first = f.first;
+                                      final last = f.last;
+                                      final isMeA = first.senderId == myUid;
+                                      final pendA = first.id.startsWith(
+                                        'pending-',
+                                      );
+                                      final readA =
+                                          isMeA &&
+                                          !pendA &&
+                                          ReadReceipt.isRead(
+                                            last.timestamp,
+                                            _lastReadNotifier.value,
+                                          );
+                                      return RepaintBoundary(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 8,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: isMeA
+                                                ? MainAxisAlignment.end
+                                                : MainAxisAlignment.start,
+                                            children: [
+                                              Flexible(
+                                                child: PhotoAlbumBubble(
+                                                  photos: f,
+                                                  timeStr: formatBubbleTime(
+                                                    last.timestamp,
+                                                  ),
+                                                  showChecks: isMeA,
+                                                  isPending: pendA,
+                                                  isRead: readA,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }
                                     final msg = item.msg!;
                                     final isMe = msg.senderId == myUid;
                                     final isPending = msg.id.startsWith(

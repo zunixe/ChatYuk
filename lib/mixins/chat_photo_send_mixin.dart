@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -65,6 +66,8 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     int? videoDurationMs,
     /// Path storage poster video (JPEG) — preview penerima. '' = tanpa poster.
     String videoPoster = '',
+    /// Album foto: semua foto batch berbagi id yang sama.
+    String? albumId,
   });
 
   /// Timer view-once yang dipilih di preview (detik; null = foto normal).
@@ -168,14 +171,49 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     await _openPreview(bytes, processed);
   }
 
-  /// Tombol galeri: ambil → taruh di preview (caption + toggle HD),
-  /// ala WhatsApp. Kirim terjadi dari tombol send composer.
+  /// Tombol galeri: ambil SATU atau BANYAK foto (maks 10) → preview →
+  /// kirim sebagai satu ALBUM (bundle ala WhatsApp). Batch berbagi
+  /// `albumId`; caption ditempel di foto terakhir. HD berlaku ke semua.
+  static const int _maxAlbumPhotos = 10;
+
+  /// Foto-foto tambahan batch (base64 terproses) — foto pertama tetap di
+  /// jalur preview lama (`_openPreview`).
+  final List<String> albumExtraB64 = [];
+  final List<Uint8List> albumExtraOriginal = [];
+
   Future<void> photoPickFromGalleryToPreview() async {
-    final picked = await _photoPicker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    final processed = await photoProcess(bytes);
-    await _openPreview(bytes, processed);
+    List<XFile> picked;
+    try {
+      picked = await _photoPicker.pickMultiImage(
+        limit: _maxAlbumPhotos,
+        imageQuality: 92,
+      );
+    } catch (_) {
+      // Plugin lama tanpa `limit` → jatuh ke pilih tunggal.
+      final one = await _photoPicker.pickImage(source: ImageSource.gallery);
+      if (one == null) return;
+      picked = [one];
+    }
+    if (picked.isEmpty) return;
+    albumExtraB64.clear();
+    albumExtraOriginal.clear();
+
+    Uint8List? firstBytes;
+    String? firstProcessed;
+    for (var i = 0; i < picked.length; i++) {
+      final bytes = await picked[i].readAsBytes();
+      final processed = await photoProcess(bytes);
+      if (processed == null) continue; // gagal satu → lewati, sisanya lanjut
+      if (firstProcessed == null) {
+        firstBytes = bytes;
+        firstProcessed = processed;
+      } else {
+        albumExtraB64.add(processed);
+        albumExtraOriginal.add(bytes);
+      }
+    }
+    if (firstProcessed == null) return;
+    await _openPreview(firstBytes!, firstProcessed);
   }
 
   /// Validasi ukuran + resize isolate. Return base64, null bila gagal
@@ -614,27 +652,85 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   }
 
   /// Kirim foto dari base64 yang sudah diproses (dipakai composer preview).
+  ///
+  /// Bila ada foto tambahan (`albumExtraB64`) → kirim sebagai SATU ALBUM:
+  /// semua pesan berbagi `albumId`, caption di foto TERAKHIR, balasan di
+  /// foto PERTAMA. HD (bila aktif) diterapkan ke SEMUA foto dari aslinya.
   Future<void> sendPhotoBase64(
     String base64, {
     String text = '',
     MessageModel? reply,
   }) async {
     if (!mounted) return;
+    final extras = List<String>.of(albumExtraB64);
+    final extrasOrig = List<Uint8List>.of(albumExtraOriginal);
+    final isAlbum = extras.isNotEmpty;
+
     // HD on + original masih ada → proses ulang dari ASLINYA (bukan
-    // kompres-ulang hasil preview standar).
+    // kompres-ulang hasil preview standar). Berlaku untuk SEMUA foto.
     var payload = base64;
     final original = pendingPhotoOriginal;
     if (photoHd && original != null) {
-      payload = await NativeImage.processJpeg(original, maxPx: 1920, quality: 90) ?? base64;
+      payload =
+          await NativeImage.processJpeg(original, maxPx: 1920, quality: 90) ??
+          base64;
     }
-    await _sendImageLike(
-      base64: payload,
-      kind: 'image',
-      type: 'image',
-      text: text,
-      reply: reply,
-    );
+    final payloadExtras = <String>[];
+    for (var i = 0; i < extras.length; i++) {
+      if (photoHd && i < extrasOrig.length) {
+        payloadExtras.add(
+          await NativeImage.processJpeg(
+                extrasOrig[i],
+                maxPx: 1920,
+                quality: 90,
+              ) ??
+              extras[i],
+        );
+      } else {
+        payloadExtras.add(extras[i]);
+      }
+    }
+
+    if (!isAlbum) {
+      await _sendImageLike(
+        base64: payload,
+        kind: 'image',
+        type: 'image',
+        text: text,
+        reply: reply,
+      );
+    } else {
+      final albumId = _newAlbumId();
+      final all = <String>[payload, ...payloadExtras];
+      for (var i = 0; i < all.length; i++) {
+        await _sendImageLike(
+          base64: all[i],
+          kind: 'image',
+          type: 'image',
+          // Caption hanya di foto TERAKHIR (pola WhatsApp).
+          text: i == all.length - 1 ? text : '',
+          // Balasan hanya di foto PERTAMA.
+          reply: i == 0 ? reply : null,
+          albumId: albumId,
+        );
+      }
+    }
+    albumExtraB64.clear();
+    albumExtraOriginal.clear();
     photoClearPreviewState();
+  }
+
+  /// UUID v4 sederhana tanpa dependency tambahan (uuid tersedia hanya
+  /// sebagai paket transitif — jangan bergantung pada paket tak langsung).
+  String _newAlbumId() {
+    final r = Random.secure();
+    final b = List<int>.generate(16, (_) => r.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40; // versi 4
+    b[8] = (b[8] & 0x3f) | 0x80; // varian RFC 4122
+    String h(int i) => b[i].toRadixString(16).padLeft(2, '0');
+    final s = [for (var i = 0; i < 16; i++) h(i)].join();
+    return '${s.substring(0, 8)}-${s.substring(8, 12)}-'
+        '${s.substring(12, 16)}-${s.substring(16, 20)}-${s.substring(20)}';
   }
 
   Future<void> _sendImageLike({
@@ -643,6 +739,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     required String type,
     String text = '',
     MessageModel? reply,
+    String? albumId,
   }) async {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     final uid = auth.uid;
@@ -667,6 +764,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      albumId: albumId,
     );
     setState(() => outboxPending.add(pendingPhoto));
     outboxScrollToBottom();
@@ -751,6 +849,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
         viewOnceSecs: viewSecs,
+        albumId: albumId,
       );
       // Simpan thumb ke DISK (PhotoCache) dari base64 asli → cold start
       // berikutnya HIT disk (anti-blink foto kiriman sendiri; dulu hanya

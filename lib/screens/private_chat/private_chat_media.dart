@@ -105,6 +105,7 @@ mixin _PcMediaMx on _PrivateChatBase {
     int? viewOnceSecs,
     int? videoDurationMs,
     String videoPoster = '',
+    String? albumId,
   }) async {
     return ProviderScope.containerOf(context, listen: false)
         .read(chatRiverpod.chatProvider.notifier)
@@ -122,6 +123,7 @@ mixin _PcMediaMx on _PrivateChatBase {
           repliedToText: repliedToText,
           repliedToSenderName: repliedToSenderName,
           videoPoster: videoPoster,
+          albumId: albumId,
         );
   }
 

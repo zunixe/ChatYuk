@@ -72,6 +72,25 @@ mixin _RcBuildMx on _RoomChatBase {
                   final item = items[items.length - 1 - i];
                   if (item.dateLabel != null)
                     return DateChip(label: item.dateLabel!);
+                  // ALBUM: satu bubble grid (bukan N bubble).
+                  if (item.isAlbum) {
+                    final ph = item.album;
+                    return RepaintBoundary(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Align(
+                          alignment: ph.first.senderId == auth.uid
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: PhotoAlbumBubble(
+                            photos: ph,
+                            timeStr: formatBubbleTime(ph.last.timestamp),
+                            showChecks: false,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
                   final m = item.msg!;
                   final isMe = m.senderId == auth.uid;
                   final mkey = _msgKeys.putIfAbsent(

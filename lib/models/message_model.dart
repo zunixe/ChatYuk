@@ -24,6 +24,10 @@ class MessageModel {
   /// tanpa mengunduh video penuh. Kosong = video lama / belum ada poster.
   final String videoPoster;
 
+  /// ID album (bundle multi-foto ala WhatsApp). NULL = bukan album (perilaku
+  /// lama). Semua foto dalam satu batch berbagi id yang sama.
+  final String? albumId;
+
   MessageModel({
     required this.id,
     required this.senderId,
@@ -43,6 +47,7 @@ class MessageModel {
     this.isForwarded = false,
     this.mentions = const [],
     this.videoPoster = '',
+    this.albumId,
   });
 
   factory MessageModel.fromMap(String id, Map<String, dynamic> map) {
@@ -76,6 +81,11 @@ class MessageModel {
       videoPoster: deleted
           ? ''
           : (map['videoPoster'] ?? map['video_poster'] ?? ''),
+      albumId: deleted
+          ? null
+          : (map['albumId'] ?? map['album_id']) is String
+                ? (map['albumId'] ?? map['album_id']) as String
+                : null,
     );
   }
 
@@ -107,6 +117,7 @@ class MessageModel {
       'isForwarded': isForwarded,
       'mentions': isDeleted ? const [] : Mention.listTo(mentions),
       'videoPoster': isDeleted ? '' : videoPoster,
+      if (albumId != null) 'albumId': albumId,
     };
   }
 
@@ -123,6 +134,7 @@ class MessageModel {
     bool? isForwarded,
     List<Mention>? mentions,
     String? videoPoster,
+    String? albumId,
   }) {
     final newDeleted = isDeleted ?? this.isDeleted;
     // PRIVASI: begitu berstatus terhapus, konten dikosongkan — update
@@ -146,6 +158,7 @@ class MessageModel {
       isForwarded: isForwarded ?? this.isForwarded,
       mentions: newDeleted ? const [] : (mentions ?? this.mentions),
       videoPoster: newDeleted ? '' : (videoPoster ?? this.videoPoster),
+      albumId: newDeleted ? null : (albumId ?? this.albumId),
     );
   }
 }
