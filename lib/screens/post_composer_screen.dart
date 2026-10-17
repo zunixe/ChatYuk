@@ -558,18 +558,24 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       ),
       decoration: InputDecoration(
         isCollapsed: true,
-        // Tema global `inputDecorationTheme` = filled + radius 12 → WAJIB
-        // dimatikan agar benar-benar tanpa box/latar (spec: borderless).
-        filled: false,
+        // Latar DIBERI (jelas di mana menulis) tapi PERSEGI penuh — tema global
+        // memakai radius 12 untuk fill DAN focusedBorder, sehingga tampak
+        // seperti kotak mengambang. Semua border dimatikan eksplisit.
+        filled: true,
+        fillColor: AppTheme.bgInput,
         border: InputBorder.none,
         enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
         hintText: s.composerHintShare,
         hintStyle: TextStyle(
           fontSize: AppTextSize.s16,
           height: AppTextSize.lh15,
           color: AppTheme.textSecondary,
         ),
-        contentPadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
       ),
       onChanged: (_) => setState(() {}),
     );
