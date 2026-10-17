@@ -36,6 +36,16 @@ mixin _PcFilterMx on _PcBase {
               active: _chatFilter == ChatFilter.registered,
               onTap: () => _selectFilter(ChatFilter.registered),
             ),
+            // GRUP: item grup tampil di daftar Pesan yang sama.
+            ChatFilterChipItem(
+              label: s.filterGroupsCount(
+                ref.watch(
+                  roomProvider.select((r) => r.myGroups.length),
+                ),
+              ),
+              active: _chatFilter == ChatFilter.groups,
+              onTap: () => _selectFilter(ChatFilter.groups),
+            ),
           ],
         );
       },

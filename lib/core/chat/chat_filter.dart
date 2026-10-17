@@ -12,7 +12,9 @@ enum ChatFilter {
   unread,
   friends,
   anon,
-  registered;
+  registered,
+  /// Hanya GRUP (grup tampil sebagai item di daftar Pesan).
+  groups;
 
   /// Nilai key yang dipakai UI (`_chatFilter`).
   String get key => name;
@@ -46,6 +48,9 @@ class ChatFilterLogic {
         return !otherRegistered;
       case ChatFilter.registered:
         return otherRegistered;
+      case ChatFilter.groups:
+        // Filter grup ditangani di layar (daftar grup), bukan chat private.
+        return false;
     }
   }
 

@@ -234,7 +234,40 @@ mixin _PcBuildMx on _PcBase {
                       }
                       // List terlihat: hanya rebuild bagian ini saat data berganti.
                       final filtered = _listNotifier.value;
-                      if (filtered.isEmpty) {
+                      // ── GRUP sebagai ITEM di daftar Pesan ──
+                      // Semua grup ikut tampil di filter Semua/Belum dibaca;
+                      // chip 'Grup' hanya menampilkan grup. Private chat tetap
+                      // lebih dulu (pinned di atas), grup menyusul urut waktu.
+                      final myGroups = ref.watch(
+                        roomProvider.select((r) => r.myGroups),
+                      );
+                      final showGroups = _chatFilter == ChatFilter.groups ||
+                          _chatFilter == ChatFilter.all ||
+                          _chatFilter == ChatFilter.unread;
+                      final List<RoomModel> groupItems = !showGroups
+                          ? const <RoomModel>[]
+                          : (_chatFilter == ChatFilter.unread
+                                  ? myGroups.where((g) => g.unread > 0)
+                                  : myGroups)
+                              .where(
+                                (g) =>
+                                    effectiveQuery.isEmpty ||
+                                    g.name
+                                        .toLowerCase()
+                                        .contains(effectiveQuery),
+                              )
+                              .toList()
+                            ..sort(
+                              (a, b) => (b.lastAt ??
+                                      DateTime.fromMillisecondsSinceEpoch(0))
+                                  .compareTo(a.lastAt ??
+                                      DateTime.fromMillisecondsSinceEpoch(0)),
+                            );
+                      final List<Object> entries =
+                          _chatFilter == ChatFilter.groups
+                              ? List<Object>.of(groupItems)
+                              : <Object>[...filtered, ...groupItems];
+                      if (entries.isEmpty) {
                         final searching = effectiveQuery.isNotEmpty;
                         return EmptyStateView(
                           icon: searching
@@ -249,8 +282,8 @@ mixin _PcBuildMx on _PcBase {
                       // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus.
                       // Paginasi lewat notifier: scroll tidak rebuild AppBar dkk.
                       final page = _pageNotifier.value;
-                      final paged = filtered.take(page * _pageSize).toList();
-                      final hasMore = paged.length < filtered.length;
+                      final paged = entries.take(page * _pageSize).toList();
+                      final hasMore = paged.length < entries.length;
                       return ListView.builder(
                         controller: _scrollCtrl,
                         padding: EdgeInsets.fromLTRB(
@@ -272,7 +305,13 @@ mixin _PcBuildMx on _PcBase {
                               ),
                             );
                           }
-                          final chat = paged[i];
+                          final entry = paged[i];
+                          if (entry is RoomModel) {
+                            return RepaintBoundary(
+                              child: _groupRow(entry, s),
+                            );
+                          }
+                          final chat = entry as PrivateChatInfo;
                           final otherUid = chat.participants.firstWhere(
                             (p) => p != auth.uid,
                             orElse: () => '',
@@ -995,5 +1034,107 @@ mixin _PcBuildMx on _PcBase {
 
   String _formatTime(DateTime dt, S s) {
     return formatRelativeTime(dt, isId: s.isId);
+  }
+
+  /// Baris GRUP di daftar Pesan (ikon, nama, preview, waktu, badge unread).
+  Widget _groupRow(RoomModel g, S s) {
+    final unread = g.unread;
+    final preview = g.lastText.isNotEmpty
+        ? (g.lastSenderName.isNotEmpty
+            ? '${g.lastSenderName}: ${g.lastText}'
+            : g.lastText)
+        : s.tabGroups;
+    final timeStr = g.lastAt == null ? '' : formatBubbleTime(g.lastAt!);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _openGroup(g),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgInput,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Text(
+                    g.icon.isEmpty ? '\u{1F465}' : g.icon,
+                    style: TextStyle(fontSize: AppGlyph.md),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        g.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.bodyStrong,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        preview,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (timeStr.isNotEmpty)
+                      Text(
+                        timeStr,
+                        style: AppText.micro.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    if (unread > 0)
+                      Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$unread',
+                          style: AppText.micro.copyWith(color: Colors.white),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openGroup(RoomModel g) {
+    final navKey = navKeyRoom(g.id);
+    if (!tryClaimNav(navKey)) return;
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => RoomChatScreen(room: g)))
+        .then((_) => releaseNav(navKey));
   }
 }

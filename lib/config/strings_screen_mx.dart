@@ -568,6 +568,8 @@ mixin SScreenMx {
   String filterFriendsCount(int n) => '$filterFriends ($n)';
   String filterAnonCount(int n) => '$filterAnon ($n)';
   String filterRegisteredCount(int n) => '$filterRegistered ($n)';
+  String get filterGroups => isId ? 'Grup' : 'Groups';
+  String filterGroupsCount(int n) => '$filterGroups ($n)';
   // ── Antrean offline (pesan menunggu koneksi) ──
   String get msgQueuedOffline => isId
       ? 'Disimpan — terkirim otomatis saat online'
