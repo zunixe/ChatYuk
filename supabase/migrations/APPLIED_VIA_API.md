@@ -4,6 +4,10 @@
 
 ## 2026-10-17 — BlurHash foto post (Timeline)
 
+- **Backfill:** `20261017140000_posts_blurhash_backfill.sql` — 22 post lama
+  berfoto diisi `image_blurhashes` (dihitung dgn encoder aplikasi). Terverifikasi
+  22/22.
+
 - **Status:** SUDAH TERAPPLIED via Management API — `20261017130000_posts_blurhash.sql`.
 - **Kolom:** `posts.image_blurhashes jsonb default '[]'`.
 - **Fungsi disentuh:** `create_post` (arg baru `p_image_blurhashes`), `list_posts`

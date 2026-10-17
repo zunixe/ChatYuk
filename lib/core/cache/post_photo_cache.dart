@@ -69,7 +69,10 @@ class PostPhotoCache {
   /// varian (feed 1080 / tile 400).
   static Future<Uint8List?> Function(String path, int width)? thumbDownloader;
 
-  static const _folderName = 'post_photos_v2';
+  // v2 → v3 (2026-10-17): file v2 dibuat dgn transform width-only yang
+  // MENGHANCURKAN aspek (terukur 400×1440) → dibuang agar tidak dipakai lagi.
+  static const _folderName = 'post_photos_v3';
+  static const List<String> _legacyFolders = ['post_photos_v2'];
 
   // In-memory thumbnail (path → bytes JPEG). LRU sederhana, cap 30MB.
   final Map<String, Uint8List> _mem = {};
@@ -202,6 +205,13 @@ class PostPhotoCache {
       _docs = dir.path;
       final folder = Directory('${_docs}/$_folderName');
       if (!folder.existsSync()) folder.createSync(recursive: true);
+      // Buang folder legacy (berisi thumb berformat salah) — best-effort.
+      for (final legacy in _legacyFolders) {
+        try {
+          final d = Directory('${_docs}/$legacy');
+          if (d.existsSync()) d.deleteSync(recursive: true);
+        } catch (_) {}
+      }
     } catch (e) {
       dlog('[PostPhotoCache] prewarm error: $e');
     }

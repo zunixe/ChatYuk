@@ -40,6 +40,38 @@ void main() {
     when(() => service.comments(any())).thenAnswer((_) async => []);
   });
 
+  test('createPost meneruskan imageBlurhashes ke service', () async {
+    when(() => service.createPost(
+          text: any(named: 'text'),
+          imagePaths: any(named: 'imagePaths'),
+          imageDims: any(named: 'imageDims'),
+          imageBlurhashes: any(named: 'imageBlurhashes'),
+          visibility: any(named: 'visibility'),
+        )).thenAnswer((_) async => {'ok': true});
+    final c = ProviderContainer(overrides: [
+      timelineProvider.overrideWith(
+          () => TimelineNotifier(service: service, autoInit: false)),
+    ]);
+    addTearDown(c.dispose);
+    await c.read(timelineProvider.notifier).createPost(
+          text: 't',
+          imagePaths: const ['posts/x/a.jpg'],
+          imageDims: const [
+            {'w': 1080, 'h': 1440}
+          ],
+          imageBlurhashes: const ['LEHV6nWB2yk8pyo0adR*.7kCMdnj'],
+        );
+    verify(() => service.createPost(
+          text: 't',
+          imagePaths: const ['posts/x/a.jpg'],
+          imageDims: const [
+            {'w': 1080, 'h': 1440}
+          ],
+          imageBlurhashes: const ['LEHV6nWB2yk8pyo0adR*.7kCMdnj'],
+          visibility: 'public',
+        )).called(1);
+  });
+
   group('load refresh', () {
     test('fetch sukses mengisi feed + matikan loading', () async {
       when(() => service.listPosts(any(),

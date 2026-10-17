@@ -3,12 +3,16 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blurhash/flutter_blurhash.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
 import 'package:chatyuk/core/media/chat_photo_helper.dart';
 import 'package:chatyuk/core/cache/post_photo_cache.dart';
 import 'package:chatyuk/widgets/post/post_photo_grid.dart';
+import 'package:chatyuk/widgets/post_photo_viewer.dart';
+
+import 'test_helper.dart';
 
 /// Mengunci pipeline foto timeline: decode width, no-upscale, blurhash
 /// placeholder, dan nol layout shift.
@@ -175,6 +179,82 @@ void main() {
       expect(PostImageVariant.tile.width, 400);
       expect(PostImageVariant.feed.tag, 'f');
       expect(PostImageVariant.tile.tag, 't');
+    });
+  });
+
+
+  // JPEG 40×80 dengan EXIF Orientation=6 (perlu diputar 90° CW saat tampil).
+  // Dibuat sekali via PIL; dipakai mengunci BAKARAN orientasi.
+  const exifRotatedJpegB64 =
+      '/9j/4AAQSkZJRgABAQAAAQABAAD/4QAiRXhpZgAATU0AKgAAAAgAAQESAAMAAAABAAYAAAAAAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCABQACgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCpRRRX85H8ThRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAf//Z';
+
+  test('dartProcessPostDim MEMBAKAR orientasi EXIF (6 → 90°)', () {
+    final bytes = base64Decode(exifRotatedJpegB64);
+    final out = dartProcessPostDim((bytes, 1080, 78));
+    expect(out, isNotNull);
+    // Sumber 40×80 (potret) + orientation 6 → setelah dibakar 80×40 (lanskap).
+    expect(out!.$2, 80, reason: 'lebar/tinggi tertukar = orientasi dibakar');
+    expect(out.$3, 40);
+  });
+
+  testWidgets('viewer: maxScale 4 + preload foto tetangga', (tester) async {
+    mockPathProvider();
+    final jpeg = Uint8List.fromList(
+      img.encodeJpg(img.Image(width: 8, height: 8)),
+    );
+    final requested = <String>[];
+    PostPhotoCache.downloader = (p) async {
+      requested.add(p);
+      return jpeg;
+    };
+    addTearDown(() => PostPhotoCache.downloader = null);
+
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => ElevatedButton(
+            onPressed: () => PostPhotoViewer.show(
+              ctx,
+              paths: const ['p/a.jpg', 'p/b.jpg', 'p/c.jpg'],
+              thumbs: [png1x1, png1x1, png1x1],
+              aspects: const [1.0, 1.0, 1.0],
+              initialIndex: 0,
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    )));
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final iv = tester.widget<InteractiveViewer>(
+      find.byType(InteractiveViewer).first,
+    );
+    expect(iv.maxScale, 4, reason: 'spesifikasi zoom maksimum 4x');
+
+    // Catatan jujur: Future IO yang dimulai di initState (di luar runAsync)
+    // tidak maju di fake-async, jadi preload diverifikasi lewat fungsi murni
+    // di bawah — bukan dengan mengandalkan network/disk di widget test.
+  });
+
+  group('viewerNeighborIndices (preload tetangga)', () {
+    test('indeks tengah → kiri & kanan', () {
+      expect(viewerNeighborIndices(1, 3), [0, 2]);
+    });
+    test('indeks pertama → hanya kanan', () {
+      expect(viewerNeighborIndices(0, 3), [1]);
+    });
+    test('indeks terakhir → hanya kiri', () {
+      expect(viewerNeighborIndices(2, 3), [1]);
+    });
+    test('satu foto / kosong / di luar rentang → kosong', () {
+      expect(viewerNeighborIndices(0, 1), isEmpty);
+      expect(viewerNeighborIndices(0, 0), isEmpty);
+      expect(viewerNeighborIndices(-1, 3), isEmpty);
+      expect(viewerNeighborIndices(5, 3), isEmpty);
     });
   });
 }

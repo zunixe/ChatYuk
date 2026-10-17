@@ -2518,3 +2518,14 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
   `create_post` 5-arg; snapshot `functions.sql` diupdate; `check_migrations --all` OK.
 - **Klien:** composer menghitung BlurHash (`core/media/blurhash.dart`, 32px) saat
   upload; `PostCard`/`PostPhotoGrid` menampilkan `BlurHash` placeholder.
+
+## 20261017140000_posts_blurhash_backfill
+
+- **Status:** TERAPPLIED via Management API.
+- **Isi:** backfill `posts.image_blurhashes` untuk **22 post lama** berfoto
+  (sebelumnya `[]`). Hash dihitung dengan encoder aplikasi
+  (`lib/core/media/blurhash.dart`, 32px, 4×3) dari file Storage
+  (bucket `chat-photos` = public read).
+- **Idempoten:** hanya baris dengan `image_blurhashes = '[]'`.
+- **Verifikasi:** `select count(*) filter (where image_blurhashes <> '[]')`
+  = **22** dari 22 post berfoto.

@@ -758,9 +758,16 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Wiring downloader foto post (core/ tidak boleh import services/).
   PostPhotoCache.downloader = StoragePhotoService.instance.downloadBytes;
   // Thumb server-side (transformasi) untuk timeline — hemat data vs unduh full.
+  // WAJIB `resize: contain` (+ width): tanpa itu Supabase TIDAK menjaga
+  // aspek (terukur: width=400 → 400×1440, bukan 400×533). Dengan contain,
+  // aspek proporsional & byte jauh lebih kecil (31,7KB → 22,7KB per sampel).
   PostPhotoCache.thumbDownloader = (path, width) =>
-      StoragePhotoService.instance
-          .downloadThumbBytes(path, width: width, quality: 80);
+      StoragePhotoService.instance.downloadThumbBytes(
+        path,
+        width: width,
+        resize: ResizeMode.contain,
+        quality: 80,
+      );
   // LP-F: link preview via Edge Function (server-side fetch) — lebih andal
   // utk situs anti-bot (TikTok/Shopee) & konsisten lintas device. Gagal →
   // LinkPreviewService fallback ke fetch device (service tetap aman).

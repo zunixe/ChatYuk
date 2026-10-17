@@ -8,6 +8,16 @@ import '../core/cache/post_photo_cache.dart';
 import '../core/media/native_image.dart';
 import '../config/theme.dart';
 
+/// Indeks foto TETANGGA yang di-preload (kiri & kanan) untuk [index] dari
+/// [length] foto. Murni → bisa diuji tanpa IO.
+List<int> viewerNeighborIndices(int index, int length) {
+  if (length <= 0 || index < 0 || index >= length) return const [];
+  final out = <int>[];
+  if (index - 1 >= 0) out.add(index - 1);
+  if (index + 1 < length) out.add(index + 1);
+  return out;
+}
+
 /// Viewer foto post — popup smooth (fade + scale), bukan halaman baru.
 /// Multi foto: swipe kiri/kanan + counter, zoom pinch, full-res lazy per foto.
 class PostPhotoViewer {
@@ -77,10 +87,8 @@ class _ViewerBodyState extends ConsumerState<_ViewerBody> {
   /// swipe). Bounded (hanya 1 kiri + 1 kanan), fire-and-forget.
   void _warmNeighbors(int i) {
     final cache = PostPhotoCache.instance;
-    for (final j in [i - 1, i + 1]) {
-      if (j >= 0 && j < widget.paths.length) {
-        unawaited(cache.full(widget.paths[j]));
-      }
+    for (final j in viewerNeighborIndices(i, widget.paths.length)) {
+      unawaited(cache.full(widget.paths[j]));
     }
   }
 
