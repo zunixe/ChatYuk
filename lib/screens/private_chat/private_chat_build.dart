@@ -615,45 +615,13 @@ mixin _PcBuildMx on _PrivateChatBase {
                   ),
                 ),
               if (replyingTo != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-                  child: Row(
-                    children: [
-                      Icon(Icons.reply, size: 16, color: AppTheme.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s.replyingTo,
-                              style: AppText.chatCaption.copyWith(
-                                color: AppTheme.primary,
-                              ),
-                            ),
-                            Text(
-                              replyingTo!.text,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppText.chatBodySmall.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.close,
-                          size: 18,
-                          color: AppTheme.textSecondary,
-                        ),
-                        onPressed: cancelReply,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
+                ReplyComposerPreview(
+                  message: replyingTo!,
+                  senderLabel: replyingTo!.senderId != widget.otherUid
+                      ? s.labelYou
+                      : replyingTo!.senderName,
+                  s: s,
+                  onCancel: cancelReply,
                 ),
               if (editingMessage != null)
                 Padding(

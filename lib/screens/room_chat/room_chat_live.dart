@@ -776,51 +776,13 @@ mixin _RcLiveMx on _RoomChatBase {
             ),
           ),
         if (replyingTo != null)
-          Container(
-            color: AppTheme.bgCard,
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-            child: Row(
-              children: [
-                Container(
-                  width: 3,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        replyingTo!.senderName,
-                        style: AppText.chatCaption.copyWith(
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        replyingTo!.text.isNotEmpty
-                            ? (isLocationPayload(replyingTo!.text)
-                                  ? '📍 ${s.msgLocation}'
-                                  : replyingTo!.text)
-                            : s.msgPhoto,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.chatBodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: cancelReply,
-                  color: AppTheme.textSecondary,
-                ),
-              ],
-            ),
+          ReplyComposerPreview(
+            message: replyingTo!,
+            senderLabel: replyingTo!.senderId == auth.uid
+                ? s.labelYou
+                : replyingTo!.senderName,
+            s: s,
+            onCancel: cancelReply,
           ),
         if (editingMessage != null)
           Container(

@@ -39,6 +39,7 @@ import '../widgets/sticker_bubble.dart';
 import 'room_chat/widgets/voice_stage_strip.dart';
 import 'room_chat/widgets/broadcast_stage.dart';
 import '../widgets/photo_album_bubble.dart';
+import '../widgets/reply_composer_preview.dart';
 import '../widgets/message/swipe_to_reply.dart';
 import 'room_chat/widgets/voice_diagnostics_sheet.dart';
 import 'room_chat/widgets/room_search_sheet.dart';

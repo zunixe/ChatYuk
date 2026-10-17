@@ -31,6 +31,7 @@ import '../core/chat/chat_location.dart';
 import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/photo_album_bubble.dart';
+import '../widgets/reply_composer_preview.dart';
 import '../widgets/sticker_bubble.dart';
 import '../widgets/message/image_decode_core.dart';
 import '../widgets/voice_bubble.dart';
