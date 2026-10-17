@@ -98,7 +98,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.image_rounded));
     await tester.pump();
-    await tester.tap(find.byIcon(Icons.timer_rounded));
+    await tester.tap(find.byIcon(Icons.timelapse_rounded));
     await tester.pump();
 
     expect(photo, 1);
@@ -116,7 +116,7 @@ void main() {
       showAttachRow: true,
     )));
     expect(find.byIcon(Icons.monetization_on_rounded), findsNothing);
-    expect(find.byIcon(Icons.card_giftcard), findsNothing);
+    expect(find.byIcon(Icons.card_giftcard_rounded), findsNothing);
     ctrl.dispose();
   });
 

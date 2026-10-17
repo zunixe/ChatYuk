@@ -904,15 +904,8 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
               child: widget.showAttachRow
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 8, left: 4, right: 4),
-                      // Wrap: bila chip banyak (4: foto/view-once/koin/hadiah)
-                      // tidak muat 1 baris di layar kecil, otomatis turun baris
-                      // — dulu Row sehingga overflow menimpa layar.
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 8,
-                        children: [
+                  ? ChatAttachPanel(
+                      children: [
                           ChatAttachChip(
                             icon: Icons.image_rounded,
                             color: AppTheme.primary,
@@ -927,7 +920,7 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                               onTap: widget.onSendVideo!,
                             ),
                           ChatAttachChip(
-                            icon: Icons.timer_rounded,
+                            icon: Icons.timelapse_rounded,
                             color: Colors.orange,
                             label: s.menuViewOnce,
                             onTap: widget.onSendViewOnce,
@@ -948,13 +941,12 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                             ),
                           if (widget.onOpenGiftPanel != null)
                             ChatAttachChip(
-                              icon: Icons.card_giftcard,
+                              icon: Icons.card_giftcard_rounded,
                               color: Colors.pinkAccent,
                               label: s.menuSendGift,
                               onTap: widget.onOpenGiftPanel!,
                             ),
                         ],
-                      ),
                     )
                   : const SizedBox.shrink(),
             ),

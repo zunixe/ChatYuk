@@ -102,36 +102,103 @@ class ChatAttachChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Tile ala WhatsApp: lingkaran solid bergradasi halus + ikon putih,
+    // label 2 baris maks di bawah. Lebar ditentukan grid [ChatAttachPanel].
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        // Lebar chip FIXED agar pusat ikon selalu di posisi yang sama —
-        // label yang panjang (mis. "Foto Sekali Lihat") tidak menggeser
-        // posisi ikon, jadi jeda antar ikon rata. Harus muat 4 chip
-        // sekaligus di layar terkecil (Redmi 393dp): 4×82 + 3×10 = 358dp.
-        width: 84,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 48,
-              height: 48,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.lerp(color, Colors.white, 0.18)!,
+                    color,
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-              child: Icon(icon, color: color, size: 22),
+              child: Icon(icon, color: Colors.white, size: 26),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               label,
-              maxLines: 1,
+              maxLines: 2,
+              textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
-              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+              style: AppText.caption.copyWith(color: AppTheme.textPrimary),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Panel lampiran ala WhatsApp: kartu solid berpinggir bulat atas dengan
+/// handle kecil, berisi grid 4 kolom [ChatAttachChip]. Latar solid supaya
+/// ikon tidak menyatu dengan wallpaper chat.
+class ChatAttachPanel extends StatelessWidget {
+  final List<Widget> children;
+  const ChatAttachPanel({super.key, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.textSecondary.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          LayoutBuilder(
+            builder: (_, c) {
+              const cols = 4;
+              final w = c.maxWidth / cols;
+              return Wrap(
+                runSpacing: 6,
+                children: [
+                  for (final ch in children) SizedBox(width: w, child: ch),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
