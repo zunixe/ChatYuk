@@ -25,7 +25,9 @@ class PhotoPrefetch {
   PhotoPrefetch._();
 
   /// Maks foto di-precache per buka chat (bounded — hemat CPU & RAM).
-  static const int maxPerChat = 6;
+  /// 6 → 10 (album multi-foto: 1 album = 4 foto, jangan sampai sisa album
+  /// tidak ter-warm → tile ke-5+ tampil "kedip").
+  static const int maxPerChat = 10;
 
   /// Precache SEMUA media chat (poster video + thumb foto) untuk [chatKey]
   /// (`private_<chatId>` atau `room_<roomId>`). Dipanggil saat TAP sebelum push

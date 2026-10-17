@@ -58,7 +58,10 @@ mixin _PcSelectMx on _PcBase {
         if (context.mounted) VideoPrefetch.precachePosters(context, pcKey),
         if (context.mounted) PhotoPrefetch.precacheThumbs(context, pcKey),
       ]).timeout(
-        const Duration(milliseconds: 400),
+        // 400 → 900ms: warm tetap background (TIDAK menahan push), tapi
+        // cukup waktu untuk thumb album (dekripsi+generate) selesai sebelum
+        // tile album di-build → tidak "kedip".
+        const Duration(milliseconds: 900),
         onTimeout: () => const <void>[],
       ),
     );
