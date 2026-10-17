@@ -4508,9 +4508,33 @@ Scroll timeline (foto) oleh user; delta tiap 3 dtk:
 - `dumpsys gfxinfo`: **0 janky / 0 missed vsync**; 50th 5ms, 90th 12ms,
   99th 14ms, GPU 50th 2ms (sampel 37 frame). `Number Slow bitmap uploads: 0`.
 
+### Benchmark panjang — FrameTiming Flutter (instrumentasi sementara, dilepas)
+
+Scroll terus-menerus ±28 detik (60 swipe turun + 60 naik), 1760 frame terukur:
+
+| Metrik | Hasil |
+|---|---|
+| Rata-rata FPS | **62,9** |
+| Janky frame | **22 / 1760 = 1,25%** |
+| Build p50 / p90 / p99 | 0 / 1 / 4 ms (terburuk p99 25ms) |
+| Raster p50 / p90 / p99 | 1 / 2 / 4 ms (terburuk p99 28ms) |
+
+Catatan: `dumpsys gfxinfo` tidak lagi melacak window Flutter ini (Total frames 0),
+jadi metrik di atas dari `SchedulerBinding.addTimingsCallback` (build & raster
+per frame) — lebih akurat. Jank 1,25% terjadi saat lompatan scroll agresif
+(1 frame per ~1 detik), bukan jank berkelanjutan.
+
+### Verifikasi transform Storage (terukur via HTTP)
+- `width=400` saja → **400×1440** (aspek HANCUR) — 31.762 B.
+- `width=400&resize=contain` → **400×533** (aspek benar) — 22.738 B.
+- Original 1080×1440 → 88.698 B.
+- **Fix**: `thumbDownloader` wajib `resize: ResizeMode.contain`; cache v2→v3
+  (file berformat salah dibuang).
+
 ### TERBUKA (jujur)
-- Sampel gfxinfo kecil (37 frame) — bukan benchmark panjang.
 - Di HP RAM kecil (2–3GB, cap ImageCache 16–24MB) eviction MASIH mungkin terjadi
-  (≈4–6 gambar muat); belum diukur di kelas perangkat itu.
-- Dimensi byte hasil transform Storage (width 400 vs 1080) belum diverifikasi
-  per-request; hanya dibuktikan tidak ada unduhan ulang & decode ulang.
+  (≈4–6 gambar muat); belum diukur di kelas perangkat itu (tidak ada perangkat).
+- Jalur EXIF native (`ImageBridge.processPost`) belum diuji dengan foto kamera
+  ber-tag orientasi asli — hanya jalur fallback Dart yang diuji otomatis.
+- Composer (progress upload/konkurensi/fallback) belum diuji otomatis (butuh
+  ImagePicker + device); kode sederhana, belum diverifikasi visual.
