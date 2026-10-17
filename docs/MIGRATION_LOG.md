@@ -1,3 +1,14 @@
+## 2026-10-18 — POLLING private chat (SUDAH APPLY via Management API)
+
+- **Migrasi** `20261018130000_chat_poll.sql`: type `'poll'` di
+  `private_messages_type_check`; kolom `private_messages.poll jsonb`; tabel
+  `chat_poll_votes` (RLS select peserta; tulis hanya via RPC; realtime +
+  replica identity full); RPC `get_poll_results(bigint[])` & `vote_poll(bigint,int[])`.
+- Fungsi notif/last_message FROZEN tidak disentuh (`text`='📊 <tanya>').
+- **Verifikasi:** pgTAP `chat_poll_test.sql` 9/9; `smoke_anon_register.sh` OK;
+  `check_migrations.sh` OK. (`email_marketing_test.sql` gagal sejak lama —
+  memanggil `supabase_tests.finish_tests()` yang tidak ada; tak terkait.)
+
 ## 2026-10-17 — Pesan tipe FILE/dokumen (SUDAH APPLY via Management API)
 
 - **Migrasi** `20261017180000_file_message_type.sql`: tambah `'file'` ke

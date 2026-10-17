@@ -34,6 +34,9 @@ class ReplyComposerPreview extends StatelessWidget {
       return (icon: Icons.location_on_outlined, text: s.msgLocation);
     }
     if (m.type == 'voice') return (icon: Icons.mic_none, text: s.msgVoice);
+    if (m.type == 'poll' && m.poll != null) {
+      return (icon: Icons.poll_outlined, text: m.poll!.question);
+    }
     if (m.type == 'file') {
       return (icon: Icons.insert_drive_file_outlined, text: t);
     }

@@ -206,6 +206,7 @@ class ChatNotifier extends Notifier<ChatState> {
     List<Mention> mentions = const [],
     String videoPoster = '',
     String? albumId,
+    Map<String, dynamic>? poll,
   }) => _service.sendPrivateMessage(
     chatId: chatId,
     senderId: senderId,
@@ -222,6 +223,7 @@ class ChatNotifier extends Notifier<ChatState> {
     mentions: mentions,
     videoPoster: videoPoster,
     albumId: albumId,
+    poll: poll,
   );
 
   Future<void> markAsRead(String chatId, String uid) async {

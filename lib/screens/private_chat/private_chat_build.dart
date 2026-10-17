@@ -668,6 +668,10 @@ mixin _PcBuildMx on _PrivateChatBase {
                   onSend: sendMessage,
                   showAttachRow: _showAttachRow,
                   onToggleAttach: _toggleAttachRow,
+                  onCreatePoll: () {
+                    setState(() => _showAttachRow = false);
+                    _openPollComposer();
+                  },
                   onSendFile: () {
                     setState(() => _showAttachRow = false);
                     pickAndSendFile();

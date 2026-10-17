@@ -179,6 +179,8 @@ mixin ChatServicePrivateMx on ChatBase {
     String videoPoster = '',
     /// Bundle multi-foto: semua pesan batch berbagi id yang sama.
     String? albumId,
+    /// Definisi poll (type 'poll'): {"q","o","m"}.
+    Map<String, dynamic>? poll,
   }) async {
     // Validasi tipe pesan
     if (![
@@ -198,6 +200,8 @@ mixin ChatServicePrivateMx on ChatBase {
       'sticker',
       // File/dokumen: text = nama file, image_path = path, duration_ms = ukuran.
       'file',
+      // Poll: definisi di kolom `poll`, text = '📊 <pertanyaan>'.
+      'poll',
     ].contains(type)) {
       throw Exception('Invalid message type');
     }
@@ -243,6 +247,7 @@ mixin ChatServicePrivateMx on ChatBase {
       // FILE: image_path = path storage, duration_ms = ukuran (byte).
       if (type == 'file' && imageData.isNotEmpty) 'image_path': imageData,
       if (type == 'file' && durationMs != null) 'duration_ms': durationMs,
+      if (type == 'poll' && poll != null) 'poll': poll,
       // VIDEO: duration_ms = PANJANG video (bukan timer), image_path =
       // path storage .mp4. Ketiga type video diperlakukan sama.
       if ((type == 'video' ||
@@ -291,6 +296,7 @@ mixin ChatServicePrivateMx on ChatBase {
         'voice_path': type == 'voice' ? imageData : '',
         'duration_ms': durationMs ?? 0,
         if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
+        if (type == 'poll' && poll != null) 'poll': poll,
       });
     } catch (_) {}
     return insertedId?.toString();

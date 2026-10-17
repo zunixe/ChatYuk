@@ -412,6 +412,28 @@ mixin SScreenMx {
       isId ? 'Gagal membuka file' : 'Could not open file';
   String get fileUploading => isId ? 'Mengirim...' : 'Sending...';
   String get fileDownloading => isId ? 'Mengunduh...' : 'Downloading...';
+  // ── Polling (ala WhatsApp) ──
+  String get menuPoll => isId ? 'Polling' : 'Poll';
+  String get pollCreateTitle => isId ? 'Buat polling' : 'Create poll';
+  String get pollQuestion => isId ? 'Pertanyaan' : 'Question';
+  String get pollQuestionHint => isId ? 'Ajukan pertanyaan' : 'Ask question';
+  String get pollOptions => isId ? 'Opsi' : 'Options';
+  String get pollAddOption => isId ? '+ Tambah' : '+ Add';
+  String pollOptionHint(int n) => isId ? 'Opsi $n' : 'Option $n';
+  String get pollAllowMultiple =>
+      isId ? 'Izinkan beberapa jawaban' : 'Allow multiple answers';
+  String get pollSelectOne => isId ? 'Pilih satu' : 'Select one';
+  String get pollSelectMany =>
+      isId ? 'Pilih satu atau lebih' : 'Select one or more';
+  String pollVotes(int n) => isId ? '$n suara' : (n == 1 ? '1 vote' : '$n votes');
+  String get pollNeedQuestion =>
+      isId ? 'Tulis pertanyaannya dulu' : 'Write a question first';
+  String get pollNeedOptions =>
+      isId ? 'Minimal 2 opsi berbeda' : 'At least 2 different options';
+  String get errSendPoll =>
+      isId ? 'Gagal mengirim polling' : 'Failed to send poll';
+  String get errVotePoll =>
+      isId ? 'Gagal menyimpan pilihan' : 'Failed to save your vote';
   // ── Pemilih galeri (ala WhatsApp) ──
   String get galleryRecents => isId ? 'Terbaru' : 'Recents';
   // ── Timeline: baris 'Apa yang baru?' (ala Threads) ──

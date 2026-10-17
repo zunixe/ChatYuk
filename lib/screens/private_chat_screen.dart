@@ -14,6 +14,9 @@ import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/poll_provider.dart';
+import '../models/chat_poll.dart';
+import '../widgets/poll/poll_composer_sheet.dart';
 import '../providers/riverpod/location_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import 'story_camera_capture_screen.dart';
@@ -70,6 +73,7 @@ part 'private_chat/private_chat_chat2.dart';
 part 'private_chat/private_chat_media.dart';
 part 'private_chat/private_chat_build.dart';
 part 'private_chat/private_chat_layout_widgets.dart';
+part 'private_chat/private_chat_poll.dart';
 
 const int _maxImageFetches = 3;
 const _confirmedCap = 200;
@@ -309,6 +313,7 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
 
   // Kontrak lintas-mixin.
   Widget _buildBottomBar(BuildContext context, S s);
+  Future<void> _openPollComposer();
   AppBar _buildSearchAppBar();
   void _drainImageQueue();
   Future<void> _fetchImageQueued(String id);
@@ -356,4 +361,4 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
 }
 
 class _PrivateChatScreenState extends _PrivateChatBase
-    with _PcCoreMx, _PcChatMx, _PcChat2Mx, _PcMediaMx, _PcBuildMx {}
+    with _PcCoreMx, _PcChatMx, _PcChat2Mx, _PcMediaMx, _PcBuildMx, _PcPollMx {}

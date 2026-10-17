@@ -9,6 +9,7 @@ import 'media_caption_time.dart';
 import 'package:flutter/material.dart';
 import '../core/media/chat_photo_helper.dart';
 import 'message/file_bubble.dart';
+import 'poll/poll_bubble.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/strings_admin.dart';
 import '../config/gifts.dart';
@@ -510,6 +511,19 @@ class MessageBubble extends StatelessWidget {
                           isImageDeferred)
                         DeferredImage(
                           onTap: () async => onRetryImage?.call(msg.id),
+                        )
+                      else if (msg.type == 'poll' && msg.poll != null)
+                        PollBubble(
+                          msg: msg,
+                          // chatKey = 'private_<chatId>' (lihat cacheKeyFor).
+                          chatId: chatKey.startsWith('private_')
+                              ? chatKey.substring(8)
+                              : chatKey,
+                          timeStr: timeStr,
+                          showChecks: isMe || showChecksBothSides,
+                          isPending: isPending,
+                          isQueued: isQueued,
+                          isRead: isRead,
                         )
                       else if (msg.type == 'file')
                         FileBubble(

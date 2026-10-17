@@ -421,6 +421,8 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
             imageData: m.imageData,
             durationMs: m.durationMs,
             isForwarded: true,
+            // Poll diteruskan sebagai poll BARU (suara mulai kosong).
+            poll: m.type == 'poll' ? m.poll?.toJson() : null,
           );
         } else {
           await chat.sendRoomMessage(
@@ -429,7 +431,8 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
             senderName: profile.nickname,
             senderGender: profile.gender,
             text: m.text,
-            type: m.type == 'text' ? 'text' : m.type,
+            // Room belum mendukung poll → teruskan sebagai teks '📊 …'.
+            type: (m.type == 'text' || m.type == 'poll') ? 'text' : m.type,
             imageData: m.imageData,
             durationMs: m.durationMs,
             isForwarded: true,

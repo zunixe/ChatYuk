@@ -46,3 +46,19 @@ int consumeConfirmedFile({
     (p) => p.type == 'file' && p.text == server.text,
   );
 }
+
+/// Dedupe bubble POLL pending vs gema server: sama seperti file, dicocokkan
+/// via teks pesan (`📊 <pertanyaan>`), id server sekali pakai, FIFO.
+int consumeConfirmedPoll({
+  required MessageModel server,
+  required DateTime openedAt,
+  required Set<String> consumedIds,
+  required List<MessageModel> pendings,
+}) {
+  if (server.type != 'poll') return -1;
+  if (!server.timestamp.isAfter(openedAt)) return -1;
+  if (!consumedIds.add(server.id)) return -1;
+  return pendings.indexWhere(
+    (p) => p.type == 'poll' && p.text == server.text,
+  );
+}

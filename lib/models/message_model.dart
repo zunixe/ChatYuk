@@ -1,4 +1,5 @@
 import '../utils.dart';
+import 'chat_poll.dart';
 import '../utils/mention.dart';
 
 class MessageModel {
@@ -28,6 +29,10 @@ class MessageModel {
   /// lama). Semua foto dalam satu batch berbagi id yang sama.
   final String? albumId;
 
+  /// Definisi poll (type 'poll'). Ikut cache lokal → bubble poll tampil
+  /// lengkap di frame pertama tanpa fetch (anti lompatan layout).
+  final ChatPoll? poll;
+
   MessageModel({
     required this.id,
     required this.senderId,
@@ -48,6 +53,7 @@ class MessageModel {
     this.mentions = const [],
     this.videoPoster = '',
     this.albumId,
+    this.poll,
   });
 
   factory MessageModel.fromMap(String id, Map<String, dynamic> map) {
@@ -86,6 +92,7 @@ class MessageModel {
           : (map['albumId'] ?? map['album_id']) is String
                 ? (map['albumId'] ?? map['album_id']) as String
                 : null,
+      poll: deleted ? null : ChatPoll.tryParse(map['poll']),
     );
   }
 
@@ -118,6 +125,7 @@ class MessageModel {
       'mentions': isDeleted ? const [] : Mention.listTo(mentions),
       'videoPoster': isDeleted ? '' : videoPoster,
       if (albumId != null) 'albumId': albumId,
+      if (poll != null && !isDeleted) 'poll': poll!.toJson(),
     };
   }
 
@@ -135,6 +143,7 @@ class MessageModel {
     List<Mention>? mentions,
     String? videoPoster,
     String? albumId,
+    ChatPoll? poll,
   }) {
     final newDeleted = isDeleted ?? this.isDeleted;
     // PRIVASI: begitu berstatus terhapus, konten dikosongkan — update
@@ -159,6 +168,7 @@ class MessageModel {
       mentions: newDeleted ? const [] : (mentions ?? this.mentions),
       videoPoster: newDeleted ? '' : (videoPoster ?? this.videoPoster),
       albumId: newDeleted ? null : (albumId ?? this.albumId),
+      poll: newDeleted ? null : (poll ?? this.poll),
     );
   }
 }

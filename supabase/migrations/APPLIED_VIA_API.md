@@ -2,6 +2,11 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-18 — Polling private chat
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261018130000_chat_poll.sql`
+  (kolom `private_messages.poll`, tabel `chat_poll_votes`, RPC `vote_poll`/`get_poll_results`).
+
 ## 2026-10-17 — Pesan tipe FILE
 
 - **Status:** SUDAH TERAPPLIED via Management API — `20261017180000_file_message_type.sql`

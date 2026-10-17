@@ -84,6 +84,8 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   final ValueChanged<Uint8List>? onPickGalleryPhoto;
   /// Kirim file/dokumen. null = chip tidak tampil.
   final VoidCallback? onSendFile;
+  /// Buat polling (private). null = chip tidak tampil.
+  final VoidCallback? onCreatePoll;
   const ChatComposerInput({
     required this.controller,
     this.focusNode,
@@ -123,6 +125,7 @@ class ChatComposerInput extends ConsumerStatefulWidget {
     this.inputFillColor,
     this.onPickGalleryPhoto,
     this.onSendFile,
+    this.onCreatePoll,
   });
 
   @override
@@ -957,6 +960,13 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                       color: const Color(0xFF7C4DFF),
                       label: s.menuSendFile,
                       onTap: widget.onSendFile!,
+                    ),
+                  if (widget.onCreatePoll != null)
+                    ChatAttachChip(
+                      icon: Icons.poll_rounded,
+                      color: const Color(0xFFFFB300),
+                      label: s.menuPoll,
+                      onTap: widget.onCreatePoll!,
                     ),
                   if (widget.onSendLocation != null)
                     ChatAttachChip(
