@@ -7,6 +7,7 @@ import 'chat_video_bubble.dart';
 import 'sticker_bubble.dart';
 import 'media_caption_time.dart';
 import 'package:flutter/material.dart';
+import '../core/media/chat_photo_helper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/strings_admin.dart';
 import '../config/gifts.dart';
@@ -349,7 +350,7 @@ class MessageBubble extends StatelessWidget {
                         // (ViewOnce), bukan di bawah. Tidak ada badge durasi
                         // di card terkunci jadi tidak bertumpuk.
                         SizedBox(
-                          width: ChatVideoBubble.bubbleWidth,
+                          width: ChatVideoBubble.widthOf(context),
                           child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -399,7 +400,7 @@ class MessageBubble extends StatelessWidget {
                         // di dalam video. Sama untuk pengirim & penerima.
                         // Lebar dikunci selebar video (ala LocationBubble).
                         SizedBox(
-                          width: ChatVideoBubble.bubbleWidth,
+                          width: ChatVideoBubble.widthOf(context),
                           child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -510,7 +511,10 @@ class MessageBubble extends StatelessWidget {
                         )
                       else if (msg.type == 'sticker')
                         // Melayang ala Telegram: gambar saja, tanpa jam/centang.
-                        StickerBubble(data: msg.imageData, size: 140)
+                        StickerBubble(
+        data: msg.imageData,
+        size: chatStickerSize(MediaQuery.sizeOf(context).width),
+      )
                       else if (msg.type == 'view_once' ||
                           msg.type == 'view_once_expired')
                         Column(

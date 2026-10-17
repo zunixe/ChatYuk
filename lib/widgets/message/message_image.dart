@@ -28,12 +28,16 @@ class MessageImage extends StatefulWidget {  final String imageData;
   /// Lapor lebar render foto (200 atau `tinggi*aspect` bila tinggi dibatasi
   /// 280) agar caption+jam bisa rata kanan sejajar tepi foto.
   final ValueChanged<double>? onRenderedWidth;
+  /// true = isi penuh kotak parent (tanpa sudut membulat) — dipakai tile
+  /// album ala WhatsApp. Ukuran mengikuti constraint parent.
+  final bool fill;
   const MessageImage({
     super.key,
     required this.imageData,
     required this.chatKey,
     required this.messageId,
     this.onRenderedWidth,
+    this.fill = false,
   });
 
   @override
@@ -61,19 +65,19 @@ class _MessageImageState extends State<MessageImage> {
   // Lebar terakhir yang dilaporkan ke parent (hindari callback berulang).
   double _reportedWidth = -1;
 
-  /// Lebar kotak foto = 60% lebar layar. Nilai diperbarui di
+  /// Lebar kotak foto = 72% lebar layar. Nilai diperbarui di
   /// `didChangeDependencies` (MediaQuery tersedia) DAN di build (aman bila
   /// ukuran layar berubah: rotasi / split-screen).
   double _targetW = 260;
 
-  /// Segerkan lebar target dari context (60% lebar layar).
+  /// Segerkan lebar target dari context (72% lebar layar).
   void _ensureTargetW(BuildContext context) {
     final screenW = MediaQuery.sizeOf(context).width;
-    final t = (screenW * 0.6).clamp(180.0, 420.0);
+    final t = chatMediaWidth(screenW);
     if ((t - _targetW).abs() <= 0.5) return;
     _targetW = t;
     // Ukuran placeholder (frame loading) ikut disesuaikan supaya tidak ada
-    // lompatan layout dari default → 60% layar. Bila bitmap belum ada,
+    // lompatan layout dari default → 72% layar. Bila bitmap belum ada,
     // hitung ulang dari HEADER gambar (murah, tak decode penuh).
     if (_decoded != null) {
       _syncSizes();
@@ -83,14 +87,10 @@ class _MessageImageState extends State<MessageImage> {
     _reportedWidth = -1; // paksa lapor ulang lebar final ke parent
   }
 
-  /// Ukuran kotak foto sesuai aspek + lebar target (60% layar).
+  /// Ukuran kotak foto sesuai aspek + lebar target (72% layar).
   /// [w]/[h] boleh 0 → placeholder kotak mengikuti lebar target.
-  ({double width, double height}) _sizeOf(int w, int h) => photoViewSize(
-    w,
-    h,
-    maxWidth: _targetW,
-    maxHeight: (_targetW * 1.6).clamp(300.0, 420.0),
-  );
+  ({double width, double height}) _sizeOf(int w, int h) =>
+      chatPhotoSize(w, h, _targetW);
 
   /// Sinkronkan SEMUA ukuran tersimpan dengan lebar target terkini.
   void _syncSizes() {
@@ -105,11 +105,11 @@ class _MessageImageState extends State<MessageImage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Lebar target (60% layar) harus siap SEBELUM frame pertama agar
+    // Lebar target (72% layar) harus siap SEBELUM frame pertama agar
     // placeholder & hasil akhir memakai ukuran sama (anti layout shift).
     _ensureTargetW(context);
     // initState (tanpa MediaQuery) memakai default → segarkan placeholder di
-    // sini supaya ukuran frame pertama sudah 60% layar.
+    // sini supaya ukuran frame pertama sudah 72% layar.
     _syncSizes();
   }
 
@@ -431,8 +431,8 @@ class _MessageImageState extends State<MessageImage> {
       return GestureDetector(
         onTap: _loading ? null : _retry,
         child: Container(
-          width: _phW,
-          height: _phH,
+          width: widget.fill ? double.infinity : _phW,
+          height: widget.fill ? double.infinity : _phH,
           color: AppTheme.bgInput,
           alignment: Alignment.center,
           child: _loading
@@ -465,15 +465,15 @@ class _MessageImageState extends State<MessageImage> {
       );
     }
     final size = _sizeOf(decoded.width, decoded.height);
-    final width = size.width;
-    final height = size.height;
+    final width = widget.fill ? double.infinity : size.width;
+    final height = widget.fill ? double.infinity : size.height;
     // Lapor lebar render ke parent (sekali / berubah) → caption+jam rata kanan
     // sejajar tepi foto.
-    _reportWidth(width);
+    if (!widget.fill) _reportWidth(width);
     return GestureDetector(
       onTap: () => _openFullscreen(),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(widget.fill ? 0 : 10),
         // THUMBNAIL TIDAK BISA zoom/geser (2026-10-11): dulu pakai
         // InteractiveViewer + onDoubleTap zoom → foto di bubble bisa membesar
         // & digeser padahal hanya thumbnail. Zoom/geser HANYA di fullscreen
@@ -514,14 +514,14 @@ class _MessageImageState extends State<MessageImage> {
         image: img,
         width: width,
         height: height,
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
       );
     }
     return Image.memory(
       decoded.bytes,
       width: width,
       height: height,
-      fit: BoxFit.contain,
+      fit: BoxFit.cover,
       gaplessPlayback: true,
       // Decode max 1080px (bukan full-res 12MP): bubble max 280px,
       // zoom inline 6x tetap tajam; hemat ~6x RAM bitmap.

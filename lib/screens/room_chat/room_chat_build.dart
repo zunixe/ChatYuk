@@ -87,6 +87,10 @@ mixin _RcBuildMx on _RoomChatBase {
                             chatKey: 'room_${widget.room.id}',
                             timeStr: formatBubbleTime(ph.last.timestamp),
                             showChecks: false,
+                            isMe: ph.first.senderId == auth.uid,
+                            cardColor: ph.first.senderId == auth.uid
+                                ? AppTheme.primary.withValues(alpha: 0.25)
+                                : AppTheme.bgInput,
                           ),
                         ),
                       ),

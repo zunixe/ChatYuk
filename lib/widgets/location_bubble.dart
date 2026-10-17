@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../core/chat/chat_location.dart';
+import '../core/media/chat_photo_helper.dart';
 import '../providers/riverpod/locale_provider.dart';
 import 'media_caption_time.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -24,11 +25,12 @@ import 'package:url_launcher/url_launcher.dart';
 class LocationBubble extends ConsumerStatefulWidget {
   final ChatLocation location;
 
-  /// Lebar kartu (default 220). Pakai `double.infinity` di preview composer.
-  final double width;
+  /// Lebar kartu (null = lebar media chat 72% layar, sama foto/video).
+  /// Pakai `double.infinity` di preview composer.
+  final double? width;
 
-  /// Tinggi peta (default 160).
-  final double height;
+  /// Tinggi peta (null = 0.6× lebar, rasio pratinjau maps WhatsApp).
+  final double? height;
 
   /// Preview composer = true (bisa digeser + peta langsung tampil). Bubble
   /// chat = false (placeholder statis; tap = buka peta/Maps).
@@ -49,8 +51,8 @@ class LocationBubble extends ConsumerStatefulWidget {
   const LocationBubble({
     super.key,
     required this.location,
-    this.width = 220,
-    this.height = 160,
+    this.width,
+    this.height,
     this.interactive = false,
     this.onTapOverride,
     this.timeStr = '',
@@ -67,8 +69,9 @@ class LocationBubble extends ConsumerStatefulWidget {
 class _LocationBubbleState extends ConsumerState<LocationBubble> {
   ChatLocation get location => widget.location;
   bool get interactive => widget.interactive;
-  double get width => widget.width;
-  double get height => widget.height;
+  double get width =>
+      widget.width ?? chatMediaWidth(MediaQuery.sizeOf(context).width);
+  double get height => widget.height ?? width * 0.6;
   String get timeStr => widget.timeStr;
   bool get showChecks => widget.showChecks;
   bool get isPending => widget.isPending;

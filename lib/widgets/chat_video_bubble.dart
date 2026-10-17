@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../core/cache/video_file_cache.dart';
+import '../core/media/chat_photo_helper.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../core/storage_paths.dart';
@@ -74,9 +75,10 @@ String formatVideoDuration(int ms) {
 /// byte diunduh ke cache disk dulu (MediaDiskCache = sumber kebenaran
 /// lokal, sama seperti foto/voice).
 class ChatVideoBubble extends StatefulWidget {
-  /// Lebar kartu video (poster + kartu terkunci sama) — dipakai bubble chat
-  /// untuk mengunci lebar kolom supaya kartu rapat (tidak melebar ke max).
-  static const double bubbleWidth = 200;
+  /// Lebar bubble video = lebar media chat (72% layar, sama foto/maps) —
+  /// dipakai bubble chat untuk mengunci lebar kolom supaya kartu rapat.
+  static double widthOf(BuildContext context) =>
+      chatMediaWidth(MediaQuery.sizeOf(context).width);
 
   /// Path storage (`chat/....mp4`) ATAU base64 (bubble optimistik sendiri).
   final String videoData;
@@ -622,7 +624,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
 
   @override
   Widget build(BuildContext context) {
-    const double width = ChatVideoBubble.bubbleWidth;
+    final width = ChatVideoBubble.widthOf(context);
     // Rasio 16:9 umum untuk video; bila poster ada, pakai rasionya.
     double height = width * 9 / 16;
     if (height > widget.maxHeight) height = widget.maxHeight;

@@ -1,12 +1,9 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
+import '../core/media/chat_photo_helper.dart';
 import '../models/message_model.dart';
 import 'message/message_image.dart';
-import 'message/photo_viewer_screen.dart';
 
 /// Bubble ALBUM foto (bundle multi-foto ala WhatsApp).
 ///
@@ -14,12 +11,14 @@ import 'message/photo_viewer_screen.dart';
 ///  - 2 foto  → 2 kotak berdampingan.
 ///  - 3 foto  → 1 besar di kiri + 2 kecil bertumpuk di kanan.
 ///  - 4+ foto → grid 2×2 dengan overlay "+N" pada kotak terakhir.
+///  Semua tata letak = kotak persegi ±72% lebar layar, foto di-crop (cover).
 ///
 /// Jam + centang muncul SEKALI di pojok kanan bawah (dari foto terakhir).
 /// Caption (bila ada di foto terakhir) tampil di bawah grid.
 class PhotoAlbumBubble extends StatelessWidget {
   /// Foto-foto album, urut kronologis (minimal 2).
   final List<MessageModel> photos;
+
   /// chatKey untuk cache foto (`private_<chatId>` / `room_<id>`).
   final String chatKey;
   final double tileSize;
@@ -28,17 +27,23 @@ class PhotoAlbumBubble extends StatelessWidget {
   final bool isPending;
   final bool isQueued;
   final bool isRead;
+  /// Pengirim = saya → sudut ekor bubble di kanan bawah (kiri bila lawan).
+  final bool isMe;
+  /// Warna card latar (sama bubble 1 foto). null = tanpa card.
+  final Color? cardColor;
 
   const PhotoAlbumBubble({
     super.key,
     required this.photos,
     required this.chatKey,
     required this.timeStr,
-    this.tileSize = 0, // 0 = otomatis 60% lebar layar
+    this.tileSize = 0, // 0 = otomatis 72% lebar layar
     this.showChecks = false,
     this.isPending = false,
     this.isQueued = false,
     this.isRead = false,
+    this.isMe = false,
+    this.cardColor,
   });
 
   static const int _maxTiles = 4;
@@ -48,169 +53,132 @@ class PhotoAlbumBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final caption = photos.last.text.trim();
-    // Lebar grid = 60% lebar layar (bila tileSize tidak dipaksa pemanggil).
+    // Ala WhatsApp: grid persegi ±72% lebar layar (bila tileSize tidak
+    // dipaksa pemanggil). Semua tata letak (2/3/4+) memakai kotak W×W.
     final screenW = MediaQuery.sizeOf(context).width;
-    final target = tileSize > 0
-        ? tileSize
-        : (screenW * 0.6).clamp(180.0, 420.0);
-    // 2 foto = 2 kolom setengah, selain itu grid kotak target.
-    final tile = photos.length == 2 ? (target + _gap) / 2 : target;
-    final gridW = photos.length == 2 ? tile * 2 + _gap : tile;
-    final gridH = tile;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: SizedBox(
-            width: gridW,
-            height: gridH,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _grid(context, tile),
-                // Jam + centang sekali untuk seluruh album.
-                Positioned(
-                  right: 6,
-                  bottom: 6,
-                  child: _timePill(),
-                ),
-              ],
+    final side = tileSize > 0 ? tileSize : chatMediaWidth(screenW);
+    final album = SizedBox(
+      width: side,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: side,
+              height: side,
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _grid(context)),
+                  // Jam + centang sekali untuk seluruh album.
+                  Positioned(right: 6, bottom: 6, child: _timePill()),
+                ],
+              ),
             ),
           ),
-        ),
-        if (caption.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 5, left: 2, right: 2),
-            child: Text(
-              caption,
-              style: AppText.chatBody.copyWith(color: AppTheme.textPrimary),
-            ),
-          ),
-      ],
-    );
-  }
-
-  static const double _gap = 2;
-
-  /// Satu kotak foto (thumbnail bytes) yang bisa diketuk.
-  Widget _tile(BuildContext context, MessageModel m, double w, double h) {
-    // MessageImage: menangani base64 pending MAUPUN path storage (unduh
-    // lazy + cache disk/mem + retry). Sebelumnya Image.memory mentah →
-    // album kosong/hilang setelah reload bila imageData = path.
-    return GestureDetector(
-      onTap: () => _openViewer(context, m),
-      child: SizedBox(
-        width: w,
-        height: h,
-        child: MessageImage(
-          imageData: m.imageData,
-          chatKey: chatKey,
-          messageId: m.id,
-        ),
-      ),
-    );
-  }
-
-  Uint8List? _bytesOf(MessageModel m) {
-    final d = m.imageData;
-    if (d.isEmpty) return null;
-    try {
-      return base64Decode(d);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  void _openViewer(BuildContext context, MessageModel m) {
-    final bytes = _bytesOf(m);
-    if (bytes == null) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => PhotoViewerScreen(bytes: bytes)),
-    );
-  }
-
-  Widget _grid(BuildContext context, double tile) {
-    final half = (tile - _gap) / 2;
-    // 2 foto: berdampingan penuh.
-    if (photos.length == 2) {
-      return Row(
-        children: [
-          _tile(context, photos[0], half, tile),
-          SizedBox(width: _gap),
-          _tile(context, photos[1], half, tile),
-        ],
-      );
-    }
-
-    final shown = photos.take(_maxTiles).toList();
-    final lastIndex = shown.length - 1;
-
-    Widget cell(int i, double w, double h) {
-      final isLast = i == lastIndex;
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          _tile(context, shown[i], w, h),
-          if (isLast && _hidden > 0)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => _openViewer(context, shown[i]),
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.52),
-                  child: Center(
-                    child: Text(
-                      '+$_hidden',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
+          if (caption.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 5, left: 2, right: 2),
+              child: Text(
+                caption,
+                style: AppText.chatBody.copyWith(color: AppTheme.textPrimary),
               ),
             ),
         ],
-      );
-    }
+      ),
+    );
+    final bg = cardColor;
+    if (bg == null) return album;
+    // Card latar ala bubble 1 foto (WhatsApp: bingkai tipis warna bubble).
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(12),
+          topRight: const Radius.circular(12),
+          bottomLeft: Radius.circular(isMe ? 12 : 4),
+          bottomRight: Radius.circular(isMe ? 4 : 12),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 6,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
+      ),
+      child: album,
+    );
+  }
 
-    return Column(
+  static const double _gap = 3;
+
+  /// Satu kotak foto — isi penuh (cover) seperti WhatsApp.
+  /// MessageImage menangani base64 pending MAUPUN path storage (unduh lazy
+  /// + cache disk/mem + retry) dan tap → viewer fullscreen.
+  Widget _tile(int i) {
+    final m = photos[i];
+    final isLast = i == _maxTiles - 1;
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        Row(
-          children: [
-            SizedBox(width: half, height: half, child: cell(0, half, half)),
-            SizedBox(width: _gap),
-            SizedBox(
-              width: half,
-              height: half,
-              child: cell(1, half, half),
-            ),
-          ],
+        MessageImage(
+          imageData: m.imageData,
+          chatKey: chatKey,
+          messageId: m.id,
+          fill: true,
         ),
-        SizedBox(height: _gap),
-        Row(
-          children: [
-            SizedBox(
-              width: half,
-              height: half,
-              child: shown.length > 2
-                  ? cell(2, half, half)
-                  : const SizedBox.shrink(),
+        if (isLast && _hidden > 0)
+          IgnorePointer(
+            child: ColoredBox(
+              color: Colors.black.withValues(alpha: 0.52),
+              child: Center(
+                child: Text(
+                  '+$_hidden',
+                  style: AppText.display.copyWith(color: Colors.white),
+                ),
+              ),
             ),
-            SizedBox(width: _gap),
-            SizedBox(
-              width: half,
-              height: half,
-              child: shown.length > 3
-                  ? cell(3, half, half)
-                  : const SizedBox.shrink(),
-            ),
-          ],
-        ),
+          ),
       ],
     );
+  }
+
+  Widget _row(List<Widget> c) => Row(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(child: c[0]),
+      const SizedBox(width: _gap),
+      Expanded(child: c[1]),
+    ],
+  );
+
+  Widget _col(List<Widget> c) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(child: c[0]),
+      const SizedBox(height: _gap),
+      Expanded(child: c[1]),
+    ],
+  );
+
+  Widget _grid(BuildContext context) {
+    // 2 foto: dua kotak tegak berdampingan.
+    if (photos.length == 2) return _row([_tile(0), _tile(1)]);
+    // 3 foto: 1 besar di kiri + 2 bertumpuk di kanan.
+    if (photos.length == 3) {
+      return _row([
+        _tile(0),
+        _col([_tile(1), _tile(2)]),
+      ]);
+    }
+    // 4+ foto: grid 2×2, kotak ke-4 diberi overlay "+N".
+    return _col([
+      _row([_tile(0), _tile(1)]),
+      _row([_tile(2), _tile(3)]),
+    ]);
   }
 
   Widget _timePill() {
@@ -223,10 +191,7 @@ class PhotoAlbumBubble extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            timeStr,
-            style: AppText.chatTime.copyWith(color: Colors.white),
-          ),
+          Text(timeStr, style: AppText.chatTime.copyWith(color: Colors.white)),
           if (showChecks) ...[
             const SizedBox(width: 3),
             Icon(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/media/chat_photo_helper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../../../config/gifts.dart';
@@ -122,7 +123,10 @@ class RoomMessageBubble extends StatelessWidget {
     }
     if (msg.type == 'sticker') {
       // Stiker ala Telegram: transparan, tanpa bg bubble & TANPA jam.
-      return StickerBubble(data: msg.imageData, size: 140);
+      return StickerBubble(
+        data: msg.imageData,
+        size: chatStickerSize(MediaQuery.sizeOf(context).width),
+      );
     }
     if (msg.type == 'image' && msg.imageData.isNotEmpty) {
       return Column(

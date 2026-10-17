@@ -148,6 +148,23 @@ String? processChatImage(Uint8List bytes) {
 /// DIPERBESAR 2026-10-18 (dulu 200×280 → 260×340 → kini 60% lebar layar):
 /// [maxWidth] diisi pemanggil dengan ~60% lebar layar; tinggi dibatasi
 /// [maxHeight] agar tetap proporsional & tidak memenuhi layar.
+/// Lebar SEMUA media chat (foto, album, video, maps) ala WhatsApp = 72%
+/// lebar layar. Satu sumber supaya ukuran bubble media seragam.
+double chatMediaWidth(double screenW) => (screenW * 0.72).clamp(200.0, 440.0);
+
+/// Sisi stiker di chat ala WhatsApp = 45% lebar layar (persegi,
+/// proporsional ke layar; gambar dijaga aspeknya di dalam kotak).
+double chatStickerSize(double screenW) => (screenW * 0.45).clamp(140.0, 200.0);
+
+/// Ukuran bubble 1 foto ala WhatsApp: lebar TETAP [width], tinggi ikut
+/// aspek tapi dibatasi 0.5×..1.33× lebar (sisanya di-crop BoxFit.cover).
+/// [w]/[h] 0 → kotak persegi.
+({double width, double height}) chatPhotoSize(int w, int h, double width) {
+  if (w <= 0 || h <= 0) return (width: width, height: width);
+  final height = (width * h / w).clamp(width * 0.5, width * 4 / 3);
+  return (width: width, height: height);
+}
+
 ({double width, double height}) photoViewSize(
   int w,
   int h, {

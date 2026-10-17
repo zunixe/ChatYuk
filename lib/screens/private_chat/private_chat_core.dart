@@ -800,6 +800,16 @@ mixin _PcCoreMx on _PrivateChatBase {
                                                   showChecks: isMeA,
                                                   isPending: pendA,
                                                   isRead: readA,
+                                                  isMe: isMeA,
+                                                  cardColor: isMeA
+                                                      ? Color.alphaBlend(
+                                                          AppTheme.primary
+                                                              .withValues(
+                                                                alpha: 0.25,
+                                                              ),
+                                                          AppTheme.bgCard,
+                                                        )
+                                                      : AppTheme.bgCard,
                                                 ),
                                               ),
                                             ],

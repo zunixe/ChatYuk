@@ -139,6 +139,7 @@ class SendHostState extends State<SendHost>
 
   @override
   Future<String?> photoDispatch({
+    String? albumId,
     required String imageData,
     required String type,
     required String senderId,
