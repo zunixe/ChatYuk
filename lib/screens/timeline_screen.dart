@@ -270,9 +270,11 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         children: [
           Text(
             title,
-            style: AppText.title.copyWith(
-              color: _kHeaderText,
+            style: TextStyle(
+              fontSize: 23,
               fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              color: _kHeaderText,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
