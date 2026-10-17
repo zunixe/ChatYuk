@@ -818,7 +818,8 @@ mixin _RcLiveMx on _RoomChatBase {
           ),
         // Bottom bar 3-state didefinisikan di atas (bottomBar) —
         // SafeArea bawah agar tidak kepotong nav bar Android.
-        SafeArea(top: false, child: bottomBar),
+        // Panel lampiran terbuka: nav bar ditangani panel (menempel bawah).
+        SafeArea(top: false, bottom: !_showAttachRow, child: bottomBar),
       ],
     );
     // Overlay gift fly + kombo — di atas semua konten (IgnorePointer,

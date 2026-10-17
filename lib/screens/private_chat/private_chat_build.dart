@@ -553,8 +553,10 @@ mixin _PcBuildMx on _PrivateChatBase {
     // L2: baca enabled DI SINI (bukan di root build) — perub. poin tak
     // rebuild header/list; hanya composer.
     final pointsEnabled = ref.watch(pointsProvider.select((p) => p.enabled));
+    // Tanpa padding samping luar: composer sudah ber-padding 8 (sama room),
+    // dan panel lampiran harus menempel penuh tepi kiri-kanan-bawah.
     return Container(
-      padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
+      padding: EdgeInsets.fromLTRB(0, 4, 0, _showAttachRow ? 0 : 4),
       decoration: BoxDecoration(
         color: Colors.transparent,
         boxShadow: [
@@ -566,6 +568,8 @@ mixin _PcBuildMx on _PrivateChatBase {
         ],
       ),
       child: SafeArea(
+        // Panel terbuka: area nav bar ditangani panel (latar menempel bawah).
+        bottom: !_showAttachRow,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
