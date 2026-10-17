@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../config/strings.dart';
 import '../../config/theme.dart';
 import '../../core/media/native_image.dart';
 import '../../providers/riverpod/locale_provider.dart';
@@ -14,15 +15,32 @@ import '../../utils.dart';
 // versi full-res dari PhotoCache dan menggantinya begitu siap.
 // Untuk view-once, countdown diteruskan dari state pemilik sehingga timer
 // terus berjalan.
+/// Satu foto di dalam viewer. Boleh >1 supaya bisa di-SWIPE VERTIKAL antar
+/// foto (ala WhatsApp: geser ke atas = foto berikutnya).
+class ViewerPhoto {
+  final Uint8List bytes;
+  final Future<String?> Function()? fullLoader;
+  const ViewerPhoto({required this.bytes, this.fullLoader});
+}
+
 class PhotoViewerScreen extends StatefulWidget {
   final Uint8List bytes;
   final Future<String?> Function()? fullLoader;
   final ValueNotifier<int>? countdown;
+
+  /// Daftar foto (multi-foto/album). Bila null → mode satu foto lama.
+  final List<ViewerPhoto>? photos;
+
+  /// Index foto yang dibuka pertama kali (hanya dipakai bila [photos] ada).
+  final int initialIndex;
+
   const PhotoViewerScreen({
     super.key,
     required this.bytes,
     this.fullLoader,
     this.countdown,
+    this.photos,
+    this.initialIndex = 0,
   });
 
   @override
@@ -30,21 +48,41 @@ class PhotoViewerScreen extends StatefulWidget {
 }
 
 class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
-  Uint8List? _fullBytes;
   final TransformationController _trans = TransformationController();
   double _scale = 1.0;
   Offset _doubleTapPos = Offset.zero;
 
+  /// Mode multi-foto (album): PageView vertikal.
+  late final bool _multi = (widget.photos?.length ?? 0) > 1;
+  late final PageController _page;
+  late int _index;
+  late List<Uint8List?> _full;
+
+  Uint8List? get _fullBytes => _multi ? _full[_index] : _singleFull;
+  Uint8List? _singleFull;
+
+  Future<String?> Function()? _loaderAt(int i) =>
+      _multi ? widget.photos![i].fullLoader : widget.fullLoader;
+
+  Uint8List _thumbAt(int i) =>
+      _multi ? widget.photos![i].bytes : widget.bytes;
+
   @override
   void initState() {
     super.initState();
+    _index = widget.initialIndex.clamp(
+      0,
+      _multi ? widget.photos!.length - 1 : 0,
+    );
+    _page = PageController(initialPage: _index);
+    _full = List<Uint8List?>.filled(_multi ? widget.photos!.length : 1, null);
     // Muat full-res MULAI frame pertama (post-frame) — BUKAN delay tetap
     // 350ms yang dulu bikin "nunggu dulu baru buka". Thumbnail sudah tampil
     // instan (bytes bubble ada di ImageCache); decode full dilakukan di
     // isolate (compute) sehingga TIDAK memblok frame transisi. Jadi foto
     // tampil seketika, ketajaman penuh menyusul begitu siap.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadFull();
+      if (mounted) _loadFull(_index);
     });
   }
 
@@ -52,19 +90,26 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   void dispose() {
     // Keluarkan bitmap full-res viewer dari ImageCache — kalau tidak,
     // tiap buka-tutup foto menumpuk puluhan MB bitmap sampai èvict LRU.
-    final b = _fullBytes;
-    if (b != null && b.isNotEmpty) {
+    for (final b in _full) {
+      if (b == null || b.isEmpty) continue;
       try {
         PaintingBinding.instance.imageCache.evict(MemoryImage(b));
       } catch (_) {}
     }
-    _fullBytes = null;
+    _singleFull = null;
     _trans.dispose();
+    _page.dispose();
     super.dispose();
   }
 
-  Future<void> _loadFull() async {
-    final loader = widget.fullLoader;
+  void _setFull(int i, Uint8List? b) {
+    if (i >= _full.length) return;
+    _full[i] = b;
+    if (!_multi) _singleFull = b;
+  }
+
+  Future<void> _loadFull(int i) async {
+    final loader = _loaderAt(i);
     if (loader == null) return;
     // File full bisa BELUM selesai di-download saat viewer dibuka (foto room
     // berupa path storage → download on-demand). Sekali coba = gagal diam
@@ -73,7 +118,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
     for (var attempt = 0; attempt < 4; attempt++) {
       if (attempt > 0) {
         await Future.delayed(Duration(seconds: attempt * 2));
-        if (!mounted || _fullBytes != null) return;
+        if (!mounted || (i < _full.length && _full[i] != null)) return;
       }
       try {
         final t0 = DateTime.now();
@@ -87,7 +132,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
             'loader=${t1.difference(t0).inMilliseconds}ms '
             'b64decode=${t2.difference(t1).inMilliseconds}ms '
             'attempt=$attempt');
-        setState(() => _fullBytes = bytes);
+        setState(() => _setFull(i, bytes));
         return;
       } catch (_) {}
     }
@@ -123,58 +168,101 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
     }
   }
 
+  /// Satu halaman foto (zoom + double-tap). Dipakai juga sebagai item
+  /// PageView vertikal pada mode multi-foto.
+  Widget _pageContent(int i, S s) {
+    final full = i < _full.length ? _full[i] : null;
+    final bytes = full ?? _thumbAt(i);
+    return GestureDetector(
+      onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
+      onDoubleTap: _handleDoubleTap,
+      child: InteractiveViewer(
+        transformationController: _trans,
+        clipBehavior: Clip.none,
+        boundaryMargin: const EdgeInsets.all(double.infinity),
+        minScale: 1.0,
+        maxScale: 6.0,
+        panEnabled: true,
+        scaleEnabled: true,
+        onInteractionUpdate: (_) {
+          _scale = _trans.value.getMaxScaleOnAxis();
+        },
+        onInteractionEnd: (_) =>
+            setState(() => _scale = _trans.value.getMaxScaleOnAxis()),
+        child: Center(
+          child: Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+            // FASE AWAL (thumb): JANGAN set cacheWidth — bytes thumb kecil
+            // (~256px) di-decode natural = INSTAN. FASE FULL: 1600 agar tajam.
+            cacheWidth: full == null ? null : 1600,
+            // Decode gagal (bytes korup/kosong) → ikon JELAS, bukan layar
+            // hitam polos (laporan "blank" tak terdiagnosa).
+            errorBuilder: (_, _, _) => const Icon(
+              Icons.broken_image_outlined,
+              size: 64,
+              color: Colors.white54,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final bytes = _fullBytes ?? widget.bytes;
+    final bool loadingFull = _fullBytes == null && _loaderAt(_index) != null;
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Stack(
           children: [
             Positioned.fill(
-              child: GestureDetector(
-                onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
-                onDoubleTap: _handleDoubleTap,
-                child: InteractiveViewer(
-                  transformationController: _trans,
-                  clipBehavior: Clip.none,
-                  boundaryMargin: const EdgeInsets.all(double.infinity),
-                  minScale: 1.0,
-                  maxScale: 6.0,
-                  panEnabled: true,
-                  scaleEnabled: true,
-                  onInteractionUpdate: (_) {
-                    _scale = _trans.value.getMaxScaleOnAxis();
-                  },
-                  onInteractionEnd: (_) => setState(
-                    () => _scale = _trans.value.getMaxScaleOnAxis(),
+              // MULTI-FOTO: swipe VERTIKAL antar foto (geser ke atas = foto
+              // berikutnya), ala WhatsApp. Saat di-zoom, geser tidak boleh
+              // pindah foto (dragging gambar lebih diutamakan).
+              child: (_multi && _scale <= 1.01)
+                  ? PageView.builder(
+                      controller: _page,
+                      scrollDirection: Axis.vertical,
+                      itemCount: widget.photos!.length,
+                      onPageChanged: (i) {
+                        setState(() {
+                          _index = i;
+                          _scale = 1.0;
+                          _trans.value = Matrix4.identity();
+                        });
+                        _loadFull(i);
+                      },
+                      itemBuilder: (_, i) => _pageContent(i, s),
+                    )
+                  : _pageContent(_index, s),
+            ),
+            if (_multi)
+              Positioned(
+                top: 12,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
                   ),
-                  child: Center(
-                    child: Image.memory(
-                      bytes,
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
-                      // FASE AWAL (thumb): JANGAN set cacheWidth — bytes thumb
-                      // kecil (~256px) di-decode natural = INSTAN. Dulu dipaksa
-                      // 1080 dari bytes thumb → key ImageCache BEDA dgn bubble
-                      // (yang decode 1080 dari base64/path, bukan thumb) → MISS
-                      // → decode ulang tepat saat transisi = "serasa lambat".
-                      // FASE FULL: 1600 untuk ketajaman zoom.
-                      cacheWidth: _fullBytes == null ? null : 1600,
-                      // Decode gagal (bytes korup/kosong) → ikon JELAS, bukan
-                      // layar hitam polos (laporan "blank" tak terdiagnosa).
-                      errorBuilder: (_, _, _) => const Icon(
-                        Icons.broken_image_outlined,
-                        size: 64,
-                        color: Colors.white54,
-                      ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${_index + 1}/${widget.photos!.length}',
+                    style: AppText.caption.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ),
-            ),
-            if (_fullBytes == null && widget.fullLoader != null)
+            if (loadingFull)
               const Positioned(
                 top: 40,
                 left: 0,

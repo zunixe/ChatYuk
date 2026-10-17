@@ -32,6 +32,14 @@ class MessageImage extends StatefulWidget {  final String imageData;
   /// album ala WhatsApp. Ukuran mengikuti constraint parent.
   final bool fill;
 
+  /// Album/grup foto: daftar `imageData` + `messageId` semua foto dalam
+  /// pesan yang sama (urut kronologis). Bila diisi (>1), tap foto membuka
+  /// viewer yang bisa di-SWIPE VERTIKAL antar foto, mulai dari foto ini.
+  final List<({String imageData, String messageId})>? gallery;
+
+  /// Index foto ini di dalam [gallery].
+  final int galleryIndex;
+
   /// Tile ALBUM (isi penuh) → placeholder SENYAP (tanpa spinner) & tanpa
   /// fade: buka chat album tidak "kedip" berulang (spinner×4 + fade×4).
   bool get _albumTile => fill;
@@ -43,6 +51,8 @@ class MessageImage extends StatefulWidget {  final String imageData;
     required this.messageId,
     this.onRenderedWidth,
     this.fill = false,
+    this.gallery,
+    this.galleryIndex = 0,
   });
 
   @override
@@ -63,10 +73,22 @@ class _MessageImageState extends State<MessageImage> {
   // Generasi decode: cegah hasil basi menimpa yang baru bila imageData
   // berubah cepat (path → thumbnail) sementara decode lama belum selesai.
   int _gen = 0;
-  // Fade-in hanya untuk konten yang BARU dimuat elemen ini (dari placeholder
-  // / pergantian gambar). Scroll-back (cache hit di initState) langsung
-  // tampil tanpa animasi ulang — daftar foto tetap persistence.
-  bool _fadeNext = false;
+  // FADE DIHAPUS (2026-10-17): memudar 180ms terasa "kedip" di chat — foto
+  // kini muncul UTUH. Spinner pun DITUNDA 250ms: load cepat (cache/disk)
+  // selesai sebelum spinner sempat tampil → tak ada kilatan spinner.
+  bool _showSpinner = false;
+  Timer? _spinnerTimer;
+
+  static const Duration _spinnerDelay = Duration(milliseconds: 250);
+
+  /// Mulai penundaan spinner (spinner hanya tampil bila MASIH memuat).
+  void _scheduleSpinner() {
+    _spinnerTimer?.cancel();
+    _showSpinner = false;
+    _spinnerTimer = Timer(_spinnerDelay, () {
+      if (mounted && _loading) setState(() => _showSpinner = true);
+    });
+  }
   // Lebar terakhir yang dilaporkan ke parent (hindari callback berulang).
   double _reportedWidth = -1;
 
@@ -131,12 +153,7 @@ class _MessageImageState extends State<MessageImage> {
     }
     if (_decoded == null) {
       _loading = true;
-      // Fade HANYA bila nanti benar-benar diunduh dari jaringan (lihat
-      // _decode: di-set sesuai sumber). Untuk thumb yang sudah ada di
-      // disk/cache, `_fadeNext` tetap false → foto muncul UTUH di frame
-      // selesainya (bukan memudar 180ms = "kedip"). User: cold start yang
-      // sudah pernah diload tidak boleh kedip.
-      _fadeNext = false;
+      _scheduleSpinner();
       _reservePlaceholder(widget.imageData);
       _decode(key, ++_gen);
     } else {
@@ -155,6 +172,8 @@ class _MessageImageState extends State<MessageImage> {
 
   @override
   void dispose() {
+    _spinnerTimer?.cancel();
+    _spinnerTimer = null;
     super.dispose();
   }
 
@@ -170,7 +189,6 @@ class _MessageImageState extends State<MessageImage> {
       // chat = frame-1 `imageData` masih PATH storage (initState ambil thumb
       // via `thumb:<id>` → foto SUDAH tampil), lalu ~100ms kemudian batch
       // `loadPhotosAsync` menimpa `imageData` → base64 thumb yang isinya SAMA.
-      // Dulu: hit!=null → _fadeNext=true + setState → foto yang sudah tampil
       // "kedip" (fade ulang 180ms). Sekarang: bila bitmap yang SEDANG tampil
       // sudah ada (`_decoded != null`) & belum berubah besar, cukup re-key
       // cache ke kunci baru — NOL setState, NOL fade, NOL decode ulang.
@@ -194,7 +212,6 @@ class _MessageImageState extends State<MessageImage> {
       if (hit != null) {
         _gen++;
         // Konten lama sudah di memori → tampil langsung (tanpa fade).
-        _fadeNext = false;
         if (mounted) {
           setState(() {
             _decoded = hit;
@@ -208,7 +225,6 @@ class _MessageImageState extends State<MessageImage> {
         // JANGAN kosongkan _decoded — foto lama tetap tampil sampai yang baru
         // siap (persistence, anti kedip). Hanya tandai loading untuk spinner
         // bila memang belum ada gambar sama sekali (lihat build).
-        _fadeNext = !widget._albumTile;
         if (mounted) {
           setState(() {
             _loading = true;
@@ -298,9 +314,7 @@ class _MessageImageState extends State<MessageImage> {
                 setState(() {});
               }
             }));
-            // Thumb dari DISK (sudah pernah diload) → tampil UTUH, tanpa fade.
-            _fadeNext = false;
-            setState(() {
+                  setState(() {
               _decoded = td;
               _loading = false;
               final s = _sizeOf(thumbDims.width, thumbDims.height);
@@ -327,7 +341,6 @@ class _MessageImageState extends State<MessageImage> {
       putDecodedCache(key, contentHit);
       if (!mounted || gen != _gen) return;
       // Isi sama sudah ada di memori → tampil langsung (tanpa fade).
-      _fadeNext = false;
       setState(() {
         _decoded = contentHit;
         _loading = false;
@@ -387,7 +400,6 @@ class _MessageImageState extends State<MessageImage> {
     // Piksel BARU didecode (belum pernah tampil di layar ini) → fade-in halus
     // supaya kemunculan tidak "pop". Bila ini sekadar re-decode isi yang sama
     // (sudah ditangani `contentHit`/`_decoded!=null` di atas), tak sampai sini.
-    _fadeNext = !widget._albumTile;
     setState(() {
       _decoded = decoded;
       _loading = false;
@@ -399,10 +411,10 @@ class _MessageImageState extends State<MessageImage> {
 
   void _retry() {
     final key = widget.imageData.hashCode;
-    _fadeNext = !widget._albumTile;
     setState(() {
       _loading = true;
     });
+    _scheduleSpinner();
     _decode(key, ++_gen);
   }
 
@@ -441,9 +453,9 @@ class _MessageImageState extends State<MessageImage> {
           color: AppTheme.bgInput,
           alignment: Alignment.center,
           child: _loading
-              ? (widget._albumTile
-                    // Tile album: placeholder SENYAP — kotak warna saja, tanpa
-                    // spinner beranimasi (sumber kesan "kedip" ×4).
+              ? ((widget._albumTile || !_showSpinner)
+                    // Album ATAU masih <250ms → placeholder SENYAP (kotak
+                    // warna saja, tanpa spinner) supaya tidak ada kilatan.
                     ? const SizedBox.shrink()
                     : const SizedBox(
                         width: 24,
@@ -487,19 +499,7 @@ class _MessageImageState extends State<MessageImage> {
         // InteractiveViewer + onDoubleTap zoom → foto di bubble bisa membesar
         // & digeser padahal hanya thumbnail. Zoom/geser HANYA di fullscreen
         // viewer (PhotoViewerScreen). Di sini cukup tap → buka fullscreen.
-        child: _fadeNext
-            // Fade-in tiap KONTEN baru. Scroll-back / cache hit di initState
-            // (_fadeNext=false) langsung tampil — tidak animasi ulang.
-            ? TweenAnimationBuilder<double>(
-                key: ValueKey(decoded),
-                tween: Tween(begin: 0, end: 1),
-                duration: const Duration(milliseconds: 180),
-                onEnd: () => _fadeNext = false,
-                builder: (_, opacity, child) =>
-                    Opacity(opacity: opacity, child: child),
-                child: _bubbleImage(context, decoded, width, height, s),
-              )
-            : _bubbleImage(context, decoded, width, height, s),
+        child: _bubbleImage(context, decoded, width, height, s),
       ),
     );
   }
@@ -564,9 +564,42 @@ class _MessageImageState extends State<MessageImage> {
     );
   }
 
+  /// Thumbnail viewer untuk satu foto galeri. Bila bitmapnya sudah ada di
+  /// cache mem → pakai langsung (instan); bila belum, ambil dari thumbnail
+  /// disk/cache; bila tetap tidak ada, pakai bitmap foto yang sedang dibuka
+  /// sebagai placeholder (agar frame pertama viewer tidak hitam).
+  Uint8List _thumbFor(int i, Uint8List fallback) {
+    final g = widget.gallery!;
+    for (final key in [g[i].imageData.hashCode, g[i].messageId.hashCode]) {
+      final d = getDecodedCache(key);
+      if (d != null && d.bytes.isNotEmpty) return d.bytes;
+    }
+    return fallback;
+  }
+
+  List<ViewerPhoto> _buildGallery() {
+    final g = widget.gallery!;
+    final self = _decoded!.bytes;
+    final selfIdx = widget.galleryIndex.clamp(0, g.length - 1);
+    final sameChat = widget.chatKey.isNotEmpty;
+    return [
+      for (var i = 0; i < g.length; i++)
+        ViewerPhoto(
+          bytes: i == selfIdx ? self : _thumbFor(i, self),
+          fullLoader: (i == selfIdx || sameChat)
+              ? () => PhotoCache.instance.load(widget.chatKey, g[i].messageId)
+              : null,
+        ),
+    ];
+  }
+
   void _openFullscreen() {
     final decoded = _decoded;
     if (decoded == null || !mounted) return;
+    final gallery =
+        (widget.gallery != null && widget.gallery!.length > 1)
+        ? _buildGallery()
+        : null;
     // Route KHUSUS viewer (fade + scale 200ms) — BUKAN slide global. Slide
     // horizontal terasa "berat/menunggu" untuk foto; zoom-in ala WhatsApp/M3
     // jauh lebih halus & tidak ada jeda. Thumbnail sudah tampil instan
@@ -581,6 +614,10 @@ class _MessageImageState extends State<MessageImage> {
           bytes: decoded.bytes,
           fullLoader: () =>
               PhotoCache.instance.load(widget.chatKey, widget.messageId),
+          photos: gallery,
+          initialIndex: gallery == null
+              ? 0
+              : widget.galleryIndex.clamp(0, gallery.length - 1),
         ),
         transitionsBuilder: (_, anim, __, child) {
           final curved = CurvedAnimation(

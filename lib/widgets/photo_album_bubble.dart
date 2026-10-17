@@ -129,6 +129,13 @@ class PhotoAlbumBubble extends StatelessWidget {
           chatKey: chatKey,
           messageId: m.id,
           fill: true,
+          // Tap tile → viewer yang bisa di-SWIPE VERTIKAL antar SEMUA foto
+          // album (bukan hanya tile yang di-tap) — ala WhatsApp.
+          gallery: [
+            for (final p in photos)
+              (imageData: p.imageData, messageId: p.id),
+          ],
+          galleryIndex: i,
         ),
         if (isLast && _hidden > 0)
           IgnorePointer(
