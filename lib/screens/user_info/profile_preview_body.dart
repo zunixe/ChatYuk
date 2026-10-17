@@ -23,6 +23,8 @@ class _PProfileBody extends StatefulWidget {
   final String? bio;
   final String location;
   final String userId;
+  /// Versi pendek (8 karakter) — SAMA dengan halaman Profil sendiri.
+  final String userIdShort;
   final int followers;
   final int following;
   final int subscribers;
@@ -66,6 +68,7 @@ class _PProfileBody extends StatefulWidget {
     required this.bio,
     required this.location,
     required this.userId,
+    required this.userIdShort,
     required this.followers,
     required this.following,
     required this.subscribers,
@@ -630,7 +633,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                 ),
               PInfoItem(
                 icon: Icons.badge_outlined,
-                value: widget.userId,
+                value: widget.userIdShort,
                 label: 'User ID',
                 tabular: true,
                 trailing: PCopyButton(

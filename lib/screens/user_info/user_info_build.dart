@@ -65,6 +65,9 @@ mixin _UiBuildMx on _UserInfoBase {  Widget build(BuildContext context) {
               bio: null,
               location: location,
               userId: widget.userId,
+              userIdShort: widget.userId.length > 8
+                  ? widget.userId.substring(0, 8)
+                  : widget.userId,
               followers: profile?.followersCount ?? 0,
               following: profile?.followingCount ?? 0,
               subscribers: profile?.subscriberCount ?? 0,
