@@ -355,6 +355,33 @@ mixin SSocialMx {
       : 'Boost this post to the top of the feed?';
   String get msgBoosted => isId ? 'Postingan di-boost' : 'Post boosted';
   String get msgPosted => isId ? 'Berhasil diposting' : 'Posted';
+  // ── Composer redesign (2026-10-17) ──
+  String get composerTitleNew => isId ? 'Postingan baru' : 'New post';
+  String get composerHintShare => isId
+      ? 'Apa yang ingin kamu bagikan?'
+      : 'What do you want to share?';
+  String get titleWhoCanReply =>
+      isId ? 'Siapa yang bisa membalas' : 'Who can reply';
+  String get visPublicDescLong => isId
+      ? 'Semua orang bisa membalas dan melihat'
+      : 'Anyone can reply and see';
+  String get visFollowersDescLong =>
+      isId ? 'Hanya orang yang mengikutimu' : 'Only people who follow you';
+  String get visSubscribersDescLong => isId
+      ? 'Hanya subscriber yang bisa melihat'
+      : 'Only subscribers can see';
+  String get composerDiscardTitle =>
+      isId ? 'Buang postingan?' : 'Discard post?';
+  String get composerDiscardMsg => isId
+      ? 'Teks dan foto yang belum dikirim akan hilang.'
+      : 'Your text and photos will be lost.';
+  String get btnDiscard => isId ? 'Buang' : 'Discard';
+  String get tooltipAddPhoto =>
+      isId ? 'Tambah foto atau video' : 'Add photo or video';
+  String get tooltipAddEmoji => isId ? 'Tambah emoji' : 'Add emoji';
+  String get tooltipHashtag => isId ? 'Hashtag' : 'Hashtag';
+  String get tooltipRemovePhoto => isId ? 'Hapus foto' : 'Remove photo';
+  String get msgPostSent => isId ? 'Postingan dikirim' : 'Post sent';
   String get errPreparePhoto => isId
       ? 'Sebagian foto gagal diproses'
       : 'Some photos failed to process';

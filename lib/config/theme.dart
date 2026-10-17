@@ -299,6 +299,7 @@ class AppTextSize {
   static const double s14 = 14;
   static const double s145 = 14.5;
   static const double s15 = 15;
+  static const double s16 = 16;
   static const double s155 = 15.5;
   static const double s17 = 17;
   static const double s18 = 18;

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LengthLimitingTextInputFormatter;
 import 'package:image_picker/image_picker.dart';
 import '../config/strings.dart';
 import '../providers/riverpod/auth_provider.dart';
@@ -48,11 +49,8 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
   String _visibility = 'public';
   bool _posting = false;
   bool _picking = false;
-  // Tinggi minimum area tulis (tumbuh otomatis saat teks panjang).
-  static const double _fieldHeight = 120;
-
-  static const _maxImages = 5;
-  static const _maxText = 2000;
+  static const _maxImages = 5; // ikuti batas backend (create_post <= 5)
+  static const _maxText = 500;
 
   @override
   void dispose() {
@@ -320,7 +318,24 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       if (!mounted) return;
       ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).load('all', refresh: true);
       Navigator.of(context).pop();
-      messenger.showSnackBar(SnackBar(content: Text(s.msgPosted)));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            s.msgPostSent,
+            style: TextStyle(
+              fontSize: AppTextSize.s14,
+              fontWeight: FontWeight.w600,
+              color: _kSnackFg,
+            ),
+          ),
+          backgroundColor: _kSnackBg,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().toLowerCase();
@@ -336,6 +351,21 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  // ── Palet khusus design "Postingan baru" (warna yang tidak ada di AppTheme) ──
+  static const Color _kWarn = Color(0xFFFF6B6F);
+  static const Color _kSelectedBg = Color(0xFF1E3A50);
+  static const Color _kLink = Color(0xFF4FB3F6);
+  static const Color _kChipText = Color(0xFFC9C9C9);
+  static const Color _kRadioOff = Color(0xFF4A4A4A);
+  static const Color _kHandle = Color(0xFF3D3D3D);
+  static const Color _kSnackBg = Color(0xFFF5F5F5);
+  static const Color _kSnackFg = Color(0xFF121212);
+
+  bool get _hasContent =>
+      _textCtrl.text.trim().isNotEmpty || _images.isNotEmpty;
+
+  S get _s => ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('PostComposer');
@@ -343,396 +373,167 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
     final s = ref.watch(localeProvider).s;
     final profile = ref.watch(authProvider.select((a) => a.profile));
     final myName = profile?.nickname ?? 'Anon';
-    final hashtags = _extractHashtags(_textCtrl.text);
+    final suggestions = _suggestedHashtags(profile?.hashtags ?? const []);
+    final len = _textCtrl.text.length.clamp(0, _maxText);
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
-        backgroundColor: AppTheme.headerGradient.colors.first,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
+        backgroundColor: AppTheme.bgScreen,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: 52,
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+        leadingWidth: 52,
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded, size: 24),
+          color: AppTheme.textPrimary,
+          tooltip: s.btnClose,
+          onPressed: _posting ? null : _close,
         ),
-        title: Text(
-          s.btnPost,
-          style: AppText.title.copyWith(color: Colors.white),
+        title: Text(s.composerTitleNew, style: AppText.titleEmphasis),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(child: _postButton(s)),
+          ),
+        ],
+        shape: Border(
+          bottom: BorderSide(color: AppTheme.divider, width: 1),
         ),
-        iconTheme: IconThemeData(color: Colors.white),
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // ── Header profil: avatar ring gradient + nama + identitas ──
-            Row(
-              children: [
-                // Ring gradient tipis di sekitar avatar — kesan premium.
-                Container(
-                  padding: const EdgeInsets.all(2.5),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: AppTheme.headerGradient,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.bgScreen,
-                      shape: BoxShape.circle,
-                    ),
-                    child: ProfileAvatar(
-                      uid: profile?.uid ?? '',
-                      name: myName,
-                      size: 46,
-                      borderRadius: 23,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(myName, style: AppText.bodyStrong),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.campaign_outlined,
-                            size: 13,
-                            color: AppTheme.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              s.postingAs,
-                              style: AppText.bodySmall.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-
-            // ── Headline pengajak — bikin user tertarik menulis ──
-            Text(
-              s.composerIntroHeadline,
-              style: AppText.title.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              s.composerIntroSub,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 14),
-
-            // ── Kartu tulis — input + counter + toolbar aksi media ──
-            Container(
-              decoration: BoxDecoration(
-                color: AppTheme.bgCard,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.divider),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ProfileAvatar(
+                uid: profile?.uid ?? '',
+                name: myName,
+                size: 40,
+                borderRadius: 20,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Input teks — tumbuh otomatis; min via _fieldHeight.
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: _fieldHeight,
-                      maxHeight: 360,
-                    ),
-                    child: TextField(
-                      controller: _textCtrl,
-                      maxLines: null,
-                      expands: false,
-                      maxLength: _maxText,
-                      style: AppText.body,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: InputDecoration(
-                        hintText: s.hintWritePost,
-                        hintStyle: AppText.body.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
-                        filled: false,
-                        border: InputBorder.none,
-                        counterText: '',
-                        contentPadding: const EdgeInsets.fromLTRB(
-                          16,
-                          14,
-                          16,
-                          6,
-                        ),
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  // Baris bawah: emoji cepat (kiri) + counter karakter (kanan).
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 16, 8),
-                    child: Row(
-                      children: [
-                        _miniAction(
-                          Icons.sentiment_satisfied_alt,
-                          Colors.amber.shade700,
-                          s.composerActionEmoji,
-                          () => EmojiPickerSheet.show(context, _textCtrl),
-                        ),
-                        const Spacer(),
-                        _charCounter(s),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // ── Media: hint + kotak "Add" (Galeri/Kamera via sheet) ──
-            // Tombol Galeri/Kamera TIDAK lagi berupa chip terpisah di dalam
-            // kartu (dulu double dengan kotak Add). Cukup SATU pintu: kotak
-            // Add besar → bottom sheet pilih Galeri/Kamera.
-            if (_images.isEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.only(left: 2, bottom: 8),
-                child: Row(
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.photo_library_outlined,
-                      size: 15,
-                      color: AppTheme.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
+                    Padding(
+                      padding: const EdgeInsets.only(left: 2, top: 2),
                       child: Text(
-                        s.composerMediaHint,
-                        style: AppText.caption.copyWith(
-                          color: AppTheme.textSecondary,
+                        myName,
+                        style: TextStyle(
+                          fontSize: AppTextSize.s15,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
                         ),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(height: 6),
+                    _visibilityChip(s),
+                    const SizedBox(height: 2),
+                    _textField(s),
+                    if (_images.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _imagesGrid(),
+                    ],
+                    if (suggestions.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _suggestionWrap(suggestions),
+                    ],
                   ],
                 ),
               ),
-              _emptyAddTile(s),
-            ] else
-              _imagesGrid(),
-
-            // ── Hashtag chip badge — muncul otomatis saat mengetik #tag ──
-            if (hashtags.isNotEmpty) ...[
-              Row(
-                children: [
-                  Icon(Icons.tag, size: 16, color: AppTheme.textSecondary),
-                  const SizedBox(width: 6),
-                  Text(s.labelHashtags, style: AppText.label),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final tag in hashtags)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppTheme.primary.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.tag,
-                            size: 14,
-                            color: AppTheme.primary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            tag,
-                            style: AppText.caption.copyWith(
-                              color: AppTheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
             ],
-
-            // (Grid foto ditangani `_imagesGrid()` di atas saat ada foto.)
-            if (_images.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                '${_images.length}/$_maxImages ${s.photoCountLabel}',
-                style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-              ),
-            ],
-            const SizedBox(height: 16),
-
-            // ── Visibilitas — card putih ala profil: ikon + label + chip ──
-            Container(
-              padding: EdgeInsets.fromLTRB(14, 12, 14, 12),
-              decoration: BoxDecoration(
-                color: AppTheme.bgCard,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.visibility_outlined,
-                          size: 18,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(s.labelVisibility, style: AppText.bodyStrong),
-                            SizedBox(height: 1),
-                            Text(
-                              _visDesc(s),
-                              style: AppText.bodySmall.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _visChip(s, 'public', Icons.public, s.visPublic),
-                      SizedBox(width: 8),
-                      _visChip(
-                        s,
-                        'followers',
-                        Icons.people_outline_rounded,
-                        s.visFollowers,
-                      ),
-                      SizedBox(width: 8),
-                      _visChip(
-                        s,
-                        'subscribers',
-                        Icons.star_outline_rounded,
-                        s.visSubscribers,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ── Tips — dorong kualitas & minat posting ──
-            _tipsCard(s),
-          ],
+          ),
         ),
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.bgCard,
-          border: Border(top: BorderSide(color: AppTheme.divider)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 12,
-              offset: const Offset(0, -2),
-            ),
-          ],
+      bottomNavigationBar: _bottomToolbar(s, len),
+    );
+  }
+
+  /// Tombol Posting pill di AppBar — nonaktif saat kosong, spinner saat upload.
+  Widget _postButton(S s) {
+    final enabled = _hasContent && !_posting;
+    return SizedBox(
+      height: 34,
+      child: ElevatedButton(
+        onPressed: enabled ? _post : null,
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          minimumSize: const Size(0, 34),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          elevation: 0,
+          backgroundColor: AppTheme.primary,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppTheme.bgInput,
+          disabledForegroundColor: AppTheme.textSecondary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(17),
+          ),
         ),
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Progress upload (determinatif, berbasis foto selesai/total).
-              if (_posting && _uploadTotal > 0) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: _uploadDone / _uploadTotal,
-                    minHeight: 4,
-                    backgroundColor: AppTheme.bgInput,
-                    color: AppTheme.primary,
-                  ),
+        child: _posting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
                 ),
-                const SizedBox(height: 8),
-              ],
-              SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _posting ? null : _post,
-              icon: _posting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.send_rounded, size: 18),
-              label: Text(s.btnPost, style: AppText.button),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _hasContent ? AppTheme.primary : null,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor:
-                    AppTheme.textSecondary.withValues(alpha: 0.25),
-                disabledForegroundColor: AppTheme.textSecondary,
-                elevation: _hasContent ? 2 : 0,
-                shadowColor: AppTheme.primary.withValues(alpha: 0.4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+              )
+            : Text(
+                s.btnPost,
+                style: TextStyle(
+                  fontSize: AppTextSize.s14,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ),
+      ),
+    );
+  }
+
+  /// Chip visibilitas (tinggi 26, target sentuh 40) → bottom sheet.
+  Widget _visibilityChip(S s) {
+    final (label, icon) = switch (_visibility) {
+      'followers' => (s.visFollowers, Icons.people_outline_rounded),
+      'subscribers' => (s.visSubscribers, Icons.star_outline_rounded),
+      _ => (s.visPublic, Icons.public_rounded),
+    };
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _posting ? null : _openVisibilitySheet,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Container(
+          height: 26,
+          padding: const EdgeInsets.fromLTRB(8, 0, 9, 0),
+          decoration: BoxDecoration(
+            color: AppTheme.bgCard,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: _kChipText),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: AppTextSize.s125,
+                  fontWeight: FontWeight.w600,
+                  color: _kChipText,
+                ),
+              ),
+              const SizedBox(width: 2),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 12,
+                color: _kChipText,
               ),
             ],
           ),
@@ -741,287 +542,233 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
     );
   }
 
-  /// Ada isi (teks atau foto) → tombol Post aktif & bergradient.
-  bool get _hasContent =>
-      _textCtrl.text.trim().isNotEmpty || _images.isNotEmpty;
+  /// TextField tanpa border/fill, tumbuh otomatis, batas 500 karakter.
+  Widget _textField(S s) {
+    return TextField(
+      controller: _textCtrl,
+      minLines: 4,
+      maxLines: null,
+      keyboardType: TextInputType.multiline,
+      textCapitalization: TextCapitalization.sentences,
+      inputFormatters: [LengthLimitingTextInputFormatter(_maxText)],
+      style: TextStyle(
+        fontSize: AppTextSize.s16,
+        height: AppTextSize.lh15,
+        color: AppTheme.textPrimary,
+      ),
+      decoration: InputDecoration(
+        isCollapsed: true,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        hintText: s.composerHintShare,
+        hintStyle: TextStyle(
+          fontSize: AppTextSize.s16,
+          height: AppTextSize.lh15,
+          color: AppTheme.textSecondary,
+        ),
+        contentPadding: EdgeInsets.zero,
+      ),
+      onChanged: (_) => setState(() {}),
+    );
+  }
 
-  /// Grid foto terpilih + kotak plus di akhir (maks _maxImages).
+  /// Grid foto 2 kolom (rasio 4:5), radius 12, tombol hapus 26px.
   Widget _imagesGrid() {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final s = _s;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
+        crossAxisCount: 2,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+        childAspectRatio: 4 / 5,
       ),
-      itemCount: _images.length + 1, // + kotak plus
+      itemCount: _images.length,
       itemBuilder: (_, i) {
-        if (i < _images.length) {
-          final idx = i;
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.memory(_images[idx], fit: BoxFit.cover,
-                    cacheWidth: 400),
+        final idx = i;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.divider, width: 0.5),
               ),
-              Positioned(
-                top: 4,
-                right: 4,
+              clipBehavior: Clip.antiAlias,
+              child: Image.memory(
+                _images[idx],
+                fit: BoxFit.cover,
+                cacheWidth: 640,
+                gaplessPlayback: true,
+              ),
+            ),
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Tooltip(
+                message: s.tooltipRemovePhoto,
                 child: GestureDetector(
-                  onTap: () => setState(() {
-                    _images.removeAt(idx);
-                    if (idx < _imageDims.length) _imageDims.removeAt(idx);
-                    if (idx < _imageBlurhashes.length) {
-                      _imageBlurhashes.removeAt(idx);
-                    }
-                  }),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _removeImage(idx),
                   child: Container(
-                    width: 24,
-                    height: 24,
+                    width: 26,
+                    height: 26,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
+                      color: Colors.black.withValues(alpha: 0.6),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
-                      Icons.close,
+                      Icons.close_rounded,
+                      size: 14,
                       color: Colors.white,
-                      size: 16,
                     ),
                   ),
                 ),
               ),
-            ],
-          );
-        }
-        return _addTile(s);
+            ),
+          ],
+        );
       },
     );
   }
 
-  /// Tombol aksi kecil di dalam kartu (emoji) — bulat, rapi.
-  Widget _miniAction(
-    IconData icon,
-    Color color,
-    String label,
-    VoidCallback onTap,
-  ) {
-    return Tooltip(
-      message: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-            border: Border.all(color: color.withValues(alpha: 0.3)),
+  void _removeImage(int idx) {
+    setState(() {
+      _images.removeAt(idx);
+      if (idx < _imageDims.length) _imageDims.removeAt(idx);
+      if (idx < _imageBlurhashes.length) _imageBlurhashes.removeAt(idx);
+    });
+  }
+
+  /// Saran hashtag dari minat/hashtag user (buang yang sudah ada di teks).
+  List<String> _suggestedHashtags(List<String> own) {
+    final existing = _extractHashtags(_textCtrl.text)
+        .map((e) => e.substring(1).toLowerCase())
+        .toSet();
+    final out = <String>[];
+    for (final raw in own) {
+      final clean = raw.replaceAll('#', '').trim();
+      if (clean.isEmpty) continue;
+      if (existing.contains(clean.toLowerCase())) continue;
+      if (out.contains(clean)) continue;
+      out.add(clean);
+      if (out.length >= 6) break;
+    }
+    return out;
+  }
+
+  Widget _suggestionWrap(List<String> tags) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final t in tags)
+          GestureDetector(
+            onTap: () => _addHashtag(t),
+            child: Container(
+              height: 28,
+              padding: const EdgeInsets.symmetric(horizontal: 11),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppTheme.bgCard,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                '#$t',
+                style: TextStyle(
+                  fontSize: AppTextSize.s125,
+                  fontWeight: FontWeight.w600,
+                  color: _kLink,
+                ),
+              ),
+            ),
           ),
-          child: Icon(icon, size: 19, color: color),
-        ),
-      ),
+      ],
     );
   }
 
-  /// Counter karakter: sembunyi saat kosong; berubah merah mendekati batas.
-  Widget _charCounter(S s) {
-    final len = _textCtrl.text.length;
-    if (len == 0) return const SizedBox.shrink();
-    final nearLimit = len > (_maxText * 0.9);
-    final color = nearLimit ? AppTheme.danger : AppTheme.textSecondary;
-    return Text(
-      '$len / $_maxText',
-      style: AppText.caption.copyWith(
-        color: color,
-        fontWeight: nearLimit ? FontWeight.w700 : FontWeight.w500,
-      ),
+  void _addHashtag(String tag) {
+    final t = _textCtrl.text;
+    final sep = (t.isEmpty || t.endsWith(' ')) ? '' : ' ';
+    var next = '$t$sep#$tag';
+    if (next.length > _maxText) next = next.substring(0, _maxText);
+    _textCtrl.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
     );
+    setState(() {});
   }
 
-  /// Kartu tips — dorong kualitas & minat posting.
-  Widget _tipsCard(S s) {
-    final tips = [s.composerTip1, s.composerTip2, s.composerTip3];
+  void _insertHash() {
+    final v = _textCtrl.value;
+    final sel = v.selection;
+    final pos = sel.isValid ? sel.start : v.text.length;
+    if (v.text.length >= _maxText) return;
+    final next = v.text.replaceRange(pos, pos, '#');
+    _textCtrl.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: pos + 1),
+    );
+    setState(() {});
+  }
+
+  /// Toolbar bawah: tambah foto / emoji / hashtag + counter & cincin progres.
+  Widget _bottomToolbar(S s, int len) {
+    final warn = len >= (_maxText * 0.9);
+    final color = warn ? _kWarn : AppTheme.textSecondary;
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: AppTheme.accent.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.25)),
+        color: AppTheme.bgScreen,
+        border: Border(top: BorderSide(color: AppTheme.divider)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: Row(
             children: [
-              Icon(
-                Icons.lightbulb_outline_rounded,
-                size: 17,
-                color: AppTheme.accent,
+              _toolButton(
+                Icons.photo_library_outlined,
+                s.tooltipAddPhoto,
+                _pickMediaSource,
+              ),
+              _toolButton(
+                Icons.emoji_emotions_outlined,
+                s.tooltipAddEmoji,
+                () => EmojiPickerSheet.show(context, _textCtrl),
+              ),
+              _toolButton(Icons.tag, s.tooltipHashtag, _insertHash),
+              const Spacer(),
+              Text(
+                '$len/$_maxText',
+                style: TextStyle(
+                  fontSize: AppTextSize.s125,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
               ),
               const SizedBox(width: 6),
-              Text(
-                s.composerTipsTitle,
-                style: AppText.label.copyWith(color: AppTheme.accent),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          for (final tip in tips)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 5),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.check_circle_outline_rounded,
-                    size: 14,
-                    color: AppTheme.accent.withValues(alpha: 0.8),
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      tip,
-                      style: AppText.bodySmall.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
+              SizedBox(
+                width: 26,
+                height: 26,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CircularProgressIndicator(
+                      value: 1,
+                      strokeWidth: 3,
+                      color: AppTheme.bgInput,
+                      strokeCap: StrokeCap.round,
                     ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Kotak tambah foto — tampil saat belum ada foto sama sekali.
-  /// Klik → bottom sheet pilih Galeri / Kamera.
-  Widget _emptyAddTile(S s) {
-    return _mediaTile(
-      icon: Icons.add_photo_alternate_outlined,
-      label: s.btnAdd,
-      onTap: _pickMediaSource,
-    );
-  }
-
-  Widget _mediaTile({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: _picking ? null : onTap,
-      child: Container(
-        height: 100,
-        decoration: BoxDecoration(
-          color: AppTheme.primary.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: AppTheme.primary.withValues(alpha: 0.4),
-            width: 1.2,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: AppTheme.primary, size: 26),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Kotak plus untuk tambah foto — selalu tampil di akhir grid.
-  Widget _addTile(S s) {
-    return GestureDetector(
-      onTap: _picking || _images.length >= _maxImages ? null : _pickMediaSource,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: AppTheme.primary.withValues(alpha: 0.4),
-            width: 1.2,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _images.length >= _maxImages
-                  ? Icons.check_circle
-                  : Icons.add_photo_alternate_outlined,
-              color: AppTheme.primary,
-              size: 24,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _images.length >= _maxImages ? '$_maxImages' : s.btnAdd,
-              style: AppText.caption.copyWith(
-                color: AppTheme.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _visDesc(S s) {
-    switch (_visibility) {
-      case 'followers':
-        return s.visFollowersDesc;
-      case 'subscribers':
-        return s.visSubscribersDesc;
-      default:
-        return s.visPublicDesc;
-    }
-  }
-
-  Widget _visChip(S s, String value, IconData icon, String label) {
-    final selected = _visibility == value;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _visibility = value),
-        child: Container(
-          padding: EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppTheme.primary.withValues(alpha: 0.1)
-                : AppTheme.bgCard,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? AppTheme.primary : AppTheme.divider,
-              width: selected ? 1.4 : 1,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: selected ? AppTheme.primary : AppTheme.textSecondary,
-              ),
-              SizedBox(width: 5),
-              Flexible(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppText.caption.copyWith(
-                    color: selected ? AppTheme.primary : AppTheme.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
+                    CircularProgressIndicator(
+                      value: (len / _maxText).clamp(0.0, 1.0),
+                      strokeWidth: 3,
+                      color: color,
+                      strokeCap: StrokeCap.round,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1029,5 +776,195 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
         ),
       ),
     );
+  }
+
+  Widget _toolButton(IconData icon, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: 44,
+        height: 40,
+        child: InkWell(
+          onTap: _posting ? null : onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Center(child: Icon(icon, size: 24, color: _kLink)),
+        ),
+      ),
+    );
+  }
+
+  /// Sheet "Siapa yang bisa membalas" (3 opsi + radio).
+  Future<void> _openVisibilitySheet() async {
+    final s = _s;
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: _kHandle,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(s.titleWhoCanReply, style: AppText.titleEmphasis),
+              const SizedBox(height: 12),
+              _visOption(
+                ctx,
+                'public',
+                s.visPublic,
+                s.visPublicDescLong,
+                Icons.public_rounded,
+              ),
+              _visOption(
+                ctx,
+                'followers',
+                s.visFollowers,
+                s.visFollowersDescLong,
+                Icons.people_outline_rounded,
+              ),
+              _visOption(
+                ctx,
+                'subscribers',
+                s.visSubscribers,
+                s.visSubscribersDescLong,
+                Icons.star_outline_rounded,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked != null && mounted) setState(() => _visibility = picked);
+  }
+
+  Widget _visOption(
+    BuildContext ctx,
+    String value,
+    String label,
+    String desc,
+    IconData icon,
+  ) {
+    final on = _visibility == value;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(ctx).pop(value),
+        child: Container(
+          height: 60,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: on ? _kSelectedBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppTheme.bgInput,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 18, color: _kLink),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: AppTextSize.s15,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      desc,
+                      style: TextStyle(
+                        fontSize: AppTextSize.s125,
+                        color: AppTheme.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: on ? AppTheme.primary : _kRadioOff,
+                    width: 2,
+                  ),
+                  color: on ? AppTheme.primary : Colors.transparent,
+                ),
+                child: on
+                    ? Center(
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Tutup composer — konfirmasi bila ada teks/foto belum dikirim.
+  Future<void> _close() async {
+    if (_posting) return;
+    if (!_hasContent) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final s = _s;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.composerDiscardTitle),
+        content: Text(s.composerDiscardMsg),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.btnCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(s.btnDiscard),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) Navigator.of(context).pop();
   }
 }
