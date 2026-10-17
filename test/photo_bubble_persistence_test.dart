@@ -172,6 +172,13 @@ void main() {
   // berubah setelah decode selesai (tidak nge-blink).
   group('MessageImage placeholder penerima', () {
     Future<void> pumpPhoto(WidgetTester t, String b64, String id) {
+      // Lebar layar uji 360dp → kotak foto 60% = 216px (clamp 180..420).
+      t.view.devicePixelRatio = 3.0;
+      t.view.physicalSize = const Size(1080, 2400);
+      addTearDown(() {
+        t.view.resetPhysicalSize();
+        t.view.resetDevicePixelRatio();
+      });
       return t.pumpWidget(
         ProviderScope(child: MaterialApp(
           home:  Scaffold(
@@ -185,13 +192,13 @@ void main() {
       );
     }
 
-    testWidgets('landscape: frame pertama 260×130, final tetap', (t) async {
+    testWidgets('landscape: frame pertama 60% layar, final tetap', (t) async {
       final im = img.Image(width: 800, height: 400);
       final b64 = base64Encode(
         Uint8List.fromList(img.encodeJpg(im, quality: 75)),
       );
       await pumpPhoto(t, b64, 'recv-land-1');
-      expect(t.getSize(find.byType(MessageImage)), const Size(260, 130));
+      expect(t.getSize(find.byType(MessageImage)), const Size(216, 108));
       // Biarkan decode isolate selesai (waktu nyata), lalu beri frame untuk
       // setState + fade-in. Spinner placeholder animasi terus → jangan pakai
       // pumpAndSettle (tidak akan pernah settle).
@@ -206,7 +213,7 @@ void main() {
             find.byType(RawImage).evaluate().isNotEmpty,
         isTrue,
       );
-      expect(t.getSize(find.byType(MessageImage)), const Size(260, 130));
+      expect(t.getSize(find.byType(MessageImage)), const Size(216, 108));
     });
 
     testWidgets('portrait: frame pertama ikut aspek, final tetap', (t) async {
@@ -216,8 +223,8 @@ void main() {
       );
       await pumpPhoto(t, b64, 'recv-port-1');
       final first = t.getSize(find.byType(MessageImage));
-      expect(first.height, closeTo(340.0, 0.01));
-      expect(first.width, closeTo(170.0, 0.01));
+      expect(first.height, closeTo(345.6, 0.01));
+      expect(first.width, closeTo(172.8, 0.01));
       await t.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 800)),
       );

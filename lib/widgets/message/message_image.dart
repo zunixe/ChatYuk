@@ -61,6 +61,58 @@ class _MessageImageState extends State<MessageImage> {
   // Lebar terakhir yang dilaporkan ke parent (hindari callback berulang).
   double _reportedWidth = -1;
 
+  /// Lebar kotak foto = 60% lebar layar. Nilai diperbarui di
+  /// `didChangeDependencies` (MediaQuery tersedia) DAN di build (aman bila
+  /// ukuran layar berubah: rotasi / split-screen).
+  double _targetW = 260;
+
+  /// Segerkan lebar target dari context (60% lebar layar).
+  void _ensureTargetW(BuildContext context) {
+    final screenW = MediaQuery.sizeOf(context).width;
+    final t = (screenW * 0.6).clamp(180.0, 420.0);
+    if ((t - _targetW).abs() <= 0.5) return;
+    _targetW = t;
+    // Ukuran placeholder (frame loading) ikut disesuaikan supaya tidak ada
+    // lompatan layout dari default → 60% layar. Bila bitmap belum ada,
+    // hitung ulang dari HEADER gambar (murah, tak decode penuh).
+    if (_decoded != null) {
+      _syncSizes();
+    } else {
+      _reservePlaceholder(widget.imageData);
+    }
+    _reportedWidth = -1; // paksa lapor ulang lebar final ke parent
+  }
+
+  /// Ukuran kotak foto sesuai aspek + lebar target (60% layar).
+  /// [w]/[h] boleh 0 → placeholder kotak mengikuti lebar target.
+  ({double width, double height}) _sizeOf(int w, int h) => photoViewSize(
+    w,
+    h,
+    maxWidth: _targetW,
+    maxHeight: (_targetW * 1.6).clamp(300.0, 420.0),
+  );
+
+  /// Sinkronkan SEMUA ukuran tersimpan dengan lebar target terkini.
+  void _syncSizes() {
+    final d = _decoded;
+    if (d != null && d.width > 0 && d.height > 0) {
+      final s = _sizeOf(d.width, d.height);
+      _phW = s.width;
+      _phH = s.height;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Lebar target (60% layar) harus siap SEBELUM frame pertama agar
+    // placeholder & hasil akhir memakai ukuran sama (anti layout shift).
+    _ensureTargetW(context);
+    // initState (tanpa MediaQuery) memakai default → segarkan placeholder di
+    // sini supaya ukuran frame pertama sudah 60% layar.
+    _syncSizes();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -84,7 +136,7 @@ class _MessageImageState extends State<MessageImage> {
       _decode(key, ++_gen);
     } else {
       _loading = false;
-      final s = photoViewSize(_decoded!.width, _decoded!.height);
+      final s = _sizeOf(_decoded!.width, _decoded!.height);
       _phW = s.width;
       _phH = s.height;
     }
@@ -142,7 +194,7 @@ class _MessageImageState extends State<MessageImage> {
           setState(() {
             _decoded = hit;
             _loading = false;
-            final s = photoViewSize(hit.width, hit.height);
+            final s = _sizeOf(hit.width, hit.height);
             _phW = s.width;
             _phH = s.height;
           });
@@ -176,7 +228,7 @@ class _MessageImageState extends State<MessageImage> {
       // Header di luar prefix (EXIF besar) → fallback decode penuh (jarang).
       dims ??= parseImageDimensions(base64Decode(data));
       if (dims == null) return;
-      final s = photoViewSize(dims.width, dims.height);
+      final s = _sizeOf(dims.width, dims.height);
       _phW = s.width;
       _phH = s.height;
     } catch (_) {}
@@ -246,7 +298,7 @@ class _MessageImageState extends State<MessageImage> {
             setState(() {
               _decoded = td;
               _loading = false;
-              final s = photoViewSize(thumbDims.width, thumbDims.height);
+              final s = _sizeOf(thumbDims.width, thumbDims.height);
               _phW = s.width;
               _phH = s.height;
             });
@@ -274,7 +326,7 @@ class _MessageImageState extends State<MessageImage> {
       setState(() {
         _decoded = contentHit;
         _loading = false;
-        final s = photoViewSize(contentHit.width, contentHit.height);
+        final s = _sizeOf(contentHit.width, contentHit.height);
         _phW = s.width;
         _phH = s.height;
       });
@@ -290,7 +342,7 @@ class _MessageImageState extends State<MessageImage> {
       var dims = parseImageDimensions(_decodeHeaderPrefix(data));
       dims ??= parseImageDimensions(await compute(_b64Decode, data));
       if (dims != null && mounted && gen == _gen) {
-        final s = photoViewSize(dims.width, dims.height);
+        final s = _sizeOf(dims.width, dims.height);
         setState(() {
           _phW = s.width;
           _phH = s.height;
@@ -334,7 +386,7 @@ class _MessageImageState extends State<MessageImage> {
     setState(() {
       _decoded = decoded;
       _loading = false;
-      final s = photoViewSize(decoded.width, decoded.height);
+      final s = _sizeOf(decoded.width, decoded.height);
       _phW = s.width;
       _phH = s.height;
     });
@@ -364,8 +416,12 @@ class _MessageImageState extends State<MessageImage> {
 
   @override
   Widget build(BuildContext context) {
+    _ensureTargetW(context);
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final decoded = _decoded;
+    // Segarkan ukuran placeholder SEBELUM dipakai di frame ini (targetW
+    // baru saja diperbarui dari MediaQuery).
+    _syncSizes();
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       // Foto biasa: belum keload = spinner; gagal = "ketuk untuk memuat".
       // JANGAN pakai tulisan expired di sini — itu hanya untuk view-once.
@@ -408,7 +464,7 @@ class _MessageImageState extends State<MessageImage> {
         ),
       );
     }
-    final size = photoViewSize(decoded.width, decoded.height);
+    final size = _sizeOf(decoded.width, decoded.height);
     final width = size.width;
     final height = size.height;
     // Lapor lebar render ke parent (sekali / berubah) → caption+jam rata kanan

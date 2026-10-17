@@ -145,14 +145,22 @@ String? processChatImage(Uint8List bytes) {
 /// sudah ter-decode MAUPUN placeholder loading supaya ukurannya sama persis
 /// (tidak ada lompatan layout saat foto selesai dimuat). Murni & testable.
 ///
-/// DIPERBESAR 2026-10-18 (dulu 200×280): keluhan "kotak foto terlalu kecil".
-/// 260 = ~72% lebar layar HP 360dp & masih muat di bubble (maxWidth 0.8).
-({double width, double height}) photoViewSize(int w, int h) {
-  if (w <= 0 || h <= 0) return (width: 260.0, height: 260.0);
-  var width = 260.0;
+/// DIPERBESAR 2026-10-18 (dulu 200×280 → 260×340 → kini 60% lebar layar):
+/// [maxWidth] diisi pemanggil dengan ~60% lebar layar; tinggi dibatasi
+/// [maxHeight] agar tetap proporsional & tidak memenuhi layar.
+({double width, double height}) photoViewSize(
+  int w,
+  int h, {
+  double maxWidth = 260.0,
+  double maxHeight = 340.0,
+}) {
+  final mw = maxWidth <= 0 ? 260.0 : maxWidth;
+  final mh = maxHeight <= 0 ? 340.0 : maxHeight;
+  if (w <= 0 || h <= 0) return (width: mw, height: mw);
+  var width = mw;
   var height = width * h / w;
-  if (height > 340) {
-    height = 340;
+  if (height > mh) {
+    height = mh;
     width = height * w / h;
   }
   return (width: width, height: height);

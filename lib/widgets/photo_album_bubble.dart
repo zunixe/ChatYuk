@@ -34,7 +34,7 @@ class PhotoAlbumBubble extends StatelessWidget {
     required this.photos,
     required this.chatKey,
     required this.timeStr,
-    this.tileSize = 132,
+    this.tileSize = 0, // 0 = otomatis 60% lebar layar
     this.showChecks = false,
     this.isPending = false,
     this.isQueued = false,
@@ -48,6 +48,15 @@ class PhotoAlbumBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final caption = photos.last.text.trim();
+    // Lebar grid = 60% lebar layar (bila tileSize tidak dipaksa pemanggil).
+    final screenW = MediaQuery.sizeOf(context).width;
+    final target = tileSize > 0
+        ? tileSize
+        : (screenW * 0.6).clamp(180.0, 420.0);
+    // 2 foto = 2 kolom setengah, selain itu grid kotak target.
+    final tile = photos.length == 2 ? (target + _gap) / 2 : target;
+    final gridW = photos.length == 2 ? tile * 2 + _gap : tile;
+    final gridH = tile;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -55,12 +64,12 @@ class PhotoAlbumBubble extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: SizedBox(
-            width: _gridWidth,
-            height: _gridHeight,
+            width: gridW,
+            height: gridH,
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                _grid(context),
+                _grid(context, tile),
                 // Jam + centang sekali untuk seluruh album.
                 Positioned(
                   right: 6,
@@ -83,12 +92,7 @@ class PhotoAlbumBubble extends StatelessWidget {
     );
   }
 
-  double get _gap => 2;
-  double get _half => (tileSize - _gap) / 2;
-
-  double get _gridWidth => photos.length == 2 ? tileSize * 2 + _gap : tileSize;
-  double get _gridHeight =>
-      photos.length == 2 ? tileSize : tileSize;
+  static const double _gap = 2;
 
   /// Satu kotak foto (thumbnail bytes) yang bisa diketuk.
   Widget _tile(BuildContext context, MessageModel m, double w, double h) {
@@ -127,14 +131,15 @@ class PhotoAlbumBubble extends StatelessWidget {
     );
   }
 
-  Widget _grid(BuildContext context) {
+  Widget _grid(BuildContext context, double tile) {
+    final half = (tile - _gap) / 2;
     // 2 foto: berdampingan penuh.
     if (photos.length == 2) {
       return Row(
         children: [
-          _tile(context, photos[0], _half, tileSize),
+          _tile(context, photos[0], half, tile),
           SizedBox(width: _gap),
-          _tile(context, photos[1], _half, tileSize),
+          _tile(context, photos[1], half, tile),
         ],
       );
     }
@@ -175,12 +180,12 @@ class PhotoAlbumBubble extends StatelessWidget {
       children: [
         Row(
           children: [
-            SizedBox(width: _half, height: _half, child: cell(0, _half, _half)),
+            SizedBox(width: half, height: half, child: cell(0, half, half)),
             SizedBox(width: _gap),
             SizedBox(
-              width: _half,
-              height: _half,
-              child: cell(1, _half, _half),
+              width: half,
+              height: half,
+              child: cell(1, half, half),
             ),
           ],
         ),
@@ -188,18 +193,18 @@ class PhotoAlbumBubble extends StatelessWidget {
         Row(
           children: [
             SizedBox(
-              width: _half,
-              height: _half,
+              width: half,
+              height: half,
               child: shown.length > 2
-                  ? cell(2, _half, _half)
+                  ? cell(2, half, half)
                   : const SizedBox.shrink(),
             ),
             SizedBox(width: _gap),
             SizedBox(
-              width: _half,
-              height: _half,
+              width: half,
+              height: half,
               child: shown.length > 3
-                  ? cell(3, _half, _half)
+                  ? cell(3, half, half)
                   : const SizedBox.shrink(),
             ),
           ],
