@@ -28,6 +28,7 @@ import 'social_list_screen.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/privacy_provider.dart';
 import '../config/theme.dart';
+import 'private_chat/widgets/coin_gift_dialogs.dart';
 
 part 'user_info/user_info_init.dart';
 part 'user_info/user_info_actions.dart';

@@ -463,10 +463,7 @@ class PDialogButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          textStyle: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
         ),
         child: Text(label),
       ),
@@ -543,4 +540,107 @@ Future<bool> confirmPUnfriend(
     ),
   );
   return result ?? false;
+}
+
+/* ═════════════ Bottom actions melayang ═════════════ */
+
+/// Tombol aksi bawah MELAYANG (gradasi transparan → bg) ala desain profil.
+/// Kiri: tombol teman (ikon saja). Kanan: "Kirim Pesan" (aksen biru).
+class PBottomActions extends StatelessWidget {
+  final bool isFriend;
+  final bool isRequestSent;
+  final VoidCallback onFriend;
+  final VoidCallback? onMessage;
+
+  const PBottomActions({
+    super.key,
+    required this.isFriend,
+    required this.onFriend,
+    this.isRequestSent = false,
+    this.onMessage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    final friendIcon = isFriend
+        ? Icons.how_to_reg_outlined
+        : (isRequestSent
+              ? Icons.pending_outlined
+              : Icons.person_add_alt_outlined);
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottom),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0, 0.28],
+          colors: [Color(0x000F1115), PColors.bg],
+        ),
+      ),
+      child: Row(
+        children: [
+          Tooltip(
+            message: isFriend
+                ? 'Berteman'
+                : (isRequestSent ? 'Menunggu konfirmasi' : 'Tambah teman'),
+            child: Material(
+              color: PColors.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: const BorderSide(color: PColors.border),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: onFriend,
+                child: SizedBox(
+                  width: 52,
+                  height: 50,
+                  child: Icon(
+                    friendIcon,
+                    size: 22,
+                    color: isFriend ? PColors.online : PColors.text,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x592F95E8),
+                    blurRadius: 20,
+                    offset: Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                height: 50,
+                child: FilledButton.icon(
+                  onPressed: onMessage,
+                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 20),
+                  label: const Text('Kirim Pesan'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: PColors.accent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -45,6 +45,8 @@ class _PProfileBody extends StatefulWidget {
   final void Function(int index) onOpenPhoto;
   final VoidCallback onCopyId;
   final VoidCallback onFollowInfo;
+  final VoidCallback onBlock;
+  final VoidCallback onReport;
   final int galleryCount;
 
   const _PProfileBody({
@@ -86,6 +88,8 @@ class _PProfileBody extends StatefulWidget {
     required this.onOpenPhoto,
     required this.onCopyId,
     required this.onFollowInfo,
+    required this.onBlock,
+    required this.onReport,
     required this.galleryCount,
   });
 
@@ -217,88 +221,118 @@ class _PProfileBodyState extends State<_PProfileBody> {
           label: 'Telepon video',
           onTap: () => widget.onCall('video'),
         ),
+      if (!widget.isSelf) ...[
+        PSheetAction(
+          icon: Icons.block_rounded,
+          label: 'Blokir',
+          destructive: true,
+          onTap: widget.onBlock,
+        ),
+        PSheetAction(
+          icon: Icons.flag_outlined,
+          label: 'Laporkan',
+          destructive: true,
+          onTap: widget.onReport,
+        ),
+      ],
     ]);
   }
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      controller: _scroll,
-      slivers: [
-        SliverAppBar(
-          pinned: true,
-          expandedHeight: _heroHeight,
-          toolbarHeight: _toolbarHeight,
-          backgroundColor: PColors.bg,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          automaticallyImplyLeading: false,
-          leadingWidth: 56,
-          titleSpacing: 0,
-          shape: _collapsed
-              ? const Border(bottom: BorderSide(color: PColors.divider))
-              : null,
-          leading: Center(
-            child: PHeaderButton(
-              icon: Icons.arrow_back_rounded,
-              tooltip: 'Kembali',
-              solid: _collapsed,
-              onTap: () => Navigator.maybePop(context),
-            ),
-          ),
-          title: AnimatedOpacity(
-            opacity: _collapsed ? 1 : 0,
-            duration: const Duration(milliseconds: 150),
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    widget.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: PColors.textStrong,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+    return Stack(
+      children: [
+        CustomScrollView(
+          controller: _scroll,
+          slivers: [
+            SliverAppBar(
+              pinned: true,
+              expandedHeight: _heroHeight,
+              toolbarHeight: _toolbarHeight,
+              backgroundColor: PColors.bg,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              automaticallyImplyLeading: false,
+              leadingWidth: 56,
+              titleSpacing: 0,
+              shape: _collapsed
+                  ? const Border(bottom: BorderSide(color: PColors.divider))
+                  : null,
+              leading: Center(
+                child: PHeaderButton(
+                  icon: Icons.arrow_back_rounded,
+                  tooltip: 'Kembali',
+                  solid: _collapsed,
+                  onTap: () => Navigator.maybePop(context),
                 ),
-                if (widget.verified) ...[
-                  const SizedBox(width: 6),
-                  const Icon(
-                    Icons.verified_rounded,
-                    size: 16,
-                    color: PColors.accent,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            if (!widget.isSelf && widget.canCall)
-              PHeaderButton(
-                icon: Icons.call_outlined,
-                tooltip: 'Telepon',
-                solid: _collapsed,
-                onTap: () => widget.onCall('audio'),
               ),
-            const SizedBox(width: 8),
-            PHeaderButton(
-              icon: Icons.more_vert_rounded,
-              tooltip: 'Opsi lainnya',
-              solid: _collapsed,
-              onTap: _openMore,
+              title: AnimatedOpacity(
+                opacity: _collapsed ? 1 : 0,
+                duration: const Duration(milliseconds: 150),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        widget.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: PColors.textStrong,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    if (widget.verified) ...[
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.verified_rounded,
+                        size: 16,
+                        color: PColors.accent,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                if (!widget.isSelf && widget.canCall)
+                  PHeaderButton(
+                    icon: Icons.call_outlined,
+                    tooltip: 'Telepon',
+                    solid: _collapsed,
+                    onTap: () => widget.onCall('audio'),
+                  ),
+                const SizedBox(width: 8),
+                PHeaderButton(
+                  icon: Icons.more_vert_rounded,
+                  tooltip: 'Opsi lainnya',
+                  solid: _collapsed,
+                  onTap: _openMore,
+                ),
+                const SizedBox(width: 8),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.parallax,
+                background: _buildHero(context),
+              ),
             ),
-            const SizedBox(width: 8),
+            SliverToBoxAdapter(child: _buildBody(context)),
+            const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
-          flexibleSpace: FlexibleSpaceBar(
-            collapseMode: CollapseMode.parallax,
-            background: _buildHero(context),
-          ),
         ),
-        SliverToBoxAdapter(child: _buildBody(context)),
-        const SliverToBoxAdapter(child: SizedBox(height: 110)),
+        if (!widget.isSelf)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: PBottomActions(
+              isFriend: _friend,
+              isRequestSent: widget.isFriendRequestSent,
+              onFriend: _friendAction,
+              onMessage: widget.onMessage,
+            ),
+          ),
       ],
     );
   }
@@ -524,7 +558,11 @@ class _PProfileBodyState extends State<_PProfileBody> {
             asCard: true,
             stats: [
               PStat(widget.followers, 'Pengikut', onTap: widget.onFollowersTap),
-              PStat(widget.following, 'Mengikuti', onTap: widget.onFollowingTap),
+              PStat(
+                widget.following,
+                'Mengikuti',
+                onTap: widget.onFollowingTap,
+              ),
               PStat(widget.subscribers, 'Subscriber'),
             ],
           ),
@@ -541,30 +579,45 @@ class _PProfileBodyState extends State<_PProfileBody> {
               ),
             ),
           ),
-        if (widget.hashtags.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 18, 16, 10),
-            child: Text(
-              'Minat',
-              style: TextStyle(
-                color: PColors.muted,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
+        if (widget.hashtags.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                for (final t in widget.hashtags)
-                  PChip(text: t.startsWith('#') ? t : '#$t', height: 30),
+                const Text(
+                  'Minat',
+                  style: TextStyle(
+                    color: PColors.muted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Chips KE SAMPING (1 baris, bisa digeser) — bukan turun
+                // ke bawah seperti Wrap.
+                Expanded(
+                  child: SizedBox(
+                    height: 32,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: EdgeInsets.zero,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: widget.hashtags.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      itemBuilder: (_, i) {
+                        final t = widget.hashtags[i];
+                        return PChip(
+                          text: t.startsWith('#') ? t : '#$t',
+                          height: 30,
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-        ],
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
           child: PInfoCard(

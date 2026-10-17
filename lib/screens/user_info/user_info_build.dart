@@ -91,6 +91,8 @@ mixin _UiBuildMx on _UserInfoBase {  Widget build(BuildContext context) {
               },
               onCopyId: () => copyWithToast(context, widget.userId, 'User ID disalin'),
               onFollowInfo: () => _showFollowVsFriendInfo(context, s),
+              onBlock: () => _blockUser(context),
+              onReport: () => _reportUser(context),
               galleryCount: galleryCount,
             ),
     );
@@ -98,6 +100,43 @@ mixin _UiBuildMx on _UserInfoBase {  Widget build(BuildContext context) {
 
   /// Carousel foto profil: avatar + foto terbuka, geser kiri-kanan.
   /// Tanpa foto sama sekali → lingkaran inisial (tidak bisa digeser).
+  /// Blokir user ini (konfirmasi dulu, gaya dialog desain baru).
+  Future<void> _blockUser(BuildContext context) async {
+    final ok = await confirmPUnfriend(
+      context,
+      name: widget.fallbackName,
+      title: 'Blokir pengguna?',
+      body:
+          '{name} tidak akan bisa mengirim pesan atau melihat profilmu. '
+          'Kamu bisa membuka blokir kapan saja.',
+      confirmLabel: 'Blokir',
+    );
+    if (!ok || !mounted) return;
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
+    final myUid = auth.uid;
+    if (myUid == null) return;
+    try {
+      await ProviderScope.containerOf(context, listen: false)
+          .read(chatProvider.notifier)
+          .blockUser(myUid, widget.userId);
+      if (mounted) showProfileToast(context, 'Pengguna diblokir');
+    } catch (_) {
+      if (mounted) showProfileToast(context, 'Gagal memblokir');
+    }
+  }
+
+  /// Laporkan user ini (dialog laporan yang sudah ada di app).
+  void _reportUser(BuildContext context) {
+    showReportUserDialog(
+      context,
+      reportedId: widget.userId,
+      reportedName: _profile?.nickname ?? widget.fallbackName,
+    );
+  }
+
   Widget _profileCarousel({
     required String avatarB64,
     required Color avatarBg,
