@@ -558,9 +558,11 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       ),
       decoration: InputDecoration(
         isCollapsed: true,
+        // Tema global `inputDecorationTheme` = filled + radius 12 → WAJIB
+        // dimatikan agar benar-benar tanpa box/latar (spec: borderless).
+        filled: false,
         border: InputBorder.none,
         enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
         hintText: s.composerHintShare,
         hintStyle: TextStyle(
           fontSize: AppTextSize.s16,

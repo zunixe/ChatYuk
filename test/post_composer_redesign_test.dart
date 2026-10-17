@@ -168,6 +168,17 @@ void main() {
     await flush(tester);
   });
 
+  testWidgets('TextField benar-benar tanpa box/latar (filled=false)',
+      (tester) async {
+    await pumpComposer(tester);
+    final tf = tester.widget<TextField>(find.byType(TextField).first);
+    // Tema global punya inputDecorationTheme filled=true (radius 12) → WAJIB
+    // ditimpa, kalau tidak muncul "kotak belakang rounded" di balik hint.
+    expect(tf.decoration!.filled, isFalse);
+    expect(tf.decoration!.border, InputBorder.none);
+    await flush(tester);
+  });
+
   testWidgets('tidak overflow di layar 360', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1.0;
