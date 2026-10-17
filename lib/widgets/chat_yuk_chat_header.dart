@@ -4,7 +4,7 @@ import '../config/theme.dart';
 
 /// Bagian (section) halaman Chat — menggantikan TabBar "Pesan / Grup /
 /// Global Room". Dipakai [ChatYukChatHeader] & halaman pemanggil.
-enum ChatSection { messages, groups, rooms }
+enum ChatSection { messages, rooms }
 
 /// Warna header disamakan dengan halaman Timeline (ChatYukHeader) supaya
 /// konsisten antar halaman. DINAMIS mengikuti tema (mode terang ≠ hitam).
@@ -84,8 +84,6 @@ class ChatYukChatHeader extends StatelessWidget
     switch (s) {
       case ChatSection.messages:
         return 'Pesan';
-      case ChatSection.groups:
-        return 'Grup';
       case ChatSection.rooms:
         return 'Global Room';
     }
@@ -267,7 +265,6 @@ class ChatYukChatHeader extends StatelessWidget
       ),
       itemBuilder: (_) => [
         _menuItem(ChatSection.messages),
-        _menuItem(ChatSection.groups),
         _menuItem(ChatSection.rooms),
       ],
       child: Row(

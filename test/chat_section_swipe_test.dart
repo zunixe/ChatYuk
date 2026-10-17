@@ -3,27 +3,53 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chatyuk/screens/chats_screen.dart';
 import 'package:chatyuk/widgets/chat_yuk_chat_header.dart';
 
-/// Mengunci logika swipe section chat (Pesan ⇄ Grup ⇄ Room) ala Timeline.
+/// Mengunci urutan geser di halaman Chat: Private → Grup → Global Room
+/// (Grup kini TAB di dalam section Pesan) dan sebaliknya.
 void main() {
-  test('geser KIRI (velocity negatif) → section berikutnya', () {
-    expect(chatSectionAfterSwipe(ChatSection.messages, -800),
-        ChatSection.groups);
-    expect(chatSectionAfterSwipe(ChatSection.groups, -800), ChatSection.rooms);
+  test('geser KIRI: Private → Grup → Room', () {
+    expect(
+      chatSwipeTarget(
+          section: ChatSection.messages, tab: ChatTab.private, velocity: -800),
+      (section: ChatSection.messages, tab: ChatTab.groups),
+    );
+    expect(
+      chatSwipeTarget(
+          section: ChatSection.messages, tab: ChatTab.groups, velocity: -800),
+      (section: ChatSection.rooms, tab: ChatTab.groups),
+    );
   });
 
-  test('geser KANAN (velocity positif) → section sebelumnya', () {
-    expect(chatSectionAfterSwipe(ChatSection.rooms, 800), ChatSection.groups);
-    expect(chatSectionAfterSwipe(ChatSection.groups, 800),
-        ChatSection.messages);
+  test('geser KANAN: Room → Grup → Private', () {
+    expect(
+      chatSwipeTarget(
+          section: ChatSection.rooms, tab: ChatTab.groups, velocity: 800),
+      (section: ChatSection.messages, tab: ChatTab.groups),
+    );
+    expect(
+      chatSwipeTarget(
+          section: ChatSection.messages, tab: ChatTab.groups, velocity: 800),
+      (section: ChatSection.messages, tab: ChatTab.private),
+    );
   });
 
   test('di ujung → tidak berpindah', () {
-    expect(chatSectionAfterSwipe(ChatSection.messages, 800), isNull);
-    expect(chatSectionAfterSwipe(ChatSection.rooms, -800), isNull);
+    expect(
+      chatSwipeTarget(
+          section: ChatSection.messages, tab: ChatTab.private, velocity: 800),
+      isNull,
+    );
+    expect(
+      chatSwipeTarget(
+          section: ChatSection.rooms, tab: ChatTab.groups, velocity: -800),
+      isNull,
+    );
   });
 
   test('geseran pelan (< ambang) diabaikan', () {
-    expect(chatSectionAfterSwipe(ChatSection.messages, -100), isNull);
-    expect(chatSectionAfterSwipe(ChatSection.groups, 200), isNull);
+    expect(
+      chatSwipeTarget(
+          section: ChatSection.messages, tab: ChatTab.private, velocity: -100),
+      isNull,
+    );
   });
 }

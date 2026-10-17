@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config/strings.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
@@ -16,18 +17,40 @@ import 'lobby_screen.dart';
 import 'call_history_screen.dart';
 import '../config/theme.dart';
 
-/// Section berikutnya setelah geser horizontal (ala Timeline).
-/// [velocity] negatif = geser ke KIRI → section berikutnya.
-/// null = tidak berpindah (velocity terlalu kecil / sudah di ujung).
-ChatSection? chatSectionAfterSwipe(
-  ChatSection current,
-  double velocity, {
+/// Tab di dalam section PESAN: chat pribadi + grup jadi satu tempat.
+enum ChatTab { private, groups }
+
+/// Tujuan geser horizontal di halaman Chat — urutan ala Timeline:
+/// Private → Groups → Rooms → (balik) Groups → Private.
+/// [velocity] negatif = geser ke KIRI (maju). null = tidak berpindah.
+({ChatSection section, ChatTab tab})? chatSwipeTarget({
+  required ChatSection section,
+  required ChatTab tab,
+  required double velocity,
   double minVelocity = 260,
 }) {
   if (velocity.abs() < minVelocity) return null;
-  final i = current.index + (velocity < 0 ? 1 : -1);
-  if (i < 0 || i >= ChatSection.values.length) return null;
-  return ChatSection.values[i];
+  final forward = velocity < 0;
+  if (forward) {
+    // Private → Groups (masih di section Pesan).
+    if (section == ChatSection.messages && tab == ChatTab.private) {
+      return (section: ChatSection.messages, tab: ChatTab.groups);
+    }
+    // Groups → Rooms.
+    if (section == ChatSection.messages) {
+      return (section: ChatSection.rooms, tab: tab);
+    }
+    return null; // Rooms = ujung kanan
+  }
+  // Mundur: Rooms → Groups.
+  if (section == ChatSection.rooms) {
+    return (section: ChatSection.messages, tab: ChatTab.groups);
+  }
+  // Groups → Private.
+  if (tab == ChatTab.groups) {
+    return (section: ChatSection.messages, tab: ChatTab.private);
+  }
+  return null; // Private = ujung kiri
 }
 
 /// Menu "Chat" gabungan: section Pesan (private) + Grup + Room.
@@ -47,6 +70,7 @@ class ChatsScreen extends ConsumerStatefulWidget {
 
 class _ChatsScreenState extends ConsumerState<ChatsScreen> {
   ChatSection _section = ChatSection.messages;
+  ChatTab _tab = ChatTab.private;
   bool _isSearching = false;
   final _searchCtrl = TextEditingController();
   String _query = '';
@@ -116,24 +140,88 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
           onOpenRoom: _openNotifRoom,
         ),
       ),
-      // SWIPE kiri/kanan pindah section (Pesan ⇄ Grup ⇄ Room) — sama seperti
-      // Timeline. GestureDetector horizontal TIDAK mengganggu scroll vertikal
-      // daftar; daftar yang punya scroll horizontal sendiri menang duluan.
+      // SWIPE kiri/kanan: Private → Grup → Global Room (dan balik) — sama
+      // seperti Timeline. GestureDetector horizontal tidak mengganggu scroll
+      // vertikal daftar.
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onHorizontalDragEnd: (d) {
-          final next = chatSectionAfterSwipe(
-            _section,
-            d.primaryVelocity ?? 0,
+          final next = chatSwipeTarget(
+            section: _section,
+            tab: _tab,
+            velocity: d.primaryVelocity ?? 0,
           );
-          if (next != null) _changeSection(next);
+          if (next == null) return;
+          setState(() {
+            _section = next.section;
+            _tab = next.tab;
+          });
         },
         child: IndexedStack(
           index: _section.index,
           children: [
-            PrivateChatsScreen(embedded: true, externalQuery: _query),
-            GroupScreen(externalQuery: _query),
+            // SECTION PESAN = tab Pesan (private) + Grup.
+            Column(
+              children: [
+                _pesanTabs(s),
+                Expanded(
+                  child: IndexedStack(
+                    index: _tab.index,
+                    children: [
+                      PrivateChatsScreen(embedded: true, externalQuery: _query),
+                      GroupScreen(externalQuery: _query),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             LobbyScreen(embedded: true, externalQuery: _query),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Tab kecil "Pesan | Grup" di dalam section Pesan.
+  Widget _pesanTabs(S s) {
+    Widget tab(String label, ChatTab t) {
+      final on = _tab == t;
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _tab = t),
+          child: Container(
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: on
+                  ? AppTheme.primary.withValues(alpha: 0.14)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              label,
+              style: AppText.bodyStrong.copyWith(
+                color: on ? AppTheme.primary : AppTheme.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: AppTheme.bgCard,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            tab(s.tabMessages, ChatTab.private),
+            tab(s.tabGroups, ChatTab.groups),
           ],
         ),
       ),
