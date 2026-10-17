@@ -211,23 +211,36 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         actions: _isSearching
             ? null
             : [
-                // Padding kanan 8 — samakan dengan menu Online (jarak ikon
-                // ke tepi layar konsisten antar halaman).
+                // Rapat ala halaman Online: Tooltip + GestureDetector +
+                // Padding(horizontal: 3) + Icon (tanpa IconButton yang
+                // memaksa 48px & bikin jarak antar-ikon jauh). Padding kanan
+                // 8 → jarak ke tepi layar sama dengan Online.
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        tooltip: s.postAddTooltip,
-                        icon: const Icon(Icons.add_box_outlined),
-                        onPressed: _openComposer,
+                      Tooltip(
+                        message: s.postAddTooltip,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _openComposer,
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 3),
+                            child: Icon(Icons.add_circle_outline),
+                          ),
+                        ),
                       ),
-                      IconButton(
-                        tooltip: s.searchHint,
-                        icon: const Icon(Icons.search_rounded),
-                        onPressed: () =>
-                            setState(() => _isSearching = true),
+                      Tooltip(
+                        message: s.searchHint,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _isSearching = true),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 3),
+                            child: Icon(Icons.search_rounded),
+                          ),
+                        ),
                       ),
                     ],
                   ),
