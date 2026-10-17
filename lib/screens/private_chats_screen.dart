@@ -25,6 +25,7 @@ import '../core/nav_journal.dart';
 import '../../providers/riverpod/nav_provider.dart';
 import '../core/chat/chat_filter.dart';
 import '../core/chat/chat_location.dart';
+import '../core/chat/last_message_label.dart';
 import '../widgets/video_prefetch.dart';
 import '../widgets/message/photo_prefetch.dart';
 import '../config/theme.dart';

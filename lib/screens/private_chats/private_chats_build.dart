@@ -661,7 +661,10 @@ mixin _PcBuildMx on _PcBase {
                                                                     chat.lastMessage,
                                                                   )
                                                                   ? '📍 ${locationPreviewLabel(chat.lastMessage, s.msgLocation)}'
-                                                                  : chat.lastMessage)
+                                                                  : localizeLastMessage(
+                                                                      chat.lastMessage,
+                                                                      s,
+                                                                    ))
                                                             : s.noMessages;
                                                         final hasUnread =
                                                             unread > 0;

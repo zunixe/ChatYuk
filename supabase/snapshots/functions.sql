@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-10-17T06:06:13Z
+-- Timestamp: 2026-10-17T16:25:00Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -501,7 +501,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: notify_private_message @ 20260927190000_notify_private_use_user_devices.sql
+-- snapshot-fn: notify_private_message @ 20261018140000_last_message_media_labels.sql
 CREATE OR REPLACE FUNCTION public.notify_private_message()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -567,6 +567,10 @@ begin
                    when new.type = 'voice' then '[Pesan suara]'
                    when new.type = 'coin' then '[Koin]'
                    when new.type = 'gift' then '[Hadiah]'
+                   -- 2026-10-18: stiker dulu body kosong; lokasi dulu JSON
+                   -- koordinat mentah di notifikasi.
+                   when new.type = 'sticker' then '[Stiker]'
+                   when new.type = 'location' then '[Lokasi]'
                    else left(coalesce(new.text,''), 200) end;
     for receiver_token in select public.user_fcm_tokens(receiver_id) loop
       insert into public.outbox (type, payload)
@@ -678,7 +682,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: handle_new_private_message @ 20260917180000_last_sender_id.sql
+-- snapshot-fn: handle_new_private_message @ 20261018140000_last_message_media_labels.sql
 CREATE OR REPLACE FUNCTION public.handle_new_private_message()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -708,6 +712,12 @@ begin
       when new.type = 'view_once' then '[Foto]'
       when new.type = 'coin' then '[Koin]'
       when new.type = 'gift' then '[Hadiah]'
+      -- 2026-10-18: tipe ber-teks kosong dulu jatuh ke else ('') → daftar
+      -- chat tampil "Belum ada pesan". Video BERCAPTION tetap pakai caption.
+      when new.type = 'sticker' then '[Stiker]'
+      when new.type = 'voice' then '[Pesan suara]'
+      when new.type in ('video','video_once','video_once_expired')
+        and coalesce(new.text,'') = '' then '[Video]'
       else new.text end,
     last_message_at = now(),
     last_sender_id = new.sender_id,

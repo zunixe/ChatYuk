@@ -2,6 +2,11 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-18 — Label media last_message/notif
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261018140000_last_message_media_labels.sql`
+  + backfill `20261018140100_backfill_last_message_media.sql`.
+
 ## 2026-10-18 — Polling private chat
 
 - **Status:** SUDAH TERAPPLIED via Management API — `20261018130000_chat_poll.sql`

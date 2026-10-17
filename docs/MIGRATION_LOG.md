@@ -1,3 +1,21 @@
+## 2026-10-18 — Label media last_message & notif private (SUDAH APPLY via Management API)
+
+- **Migrasi** `20261018140000_last_message_media_labels.sql` (FROZEN:
+  `handle_new_private_message`, `notify_private_message`; basis = versi live,
+  diverifikasi identik snapshot). HANYA menambah cabang: last_message stiker
+  `[Stiker]`, voice `[Pesan suara]`, video tanpa caption `[Video]`; body notif
+  stiker `[Stiker]`, lokasi `[Lokasi]` (dulu JSON mentah).
+- **Backfill** `20261018140100_backfill_last_message_media.sql`: 5 chat yang
+  last_message-nya terlanjur kosong (3 voice, 2 stiker) diberi label; waktu/
+  unread/urutan tidak disentuh.
+- **Snapshot:** hanya 2 blok fungsi diperbarui manual dari `pg_get_functiondef`
+  live — `snapshot_functions.sh` gagal mengambil 16/30 fungsi (rate limit
+  keychain token) sehingga hasilnya TIDAK dipakai. Diff = tambahan saja.
+- **Verifikasi:** pgTAP `last_message_media_labels_test.sql` 7/7 (sebelum apply
+  gagal di label baru); `check_migrations.sh` OK.
+- **Catatan:** stiker yang DIHAPUS sebagai pesan terakhir tetap membuat
+  last_message kosong (perilaku alur hapus, di luar cakupan).
+
 ## 2026-10-18 — POLLING private chat (SUDAH APPLY via Management API)
 
 - **Migrasi** `20261018130000_chat_poll.sql`: type `'poll'` di

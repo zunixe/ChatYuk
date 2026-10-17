@@ -397,6 +397,13 @@ mixin SScreenMx {
   String get hintSlideToCancel =>
       isId ? 'Geser untuk batal' : 'Slide to cancel';
   String get msgPhoto => isId ? '[Foto]' : '[Photo]';
+  // Label media di pratinjau daftar chat (padanan label server, bilingual).
+  String get previewSticker => isId ? '[Stiker]' : '[Sticker]';
+  String get previewVoice => isId ? '[Pesan suara]' : '[Voice message]';
+  String get previewVideo => isId ? '[Video]' : '[Video]';
+  String get previewCoin => isId ? '[Koin]' : '[Coin]';
+  String get previewGift => isId ? '[Hadiah]' : '[Gift]';
+  String get previewLocation => isId ? '[Lokasi]' : '[Location]';
   // ── Kirim Lokasi (ala WhatsApp) ──
   String get menuSendLocation => isId ? 'Lokasi' : 'Location';
   String get galleryAllowAccess =>
