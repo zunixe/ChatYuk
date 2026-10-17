@@ -251,7 +251,24 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
           // atasnya — kalau ditambah di sini jadi garis dobel.
         ),
       ),
-      body: _buildFeed(_current),
+      // SWIPE kiri/kanan untuk pindah scope (Semua ⇄ Mengikuti ⇄
+      // Postinganku). GestureDetector horizontal TIDAK mengganggu scroll
+      // vertikal feed (arah berbeda) maupun swipe-to-reply/gesture kartu.
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragEnd: (d) {
+          final v = d.primaryVelocity ?? 0;
+          if (v.abs() < 260) return; // abaikan geseran kecil/ragu
+          if (v < 0) {
+            // geser ke KIRI → scope berikutnya
+            if (_current < 2) _selectScope(_current + 1);
+          } else {
+            // geser ke KANAN → scope sebelumnya
+            if (_current > 0) _selectScope(_current - 1);
+          }
+        },
+        child: _buildFeed(_current),
+      ),
     );
   }
 
