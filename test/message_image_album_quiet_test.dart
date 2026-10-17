@@ -48,10 +48,20 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
   });
 
-  testWidgets('foto biasa → spinner tetap tampil saat memuat',
+  testWidgets('foto biasa → spinner DITUNDA (tak ada kilatan di frame awal)',
       (tester) async {
     await pumpTile(tester, fill: false);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // Spinner ditunda 250ms: load cepat (cache/disk) selesai dulu → tidak
+    // ada kilatan spinner beranimasi = anti "kedip".
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('TIDAK ada fade/Opacity animasi (foto muncul utuh)',
+      (tester) async {
+    await pumpTile(tester, fill: false);
+    // Fade 180ms dihapus → tidak boleh ada TweenAnimationBuilder pembungkus.
+    expect(find.byType(TweenAnimationBuilder<double>), findsNothing);
     await tester.pump(const Duration(seconds: 2));
   });
 }

@@ -49,6 +49,8 @@ import 'core/cache/message_cache.dart';
 import 'core/cache/media_disk_cache.dart';
 import 'core/cache/video_file_cache.dart';
 import 'core/cache/photo_cache.dart';
+import 'core/cache/photo_aspect_cache.dart';
+import 'core/media/image_cache_hygiene.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/chat_background.dart';
 import 'core/media/link_preview_service.dart';
@@ -639,6 +641,12 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
       await MediaDiskCache.instance.prewarm();
       await VideoFileCache.instance.prewarm(); // video persisten (spt voice).
       await PostPhotoCache.instance.prewarm(); // thumb post (anti-kedip TL).
+      // Aspek foto chat persisten (bubble tidak "melompat" saat cold start).
+      await PhotoAspectCache.instance.prewarm();
+      // Bersihkan bersama cache lain saat logout/ganti akun.
+      ImageCacheHygiene.registerAppCache(
+        () => unawaited(PhotoAspectCache.instance.clear()),
+      );
     }, 15),
     guard('firebase', () async {
       try {

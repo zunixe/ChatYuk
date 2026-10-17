@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/strings.dart';
 import '../../config/theme.dart';
+import '../../core/cache/photo_aspect_cache.dart';
 import '../../core/cache/photo_cache.dart';
 import '../../core/media/chat_photo_helper.dart';
 import '../../core/media/native_image.dart';
@@ -154,7 +155,18 @@ class _MessageImageState extends State<MessageImage> {
     if (_decoded == null) {
       _loading = true;
       _scheduleSpinner();
-      _reservePlaceholder(widget.imageData);
+      // Aspek yang PERNAH diketahui (cache persisten) → kotak frame pertama
+      // sudah final (tidak kotak persegi lalu melompat).
+      final known = widget.messageId.isEmpty
+          ? null
+          : PhotoAspectCache.instance.aspectOf(widget.messageId);
+      if (known != null && known > 0) {
+        final sz = _sizeOf(1000, (1000 / known).round());
+        _phW = sz.width;
+        _phH = sz.height;
+      } else {
+        _reservePlaceholder(widget.imageData);
+      }
       _decode(key, ++_gen);
     } else {
       _loading = false;
@@ -305,6 +317,11 @@ class _MessageImageState extends State<MessageImage> {
               thumbDims.height,
             );
             putDecodedCache(key, td);
+            PhotoAspectCache.instance.remember(
+              widget.messageId,
+              thumbDims.width,
+              thumbDims.height,
+            );
             // Bitmap thumb di latar → RawImage pada render berikutnya.
             unawaited(attachDecodedImage(td, targetWidth: 720).then((_) {
               if (mounted &&
@@ -385,6 +402,11 @@ class _MessageImageState extends State<MessageImage> {
     }
     putDecodedCache(data.hashCode, decoded);
     putDecodedCache(key, decoded);
+    PhotoAspectCache.instance.remember(
+      widget.messageId,
+      decoded.width,
+      decoded.height,
+    );
     // Set state SEKARANG (fallback Image.memory render instan), lalu decode
     // bitmap di latar → begitu siap, RawImage dipakai (nol decode) pada render
     // berikutnya. TIDAK menunggu (agar tak gantung bila codec lambat/gagal).
