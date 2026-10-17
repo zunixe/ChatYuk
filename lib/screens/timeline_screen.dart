@@ -232,17 +232,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                           ),
                         ),
                       ),
-                      Tooltip(
-                        message: s.postAddTooltip,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _openComposer,
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 3),
-                            child: Icon(Icons.add_circle_outline),
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
