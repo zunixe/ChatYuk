@@ -35,6 +35,9 @@ ChatSection? chatSectionAfterSwipe(
 /// Header ringkas (ala Timeline) dengan menu pindah section; TabBar lama
 /// dihapus. Isi daftar berganti memakai [IndexedStack] (state tiap section
 /// tetap hidup — perilaku sama dengan TabBarView lama).
+/// Lebar perkiraan menu titik-3 (untuk memposisikan tepat di bawah ikon).
+const double _kMoreMenuWidth = 200;
+
 class ChatsScreen extends ConsumerStatefulWidget {
   const ChatsScreen({super.key});
 
@@ -155,17 +158,29 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
   Future<void> _openMoreMenu() async {
     final s = ref.read(localeProvider).s;
     final box = _moreBtnKey.currentContext?.findRenderObject() as RenderBox?;
-    final offset = box != null
-        ? box.localToGlobal(Offset.zero)
-        : Offset(MediaQuery.sizeOf(context).width - 200, 60);
+    final screenW = MediaQuery.sizeOf(context).width;
+    // Menu MENEMPEL di bawah tombol titik-3, rata kanan dengan tombolnya.
+    // Dulu posisi dihitung `offset.dx - 160` (menggeser 160px ke KIRI dari
+    // pojok kiri-atas tombol) sehingga menu melayang jauh dari ikon.
+    final RelativeRect pos;
+    if (box != null) {
+      final topLeft = box.localToGlobal(Offset.zero);
+      final w = box.size.width;
+      pos = RelativeRect.fromLTRB(
+        // Lebar menu ±200: biarkan Flutter meng-clamp agar tidak keluar layar.
+        (topLeft.dx + w - _kMoreMenuWidth).clamp(8.0, screenW),
+        topLeft.dy + box.size.height + 4, // tepat di bawah ikon
+        // Sisi kanan: sejajar tepi kanan tombol (rawat jarak ke tepi layar).
+        screenW - (topLeft.dx + w) + 8,
+        0,
+      );
+    } else {
+      // Fallback (tombol belum ter-layout): kanan-atas seperti header.
+      pos = RelativeRect.fromLTRB(screenW - _kMoreMenuWidth - 12, 60, 12, 0);
+    }
     final sel = await showMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        offset.dx - 160,
-        offset.dy + 44,
-        offset.dx + 60,
-        0,
-      ),
+      position: pos,
       color: kChatMenuBg,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
