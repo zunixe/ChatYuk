@@ -195,26 +195,20 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                   value: email,
                   label: 'Email',
                   trailing: emailConfirmed
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.check_circle,
-                              size: 14,
-                              color: AppTheme.online,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Terverifikasi',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.online,
-                              ),
-                            ),
-                          ],
-                        )
+                      ? _verifiedPill()
                       : TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            textStyle: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                           onPressed: () => Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -270,55 +264,74 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
+  /// Pill "Terverifikasi" RINGKAS — ikon saja (tooltip), supaya email
+  /// mendapat lebar maksimal dan tidak pernah tertutup.
+  Widget _verifiedPill() {
+    return Tooltip(
+      message: 'Email terverifikasi',
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: AppTheme.online.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(Icons.verified, size: 16, color: AppTheme.online),
+      ),
+    );
+  }
+
+  /// Baris info kartu Akun.
+  ///
+  /// Trailing DIALOKASIKAN lebih dulu (diukur via IntrinsicWidth pada
+  /// `maxWidth` terbatas), lalu teks mendapat sisa lebar — jadi email
+  /// TIDAK pernah tertutup pill "Terverifikasi" maupun tombol.
   Widget _infoRow({
     required IconData icon,
     required String value,
     required String label,
     Widget? trailing,
   }) {
-    return SizedBox(
-      height: 60,
-      child: Row(
-        children: [
-          const SizedBox(width: 14),
-          Icon(icon, size: 22, color: AppTheme.textSecondary),
-          const SizedBox(width: 14),
-          Expanded(
-            flex: 3,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 15, color: AppTheme.textPrimary),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (trailing != null)
-            // Batasi lebar trailing + jarak kanan supaya tidak menabrak
-            // nilai/label saat teks panjang (mis. email panjang).
-            Flexible(
-              fit: FlexFit.loose,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8, right: 8),
-                child: trailing,
-              ),
-            )
-          else
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 60),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
             const SizedBox(width: 14),
-        ],
+            Icon(icon, size: 22, color: AppTheme.textSecondary),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 15, color: AppTheme.textPrimary),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 10),
+              trailing,
+              const SizedBox(width: 12),
+            ] else
+              const SizedBox(width: 14),
+          ],
+        ),
       ),
     );
   }
