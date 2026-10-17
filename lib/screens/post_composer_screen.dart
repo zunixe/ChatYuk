@@ -673,29 +673,49 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
     return out;
   }
 
+  /// Chip saran hashtag — berjajar ke SAMPING (wrap multi-kolom).
+  ///
+  /// PENTING: JANGAN bungkus dengan `SizedBox(width: double.infinity)` dan
+  /// jangan pakai `Container(alignment: center)`. Di dalam `Wrap`, anak yang
+  /// punya `alignment` akan menerima lebar MAKSIMUM induk → satu chip
+  /// menghabiskan satu baris penuh sehingga daftar hashtag tampak
+  /// "berurutan ke bawah" (laporan user: #music #putsal #gaming menurun).
+  /// Chip di sini memakai `Row(mainAxisSize: min)` + teks dibatasi lebar,
+  /// jadi lebarnya mengikuti isi.
   Widget _suggestionWrap(List<String> tags) {
+    final maxChipText = MediaQuery.sizeOf(context).width * 0.55;
     return Wrap(
       spacing: 6,
       runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (final t in tags)
           GestureDetector(
             onTap: () => _addHashtag(t),
             child: Container(
-              height: 28,
-              padding: const EdgeInsets.symmetric(horizontal: 11),
-              alignment: Alignment.center,
+              height: 26,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
                 color: AppTheme.bgCard,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(13),
               ),
-              child: Text(
-                '#$t',
-                style: TextStyle(
-                  fontSize: AppTextSize.s125,
-                  fontWeight: FontWeight.w600,
-                  color: _kLink,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxChipText),
+                    child: Text(
+                      '#$t',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: AppTextSize.s125,
+                        fontWeight: FontWeight.w600,
+                        color: _kLink,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
