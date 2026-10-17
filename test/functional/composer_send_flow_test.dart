@@ -78,7 +78,7 @@ void main() {
       onToggleAttach: () => toggled++,
     )));
 
-    await tester.tap(find.byIcon(Icons.add_circle_outline));
+    await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pump();
     expect(toggled, 1);
     ctrl.dispose();

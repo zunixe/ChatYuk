@@ -8,7 +8,13 @@ import 'package:path_provider/path_provider.dart';
 import '../../utils.dart';
 import 'media_disk_cache.dart';
 
-/// Cache POSTER foto chat — pratinjau KECIL (24px, blur) yang dibaca SINKRON.
+/// Cache POSTER foto chat — grid warna 8×8 (RGBA mentah, 256 byte) yang
+/// dibaca SINKRON dan DILUKIS langsung (CustomPaint, lihat `PosterGrid`).
+///
+/// v2 (2026-10-17): dulu poster = JPEG 24px yang ditampilkan via
+/// `Image.memory` → decode Flutter SELALU async → frame-1 tetap kosong lalu
+/// poster muncul, lalu foto tajam = kedip ganda (terutama album 4 tile).
+/// Grid piksel mentah tidak perlu decode sama sekali → frame-1 pasti bergambar.
 ///
 /// Kenapa: foto chat terenkripsi → thumbnail asli harus di-DEKRIpsi (async),
 /// jadi frame pertama bubble kosong (kotak) lalu foto "pop-in" = kedip —
@@ -25,10 +31,17 @@ class ChatPosterCache {
   ChatPosterCache._();
   static final ChatPosterCache instance = ChatPosterCache._();
 
-  static const String _folderName = 'chat_posters_v1';
+  static const String _folderName = 'chat_posters_v2';
+  static const String _legacyFolder = 'chat_posters_v1';
+
+  /// Sisi grid poster (sel) & panjang byte RGBA yang valid.
+  static const int gridSide = 8;
+  static const int byteLength = gridSide * gridSide * 4;
+
+  /// Lebar JPEG perantara saat membuat poster (native downscale → grid).
   static const int _maxPx = 24;
 
-  /// Batas entri di memori (~1 KB/poster → ~300 KB).
+  /// Batas entri di memori (256 B/poster → ~77 KB).
   static const int _memCap = 300;
 
   final Map<String, Uint8List> _mem = {};
@@ -43,14 +56,21 @@ class ChatPosterCache {
     try {
       final dir = await getApplicationDocumentsDirectory();
       _docs = dir.path;
-      final folder = Directory('${_docs}/$_folderName');
+      final folder = Directory('$_docs/$_folderName');
       if (!folder.existsSync()) folder.createSync(recursive: true);
+      // Poster v1 (JPEG) tidak dipakai lagi → bersihkan sekali.
+      final legacy = Directory('$_docs/$_legacyFolder');
+      if (legacy.existsSync()) {
+        unawaited(legacy.delete(recursive: true).then((_) {}, onError: (_) {}));
+      }
     } catch (e) {
       dlog('[ChatPosterCache] prewarm error: $e');
     }
   }
 
-  String _fileName(String messageId) => '${hashKey64(messageId)}.jpg';
+  String _fileName(String messageId) => '${hashKey64(messageId)}.rgba';
+
+  static bool isValid(Uint8List? b) => b != null && b.length == byteLength;
 
   /// Poster SINKRON (RAM → disk) — dipakai `initState` supaya frame pertama
   /// sudah bergambar. null bila belum ada (pemanggil pakai placeholder biasa).
@@ -64,7 +84,7 @@ class ChatPosterCache {
       final f = File('$docs/$_folderName/${_fileName(messageId)}');
       if (!f.existsSync()) return null;
       final bytes = f.readAsBytesSync();
-      if (bytes.isEmpty) return null;
+      if (!isValid(bytes)) return null;
       _memPut(messageId, bytes);
       return bytes;
     } catch (_) {
@@ -83,7 +103,7 @@ class ChatPosterCache {
 
   /// Simpan poster (fire-and-forget tulis disk). Abaikan bila kosong.
   Future<void> save(String messageId, Uint8List bytes) async {
-    if (messageId.isEmpty || bytes.isEmpty) return;
+    if (messageId.isEmpty || !isValid(bytes)) return;
     _memPut(messageId, bytes);
     final docs = _docs;
     if (docs == null) return;

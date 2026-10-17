@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -7,15 +6,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/core/cache/chat_poster_cache.dart';
 import 'package:chatyuk/widgets/message/message_image.dart';
+import 'package:chatyuk/widgets/message/poster_grid.dart';
 
 import 'test_helper.dart';
 
-/// Mengunci: POSTER (kecil, sinkron) dipakai sebagai placeholder frame-1 →
-/// tidak ada kotak kosong / spinner sebelum foto tajam (anti-kedip).
+/// Mengunci: POSTER (grid RGBA, sinkron) DILUKIS di frame-1 → tidak ada
+/// kotak kosong / spinner sebelum foto tajam (anti-kedip). Poster v2 TIDAK
+/// memakai `Image` (decode async = kosong 1 frame = kedip).
 void main() {
-  final pngBytes = Uint8List.fromList(base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-  ));
+  final posterBytes = Uint8List(ChatPosterCache.byteLength)
+    ..fillRange(0, ChatPosterCache.byteLength, 120);
 
   setUp(() {
     mockPathProvider();
@@ -30,7 +30,7 @@ void main() {
   Future<void> warmPoster(WidgetTester t) async {
     await t.runAsync(() async {
       await ChatPosterCache.instance.prewarm();
-      await ChatPosterCache.instance.save('m-poster', pngBytes);
+      await ChatPosterCache.instance.save('m-poster', posterBytes);
     });
   }
 
@@ -57,14 +57,15 @@ void main() {
         ),
       ),
     );
-    await t.pump();
   }
 
   testWidgets('tile album: poster tampil frame-1, tanpa spinner',
       (tester) async {
     await warmPoster(tester);
     await pumpTile(tester, fill: true);
-    expect(find.byType(Image), findsOneWidget, reason: 'poster tampil');
+    // Frame PERTAMA (tanpa pump tambahan) sudah melukis poster.
+    expect(find.byType(PosterGrid), findsOneWidget, reason: 'poster frame-1');
+    expect(find.byType(Image), findsNothing, reason: 'tanpa decode async');
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pump(const Duration(seconds: 2));
   });
@@ -73,7 +74,8 @@ void main() {
       (tester) async {
     await warmPoster(tester);
     await pumpTile(tester, fill: false);
-    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(PosterGrid), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pump(const Duration(seconds: 2));
   });
@@ -84,8 +86,8 @@ void main() {
     await warmPoster(tester);
     ChatPosterCache.instance.clearMemOnly(); // RAM kosong = cold start
     await pumpTile(tester, fill: true);
-    expect(find.byType(Image), findsOneWidget,
-        reason: 'poster harus dibaca sinkron dari disk');
+    expect(find.byType(PosterGrid), findsOneWidget,
+        reason: 'poster harus dibaca sinkron dari disk & dilukis frame-1');
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pump(const Duration(seconds: 2));
   });
@@ -94,6 +96,7 @@ void main() {
       (tester) async {
     // id UNIK (belum pernah di-save) → benar-benar tanpa poster (disk/RAM).
     await pumpTile(tester, fill: true, id: 'm-noposter');
+    expect(find.byType(PosterGrid), findsNothing);
     expect(find.byType(Image), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pump(const Duration(seconds: 2));

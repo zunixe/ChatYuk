@@ -67,15 +67,17 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('open=true tampilkan ikon tutup', (tester) async {
+    testWidgets('open=true: glif + diputar 45° jadi ✕ (bukan ganti ikon)',
+        (tester) async {
       await tester.pumpWidget(wrap(ChatIconButton(
         open: true,
         onTap: () {},
         tooltip: s.btnClose,
       )));
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.close_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.add_rounded), findsNothing);
+      expect(find.byIcon(Icons.add_rounded), findsOneWidget);
+      final rot = tester.widget<AnimatedRotation>(find.byType(AnimatedRotation));
+      expect(rot.turns, 0.125);
     });
 
     testWidgets('icon custom dipakai apa adanya', (tester) async {

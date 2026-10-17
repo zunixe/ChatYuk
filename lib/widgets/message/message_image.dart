@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ import '../../providers/riverpod/service_locator.dart';
 import '../../providers/riverpod/locale_provider.dart';
 import 'image_decode_core.dart';
 import 'photo_viewer_screen.dart';
+import 'poster_grid.dart';
 
 /// base64→bytes di isolate (lihat [_decode]: fallback dims). Top-level agar
 /// bisa dipakai `compute` (spawn isolate per panggilan — hanya jalur fallback
@@ -447,14 +449,31 @@ class _MessageImageState extends State<MessageImage> {
     if (widget.messageId.isEmpty || src.isEmpty) return;
     unawaited(() async {
       try {
-        final p = await NativeImage.downscaleBytes(
+        // Native downscale ke JPEG kecil → decode ke grid 8×8 RGBA mentah
+        // (poster v2: dilukis tanpa decode saat render).
+        final small = await NativeImage.downscaleBytes(
           src,
           targetWidth: ChatPosterCache.maxPx,
-          quality: 40,
+          quality: 60,
         );
-        if (p != null && p.isNotEmpty) {
-          await ChatPosterCache.instance.save(widget.messageId, p);
-        }
+        if (small == null || small.isEmpty) return;
+        const n = ChatPosterCache.gridSide;
+        final codec = await ui.instantiateImageCodec(
+          small,
+          targetWidth: n,
+          targetHeight: n,
+        );
+        final frame = await codec.getNextFrame();
+        final data = await frame.image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        );
+        frame.image.dispose();
+        codec.dispose();
+        if (data == null) return;
+        await ChatPosterCache.instance.save(
+          widget.messageId,
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+        );
       } catch (_) {}
     }());
   }
@@ -503,23 +522,11 @@ class _MessageImageState extends State<MessageImage> {
         return GestureDetector(
           onTap: _loading ? null : _retry,
           child: widget.fill
-              ? SizedBox.expand(
-                  child: Image.memory(
-                    poster,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    filterQuality: FilterQuality.low,
-                  ),
-                )
+              ? SizedBox.expand(child: PosterGrid(rgba: poster))
               : SizedBox(
                   width: _phW,
                   height: _phH,
-                  child: Image.memory(
-                    poster,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    filterQuality: FilterQuality.low,
-                  ),
+                  child: PosterGrid(rgba: poster),
                 ),
         );
       }
@@ -611,6 +618,20 @@ class _MessageImageState extends State<MessageImage> {
       height: height,
       fit: BoxFit.cover,
       gaplessPlayback: true,
+      // ANTI-KEDIP: Image.memory decode async → selama frame belum siap,
+      // tampilkan poster (bila ada) — bukan kotak kosong 1 frame.
+      frameBuilder: (_, child, frame, sync) {
+        if (frame != null || sync) return child;
+        final poster = _poster ??= widget.messageId.isEmpty
+            ? null
+            : ChatPosterCache.instance.posterSync(widget.messageId);
+        if (poster == null) return child;
+        return SizedBox(
+          width: width,
+          height: height,
+          child: PosterGrid(rgba: poster),
+        );
+      },
       // Decode max 1080px (bukan full-res 12MP): bubble max 280px,
       // zoom inline 6x tetap tajam; hemat ~6x RAM bitmap.
       cacheWidth: 720,
