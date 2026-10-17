@@ -221,17 +221,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Tooltip(
-                        message: s.postAddTooltip,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _openComposer,
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 3),
-                            child: Icon(Icons.add_circle_outline),
-                          ),
-                        ),
-                      ),
-                      Tooltip(
                         message: s.searchHint,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
@@ -239,6 +228,17 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                           child: const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 3),
                             child: Icon(Icons.search_rounded),
+                          ),
+                        ),
+                      ),
+                      Tooltip(
+                        message: s.postAddTooltip,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _openComposer,
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 3),
+                            child: Icon(Icons.add_circle_outline),
                           ),
                         ),
                       ),

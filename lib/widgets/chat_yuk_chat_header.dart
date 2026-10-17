@@ -135,17 +135,36 @@ class ChatYukChatHeader extends StatelessWidget
         actions: searching
             ? null
             : [
-                _actionBtn(
-                  icon: Icons.search_rounded,
-                  tooltip: 'Cari',
-                  onPressed: onSearch,
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Tooltip(
+                        message: 'Cari',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: onSearch,
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 3),
+                            child: Icon(Icons.search_rounded),
+                          ),
+                        ),
+                      ),
+                      Tooltip(
+                        message: 'Menu',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: onMore,
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 3),
+                            child: Icon(Icons.more_vert_rounded),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                _actionBtn(
-                  icon: Icons.more_vert_rounded,
-                  tooltip: 'Menu',
-                  onPressed: onMore,
-                ),
-                const SizedBox(width: 4),
               ],
       ),
     );
@@ -211,20 +230,6 @@ class ChatYukChatHeader extends StatelessWidget
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: color, width: width),
       );
-
-  Widget _actionBtn({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback? onPressed,
-  }) {
-    // Ukuran ikon & tombol SAMA dengan halaman Timeline (IconButton standar,
-    // iconSize default 24, tanpa kotak 44 eksplisit) supaya konsisten.
-    return IconButton(
-      tooltip: tooltip,
-      icon: Icon(icon),
-      onPressed: onPressed,
-    );
-  }
 
   Widget _titleMenu(BuildContext context) {
     return PopupMenuButton<ChatSection>(
