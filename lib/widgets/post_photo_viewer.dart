@@ -310,7 +310,7 @@ class _ViewerPageState extends State<_ViewerPage> {
             child: image,
           ),
         ),
-        if (_fullBytes == null)
+        if (_fullBytes == null && widget.thumb.isEmpty)
           const Positioned(
             top: 40,
             left: 0,

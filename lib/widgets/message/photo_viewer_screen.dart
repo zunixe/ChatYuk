@@ -17,6 +17,18 @@ import '../../utils.dart';
 // terus berjalan.
 /// Satu foto di dalam viewer. Boleh >1 supaya bisa di-SWIPE VERTIKAL antar
 /// foto (ala WhatsApp: geser ke atas = foto berikutnya).
+
+
+/// Spinner full-res di viewer HANYA perlu bila TIDAK ADA apa pun untuk
+/// ditampilkan (thumbnail pun tidak ada). Thumbnail sudah tampil → spinner
+/// tidak perlu (dulu selalu tampil selama full dimuat/retry → "muter-muter").
+bool viewerShowFullSpinner({
+  required bool hasFull,
+  required bool hasThumb,
+  required bool hasLoader,
+}) =>
+    !hasFull && !hasThumb && hasLoader;
+
 class ViewerPhoto {
   final Uint8List bytes;
   final Future<String?> Function()? fullLoader;
@@ -213,7 +225,11 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   @override
   Widget build(BuildContext context) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final bool loadingFull = _fullBytes == null && _loaderAt(_index) != null;
+    final bool loadingFull = viewerShowFullSpinner(
+      hasFull: _fullBytes != null,
+      hasThumb: _thumbAt(_index).isNotEmpty,
+      hasLoader: _loaderAt(_index) != null,
+    );
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
