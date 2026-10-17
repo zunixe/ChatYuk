@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/room_provider.dart';
+import 'online_users/widgets/global_room_nav.dart';
 import 'online_users/widgets/my_status_sheet.dart';
 import 'online_users/widgets/unread_bubble.dart';
 import 'online_users/widgets/user_list_section.dart';
@@ -906,9 +907,11 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
       unawaited(rp.markRoomRead(target.id));
       final navKey = navKeyRoom(target.id);
       if (!tryClaimNav(navKey)) return;
-      await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => RoomChatScreen(room: target)),
+      // Menu Global Room di BAWAH chat room → back dari room = menu.
+      await openRoomWithMenuBelow(
+        Navigator.of(context),
+        menu: (_) => const LobbyScreen(initialCategory: 'general'),
+        room: (_) => RoomChatScreen(room: target),
       ).then((_) => releaseNav(navKey));
       return;
     }
