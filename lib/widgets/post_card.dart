@@ -61,10 +61,6 @@ class _PostCardState extends ConsumerState<PostCard> {
     _commentCtrl.dispose();
     super.dispose();
   }
-  // Jarak tepi kiri konten (teks, foto, tombol like/komentar/share).
-  // Avatar 38 + spacer 10 = 48 → konten sejajar tepi kanan avatar,
-  // dan nama user sejajar sama jarak dari kiri.
-  static const double _kContentPadH = 48;
   final List<Uint8List?> _imageThumbs = [];
   // Rasio asli (w/h) per foto — sumber: payload `imageDims`/`imageW`/`imageH`
   // (akurat, tanpa shift) atau fallback decode bytes thumbnail.
@@ -542,6 +538,140 @@ class _PostCardState extends ConsumerState<PostCard> {
     }
   }
 
+  // ── Geometri layout ala Threads ──
+  static const double _kItemPadH = 16; // padding kiri/kanan item
+  static const double _kAvatarCol = 40; // lebar kolom avatar
+  static const double _kAvatarSize = 36; // diameter avatar
+  static const double _kAvatarGap = 10; // jarak avatar → konten
+  // Konten (teks, media, aksi) sejajar tepi kanan avatar:
+  // 16 (item) + 40 (avatar) + 10 (gap) = 66.
+  static const double _kContentLeftInset = _kItemPadH + _kAvatarCol + _kAvatarGap;
+
+  /// Format angka aksi: 0 → kosong, 1200 → "1,2rb"/"1.2K", 2500000 → "2,5jt".
+  String _fmtCount(int n, S s) {
+    if (n <= 0) return '';
+    final dec = s.isId ? ',' : '.';
+    String trim(double v) =>
+        v.toStringAsFixed(1).replaceAll('.0', '').replaceAll('.', dec);
+    if (n >= 1000000) return '${trim(n / 1000000)}${s.isId ? 'jt' : 'M'}';
+    if (n >= 1000) return '${trim(n / 1000)}${s.isId ? 'rb' : 'K'}';
+    return '$n';
+  }
+
+  IconData _visibilityIconData(String v) => switch (v) {
+    'followers' => Icons.people_outline_rounded,
+    'subscribers' => Icons.star_outline_rounded,
+    _ => Icons.public,
+  };
+
+  /// Kolom avatar (lebar 40) + badge "+ ikuti" di kanan-bawah (ala Threads).
+  /// Badge hanya tampil bila belum mengikuti & bukan post sendiri.
+  Widget _avatarColumn(bool showFollowBadge, S s) {
+    return SizedBox(
+      width: _kAvatarCol,
+      child: Center(
+        child: SizedBox(
+          width: _kAvatarSize,
+          height: _kAvatarSize,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              PostAuthorAvatar(
+                post: _p,
+                name: _p['authorName'] as String? ?? 'Anon',
+                size: _kAvatarSize,
+                onAvatarTap: _zoomAuthorPhoto,
+              ),
+              if (showFollowBadge)
+                Positioned(
+                  right: -4,
+                  bottom: -4,
+                  child: Tooltip(
+                    message: s.btnFollow,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _followBusy ? null : _toggleFollow,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F5F5),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppTheme.bgScreen,
+                            width: 2.5,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.add,
+                          size: 10,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Baris header: nama · waktu · (spacer) · ··· menu.
+  /// Label "🌐 Publik" & teks "· Ikuti" DIHAPUS dari feed (ikuti pindah ke
+  /// badge avatar; visibility pindah ke menu ···).
+  Widget _headerRow(
+    S s,
+    String name,
+    DateTime createdAt,
+    bool isAuthor,
+    bool isFriend,
+    bool isBoosted,
+  ) {
+    return SizedBox(
+      height: 22,
+      child: Row(
+        children: [
+          Flexible(
+            child: GestureDetector(
+              onTap: _openProfile,
+              child: Text(
+                name,
+                style: AppText.bodyStrong,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          if (isFriend) ...[
+            const SizedBox(width: 5),
+            Icon(
+              Icons.people_alt_rounded,
+              size: 13,
+              color: AppTheme.primary,
+            ),
+          ],
+          if (isBoosted) ...[
+            const SizedBox(width: 5),
+            Icon(
+              Icons.rocket_launch_rounded,
+              size: 13,
+              color: AppTheme.danger,
+            ),
+          ],
+          const SizedBox(width: 6),
+          Text(
+            _timeAgo(createdAt),
+            style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+          ),
+          const Spacer(),
+          if (isAuthor) _postMenu(s),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('PostCard');
@@ -550,7 +680,6 @@ class _PostCardState extends ConsumerState<PostCard> {
     final authorId = _p['authorId'] as String? ?? '';
     final isAuthor = authorId.isNotEmpty && authorId == uid;
     final name = _p['authorName'] as String? ?? 'Anon';
-    // Status follow: set global (realtime) ATAU bawaan server saat load.
     final following =
         ref.watch(socialProvider.select((sp) => sp.isFollowing(authorId))) ||
         _p['isFollowing'] == true;
@@ -560,131 +689,74 @@ class _PostCardState extends ConsumerState<PostCard> {
     final commentCount = (_p['commentCount'] as num?)?.toInt() ?? 0;
     final shareCount = (_p['shareCount'] as num?)?.toInt() ?? 0;
     final isBoosted = _p['isBoosted'] == true;
-    // Status teman: set global (realtime) ATAU bawaan server saat load.
-    // Realtime stream `posts` tidak membawa is_friend (computed di RPC), jadi
-    // sumber utama = SocialNotifier.isFriend(authorId).
     final isFriend =
         ref.watch(socialProvider.select((sp) => sp.isFriend(authorId))) ||
         _p['isFriend'] == true;
+    final hasText = (_p['text'] as String? ?? '').isNotEmpty;
+    final hasMedia = _imagePaths().isNotEmpty && !_photosAllFailed();
+    // Badge "+ ikuti" hanya bila belum mengikuti & bukan post sendiri.
+    final showFollowBadge = !isAuthor && authorId.isNotEmpty && !following;
 
-    // Konten (nama, teks, foto, tombol aksi) diberi padding kiri/kanan
-    // supaya sejajar dengan tepi kanan avatar di header. Pemisah antar
-    // post pakai Divider tipis full-width.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(height: 1, thickness: 0.5),
+        // Header + teks (avatar di kolom kiri 40).
         Padding(
-          // Profil dempet ke kiri (tanpa padding kiri).
-          padding: EdgeInsets.fromLTRB(0, 12, 8, 2),
+          padding: const EdgeInsets.fromLTRB(_kItemPadH, 12, _kItemPadH, 0),
           child: Row(
-              children: [
-                // Tap avatar = zoom foto (internal); tap nama = profil.
-                PostAuthorAvatar(post: _p, name: name, size: 38, onAvatarTap: _zoomAuthorPhoto),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: GestureDetector(
-                              onTap: _openProfile,
-                              child: Text(
-                                name,
-                                style: AppText.bodyStrong,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                          // Follow ↔ Following ala Facebook: di depan nama,
-                          // tebal (tidak tipis), biru saat Follow.
-                          if (!isAuthor) ...[
-                            Text(
-                              ' · ',
-                              style: AppText.label.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: _followBusy ? null : _toggleFollow,
-                              child: Tooltip(
-                                message:
-                                    '${following ? s.btnUnfollow : s.btnFollow} · ${s.sheetFollowDesc}',
-                                child: Text(
-                                  following
-                                      ? s.socialFollowing
-                                      : s.btnFollow,
-                                  style: AppText.label.copyWith(
-                                    color: following
-                                        ? AppTheme.textSecondary
-                                        : AppTheme.primary,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                          if (isFriend) ...[
-                            SizedBox(width: 5),
-                            Icon(
-                              Icons.people_alt_rounded,
-                              size: 13,
-                              color: AppTheme.primary,
-                            ),
-                          ],
-                          if (isBoosted) ...[
-                            SizedBox(width: 5),
-                            Icon(
-                              Icons.rocket_launch_rounded,
-                              size: 13,
-                              color: AppTheme.danger,
-                            ),
-                          ],
-                        ],
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _avatarColumn(showFollowBadge, s),
+              const SizedBox(width: _kAvatarGap),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _headerRow(
+                      s,
+                      name,
+                      createdAt,
+                      isAuthor,
+                      isFriend,
+                      isBoosted,
+                    ),
+                    if (hasText)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(_p['text'] as String, style: AppText.body),
                       ),
-                      Row(
-                        children: [
-                          Text(
-                            _timeAgo(createdAt),
-                            style: AppText.micro.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(width: 3),
-                          _visibilityIcon(
-                            _p['visibility'] as String? ?? 'public',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
-                if (isAuthor) _authorMenu(s),
-              ],
-            ),
+              ),
+            ],
           ),
-          if ((_p['text'] as String? ?? '').isNotEmpty)
-            Padding(
-              padding: EdgeInsets.fromLTRB(_kContentPadH, 2, 16, 2),
-              child: Text(_p['text'] as String, style: AppText.body),
-            ),
-          // Area foto dicadangkan sejak path diketahui (bukan saat thumb
-          // tiba) — dulu blok 0→penuh tiba-tiba tiap thumb masuk → kartu
-          // melompat saat scroll. Placeholder setinggi layout final.
-          if (_imagePaths().isNotEmpty && !_photosAllFailed())
-            Padding(
-              // Kanan 16 — sejajar dengan teks di atasnya.
-              padding: EdgeInsets.fromLTRB(_kContentPadH, 2, 16, 2),
-              child: _photoGrid(),
-            ),
+        ),
+        // Media — sejajar tepi kanan avatar (kiri 66); kanan 0 supaya carousel
+        // bisa meluber sampai tepi layar (item berikutnya mengintip).
+        if (hasMedia)
           Padding(
-            padding: EdgeInsets.fromLTRB(_kContentPadH, 4, 8, 8),
+            padding: const EdgeInsets.fromLTRB(
+              _kContentLeftInset,
+              10,
+              0,
+              0,
+            ),
+            child: _photoGrid(),
+          ),
+        // Baris aksi: digeser kiri 8 agar ikon sejajar tepi teks.
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            _kContentLeftInset - 8,
+            0,
+            _kItemPadH,
+            4,
+          ),
+          child: SizedBox(
+            height: 40,
             child: Row(
               children: [
                 _iconAction(
-                  // Phosphor: outline saat mati, fill merah saat suka.
                   icon: isLiked
                       ? PhosphorIconsFill.heart
                       : PhosphorIconsRegular.heart,
@@ -694,14 +766,12 @@ class _PostCardState extends ConsumerState<PostCard> {
                   onTap: _like,
                 ),
                 _iconAction(
-                  // Phosphor chat-circle — sekeluarga dengan heart.
                   icon: PhosphorIconsRegular.chatCircle,
                   color: AppTheme.textSecondary,
                   count: commentCount,
                   onTap: _comment,
                 ),
                 _iconAction(
-                  // Phosphor paper-plane-tilt (gaya Threads).
                   icon: PhosphorIconsRegular.paperPlaneTilt,
                   color: AppTheme.textSecondary,
                   count: shareCount,
@@ -722,7 +792,8 @@ class _PostCardState extends ConsumerState<PostCard> {
               ],
             ),
           ),
-        ],
+        ),
+      ],
     );
   }
 
@@ -734,6 +805,9 @@ class _PostCardState extends ConsumerState<PostCard> {
     aspects: _imageAspect,
     paths: _imagePaths(),
     onOpenViewer: _openViewer,
+    // Kanan 0: carousel meluber ke tepi layar (padding kanan 16 di dalam
+    // list). Media tunggal tetap 16 (gutter) — diatur lewat rightInset.
+    rightInset: 16,
   );
 
 
@@ -789,65 +863,48 @@ class _PostCardState extends ConsumerState<PostCard> {
     String? tooltip,
     double scale = 1,
   }) {
+    final s = ref.read(localeProvider).s;
+    final label = showCount ? _fmtCount(count, s) : '';
     return Tooltip(
       message: tooltip ?? '',
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedScale(
-                scale: scale,
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.elasticOut,
-                child: Icon(icon, size: 18, color: color),
-              ),
-              if (showCount) ...[
-                const SizedBox(width: 4),
-                Text(
-                  '$count',
-                  style: AppText.caption.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
+        borderRadius: BorderRadius.circular(18),
+        child: SizedBox(
+          height: 36,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedScale(
+                  scale: scale,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.elasticOut,
+                  child: Icon(icon, size: 20, color: color),
                 ),
+                // Angka 0 TIDAK ditampilkan (hanya ikon).
+                if (label.isNotEmpty) ...[
+                  const SizedBox(width: 5),
+                  Text(
+                    label,
+                    style: AppText.bodySmall.copyWith(color: color),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _visibilityIcon(String v) {
-    final (icon, color) = switch (v) {
-      'followers' => (Icons.people_outline_rounded, AppTheme.primary),
-      'subscribers' => (Icons.star_outline_rounded, Colors.amber.shade700),
-      _ => (Icons.public, AppTheme.textSecondary),
-    };
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 12, color: color),
-        const SizedBox(width: 2),
-        Text(
-          _visibilityLabel(v),
-          style: AppText.micro.copyWith(
-            color: color,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Menu ⋮ untuk post milik sendiri: hapus.
-  Widget _authorMenu(S s) {
+  /// Menu ⋮ (milik sendiri): info visibilitas + hapus.
+  /// Label "🌐 Publik" pindah dari feed ke sini.
+  Widget _postMenu(S s) {
+    final vis = _p['visibility'] as String? ?? 'public';
     return PopupMenuButton<String>(
-      icon: Icon(Icons.more_vert, size: 18, color: AppTheme.textSecondary),
+      icon: Icon(Icons.more_horiz, size: 18, color: AppTheme.textSecondary),
       padding: EdgeInsets.zero,
       color: AppTheme.bgCard,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -855,6 +912,24 @@ class _PostCardState extends ConsumerState<PostCard> {
         if (v == 'delete') _deletePost(s);
       },
       itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          height: 40,
+          child: Row(
+            children: [
+              Icon(
+                _visibilityIconData(vis),
+                size: 18,
+                color: AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _visibilityLabel(vis),
+                style: AppText.body.copyWith(color: AppTheme.textPrimary),
+              ),
+            ],
+          ),
+        ),
         PopupMenuItem<String>(
           value: 'delete',
           child: Row(

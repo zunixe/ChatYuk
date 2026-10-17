@@ -19,6 +19,7 @@ import 'package:chatyuk/services/social_service.dart';
 import 'package:chatyuk/services/timeline_service.dart';
 import 'package:chatyuk/core/cache/post_photo_cache.dart';
 import 'package:chatyuk/widgets/post_card.dart';
+import 'package:chatyuk/widgets/post/post_photo_grid.dart';
 
 import 'test_helper.dart';
 
@@ -198,21 +199,21 @@ void main() {
     expect(find.byIcon(Icons.people_alt_rounded), findsNothing);
   });
 
-  testWidgets('foto single 1:1 → lebar PENUH area konten (736)', (tester) async {
+  testWidgets('foto single 1:1 → lebar penuh kolom konten ala Threads', (
+    tester,
+  ) async {
     await pump(
       tester,
       _post(images: [_pngBase64], imageW: 1000, imageH: 1000),
     );
     expect(tester.takeException(), isNull);
-    // Area konten = layar 800 − pad 48 − 16 = 736.
+    // Layar 800 − (16 item + 40 avatar + 10 gap) − 16 gutter = 718.
     final f = find.byKey(const ValueKey('photo_placeholder'));
     expect(f, findsOneWidget, reason: 'ada kotak foto placeholder');
     final size = tester.getSize(f);
-    // ignore: avoid_print
-    print('DEBUG lebar foto single = ${size.width} (area konten 736)');
-    expect(size.width, closeTo(736, 3),
-        reason: 'foto single harus selebar area konten (sampai padding)');
-    expect(size.height, closeTo(736, 3), reason: 'rasio 1:1 → tinggi = lebar');
+    expect(size.width, closeTo(718, 3),
+        reason: 'foto single = lebar kolom konten (gutter kanan 16)');
+    expect(size.height, closeTo(718, 3), reason: 'rasio 1:1 → tinggi = lebar');
   });
 
   testWidgets('foto single 9:16 portrait → lebar penuh, tinggi sesuai rasio',
@@ -225,9 +226,10 @@ void main() {
     final f = find.byKey(const ValueKey('photo_placeholder'));
     expect(f, findsOneWidget);
     final s = tester.getSize(f);
-    expect(s.width, closeTo(736, 3));
-    expect(s.height, closeTo(736 * 1920 / 1080, 3),
-        reason: 'tinggi mengikuti rasio asli 9:16');
+    expect(s.width, closeTo(718, 3));
+    // 9:16 (0.5625) di bawah batas 4:5 (0.8) → dipotong (crop) ke 4:5.
+    expect(s.height, closeTo(718 / 0.8, 3),
+        reason: 'tinggi memenuhi batas 4:5 (paling tinggi), bukan memanjang');
   });
 
   testWidgets('multi-foto → baris horizontal, beberapa foto sekaligus',
@@ -242,14 +244,14 @@ void main() {
       ),
     );
     expect(tester.takeException(), isNull);
-    // Placeholder multi = 1 item (lebar ±48% area). 736 × 0.48 ≈ 353.
+    // Carousel: tinggi seragam 240; lebar = 240 × rasio (dibatasi 3:4…4:3).
+    // Rasio 1200/2670 ≈ 0.449 di bawah batas 0.75 → dipakai 0.75 → 180.
     final f = find.byKey(const ValueKey('photo_placeholder'));
     expect(f, findsOneWidget);
     final s = tester.getSize(f);
-    expect(s.width, closeTo(353, 4),
-        reason: 'tiap foto multi ±48% area → 2 foto terlihat sekaligus');
-    expect(s.height, lessThan(736 * 1.4 + 1),
-        reason: 'tinggi dicap agar tidak terlalu tinggi');
+    expect(s.width, closeTo(180, 3),
+        reason: 'lebar item = 240 × rasio (min 3:4 = 0.75)');
+    expect(s.height, closeTo(240, 1), reason: 'tinggi seragam carousel 240');
   });
 
   testWidgets('post foto tanpa imageW/H (post lama) → fallback aman',
@@ -281,11 +283,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(tester.takeException(), isNull, reason: 'render awal aman');
 
-    // Tap foto terakhir (index 2) — inilah yang dulu crash karena list
-    // terfilter hanya berisi [ok0, ok2] (length 2).
-    final photos = find.byType(GestureDetector);
-    if (photos.evaluate().isNotEmpty) {
-      await tester.tap(photos.last, warnIfMissed: false);
+    // Tap foto terakhir di DALAM carousel (index 2) — inilah yang dulu crash
+    // karena list viewer terfilter hanya berisi [ok0, ok2] (length 2).
+    // Cari GestureDetector khusus media (bukan badge follow/avatar) supaya
+    // tidak salah tap elemen lain.
+    final mediaTap = find.descendant(
+      of: find.byKey(const ValueKey('photo_multi')),
+      matching: find.byType(GestureDetector),
+    );
+    if (mediaTap.evaluate().isNotEmpty) {
+      await tester.tap(mediaTap.last, warnIfMissed: false);
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 300));
     }
@@ -590,5 +597,143 @@ void _cleanupTestChannels() {
     _cleanupTestChannels();
     await tester.pump(const Duration(seconds: 120));
     expect(tester.takeException(), isNull);
+  });
+
+  // ── REDESIGN TIMELINE (ala Threads) ──
+  group('Redesign Timeline ala Threads', () {
+    testWidgets('badge "+ ikuti" tampil di avatar (belum follow & bukan sendiri)',
+        (tester) async {
+      await pump(tester, _post());
+      expect(find.byIcon(Icons.add), findsOneWidget,
+          reason: 'badge follow di avatar harus tampil');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('badge "+ ikuti" TIDAK tampil untuk post sendiri',
+        (tester) async {
+      final p = _post()..['authorId'] = 'me';
+      await pump(tester, p);
+      expect(find.byIcon(Icons.add), findsNothing,
+          reason: 'post sendiri tak punya tombol ikuti');
+    });
+
+    testWidgets('teks "· Ikuti" & label Publik HILANG dari feed',
+        (tester) async {
+      await pump(tester, _post());
+      // "Ikuti" (label tombol) & "Publik" tidak muncul sebagai teks di kartu.
+      expect(find.textContaining('Ikuti'), findsNothing);
+      expect(find.textContaining('Publik'), findsNothing);
+    });
+
+    testWidgets('angka 0 TIDAK ditampilkan di baris aksi', (tester) async {
+      await pump(tester, _post(likes: 0, comments: 0, shares: 0));
+      expect(find.text('0'), findsNothing);
+      // Ikon aksi tetap ada (hati/komentar/kirim).
+      expect(find.byIcon(PhosphorIconsRegular.heart), findsOneWidget);
+      expect(find.byIcon(PhosphorIconsRegular.chatCircle), findsOneWidget);
+      expect(find.byIcon(PhosphorIconsRegular.paperPlaneTilt), findsOneWidget);
+    });
+
+    testWidgets('angka besar diringkas (1200 → 1,2rb)', (tester) async {
+      await pump(tester, _post(likes: 1200));
+      expect(find.text('1,2rb'), findsOneWidget);
+    });
+
+    testWidgets('multi media → carousel horizontal (bukan grid)',
+        (tester) async {
+      // Uji langsung widget grid (deterministik, tanpa IO).
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              child: PostPhotoGrid(
+                thumbs: [_pngBytes, _pngBytes, _pngBytes],
+                aspects: const [1.0, 1.0, 1.0],
+                onOpenViewer: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final carousel = find.byKey(const ValueKey('photo_multi'));
+      expect(carousel, findsOneWidget);
+      final lv = find.descendant(
+        of: carousel,
+        matching: find.byWidgetPredicate(
+          (w) => w is ListView && w.scrollDirection == Axis.horizontal,
+        ),
+      );
+      expect(lv, findsOneWidget, reason: 'carousel = ListView horizontal');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('media tunggal → kotak (bukan carousel) + rasio dibatasi',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              child: PostPhotoGrid(
+                // Rasio 9:16 (0.5625) → dibatasi ke 4:5 (0.8).
+                thumbs: [_pngBytes],
+                aspects: const [0.5625],
+                onOpenViewer: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final single = find.byKey(const ValueKey('photo_single'));
+      expect(single, findsOneWidget);
+      final size = tester.getSize(single);
+      // rightInset default 16 → lebar = 300 − 16 = 284; tinggi = 284 / 0.8.
+      expect(size.width, closeTo(284, 1));
+      expect(size.height, closeTo(284 / 0.8, 1));
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  testWidgets('tanpa overflow di layar sempit 360 (checklist desain)',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await pump(
+      tester,
+      _post(
+        author: 'Nama Panjang Sekali Biar Terpotong Ellipsis',
+        text: 'Teks panjang ' * 20,
+        images: [_pngBase64, _pngBase64],
+        imageW: 1200,
+        imageH: 900,
+        likes: 1200,
+        comments: 5,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    // Overflow memunculkan exception di test → harus null.
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PostCard), findsOneWidget);
+  });
+
+  group('helper media (rasio ala Threads)', () {
+    test('singleMediaAspect dibatasi 4:5 … 1.91:1', () {
+      expect(singleMediaAspect(0, 0), 1.0);
+      expect(singleMediaAspect(1000, 1000), 1.0);
+      expect(singleMediaAspect(1000, 2000), closeTo(0.8, 0.0001));
+      expect(singleMediaAspect(2000, 1000), closeTo(1.91, 0.0001));
+      expect(singleMediaAspect(1200, 1600), closeTo(0.8, 0.0001));
+    });
+
+    test('carouselItemWidth dibatasi 3:4 … 4:3 pada tinggi 240', () {
+      expect(carouselItemWidth(1000, 1000), 240);
+      expect(carouselItemWidth(1000, 2000), closeTo(180, 0.0001));
+      expect(carouselItemWidth(2000, 1000), closeTo(319.2, 0.01));
+    });
   });
 }
