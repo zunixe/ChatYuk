@@ -4539,5 +4539,10 @@ per frame) — lebih akurat. Jank 1,25% terjadi saat lompatan scroll agresif
   **80×40** → orientasi dibakar DAN tidak upscale (80 < 1080 tetap 80).
 - Varian tile diverifikasi di perangkat: `thumb(tile)` → **400×533, 22.738 B**
   (cocok dengan ukur HTTP) → `resize=contain` benar.
-- Composer (progress upload/konkurensi/fallback) belum diuji otomatis (butuh
-  ImagePicker + device); kode sederhana, belum diverifikasi visual.
+- ~~Composer (fallback kompresi + batas konkurensi) belum diuji otomatis~~ →
+  **SUDAH**: logika diekstrak ke `core/media/post_photo_prepare.dart`
+  (`preparePostPhoto`) & `core/bounded_task.dart` (`runBounded`), lalu dikunci
+  test: fallback file-asli saat kompresi `null`/melempar, dimensi dari header,
+  blurhash gagal→'', bytes invalid→null, konkurensi maks 3 tidak terlampaui.
+  Yang BELUM diuji otomatis: interaksi UI ImagePicker + indikator progress
+  (butuh device/manual).

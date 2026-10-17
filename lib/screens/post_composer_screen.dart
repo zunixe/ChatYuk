@@ -10,9 +10,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import '../providers/riverpod/nav_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
-import '../core/media/blurhash.dart';
-import '../core/media/chat_photo_helper.dart';
+import '../core/bounded_task.dart';
 import '../core/media/native_image.dart';
+import '../core/media/post_photo_prepare.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
 import '../providers/riverpod/theme_provider.dart';
@@ -60,30 +60,12 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
     super.dispose();
   }
 
-  /// Proses foto pilih → (bytes, w, h, blurhash). Bila kompresi GAGAL,
-  /// pakai file ASLI (jangan hilangkan foto user) dan tetap hitung metadata.
-  /// BlurHash dihitung dari versi kecil (32px) agar ringan.
+  /// Proses foto pilih → bytes siap upload + dimensi + BlurHash.
+  /// Logika & fallback (kompresi gagal → file asli) ada di
+  /// `preparePostPhoto` (`core/media/post_photo_prepare.dart`) agar testable.
   Future<({Uint8List bytes, int w, int h, String blurhash})?> _prepare(
     Uint8List raw,
-  ) async {
-    var bytes = raw;
-    var w = 0;
-    var h = 0;
-    final processed = await NativeImage.processPost(raw);
-    if (processed != null) {
-      bytes = processed.bytes;
-      w = processed.width;
-      h = processed.height;
-    }
-    if (w <= 0 || h <= 0) {
-      final dims = parseImageDimensions(bytes);
-      w = dims?.width ?? 0;
-      h = dims?.height ?? 0;
-    }
-    if (w <= 0 || h <= 0) return null;
-    final bh = await computeBlurHash(bytes) ?? '';
-    return (bytes: bytes, w: w, h: h, blurhash: bh);
-  }
+  ) => preparePostPhoto(raw);
 
   /// Ambil foto dari galeri — multi-pick sekaligus (maks 10 total).
   Future<void> _pickGallery() async {
@@ -295,24 +277,21 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
         final results = List<String?>.filled(total, null);
         // Konkurensi DIBATASI (3) — dulu semua foto serentak → lonjakan
         // memori/bandwidth di HP kelas menengah.
-        var next = 0;
-        Future<void> worker() async {
-          while (true) {
-            final i = next++;
-            if (i >= total) return;
+        await runBounded<Uint8List>(
+          items: _images,
+          maxConcurrent: 3,
+          run: (b64, i) async {
             try {
               results[i] = await storage.uploadPostImage(
                 uid: uid,
-                base64: base64Encode(_images[i]),
+                base64: base64Encode(b64),
               );
             } catch (_) {
               results[i] = null;
             }
             if (mounted) setState(() => _uploadDone = i + 1);
-          }
-        }
-
-        await Future.wait(List.generate(total.clamp(0, 3), (_) => worker()));
+          },
+        );
         // Seed cache lokal tiap foto yang sukses diupload (fire-and-forget)
         // supaya feed refresh langsung tampil tanpa re-download.
         for (var i = 0; i < results.length; i++) {
