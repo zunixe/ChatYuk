@@ -76,13 +76,15 @@ class _PollComposerSheetState extends State<PollComposerSheet> {
     final q = _q.text.trim();
     final o = _cleanOptions;
     if (q.isEmpty) {
-      ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text(s.pollNeedQuestion)));
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(s.pollNeedQuestion)));
       return;
     }
     if (o.length < ChatPoll.minOptions) {
-      ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text(s.pollNeedOptions)));
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(s.pollNeedOptions)));
       return;
     }
     Navigator.of(context).pop(ChatPoll(question: q, options: o, multi: _multi));
@@ -111,88 +113,83 @@ class _PollComposerSheetState extends State<PollComposerSheet> {
         initialChildSize: 0.75,
         minChildSize: 0.4,
         maxChildSize: 0.95,
-        builder: (_, scroll) => Stack(
+        // Tombol kirim di HEADER (bukan FAB melayang) — dulu FAB menutupi
+        // switch "beberapa jawaban" saat keyboard terbuka (cek di HP).
+        builder: (_, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            ListView(
-              controller: scroll,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.textSecondary.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Row(
               children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.textSecondary.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                IconButton(
+                  icon: Icon(Icons.close, color: AppTheme.textPrimary),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                Expanded(
+                  child: Text(
+                    s.pollCreateTitle,
+                    style: AppText.title.copyWith(color: AppTheme.textPrimary),
                   ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.close, color: AppTheme.textPrimary),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    Expanded(
-                      child: Text(
-                        s.pollCreateTitle,
-                        style: AppText.title.copyWith(
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(s.pollQuestion, style: AppText.label),
-                const SizedBox(height: 6),
-                TextField(
-                  key: const ValueKey('poll_question'),
-                  controller: _q,
-                  autofocus: true,
-                  maxLength: ChatPoll.maxQuestionLen,
-                  minLines: 1,
-                  maxLines: 3,
-                  style: AppText.body,
-                  onChanged: (_) => setState(() {}),
-                  decoration: _deco(s.pollQuestionHint),
-                ),
-                const SizedBox(height: 16),
-                Text(s.pollOptions, style: AppText.label),
-                const SizedBox(height: 6),
-                for (var i = 0; i < _opts.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: TextField(
-                      key: ValueKey('poll_option_$i'),
-                      controller: _opts[i],
-                      maxLength: ChatPoll.maxOptionLen,
-                      style: AppText.body,
-                      textInputAction: TextInputAction.next,
-                      onChanged: (_) => _onOptionChanged(i),
-                      decoration: _deco(s.pollOptionHint(i + 1)),
-                    ),
+                IconButton.filled(
+                  key: const ValueKey('poll_send'),
+                  onPressed: _submit,
+                  style: IconButton.styleFrom(
+                    backgroundColor: _valid
+                        ? AppTheme.primary
+                        : AppTheme.textSecondary.withValues(alpha: 0.4),
                   ),
-                const SizedBox(height: 4),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.pollAllowMultiple, style: AppText.bodyStrong),
-                  value: _multi,
-                  onChanged: (v) => setState(() => _multi = v),
+                  icon: const Icon(Icons.send_rounded, color: Colors.white),
                 ),
               ],
             ),
-            Positioned(
-              right: 16,
-              bottom: 16 + MediaQuery.paddingOf(context).bottom,
-              child: FloatingActionButton(
-                key: const ValueKey('poll_send'),
-                onPressed: _submit,
-                backgroundColor:
-                    _valid ? AppTheme.primary : AppTheme.textSecondary,
-                child: const Icon(Icons.send_rounded, color: Colors.white),
+            const SizedBox(height: 12),
+            Text(s.pollQuestion, style: AppText.label),
+            const SizedBox(height: 6),
+            TextField(
+              key: const ValueKey('poll_question'),
+              controller: _q,
+              autofocus: true,
+              maxLength: ChatPoll.maxQuestionLen,
+              minLines: 1,
+              maxLines: 3,
+              style: AppText.body,
+              onChanged: (_) => setState(() {}),
+              decoration: _deco(s.pollQuestionHint),
+            ),
+            const SizedBox(height: 16),
+            Text(s.pollOptions, style: AppText.label),
+            const SizedBox(height: 6),
+            for (var i = 0; i < _opts.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: TextField(
+                  key: ValueKey('poll_option_$i'),
+                  controller: _opts[i],
+                  maxLength: ChatPoll.maxOptionLen,
+                  style: AppText.body,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => _onOptionChanged(i),
+                  decoration: _deco(s.pollOptionHint(i + 1)),
+                ),
               ),
+            const SizedBox(height: 4),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(s.pollAllowMultiple, style: AppText.bodyStrong),
+              value: _multi,
+              onChanged: (v) => setState(() => _multi = v),
             ),
           ],
         ),
