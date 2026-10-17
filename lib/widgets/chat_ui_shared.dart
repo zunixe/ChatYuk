@@ -31,8 +31,11 @@ class ChatIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Isi tombol (lingkaran ikon) — sama untuk tap maupun tahan.
+    // AnimatedContainer: warna lingkaran ikut halus saat state berubah.
     final core = Center(
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
         width: 30,
         height: 30,
         decoration: BoxDecoration(
@@ -40,18 +43,19 @@ class ChatIconButton extends StatelessWidget {
           color: AppTheme.primary.withValues(alpha: open ? 0.16 : 0.12),
         ),
         child: AnimatedRotation(
-          // Rotasi saja (+ → ✕), TANPA crossfade ikon: crossfade
-          // menumpuk dua glif 180ms sehingga terlihat seperti ikon
-          // rusak/glitch di tengah transisi.
+          // Rotasi (+ → ✕), TANPA crossfade ikon: crossfade menumpuk dua
+          // glif 180ms sehingga terlihat seperti ikon rusak/glitch.
           turns: open ? 0.125 : 0,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutBack,
+          // SATU glif saja (+ / ikon yang diberikan). Saat `open`, glif itu
+          // diputar 45° → membentuk ✕ secara alami. Dulu ikon DIGANTI
+          // sekaligus (add → close) sehingga yang terlihat berputar justru ✕
+          // (putaran tak nyambung).
           child: Icon(
-            icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
+            icon ?? Icons.add_rounded,
             color: AppTheme.primary,
-            // 18px di kotak 30px → margin 6px tiap sisi. Glif "+" polos
-            // terbaca lebih ringan/proporsional daripada 20px (dulu memakai
-            // add_circle_outline yang lingkarannya memenuhi kotak).
+            // 18px di kotak 30px → margin 6px tiap sisi (proporsional).
             size: 18,
           ),
         ),

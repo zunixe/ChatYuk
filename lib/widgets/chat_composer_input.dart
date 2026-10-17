@@ -779,14 +779,12 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                                 ),
                               ),
                               ChatIconButton(
-                                // Ikon plus POLOS (bukan add_circle) supaya
-                                // rotasi 45° menghasilkan ✕ yang rapi &
-                                // seukuran — dulu add_circle_outline → close
-                                // = dua glif beda besar (terlihat "kebesaran"
-                                // setelah diklik).
-                                icon: widget.showAttachRow
-                                    ? Icons.close_rounded
-                                    : Icons.add_rounded,
+                                // Ikon SELALU "+" polos; rotasi 45° oleh
+                                // ChatIconButton yang mengubahnya jadi ✕.
+                                // JANGAN ganti ikonnya di sini — kalau diganti
+                                // (add → close) rotasi 45° malah memutar ✕
+                                // sehingga terlihat miring/tak nyambung.
+                                icon: Icons.add_rounded,
                                 open: widget.showAttachRow,
                                 onTap: widget.onToggleAttach,
                                 tooltip: s.menuSendPhoto,
