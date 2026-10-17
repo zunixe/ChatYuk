@@ -117,6 +117,20 @@ mixin _RcRoomMx on _RoomChatBase {
             }
           }
         }
+        // Stiker: path persis / FIFO, id server sekali pakai.
+        for (final m in msgs) {
+          if (m.senderId != myId) continue;
+          final idx = consumeConfirmedSticker(
+            server: m,
+            openedAt: _openedAt,
+            consumedIds: _confirmedPhotoIds,
+            pendings: _pending,
+          );
+          if (idx != -1) {
+            _pending.removeAt(idx);
+            changed = true;
+          }
+        }
         // File: id server sekali pakai + nama file (FIFO).
         for (final m in msgs) {
           if (m.senderId != myId) continue;

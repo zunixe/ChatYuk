@@ -62,3 +62,22 @@ int consumeConfirmedPoll({
     (p) => p.type == 'poll' && p.text == server.text,
   );
 }
+
+/// Dedupe bubble STIKER pending vs gema server. Pending stiker baru berisi
+/// base64 (server = path) → cocokkan path persis bila ada, selain itu FIFO
+/// per tipe. Id server sekali pakai, hanya pesan setelah [openedAt].
+int consumeConfirmedSticker({
+  required MessageModel server,
+  required DateTime openedAt,
+  required Set<String> consumedIds,
+  required List<MessageModel> pendings,
+}) {
+  if (server.type != 'sticker') return -1;
+  if (!server.timestamp.isAfter(openedAt)) return -1;
+  if (!consumedIds.add(server.id)) return -1;
+  final exact = pendings.indexWhere(
+    (p) => p.type == 'sticker' && p.imageData == server.imageData,
+  );
+  if (exact != -1) return exact;
+  return pendings.indexWhere((p) => p.type == 'sticker');
+}

@@ -127,44 +127,20 @@ mixin _PcMediaMx on _PrivateChatBase {
         );
   }
 
-  /// Kirim STIKER: upload PNG 512px ke bucket `stickers/` → pesan type
-  /// 'sticker' (imageData = path storage).
-  Future<void> _sendSticker(Uint8List pngBytes) async {
-    dlog('[STICKER] _sendSticker len=${pngBytes.length}');
-    if (pngBytes.isEmpty) return;
-    final container = ProviderScope.containerOf(context, listen: false);
-    final auth = container.read(authProvider.notifier);
-    final uid = auth.uid;
-    if (uid == null) return;
+  /// Kontrak ChatStickerSendMixin: insert pesan stiker (path storage).
+  @override
+  Future<void> stickerDispatch(String path) async {
+    final auth = ref.read(authProvider.notifier);
     final prof = auth.profile;
-    final b64 = base64Encode(pngBytes);
-    try {
-      final path = await container
-          .read(storageProvider)
-          .uploadSticker(uid: uid, base64: b64, ext: 'png');
-      dlog('[STICKER] upload path=$path');
-      if (path == null || path.isEmpty || !mounted) return;
-      // Titip bytes ke cache bubble: pengirim langsung lihat tanpa download.
-      StickerBubble.seedCache(path, pngBytes);
-      await container.read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
-            chatId: widget.chatId,
-            senderId: uid,
-            senderName: prof?.nickname ?? 'Anon',
-            senderGender: prof?.gender ?? 'other',
-            text: '',
-            type: 'sticker',
-            imageData: path,
-          );
-    } catch (e) {
-      dlog('[STICKER] kirim gagal: $e');
-      dlog('[Sticker] kirim gagal: $e');
-      if (mounted) {
-        showChatSnack(
-          context,
-          container.read(localeProvider).s.stickerSendFail,
-        );
-      }
-    }
+    await ref.read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
+      chatId: widget.chatId,
+      senderId: auth.uid!,
+      senderName: prof?.nickname ?? 'Anon',
+      senderGender: prof?.gender ?? 'other',
+      text: '',
+      type: 'sticker',
+      imageData: path,
+    );
   }
 
   /// Izinkan → ambil posisi → sheet pilihan (lokasi saat ini / live / tempat

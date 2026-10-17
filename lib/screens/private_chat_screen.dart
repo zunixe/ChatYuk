@@ -35,7 +35,6 @@ import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/photo_album_bubble.dart';
 import '../widgets/reply_composer_preview.dart';
-import '../widgets/sticker_bubble.dart';
 import '../widgets/message/image_decode_core.dart';
 import '../widgets/voice_bubble.dart';
 import '../widgets/date_chip.dart';
@@ -58,6 +57,7 @@ import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/chat_send_mixin.dart';
 import '../mixins/chat_file_send_mixin.dart';
 import '../mixins/chat_gallery_send_mixin.dart';
+import '../mixins/chat_sticker_send_mixin.dart';
 import '../widgets/chat_composer_input.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/location_picker_sheet.dart';
@@ -145,6 +145,7 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
         ChatSendMixin<PrivateChatScreen>,
         ChatFileSendMixin<PrivateChatScreen>,
         ChatGallerySendMixin<PrivateChatScreen>,
+        ChatStickerSendMixin<PrivateChatScreen>,
         _PcOpenTimingMx {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
@@ -325,7 +326,6 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
   void _startLiveLocationUpdates(String messageId, ChatLocation initial);
   void _trimConfirmed(Set<String> ids);
   Future<void> voiceFinishRecording(String path, int recordedMs);
-  Future<void> _sendSticker(Uint8List pngBytes);
   bool get _showCallOverlay;
   void _expandCall();
   void _sendRecordingSignal();

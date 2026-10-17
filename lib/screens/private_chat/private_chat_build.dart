@@ -3,44 +3,6 @@ part of '../private_chat_screen.dart';
 // ignore_for_file: unused_element, unused_element_parameter
 
 mixin _PcBuildMx on _PrivateChatBase {
-  /// Kirim STIKER KOLEKSI (path server sudah ada) — tanpa upload ulang.
-  /// Download 1× untuk seed cache bubble, lalu kirim pesan type 'sticker'.
-  /// Di mixin ini (satu file dengan pemakai di composer) supaya resolve
-  /// nama selalu dalam satu unit part.
-  Future<void> _sendStickerPath(String path) async {
-    dlog('[STICKER] _sendStickerPath $path');
-    if (path.isEmpty) return;
-    final container = ProviderScope.containerOf(context, listen: false);
-    final auth = container.read(authProvider.notifier);
-    final uid = auth.uid;
-    if (uid == null) return;
-    final prof = auth.profile;
-    try {
-      final bytes =
-          await container.read(storageProvider).downloadBytes(path);
-      if (bytes != null && bytes.isNotEmpty) {
-        StickerBubble.seedCache(path, bytes);
-      }
-      await container.read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
-            chatId: widget.chatId,
-            senderId: uid,
-            senderName: prof?.nickname ?? 'Anon',
-            senderGender: prof?.gender ?? 'other',
-            text: '',
-            type: 'sticker',
-            imageData: path,
-          );
-    } catch (e) {
-      dlog('[STICKER] kirim path gagal: $e');
-      if (mounted) {
-        showChatSnack(
-          context,
-          container.read(localeProvider).s.stickerSendFail,
-        );
-      }
-    }
-  }
-
   @override
   Future<bool> chatDeleteMessage(String id) async {
     final ok = await ProviderScope.containerOf(
@@ -693,8 +655,8 @@ mixin _PcBuildMx on _PrivateChatBase {
                     sendViewOnceFromPicker();
                   },
                   onSendVoice: (path, ms) => voiceFinishRecording(path, ms),
-                  onSendSticker: _sendSticker,
-                  onSendStickerPath: _sendStickerPath,
+                  onSendSticker: sendStickerBytes,
+                  onSendStickerPath: sendStickerPath,
                   onRecordingSignal: _sendRecordingSignal,
                   onTyping: _sendTypingSignal,
                   // Koin & hadiah hanya bila sistem koin aktif —

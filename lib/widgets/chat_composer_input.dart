@@ -20,6 +20,7 @@ import 'chat_attach_panel.dart';
 import 'chat_ui_shared.dart';
 import 'composer_link_preview.dart';
 import 'emoji_picker_sheet.dart';
+import 'sticker_sheet.dart' show StickerBytesSender;
 import 'location_bubble.dart';
 
 class ChatComposerInput extends ConsumerStatefulWidget {
@@ -57,7 +58,7 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   final VoidCallback? onOpenGiftPanel;
   final void Function(String filePath, int durationMs)? onSendVoice;
   /// Kirim STIKER (bytes PNG 512px) — diisi pemanggil (private/room).
-  final Future<void> Function(Uint8List stickerPngBytes)? onSendSticker;
+  final StickerBytesSender? onSendSticker;
   /// Kirim stiker koleksi server (path) tanpa upload ulang.
   final Future<void> Function(String stickerPath)? onSendStickerPath;
   /// Sinyal 'sedang merekam' (private pakai typing kind=recording).

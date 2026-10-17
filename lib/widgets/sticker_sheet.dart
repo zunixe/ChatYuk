@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -20,13 +20,19 @@ import 'sticker_bubble.dart';
 import 'sticker_editor.dart';
 import 'sticker_packs.dart';
 
+/// Kirim stiker dari bytes (+ ekstensi: png default, gif/webp GIPHY).
+typedef StickerBytesSender = Future<void> Function(
+  Uint8List bytes, {
+  String ext,
+});
+
 /// Sheet bersama **Emoji | Sticker** untuk composer chat (private & room).
 ///
 /// Tab Sticker: impor dari GALERI (S3) → crop 512px PNG (ImageBridge) →
 /// kirim. Grid = koleksi SERVER (tahan install ulang) + impor sesi ini.
 class StickerEmojiSheet extends ConsumerStatefulWidget {
   final TextEditingController controller;
-  final Future<void> Function(Uint8List stickerPngBytes) onSendSticker;
+  final StickerBytesSender onSendSticker;
   /// Kirim stiker yang SUDAH ada di server (tanpa upload ulang).
   /// null = fallback download lalu [onSendSticker].
   final Future<void> Function(String stickerPath)? onSendStickerPath;
@@ -36,6 +42,11 @@ class StickerEmojiSheet extends ConsumerStatefulWidget {
     required this.onSendSticker,
     this.onSendStickerPath,
   });
+
+  /// Test-only: isi daftar stiker terbaru (lihat state).
+  @visibleForTesting
+  static void debugSeedRecent(List<Uint8List> items) =>
+      _StickerEmojiSheetState.debugSeedRecent(items);
 
   @override
   ConsumerState<StickerEmojiSheet> createState() => _StickerEmojiSheetState();
@@ -57,11 +68,35 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
   // Sub-tab stiker: 0 = koleksiku, 1 = Emoji Art (Twemoji, CC-BY 4.0).
   int _pack = 0;
   bool _busy = false;
+  // Sekali kirim per buka sheet: tap ganda tidak mengirim dua stiker.
+  bool _sent = false;
+
+  /// INSTAN ala WhatsApp: tutup sheet SEKARANG, kirim di latar. Handler
+  /// layar chat (masih hidup) menampilkan bubble pending seketika — dulu
+  /// sheet menunggu upload/unduh + insert selesai (terasa tak ter-klik).
+  /// [job] TIDAK boleh memakai `ref`/`context` sheet (sudah ditutup).
+  void _sendAndClose(Future<void> Function() job) {
+    if (_sent) return;
+    _sent = true;
+    HapticFeedback.selectionClick();
+    Navigator.of(context).maybePop();
+    unawaited(job().catchError((Object e) {
+      dlog('[STICKER] kirim latar error: $e');
+    }));
+  }
 
   static void _registerHygiene() {
     if (_hygieneRegistered) return;
     _hygieneRegistered = true;
     ImageCacheHygiene.registerAppCache(_recent.clear);
+  }
+
+  /// Test-only: isi daftar stiker terbaru tanpa alur impor.
+  @visibleForTesting
+  static void debugSeedRecent(List<Uint8List> items) {
+    _recent
+      ..clear()
+      ..addAll(items);
   }
 
   /// Sisipkan bytes ke daftar "terbaru" (bounded) + pastikan pembersih
@@ -271,48 +306,27 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
   /// Kirim stiker dari sumber eksternal (GIPHY): bytes + ext apa adanya.
   /// Upload ext asli (webp/gif) → kirim via path (tanpa editor).
   Future<void> _pickExternal(Uint8List bytes, String ext) async {
-    if (_busy || bytes.isEmpty) return;
-    setState(() => _busy = true);
-    try {
-      final uid = ref.read(authProvider.notifier).uid;
-      if (uid == null || !mounted) return;
-      final path = await ref
-          .read(storageProvider)
-          .uploadSticker(uid: uid, base64: base64Encode(bytes), ext: ext);
-      if (path == null || path.isEmpty || !mounted) return;
-      final viaPath = widget.onSendStickerPath;
-      if (viaPath == null) return;
-      await viaPath(path);
-      unawaited(_loadSaved());
-      if (mounted) Navigator.of(context).maybePop();
-    } catch (e) {
-      dlog('[STICKER] pick external error: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    if (bytes.isEmpty) return;
+    final send = widget.onSendSticker;
+    _sendAndClose(() => send(bytes, ext: ext));
   }
 
   /// Kirim karya Emoji Art: upscale 72px → 512 PNG via pipeline impor
   /// (tanpa hapus latar — karya sudah transparan), lalu kirim + koleksi.
   Future<void> _sendArt(Uint8List art72) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
+    final send = widget.onSendSticker;
+    // Upscale native (tanpa ref) jalan setelah sheet tertutup.
+    _sendAndClose(() async {
       final b64 = await NativeImage.processStickerPng(
         art72,
         size: 512,
         removeBackground: false,
       );
       final bytes = b64 == null ? null : _b64(b64);
-      if (bytes == null || !mounted) return;
-      setState(() => _rememberRecent(bytes));
-      await widget.onSendSticker(bytes);
-      unawaited(_loadSaved());
-      if (mounted) Navigator.of(context).maybePop();
-    } catch (_) {
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+      if (bytes == null) return;
+      _rememberRecent(bytes);
+      await send(bytes);
+    });
   }
 
   /// Kirim stiker koleksi server: langsung pakai path bila handler
@@ -494,11 +508,13 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
             itemBuilder: (_, i) {
               if (i < _paths.length) {
                 final path = _paths[i];
-                return GestureDetector(
-                  onTap: () async {
-                    await _sendSaved(path);
-                    if (mounted) Navigator.of(context).maybePop();
-                  },
+                final viaPath = widget.onSendStickerPath;
+                return _StickerTile(
+                  onTap: () => viaPath != null
+                      ? _sendAndClose(() => viaPath(path))
+                      : _sendSaved(path).then((_) {
+                          if (mounted) Navigator.of(context).maybePop();
+                        }),
                   // Tahan (long-press) = hapus stiker dari koleksi server.
                   onLongPress: () => _confirmDeleteSticker(path),
                   child: StickerBubble(data: path, size: 72),
@@ -507,11 +523,9 @@ class _StickerEmojiSheetState extends ConsumerState<StickerEmojiSheet> {
               final ri = i - _paths.length;
               if (ri < _recent.length) {
                 final bytes = _recent[ri];
-                return GestureDetector(
-                  onTap: () async {
-                    await widget.onSendSticker(bytes);
-                    if (mounted) Navigator.of(context).maybePop();
-                  },
+                final send = widget.onSendSticker;
+                return _StickerTile(
+                  onTap: () => _sendAndClose(() => send(bytes)),
                   child: StickerBytes(bytes: bytes, size: 72),
                 );
               }
@@ -611,3 +625,57 @@ class _StickerEmojiGrid extends StatelessWidget {
     );
   }
 }
+
+/// Tile stiker dengan umpan balik TEKAN yang jelas (mengecil + riak) —
+/// dulu GestureDetector polos: tak ada tanda stiker sudah ter-klik.
+class _StickerTile extends StatefulWidget {
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final Widget child;
+  const _StickerTile({
+    required this.onTap,
+    required this.child,
+    this.onLongPress,
+  });
+
+  @override
+  State<_StickerTile> createState() => _StickerTileState();
+}
+
+class _StickerTileState extends State<_StickerTile> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (_down != v) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: _down ? 0.86 : 1,
+      duration: const Duration(milliseconds: 90),
+      curve: Curves.easeOut,
+      child: Material(
+        color: _down
+            ? AppTheme.primary.withValues(alpha: 0.14)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTapDown: (_) => _set(true),
+          onTapCancel: () => _set(false),
+          onTap: () {
+            _set(false);
+            widget.onTap();
+          },
+          onLongPress: widget.onLongPress,
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+

@@ -210,6 +210,21 @@ mixin _PcChatMx on _PrivateChatBase {
                 }
               }
               break;
+            case 'sticker':
+              {
+                final idx = consumeConfirmedSticker(
+                  server: m,
+                  openedAt: _openedAt,
+                  consumedIds: _confirmedPhotoIds,
+                  pendings: _pending,
+                );
+                _trimConfirmed(_confirmedPhotoIds);
+                if (idx != -1) {
+                  _pending.removeAt(idx);
+                  changed = true;
+                }
+              }
+              break;
             case 'poll':
               {
                 final idx = consumeConfirmedPoll(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../providers/riverpod/locale_provider.dart';
-import 'dart:typed_data';
 
 import '../config/theme.dart';
 import 'sticker_sheet.dart';
@@ -71,7 +70,7 @@ class EmojiPickerSheet {
     BuildContext context,
     TextEditingController controller, {
     /// Bila diisi → sheet menampilkan TAB STIKER (kirim sticker) selain emoji.
-    Future<void> Function(Uint8List stickerPngBytes)? onSendSticker,
+    StickerBytesSender? onSendSticker,
     /// Kirim stiker koleksi server tanpa upload ulang (terus ke sheet).
     Future<void> Function(String stickerPath)? onSendStickerPath,
   }) {

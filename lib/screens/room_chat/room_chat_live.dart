@@ -192,74 +192,23 @@ mixin _RcLiveMx on _RoomChatBase {
     });
   }
 
-  /// Kirim STIKER di room: upload PNG → pesan type 'sticker'.
-  Future<void> _sendSticker(Uint8List pngBytes) async {
-    if (pngBytes.isEmpty) return;
-    final container = ProviderScope.containerOf(context, listen: false);
-    final auth = container.read(authProvider.notifier);
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) return;
-    final b64 = base64Encode(pngBytes);
-    try {
-      final path = await container
-          .read(storageProvider)
-          .uploadSticker(uid: uid, base64: b64, ext: 'png');
-      if (path == null || path.isEmpty || !mounted) return;
-      // Titip bytes ke cache bubble (lihat private).
-      try {
-        StickerBubble.seedCache(path, pngBytes);
-      } catch (_) {}
-      await container.read(chatRiverpod.chatProvider.notifier).sendRoomMessage(
-            roomId: widget.room.id,
-            senderId: uid,
-            senderName: profile.nickname,
-            senderGender: profile.gender,
-            text: '',
-            type: 'sticker',
-            imageData: path,
-          );
-      if (mounted) _scrollToBottom();
-    } catch (e) {
-      dlog('[Sticker] room kirim gagal: $e');
-      if (mounted) {
-        showChatSnack(context, container.read(localeProvider).s.stickerSendFail);
-      }
-    }
-  }
-
-  /// Kirim STIKER KOLEKSI di room (path server) — tanpa upload ulang.
-  Future<void> _sendStickerPath(String path) async {
-    if (path.isEmpty) return;
-    final container = ProviderScope.containerOf(context, listen: false);
-    final auth = container.read(authProvider.notifier);
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) return;
-    try {
-      final bytes =
-          await container.read(storageProvider).downloadBytes(path);
-      if (bytes != null && bytes.isNotEmpty) {
-        try {
-          StickerBubble.seedCache(path, bytes);
-        } catch (_) {}
-      }
-      await container.read(chatRiverpod.chatProvider.notifier).sendRoomMessage(
-            roomId: widget.room.id,
-            senderId: uid,
-            senderName: profile.nickname,
-            senderGender: profile.gender,
-            text: '',
-            type: 'sticker',
-            imageData: path,
-          );
-      if (mounted) _scrollToBottom();
-    } catch (e) {
-      dlog('[Sticker] room kirim path gagal: $e');
-      if (mounted) {
-        showChatSnack(context, container.read(localeProvider).s.stickerSendFail);
-      }
-    }
+  /// Kontrak ChatStickerSendMixin: insert pesan stiker room (path storage).
+  @override
+  Future<void> stickerDispatch(String path) async {
+    final auth = ProviderScope.containerOf(context, listen: false)
+        .read(authProvider.notifier);
+    final profile = auth.profile!;
+    await ProviderScope.containerOf(context, listen: false)
+        .read(chatRiverpod.chatProvider.notifier)
+        .sendRoomMessage(
+          roomId: widget.room.id,
+          senderId: auth.uid!,
+          senderName: profile.nickname,
+          senderGender: profile.gender,
+          text: '',
+          type: 'sticker',
+          imageData: path,
+        );
   }
 
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
@@ -541,8 +490,8 @@ mixin _RcLiveMx on _RoomChatBase {
           sendViewOnceFromPicker();
         },
         onSendVoice: _sendVoiceMessage,
-        onSendSticker: _sendSticker,
-        onSendStickerPath: _sendStickerPath,
+        onSendSticker: sendStickerBytes,
+        onSendStickerPath: sendStickerPath,
         // Gift (fitur koin) hanya bila sistem koin aktif — hilang
         // total saat dimatikan admin (ikut flag points.enabled).
         onOpenGiftPanel: points && isPrivateRoom && _myRole != 'owner'

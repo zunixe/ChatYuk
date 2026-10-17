@@ -35,7 +35,6 @@ import '../widgets/app_gesture.dart';
 import '../widgets/date_chip.dart';
 import 'room_chat/widgets/room_widgets.dart';
 import 'room_chat/widgets/room_message_bubble.dart';
-import '../widgets/sticker_bubble.dart';
 import 'room_chat/widgets/voice_stage_strip.dart';
 import 'room_chat/widgets/broadcast_stage.dart';
 import '../widgets/photo_album_bubble.dart';
@@ -66,6 +65,7 @@ import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/chat_send_mixin.dart';
 import '../mixins/chat_file_send_mixin.dart';
 import '../mixins/chat_gallery_send_mixin.dart';
+import '../mixins/chat_sticker_send_mixin.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/call_provider.dart';
 
@@ -93,7 +93,8 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
         ChatPhotoSendMixin<RoomChatScreen>,
         ChatSendMixin<RoomChatScreen>,
         ChatFileSendMixin<RoomChatScreen>,
-        ChatGallerySendMixin<RoomChatScreen> {
+        ChatGallerySendMixin<RoomChatScreen>,
+        ChatStickerSendMixin<RoomChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _showUsers = false;
