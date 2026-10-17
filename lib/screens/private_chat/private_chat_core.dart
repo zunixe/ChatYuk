@@ -83,9 +83,10 @@ mixin _PcCoreMx on _PrivateChatBase {
     }
 
     return PopScope(
-      // Back menutup search dulu, lalu mode seleksi, baru keluar layar.
+      // Back menutup panel lampiran dulu, lalu search, lalu mode seleksi,
+      // baru keluar layar.
       // `_backEscape` = katup sekali-pakai anti "back mati permanen".
-      canPop: (!inSelection && !_searching) || _backEscape,
+      canPop: (!inSelection && !_searching && !_showAttachRow) || _backEscape,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           // Back benar-benar menutup layar: lepas fokus keyboard SEGERA
@@ -101,7 +102,7 @@ mixin _PcCoreMx on _PrivateChatBase {
         // → niat user SUDAH terpenuhi → NO-OP. Force-pop di sini SALAH
         // (insiden 2026-10-11: escape menembus sampai launcher).
         // Escape hanya bila basi yang SAMA berulang (macet beneran).
-        if (!_searching && !inSelection) {
+        if (!_searching && !inSelection && !_showAttachRow) {
           if (_backGuard.shouldEscape('pc:clean')) {
             debugPrint('[NAV] back escape private-chat (macet, paksa pop)');
             NavJournal.log('back private-chat ESCAPE macet (paksa pop)');
@@ -115,13 +116,19 @@ mixin _PcCoreMx on _PrivateChatBase {
         _backGuard.reset();
         // Jejak diagnosa "back mati": catat kenapa back di-veto.
         debugPrint(
-          '[NAV] back veto private-chat searching=$_searching selection=${selectedIds.length}',
+          '[NAV] back veto private-chat attach=$_showAttachRow '
+          'searching=$_searching selection=${selectedIds.length}',
         );
         NavJournal.log(
-          'back private-chat veto searching=$_searching selection=${selectedIds.length}',
+          'back private-chat veto attach=$_showAttachRow '
+          'searching=$_searching selection=${selectedIds.length}',
         );
         try {
-          if (_searching) {
+          if (_showAttachRow) {
+            // Panel lampiran (menu "+") terbuka → back MENUTUP panel saja,
+            // TIDAK keluar dari chat (laporan user).
+            setState(() => _showAttachRow = false);
+          } else if (_searching) {
             _closeSearch();
           } else if (inSelection) {
             clearSelection();

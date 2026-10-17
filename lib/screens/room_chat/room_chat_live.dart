@@ -413,8 +413,10 @@ mixin _RcLiveMx on _RoomChatBase {
     final points = ref.watch(pointsProvider.select((p) => p.enabled));
 
     return PopScope(
+      // Back menutup panel lampiran (menu "+") dulu, lalu mode seleksi,
+      // baru keluar layar.
       // `_backEscape` = katup sekali-pakai anti "back mati permanen".
-      canPop: !inSelection || _backEscape,
+      canPop: (!inSelection && !_showAttachRow) || _backEscape,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           NavJournal.log('back room-chat didPop (tutup layar)');
@@ -423,7 +425,7 @@ mixin _RcLiveMx on _RoomChatBase {
         }
         // Veto BASI (seleksi sudah bersih konkuren) → NO-OP. Escape hanya
         // bila basi yang SAMA berulang (macet beneran).
-        if (!inSelection) {
+        if (!inSelection && !_showAttachRow) {
           if (_backGuard.shouldEscape('rc:clean')) {
             debugPrint('[NAV] back escape room-chat (macet, paksa pop)');
             NavJournal.log('back room-chat ESCAPE macet (paksa pop)');
@@ -435,10 +437,21 @@ mixin _RcLiveMx on _RoomChatBase {
           return;
         }
         _backGuard.reset();
-        debugPrint('[NAV] back veto room-chat selection=${selectedIds.length}');
-        NavJournal.log('back room-chat veto selection=${selectedIds.length}');
+        debugPrint(
+          '[NAV] back veto room-chat attach=$_showAttachRow '
+          'selection=${selectedIds.length}',
+        );
+        NavJournal.log(
+          'back room-chat veto attach=$_showAttachRow '
+          'selection=${selectedIds.length}',
+        );
         try {
-          if (inSelection) clearSelection();
+          if (_showAttachRow) {
+            // Panel lampiran terbuka → back MENUTUP panel saja, tidak keluar.
+            setState(() => _showAttachRow = false);
+          } else if (inSelection) {
+            clearSelection();
+          }
         } catch (e) {
           // Handler melempar + route masih ada & tertahan → escape sekali.
           debugPrint('[NAV] back handler error room-chat: $e');
