@@ -682,7 +682,7 @@ mixin _PcBuildMx on _PrivateChatBase {
                   },
                   onSendPhoto: () {
                     setState(() => _showAttachRow = false);
-                    photoPickFromGalleryToPreview();
+                    openGalleryPicker();
                   },
                   onSendViewOnce: () {
                     setState(() => _showAttachRow = false);

@@ -65,6 +65,7 @@ import '../mixins/chat_outbox_mixin.dart';
 import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/chat_send_mixin.dart';
 import '../mixins/chat_file_send_mixin.dart';
+import '../mixins/chat_gallery_send_mixin.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/call_provider.dart';
 
@@ -91,7 +92,8 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
         ChatSelectionMixin<RoomChatScreen>,
         ChatPhotoSendMixin<RoomChatScreen>,
         ChatSendMixin<RoomChatScreen>,
-        ChatFileSendMixin<RoomChatScreen> {
+        ChatFileSendMixin<RoomChatScreen>,
+        ChatGallerySendMixin<RoomChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _showUsers = false;

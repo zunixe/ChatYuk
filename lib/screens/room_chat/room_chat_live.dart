@@ -521,7 +521,7 @@ mixin _RcLiveMx on _RoomChatBase {
         },
         onSendPhoto: () {
           setState(() => _showAttachRow = false);
-          photoPickFromGalleryToPreview();
+          openGalleryPicker();
         },
         onSendViewOnce: () {
           setState(() => _showAttachRow = false);

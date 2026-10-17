@@ -144,7 +144,7 @@ mixin SScreenMx {
       isId ? 'Upload gagal, pakai emoji' : 'Upload failed, using emoji';
 
   // ── Send Coins ──
-  String get menuSendPhoto => isId ? 'Kirim Foto' : 'Send Photo';
+  String get menuSendPhoto => isId ? 'Gallery' : 'Gallery';
   String get menuTakePhoto => isId ? 'Ambil Foto' : 'Take Photo';
   String get menuTakePhotoVideo => isId ? 'Kamera' : 'Camera';
   String get menuRecordVideo => isId ? 'Rekam Video' : 'Record Video';
@@ -412,6 +412,14 @@ mixin SScreenMx {
       isId ? 'Gagal membuka file' : 'Could not open file';
   String get fileUploading => isId ? 'Mengirim...' : 'Sending...';
   String get fileDownloading => isId ? 'Mengunduh...' : 'Downloading...';
+  // ── Pemilih galeri (ala WhatsApp) ──
+  String get galleryRecents => isId ? 'Terbaru' : 'Recents';
+  String gallerySelectMax(int n) =>
+      isId ? 'Maksimal $n foto' : 'Up to $n photos';
+  String get galleryNoAccess => isId
+      ? 'Izinkan ChatYuk mengakses foto untuk memilih dari galeri.'
+      : 'Allow ChatYuk to access photos to pick from your gallery.';
+  String get galleryOpenSettings => isId ? 'Buka Setelan' : 'Open Settings';
   String get msgLocation => isId ? '[Lokasi]' : '[Location]';
   String get locSendTitle => isId ? 'Kirim Lokasi' : 'Send Location';
   String get locFetching =>

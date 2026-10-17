@@ -54,6 +54,7 @@ import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/chat_send_mixin.dart';
 import '../mixins/chat_file_send_mixin.dart';
+import '../mixins/chat_gallery_send_mixin.dart';
 import '../widgets/chat_composer_input.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/location_picker_sheet.dart';
@@ -139,6 +140,7 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
         ChatPhotoSendMixin<PrivateChatScreen>,
         ChatSendMixin<PrivateChatScreen>,
         ChatFileSendMixin<PrivateChatScreen>,
+        ChatGallerySendMixin<PrivateChatScreen>,
         _PcOpenTimingMx {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
