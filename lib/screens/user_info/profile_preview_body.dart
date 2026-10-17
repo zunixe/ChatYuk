@@ -260,7 +260,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
               leadingWidth: 56,
               titleSpacing: 0,
               shape: _collapsed
-                  ? const Border(bottom: BorderSide(color: PColors.divider))
+                  ? Border(bottom: BorderSide(color: PColors.divider))
                   : null,
               leading: Center(
                 child: PHeaderButton(

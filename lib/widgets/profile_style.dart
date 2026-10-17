@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../config/theme.dart';
+
 /// Palet & komponen tampilan PROFIL (gaya Instagram/WA gelap) — satu tempat.
 class PColors {
-  static const bg = Color(0xFF0F1115);
-  static const divider = Color(0xFF1C2028);
-  static const card = Color(0xFF161A21);
-  static const cardDivider = Color(0xFF1F242D);
-  static const surface = Color(0xFF1A1E26);
+  /// Background & card MENGIKUTI TEMA halaman Profil sendiri
+  /// (`AppTheme.bgScreen` / `bgCard`) supaya konsisten saat mode terang.
+  static Color get bg => AppTheme.bgScreen;
+  static Color get divider => AppTheme.divider;
+  static Color get card => AppTheme.bgCard;
+  static Color get cardDivider => AppTheme.divider;
+  static Color get surface => AppTheme.bgCard;
   static const border = Color(0xFF2E3440);
   static const handle = Color(0xFF3A404C);
   static const text = Color(0xFFE8EAED);
@@ -33,7 +37,7 @@ void showProfileToast(BuildContext context, String message) {
       SnackBar(
         content: Text(
           message,
-          style: const TextStyle(
+          style: TextStyle(
             color: PColors.bg,
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -254,7 +258,7 @@ class PInfoCard extends StatelessWidget {
         children: [
           for (var i = 0; i < items.length; i++) ...[
             if (i > 0)
-              const Divider(
+              Divider(
                 height: 1,
                 thickness: 1,
                 color: PColors.cardDivider,
@@ -570,12 +574,12 @@ class PBottomActions extends StatelessWidget {
               : Icons.person_add_alt_outlined);
     return Container(
       padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottom),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          stops: [0, 0.28],
-          colors: [Color(0x000F1115), PColors.bg],
+          stops: const [0, 0.28],
+          colors: [PColors.bg.withValues(alpha: 0), PColors.bg],
         ),
       ),
       child: Row(

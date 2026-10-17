@@ -164,7 +164,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: PColors.divider),
+                Divider(height: 1, color: PColors.divider),
                 Expanded(
                   child: items.isEmpty
                       ? const Center(
@@ -183,7 +183,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
                       : ListView.separated(
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           itemCount: items.length,
-                          separatorBuilder: (_, __) => const Divider(
+                          separatorBuilder: (_, __) => Divider(
                             height: 1,
                             indent: 60,
                             color: PColors.cardDivider,
