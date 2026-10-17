@@ -915,18 +915,15 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
 
     // Room resmi belum ada (seeding belum jalan) → buka HALAMAN Global Room
     // dengan kategori General terpilih.
-    // `replaceOnOpenRoom: true` → saat user memilih room, chat room
-    // MENGGANTIKAN halaman daftar ini sehingga tombol back di chat room
-    // kembali ke HALAMAN ONLINE (bukan ke menu Global Room) — laporan user.
+    // Back dari chat room = kembali ke MENU GLOBAL ROOM (daftar room) ini,
+    // sesuai permintaan user — jadi Lobby dibiarkan TETAP di tumpukan
+    // (push biasa, bukan replace).
     rp.setExploreCategory('general');
     if (!context.mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const LobbyScreen(
-          initialCategory: 'general',
-          replaceOnOpenRoom: true,
-        ),
+        builder: (_) => const LobbyScreen(initialCategory: 'general'),
       ),
     );
   }
