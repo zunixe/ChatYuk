@@ -921,93 +921,65 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
         ),
       ),
     ),
-            // Panel lampiran MUNCUL DARI BAWAH: slide-up + fade, bukan
-            // hanya AnimatedSize (dulu isi panel sudah penuh sejak frame
-            // pertama sehingga terlihat "keluar dari tengah").
-            // AnimatedSize membungkus AnimatedSwitcher agar tinggi panel ikut
-            // bertambah halus (tanpa lompatan layout composer).
-            AnimatedSize(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.bottomCenter,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                reverseDuration: const Duration(milliseconds: 160),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, anim) {
-                  // Naik dari bawah (offset 0.35 → 0) sambil memudar masuk.
-                  // ClipRect mencegah isi meluber ke atas saat setengah jalan.
-                  final slide = Tween<Offset>(
-                    begin: const Offset(0, 0.35),
-                    end: Offset.zero,
-                  ).animate(anim);
-                  return ClipRect(
-                    child: SlideTransition(
-                      position: slide,
-                      child: FadeTransition(opacity: anim, child: child),
+            // Panel lampiran MUNCUL DARI BAWAH & TURUN lagi saat ditutup.
+            // Satu controller menggerakkan TINGGI + slide + fade sekaligus,
+            // jadi composer naik/turun berbarengan dengan isi panel (tidak
+            // ada fase "isi sudah hilang tapi ruang masih ada").
+            _AttachPanelSlide(
+              open: widget.showAttachRow,
+              child: ChatAttachPanel(
+                onClose: widget.onToggleAttach,
+                onPickGalleryPhoto: widget.onPickGalleryPhoto,
+                allowGalleryLabel: s.galleryAllowAccess,
+                children: [
+                  ChatAttachChip(
+                    icon: Icons.image_rounded,
+                    color: AppTheme.primary,
+                    label: s.menuSendPhoto,
+                    onTap: widget.onSendPhoto,
+                  ),
+                  if (widget.onSendVideo != null)
+                    ChatAttachChip(
+                      icon: Icons.videocam_rounded,
+                      color: const Color(0xFF7E57C2),
+                      label: s.menuSendVideo,
+                      onTap: widget.onSendVideo!,
                     ),
-                  );
-                },
-                child: widget.showAttachRow
-                    ? ChatAttachPanel(
-                        key: const ValueKey('attach-open'),
-                        onClose: widget.onToggleAttach,
-                        onPickGalleryPhoto: widget.onPickGalleryPhoto,
-                        allowGalleryLabel: s.galleryAllowAccess,
-                        children: [
-                            ChatAttachChip(
-                              icon: Icons.image_rounded,
-                              color: AppTheme.primary,
-                              label: s.menuSendPhoto,
-                              onTap: widget.onSendPhoto,
-                            ),
-                            if (widget.onSendVideo != null)
-                              ChatAttachChip(
-                                icon: Icons.videocam_rounded,
-                                color: const Color(0xFF7E57C2),
-                                label: s.menuSendVideo,
-                                onTap: widget.onSendVideo!,
-                              ),
-                            ChatAttachChip(
-                              icon: Icons.timelapse_rounded,
-                              color: Colors.orange,
-                              label: s.menuViewOnce,
-                              onTap: widget.onSendViewOnce,
-                            ),
-                            if (widget.onSendFile != null)
-                            ChatAttachChip(
-                              icon: Icons.insert_drive_file_rounded,
-                              color: const Color(0xFF7C4DFF),
-                              label: s.menuSendFile,
-                              onTap: widget.onSendFile!,
-                            ),
-                          if (widget.onSendLocation != null)
-                              ChatAttachChip(
-                                icon: Icons.location_on_rounded,
-                                color: Colors.green,
-                                label: s.menuSendLocation,
-                                onTap: widget.onSendLocation!,
-                              ),
-                            if (widget.onSendCoin != null)
-                              ChatAttachChip(
-                                icon: Icons.monetization_on_rounded,
-                                color: const Color(0xFFFFB300),
-                                label: s.menuSendCoin,
-                                onTap: widget.onSendCoin!,
-                              ),
-                            if (widget.onOpenGiftPanel != null)
-                              ChatAttachChip(
-                                icon: Icons.card_giftcard_rounded,
-                                color: Colors.pinkAccent,
-                                label: s.menuSendGift,
-                                onTap: widget.onOpenGiftPanel!,
-                              ),
-                          ],
-                      )
-                    : const SizedBox.shrink(
-                        key: ValueKey('attach-closed'),
-                      ),
+                  ChatAttachChip(
+                    icon: Icons.timelapse_rounded,
+                    color: Colors.orange,
+                    label: s.menuViewOnce,
+                    onTap: widget.onSendViewOnce,
+                  ),
+                  if (widget.onSendFile != null)
+                    ChatAttachChip(
+                      icon: Icons.insert_drive_file_rounded,
+                      color: const Color(0xFF7C4DFF),
+                      label: s.menuSendFile,
+                      onTap: widget.onSendFile!,
+                    ),
+                  if (widget.onSendLocation != null)
+                    ChatAttachChip(
+                      icon: Icons.location_on_rounded,
+                      color: Colors.green,
+                      label: s.menuSendLocation,
+                      onTap: widget.onSendLocation!,
+                    ),
+                  if (widget.onSendCoin != null)
+                    ChatAttachChip(
+                      icon: Icons.monetization_on_rounded,
+                      color: const Color(0xFFFFB300),
+                      label: s.menuSendCoin,
+                      onTap: widget.onSendCoin!,
+                    ),
+                  if (widget.onOpenGiftPanel != null)
+                    ChatAttachChip(
+                      icon: Icons.card_giftcard_rounded,
+                      color: Colors.pinkAccent,
+                      label: s.menuSendGift,
+                      onTap: widget.onOpenGiftPanel!,
+                    ),
+                ],
               ),
             ),
       ],
@@ -1030,4 +1002,90 @@ class _ForceRebuild extends InheritedWidget {
   @override
   bool updateShouldNotify(_ForceRebuild oldWidget) =>
       oldWidget.token != token;
+}
+
+/// Panel lampiran yang MUNCUL DARI BAWAH dan TURUN lagi saat ditutup.
+///
+/// Kenapa bukan sekadar `AnimatedSize` + `AnimatedSwitcher`: saat menutup,
+/// switcher menumpuk child lama & baru sehingga `AnimatedSize` terus mengukur
+/// tinggi MAKSIMUM → composer tidak ikut menyusut, lalu ruang kosong lenyap
+/// mendadak (penutupan terasa tersendat; terukur: posisi composer tetap
+/// selama animasi).
+///
+/// Di sini satu [AnimationController] menggerakkan tiga hal sekaligus:
+///  - tinggi wadah  (0 → tinggi panel)  → composer naik/turun mulus,
+///  - slide isi     (0.35 → 0 offset)   → isi naik dari bawah / turun,
+///  - opacity       (0 → 1)             → memudar masuk/keluar.
+class _AttachPanelSlide extends StatefulWidget {
+  final bool open;
+  final Widget child;
+  const _AttachPanelSlide({required this.open, required this.child});
+
+  @override
+  State<_AttachPanelSlide> createState() => _AttachPanelSlideState();
+}
+
+class _AttachPanelSlideState extends State<_AttachPanelSlide>
+    with SingleTickerProviderStateMixin {
+  static const Duration _dur = Duration(milliseconds: 200);
+
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: _dur,
+  );
+  late final Animation<double> _curved = CurvedAnimation(
+    parent: _c,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.open) _c.value = 1;
+  }
+
+  @override
+  void didUpdateWidget(_AttachPanelSlide old) {
+    super.didUpdateWidget(old);
+    if (widget.open == old.open) return;
+    if (widget.open) {
+      _c.forward();
+    } else {
+      _c.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Tinggi asli panel diukur sekali (offstage) lalu dipakai sebagai target
+    // tinggi wadah — agar animasi tinggi tidak bergantung layout anak.
+    return AnimatedBuilder(
+      animation: _curved,
+      builder: (context, child) {
+        final t = _curved.value; // 0..1
+        if (t == 0) return const SizedBox.shrink();
+        return ClipRect(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            heightFactor: t, // tinggi menyusut/tumbuh bersama animasi
+            child: Opacity(
+              opacity: t.clamp(0.0, 1.0),
+              child: FractionalTranslation(
+                translation: Offset(0, 0.35 * (1 - t)),
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
+      child: widget.child,
+    );
+  }
 }
