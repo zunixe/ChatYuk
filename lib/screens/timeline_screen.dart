@@ -247,7 +247,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     final title = switch (_current) {
       1 => s.tabFollowing,
       2 => s.tabMine,
-      _ => 'ChatYuk',
+      _ => 'Timeline',
     };
     return PopupMenuButton<int>(
       tooltip: '',
@@ -270,7 +270,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         children: [
           Text(
             title,
-            style: AppText.title.copyWith(color: _kHeaderText),
+            style: AppText.title.copyWith(
+              color: _kHeaderText,
+              fontWeight: FontWeight.w800,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
