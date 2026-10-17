@@ -4531,6 +4531,21 @@ per frame) — lebih akurat. Jank 1,25% terjadi saat lompatan scroll agresif
 - **Fix**: `thumbDownloader` wajib `resize: ResizeMode.contain`; cache v2→v3
   (file berformat salah dibuang).
 
+### Ketahanan tekanan memori (relevan HP RAM kecil) — di perangkat
+Simulasi `am send-trim-memory` level `RUNNING_CRITICAL` → `COMPLETE` →
+`RUNNING_LOW` pada feed Timeline yang sudah termuat:
+
+| Cek | Hasil |
+|---|---|
+| PID aplikasi | **tidak berubah** (tidak di-kill) |
+| Respons gulir sebelum trim | diff 61,47 |
+| Respons gulir **sesudah** trim | diff **61,47** (identik) |
+| Exception / fatal / OOM / `Cannot clone` | **0** |
+
+Artinya jalur `trimMemCache` (dipanggil `app.dart` saat memory-pressure)
+melepas cache tanpa merusak render/gesture: UI tetap responsif dan tidak ada
+error resource native. (Kuantitas bitmap yang di-reload tidak diukur visual.)
+
 ### TERBUKA (jujur)
 - Di HP RAM kecil (2–3GB, cap ImageCache 16–24MB) eviction MASIH mungkin terjadi
   (≈4–6 gambar muat); belum diukur di kelas perangkat itu (tidak ada perangkat).
