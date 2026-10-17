@@ -26,10 +26,20 @@ class RoomsExploreScreen extends ConsumerStatefulWidget {
   /// Kategori yang dipilih saat layar pertama dibuka (mis. 'general' saat
   /// dibuka dari kapsul Global Room di halaman Online). null = default.
   final String? initialCategory;
+
+  /// GANTI halaman daftar room dengan chat room saat room dibuka
+  /// (`pushReplacement`) alih-alih menumpuk.
+  ///
+  /// Dipakai saat daftar room ini dibuka sebagai PERPANJANGAN halaman Online
+  /// (kapsul Global Room): tumpukan jadi Online → Lobby → ChatRoom. Dengan
+  /// replace, back dari ChatRoom kembali ke **Online** — bukan ke daftar room
+  /// (laporan: "back malah masuk ke menu Global Room").
+  final bool replaceOnOpenRoom;
   const RoomsExploreScreen({
     super.key,
     this.externalQuery,
     this.initialCategory,
+    this.replaceOnOpenRoom = false,
   });
 
   @override
@@ -68,11 +78,24 @@ class _RoomsExploreScreenState extends ConsumerState<RoomsExploreScreen> {
       releaseNav(navKey);
       return;
     }
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
-    ).then((_) => releaseNav(navKey));
-    if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchExplore();
+    final route = MaterialPageRoute<void>(
+      builder: (_) => RoomChatScreen(room: room),
+    );
+    // replaceOnOpenRoom: chat room MENGGANTIKAN daftar room sehingga back
+    // langsung kembali ke layar pemanggil (halaman Online).
+    final nav = Navigator.of(context);
+    if (widget.replaceOnOpenRoom) {
+      await nav.pushReplacement(route);
+    } else {
+      await nav.push(route);
+    }
+    releaseNav(navKey);
+    if (mounted) {
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).fetchExplore();
+    }
   }
 
   @override

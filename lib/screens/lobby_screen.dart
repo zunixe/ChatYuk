@@ -21,11 +21,17 @@ class LobbyScreen extends ConsumerStatefulWidget {
   /// Kategori awal untuk RoomsExploreScreen (mis. 'general' saat dibuka dari
   /// kapsul Global Room di halaman Online). null = default.
   final String? initialCategory;
+
+  /// Diteruskan ke RoomsExploreScreen: chat room menggantikan halaman daftar
+  /// room, sehingga back dari chat room kembali ke layar SEBELUM lobby
+  /// (halaman Online) — bukan balik ke daftar room.
+  final bool replaceOnOpenRoom;
   const LobbyScreen({
     super.key,
     this.embedded = false,
     this.externalQuery,
     this.initialCategory,
+    this.replaceOnOpenRoom = false,
   });
 
   @override
@@ -147,6 +153,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             child: RoomsExploreScreen(
               externalQuery: widget.externalQuery,
               initialCategory: widget.initialCategory,
+              replaceOnOpenRoom: widget.replaceOnOpenRoom,
             ),
           ),
         ],
