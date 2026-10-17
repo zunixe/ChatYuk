@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
 import '../models/message_model.dart';
+import 'message/message_image.dart';
 import 'message/photo_viewer_screen.dart';
 
 /// Bubble ALBUM foto (bundle multi-foto ala WhatsApp).
@@ -19,6 +20,8 @@ import 'message/photo_viewer_screen.dart';
 class PhotoAlbumBubble extends StatelessWidget {
   /// Foto-foto album, urut kronologis (minimal 2).
   final List<MessageModel> photos;
+  /// chatKey untuk cache foto (`private_<chatId>` / `room_<id>`).
+  final String chatKey;
   final double tileSize;
   final String timeStr;
   final bool showChecks;
@@ -29,8 +32,9 @@ class PhotoAlbumBubble extends StatelessWidget {
   const PhotoAlbumBubble({
     super.key,
     required this.photos,
+    required this.chatKey,
     required this.timeStr,
-    this.tileSize = 108,
+    this.tileSize = 132,
     this.showChecks = false,
     this.isPending = false,
     this.isQueued = false,
@@ -88,21 +92,19 @@ class PhotoAlbumBubble extends StatelessWidget {
 
   /// Satu kotak foto (thumbnail bytes) yang bisa diketuk.
   Widget _tile(BuildContext context, MessageModel m, double w, double h) {
-    final bytes = _bytesOf(m);
+    // MessageImage: menangani base64 pending MAUPUN path storage (unduh
+    // lazy + cache disk/mem + retry). Sebelumnya Image.memory mentah →
+    // album kosong/hilang setelah reload bila imageData = path.
     return GestureDetector(
       onTap: () => _openViewer(context, m),
       child: SizedBox(
         width: w,
         height: h,
-        child: bytes == null
-            ? ColoredBox(color: AppTheme.bgInput)
-            : Image.memory(
-                bytes,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-                errorBuilder: (_, __, ___) =>
-                    ColoredBox(color: AppTheme.bgInput),
-              ),
+        child: MessageImage(
+          imageData: m.imageData,
+          chatKey: chatKey,
+          messageId: m.id,
+        ),
       ),
     );
   }

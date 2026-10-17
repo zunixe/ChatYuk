@@ -791,6 +791,9 @@ mixin _PcCoreMx on _PrivateChatBase {
                                               Flexible(
                                                 child: PhotoAlbumBubble(
                                                   photos: f,
+                                                  chatKey: cacheKeyFor(
+                                                    widget.chatId,
+                                                  ),
                                                   timeStr: formatBubbleTime(
                                                     last.timestamp,
                                                   ),

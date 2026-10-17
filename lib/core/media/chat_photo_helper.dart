@@ -141,15 +141,18 @@ String? processChatImage(Uint8List bytes) {
   }
 }
 
-/// Ukuran bubble foto (maks 200×280) sesuai rasio asli — dipakai gambar yang
+/// Ukuran bubble foto (maks 260×340) sesuai rasio asli — dipakai gambar yang
 /// sudah ter-decode MAUPUN placeholder loading supaya ukurannya sama persis
 /// (tidak ada lompatan layout saat foto selesai dimuat). Murni & testable.
+///
+/// DIPERBESAR 2026-10-18 (dulu 200×280): keluhan "kotak foto terlalu kecil".
+/// 260 = ~72% lebar layar HP 360dp & masih muat di bubble (maxWidth 0.8).
 ({double width, double height}) photoViewSize(int w, int h) {
-  if (w <= 0 || h <= 0) return (width: 200.0, height: 200.0);
-  var width = 200.0;
+  if (w <= 0 || h <= 0) return (width: 260.0, height: 260.0);
+  var width = 260.0;
   var height = width * h / w;
-  if (height > 280) {
-    height = 280;
+  if (height > 340) {
+    height = 340;
     width = height * w / h;
   }
   return (width: width, height: height);

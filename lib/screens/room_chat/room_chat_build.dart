@@ -84,6 +84,7 @@ mixin _RcBuildMx on _RoomChatBase {
                               : Alignment.centerLeft,
                           child: PhotoAlbumBubble(
                             photos: ph,
+                            chatKey: 'room_${widget.room.id}',
                             timeStr: formatBubbleTime(ph.last.timestamp),
                             showChecks: false,
                           ),

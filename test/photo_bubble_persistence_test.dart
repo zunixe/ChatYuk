@@ -57,22 +57,22 @@ void main() {
   });
 
   group('photoViewSize', () {
-    test('landscape 800×400 → 200×100', () {
+    test('landscape 800×400 → 260×130', () {
       final s = photoViewSize(800, 400);
-      expect(s.width, 200.0);
-      expect(s.height, 100.0);
+      expect(s.width, 260.0);
+      expect(s.height, 130.0);
     });
 
-    test('portrait tinggi dibatasi 280', () {
+    test('portrait tinggi dibatasi 340', () {
       final s = photoViewSize(400, 800);
-      expect(s.height, 280.0);
-      expect(s.width, closeTo(140.0, 0.01));
+      expect(s.height, 340.0);
+      expect(s.width, closeTo(170.0, 0.01));
     });
 
-    test('dimensi invalid → fallback 200×200', () {
+    test('dimensi invalid → fallback 260×260', () {
       final s = photoViewSize(0, 0);
-      expect(s.width, 200.0);
-      expect(s.height, 200.0);
+      expect(s.width, 260.0);
+      expect(s.height, 260.0);
     });
 
     test('placeholder == gambar final untuk aspek sama', () {
@@ -80,8 +80,8 @@ void main() {
       // lompatan layout saat decode selesai.
       final dims = parseImageDimensions(jpegBytes(600, 300))!;
       final s = photoViewSize(dims.width, dims.height);
-      expect(s.width, 200.0);
-      expect(s.height, 100.0);
+      expect(s.width, 260.0);
+      expect(s.height, 130.0);
     });
   });
 
@@ -185,13 +185,13 @@ void main() {
       );
     }
 
-    testWidgets('landscape: frame pertama 200×100, final tetap', (t) async {
+    testWidgets('landscape: frame pertama 260×130, final tetap', (t) async {
       final im = img.Image(width: 800, height: 400);
       final b64 = base64Encode(
         Uint8List.fromList(img.encodeJpg(im, quality: 75)),
       );
       await pumpPhoto(t, b64, 'recv-land-1');
-      expect(t.getSize(find.byType(MessageImage)), const Size(200, 100));
+      expect(t.getSize(find.byType(MessageImage)), const Size(260, 130));
       // Biarkan decode isolate selesai (waktu nyata), lalu beri frame untuk
       // setState + fade-in. Spinner placeholder animasi terus → jangan pakai
       // pumpAndSettle (tidak akan pernah settle).
@@ -206,7 +206,7 @@ void main() {
             find.byType(RawImage).evaluate().isNotEmpty,
         isTrue,
       );
-      expect(t.getSize(find.byType(MessageImage)), const Size(200, 100));
+      expect(t.getSize(find.byType(MessageImage)), const Size(260, 130));
     });
 
     testWidgets('portrait: frame pertama ikut aspek, final tetap', (t) async {
@@ -216,8 +216,8 @@ void main() {
       );
       await pumpPhoto(t, b64, 'recv-port-1');
       final first = t.getSize(find.byType(MessageImage));
-      expect(first.height, closeTo(280.0, 0.01));
-      expect(first.width, closeTo(140.0, 0.01));
+      expect(first.height, closeTo(340.0, 0.01));
+      expect(first.width, closeTo(170.0, 0.01));
       await t.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 800)),
       );
