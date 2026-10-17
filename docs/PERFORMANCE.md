@@ -4534,7 +4534,10 @@ per frame) — lebih akurat. Jank 1,25% terjadi saat lompatan scroll agresif
 ### TERBUKA (jujur)
 - Di HP RAM kecil (2–3GB, cap ImageCache 16–24MB) eviction MASIH mungkin terjadi
   (≈4–6 gambar muat); belum diukur di kelas perangkat itu (tidak ada perangkat).
-- Jalur EXIF native (`ImageBridge.processPost`) belum diuji dengan foto kamera
-  ber-tag orientasi asli — hanya jalur fallback Dart yang diuji otomatis.
+- ~~Jalur EXIF native~~ **SUDAH diverifikasi di perangkat** (self-test sementara,
+  build profile): fixture 40×80 + Orientation=6 → `processPost` menghasilkan
+  **80×40** → orientasi dibakar DAN tidak upscale (80 < 1080 tetap 80).
+- Varian tile diverifikasi di perangkat: `thumb(tile)` → **400×533, 22.738 B**
+  (cocok dengan ukur HTTP) → `resize=contain` benar.
 - Composer (progress upload/konkurensi/fallback) belum diuji otomatis (butuh
   ImagePicker + device); kode sederhana, belum diverifikasi visual.
