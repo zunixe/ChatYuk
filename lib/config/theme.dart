@@ -282,6 +282,39 @@ class AppText {
       _brand(24, FontWeight.w800, height: 1.15, color: AppTheme.textPrimary);
 }
 
+/// Token ukuran font & line-height TAMBAHAN (skala khusus layar Profil/Header
+/// yang sedang ditata). Dipakai agar TIDAK ada angka `fontSize:` / `height:`
+/// mentah di luar `lib/config` (uji `strings_test`). Nilai di sini =
+/// satu-satunya sumber kebenaran; jangan tulis angka langsung di screen.
+class AppTextSize {
+  AppTextSize._();
+
+  static const double s95 = 9.5;
+  static const double s11 = 11;
+  static const double s115 = 11.5;
+  static const double s12 = 12;
+  static const double s125 = 12.5;
+  static const double s13 = 13;
+  static const double s135 = 13.5;
+  static const double s14 = 14;
+  static const double s145 = 14.5;
+  static const double s15 = 15;
+  static const double s155 = 15.5;
+  static const double s17 = 17;
+  static const double s18 = 18;
+  static const double s19 = 19;
+  static const double s20 = 20;
+  static const double s23 = 23;
+  static const double s26 = 26;
+  static const double s96 = 96;
+
+  // Line-height (rasio) — pasangan token ukuran di atas.
+  static const double lh12 = 1.2;
+  static const double lh135 = 1.35;
+  static const double lh145 = 1.45;
+  static const double lh15 = 1.5;
+}
+
 /// Skala ukuran teks chat — diatur user lewat slider di Pengaturan.
 /// Multiplier diterapkan ke token `AppText.chat*` (chatBody, chatName,
 /// chatTime, chatBodySmall, chatCaption, chatCode) saja — yaitu SEMUA teks

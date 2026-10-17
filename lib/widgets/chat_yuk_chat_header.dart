@@ -276,7 +276,7 @@ class ChatYukChatHeader extends StatelessWidget
           Text(
             _label(section),
             style: TextStyle(
-              fontSize: 23,
+              fontSize: AppTextSize.s23,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
               color: kChatHeaderText,
@@ -318,7 +318,7 @@ class ChatYukChatHeader extends StatelessWidget
             child: Text(
               _label(value),
               style: TextStyle(
-                fontSize: 15,
+                fontSize: AppTextSize.s15,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 color: active ? kChatHeaderText : kChatMenuText,
               ),
@@ -336,7 +336,7 @@ class ChatYukChatHeader extends StatelessWidget
                 unread > 99 ? '99+' : '$unread',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTextSize.s11,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
                 ),
@@ -383,7 +383,7 @@ class ChatFilterChipBar extends StatelessWidget {
               child: Text(
                 it.label,
                 style: TextStyle(
-                  fontSize: 13.5,
+                  fontSize: AppTextSize.s135,
                   fontWeight: FontWeight.w700,
                   color: it.active ? kChatChipActiveText : kChatChipText,
                 ),
@@ -442,9 +442,9 @@ class _BellWithBadge extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 9.5,
+                    fontSize: AppTextSize.s95,
                     fontWeight: FontWeight.w800,
-                    height: 1.2,
+                    height: AppTextSize.lh12,
                   ),
                 ),
               ),

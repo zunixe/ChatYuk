@@ -100,7 +100,7 @@ mixin _ProfileUiMx on _ProfileBase {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 20,
+            fontSize: AppTextSize.s20,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.4,
             color: AppTheme.textPrimary,
@@ -188,7 +188,7 @@ Widget _sectionTitle(String text, {Widget? trailing}) {
             child: Text(
               text,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: AppTextSize.s13,
                 fontWeight: FontWeight.w700,
                 color: AppTheme.textSecondary,
               ),
@@ -223,7 +223,7 @@ Widget _statusPill(bool online) {
         Text(
           online ? 'Online' : 'Offline',
           style: TextStyle(
-            fontSize: 11.5,
+            fontSize: AppTextSize.s115,
             fontWeight: FontWeight.w700,
             color: c,
           ),
@@ -464,7 +464,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: AppTextSize.s15,
                     fontWeight: FontWeight.w700,
                     color: AppTheme.textPrimary,
                   ),
@@ -479,8 +479,8 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
             Text(
               bio,
               style: TextStyle(
-                fontSize: 14,
-                height: 1.45,
+                fontSize: AppTextSize.s14,
+                height: AppTextSize.lh145,
                 color: AppTheme.textPrimary.withValues(alpha: 0.88),
               ),
             ),
@@ -491,7 +491,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
               info,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 13.5, color: AppTheme.textSecondary),
+              style: TextStyle(fontSize: AppTextSize.s135, color: AppTheme.textSecondary),
             ),
           ],
         ],
@@ -511,7 +511,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
             Text(
               '$value',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: AppTextSize.s18,
                 fontWeight: FontWeight.w800,
                 color: AppTheme.textPrimary,
               ),
@@ -521,7 +521,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12.5, color: AppTheme.textSecondary),
+              style: TextStyle(fontSize: AppTextSize.s125, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -566,7 +566,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
           Text(
             '#$tag',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: AppTextSize.s13,
               fontWeight: FontWeight.w600,
               color: AppTheme.textPrimary,
             ),
@@ -606,7 +606,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
                 ? '+ ${s.hashtagAdd}'
                 : '+ ${s.hashtagAddShort}',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: AppTextSize.s13,
               fontWeight: FontWeight.w600,
               color: AppTheme.textSecondary,
             ),
@@ -620,11 +620,11 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
       child: TextField(
         controller: _hashtagCtrl,
         autofocus: true,
-        style: TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+        style: TextStyle(fontSize: AppTextSize.s13, color: AppTheme.textPrimary),
         decoration: InputDecoration(
           isDense: true,
           hintText: s.hintHashtag,
-          hintStyle: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+          hintStyle: TextStyle(fontSize: AppTextSize.s13, color: AppTheme.textSecondary),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 10,
             vertical: 6,
@@ -727,7 +727,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: AppTextSize.s14,
                 fontWeight: FontWeight.w700,
                 color: AppTheme.textPrimary,
               ),
@@ -781,7 +781,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 14.5,
+                          fontSize: AppTextSize.s145,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.textPrimary,
                         ),
@@ -802,7 +802,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
                           n > 99 ? '99+' : '$n',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: AppTextSize.s12,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),

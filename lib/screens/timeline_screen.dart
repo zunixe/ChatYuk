@@ -301,7 +301,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
           Text(
             title,
             style: TextStyle(
-              fontSize: 23,
+              fontSize: AppTextSize.s23,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
               color: _kHeaderText,
@@ -333,7 +333,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
           Text(
             label,
             style: TextStyle(
-              fontSize: 15,
+              fontSize: AppTextSize.s15,
               fontWeight: active ? FontWeight.w700 : FontWeight.w500,
               color: active ? _kHeaderText : _kMenuText,
             ),

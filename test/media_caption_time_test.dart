@@ -86,7 +86,7 @@ void main() {
     // Jam tampil.
     expect(find.text(timeStr), findsOneWidget);
     // Caption juga tampil.
-    expect(find.text('ok'), findsOneWidget);
+    expect(find.text('ok', findRichText: true), findsOneWidget);
   });
 
   testWidgets('foto + caption panjang: jam tetap tampil (baris bawah kanan)',
@@ -149,7 +149,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
     // Caption view-once harus tampil (dulu hilang).
-    expect(find.text('Tes'), findsOneWidget);
+    expect(find.text('Tes', findRichText: true), findsOneWidget);
   });
 
   testWidgets('view_once_expired + caption: caption tetap tampil',
@@ -169,7 +169,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
-    expect(find.text('Tes'), findsOneWidget);
+    expect(find.text('Tes', findRichText: true), findsOneWidget);
   });
 
   testWidgets('view_once tanpa caption: tidak ada teks caption kosong',

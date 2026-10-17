@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../config/strings.dart';
 import '../config/theme.dart';
+import '../providers/riverpod/locale_provider.dart';
 
 /// Palet & komponen tampilan PROFIL (gaya Instagram/WA gelap) — satu tempat.
 class PColors {
@@ -39,7 +41,7 @@ void showProfileToast(BuildContext context, String message) {
           message,
           style: TextStyle(
             color: PColors.bg,
-            fontSize: 14,
+            fontSize: AppTextSize.s14,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -119,7 +121,7 @@ class PNoPhoto extends StatelessWidget {
         initials,
         style: const TextStyle(
           color: Color(0x99FFFFFF),
-          fontSize: 96,
+          fontSize: AppTextSize.s96,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -177,7 +179,7 @@ class PStatsRow extends StatelessWidget {
                       s.label,
                       style: const TextStyle(
                         color: PColors.muted,
-                        fontSize: 12.5,
+                        fontSize: AppTextSize.s125,
                       ),
                     ),
                   ],
@@ -218,7 +220,7 @@ class PChip extends StatelessWidget {
         text,
         style: const TextStyle(
           color: PColors.chipText,
-          fontSize: 13,
+          fontSize: AppTextSize.s13,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -281,7 +283,7 @@ class PInfoCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: PColors.textStrong,
-                            fontSize: 15,
+                            fontSize: AppTextSize.s15,
                             fontFeatures: items[i].tabular
                                 ? const [FontFeature.tabularFigures()]
                                 : null,
@@ -292,7 +294,7 @@ class PInfoCard extends StatelessWidget {
                           items[i].label,
                           style: const TextStyle(
                             color: PColors.muted,
-                            fontSize: 12.5,
+                            fontSize: AppTextSize.s125,
                           ),
                         ),
                       ],
@@ -351,7 +353,7 @@ class PEmptyState extends StatelessWidget {
             title,
             style: const TextStyle(
               color: PColors.text,
-              fontSize: 15,
+              fontSize: AppTextSize.s15,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -359,7 +361,7 @@ class PEmptyState extends StatelessWidget {
           Text(
             subtitle,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: PColors.muted, fontSize: 13),
+            style: const TextStyle(color: PColors.muted, fontSize: AppTextSize.s13),
           ),
         ],
       ),
@@ -427,7 +429,7 @@ Future<void> showPSheet(BuildContext context, List<PSheetAction> actions) {
                         a.label,
                         style: TextStyle(
                           color: a.destructive ? PColors.danger : PColors.text,
-                          fontSize: 15,
+                          fontSize: AppTextSize.s15,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -467,7 +469,7 @@ class PDialogButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          textStyle: const TextStyle(fontSize: AppTextSize.s14, fontWeight: FontWeight.w700),
         ),
         child: Text(label),
       ),
@@ -503,7 +505,7 @@ Future<bool> confirmPUnfriend(
               title,
               style: const TextStyle(
                 color: PColors.textStrong,
-                fontSize: 17,
+                fontSize: AppTextSize.s17,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -512,8 +514,8 @@ Future<bool> confirmPUnfriend(
               body.replaceAll('{name}', name),
               style: const TextStyle(
                 color: PColors.textSoft,
-                fontSize: 14,
-                height: 1.5,
+                fontSize: AppTextSize.s14,
+                height: AppTextSize.lh15,
               ),
             ),
             const SizedBox(height: 16),
@@ -566,6 +568,7 @@ class PBottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppLocale.s;
     final bottom = MediaQuery.paddingOf(context).bottom;
     final friendIcon = isFriend
         ? Icons.how_to_reg_outlined
@@ -586,8 +589,10 @@ class PBottomActions extends StatelessWidget {
         children: [
           Tooltip(
             message: isFriend
-                ? 'Berteman'
-                : (isRequestSent ? 'Menunggu konfirmasi' : 'Tambah teman'),
+                ? s.friendTooltipFriend
+                : (isRequestSent
+                      ? s.friendTooltipPending
+                      : s.friendTooltipAdd),
             child: Material(
               color: PColors.surface,
               shape: RoundedRectangleBorder(
@@ -627,7 +632,7 @@ class PBottomActions extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: onMessage,
                   icon: const Icon(Icons.chat_bubble_outline_rounded, size: 20),
-                  label: const Text('Kirim Pesan'),
+                  label: Text(s.btnSendMessage),
                   style: FilledButton.styleFrom(
                     backgroundColor: PColors.accent,
                     foregroundColor: Colors.white,
@@ -635,7 +640,7 @@ class PBottomActions extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     textStyle: const TextStyle(
-                      fontSize: 15.5,
+                      fontSize: AppTextSize.s155,
                       fontWeight: FontWeight.w800,
                     ),
                   ),

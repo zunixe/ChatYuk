@@ -69,6 +69,12 @@ mixin SSocialMx {
   String snackNowFriends(String name) =>
       isId ? 'Sekarang berteman dengan $name' : 'Now friends with $name';
   String get btnChatNow => isId ? 'Chat' : 'Chat';
+  // Tombol "Kirim Pesan" (profil orang lain) + tooltip tombol teman.
+  String get btnSendMessage => isId ? 'Kirim Pesan' : 'Send Message';
+  String get friendTooltipFriend => isId ? 'Berteman' : 'Friends';
+  String get friendTooltipPending =>
+      isId ? 'Menunggu konfirmasi' : 'Pending confirmation';
+  String get friendTooltipAdd => isId ? 'Tambah teman' : 'Add friend';
   String get msgRegisterToFollow =>
       isId ? 'Daftar dulu untuk mengikuti' : 'Register to follow';
   String get msgTargetNotRegistered => isId

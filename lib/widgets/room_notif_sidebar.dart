@@ -126,7 +126,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
                           'Notifikasi',
                           style: TextStyle(
                             color: PColors.textStrong,
-                            fontSize: 19,
+                            fontSize: AppTextSize.s19,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.4,
                           ),
@@ -175,7 +175,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: PColors.muted,
-                                fontSize: 13.5,
+                                fontSize: AppTextSize.s135,
                               ),
                             ),
                           ),
@@ -229,7 +229,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
                                                       TextOverflow.ellipsis,
                                                   style: const TextStyle(
                                                     color: PColors.textStrong,
-                                                    fontSize: 14.5,
+                                                    fontSize: AppTextSize.s145,
                                                     fontWeight: FontWeight.w700,
                                                   ),
                                                 ),
@@ -239,7 +239,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
                                                 _when(it.lastAt, s),
                                                 style: const TextStyle(
                                                   color: PColors.faint,
-                                                  fontSize: 11.5,
+                                                  fontSize: AppTextSize.s115,
                                                 ),
                                               ),
                                             ],
@@ -255,7 +255,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
                                                       TextOverflow.ellipsis,
                                                   style: const TextStyle(
                                                     color: PColors.muted,
-                                                    fontSize: 13,
+                                                    fontSize: AppTextSize.s13,
                                                   ),
                                                 ),
                                               ),
@@ -284,7 +284,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
                                                   textAlign: TextAlign.center,
                                                   style: const TextStyle(
                                                     color: Colors.white,
-                                                    fontSize: 11,
+                                                    fontSize: AppTextSize.s11,
                                                     fontWeight: FontWeight.w700,
                                                   ),
                                                 ),
@@ -314,7 +314,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
     // adanya; fallback ke ikon grup/room.
     final icon = it.icon.trim();
     if (icon.isNotEmpty && icon.length <= 4) {
-      return Text(icon, style: const TextStyle(fontSize: 17));
+      return Text(icon, style: const TextStyle(fontSize: AppTextSize.s17));
     }
     return Icon(
       it.isGroup ? Icons.group_rounded : Icons.public_rounded,

@@ -15,7 +15,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
           s.titleMyPhotos,
           trailing: Text(
             '${_photos.length} ${s.ofLabel} $maxPhotos',
-            style: TextStyle(fontSize: 12.5, color: AppTheme.textSecondary),
+            style: TextStyle(fontSize: AppTextSize.s125, color: AppTheme.textSecondary),
           ),
         ),
         SizedBox(
@@ -55,7 +55,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                           Text(
                             s.photoAddLabel,
                             style: TextStyle(
-                              fontSize: 12.5,
+                              fontSize: AppTextSize.s125,
                               fontWeight: FontWeight.w600,
                               color: AppTheme.textSecondary,
                             ),
@@ -81,7 +81,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                           Text(
                             s.photoEmptyTitle,
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: AppTextSize.s14,
                               fontWeight: FontWeight.w700,
                               color: AppTheme.textPrimary,
                             ),
@@ -92,8 +92,8 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 12.5,
-                              height: 1.35,
+                              fontSize: AppTextSize.s125,
+                              height: AppTextSize.lh135,
                               color: AppTheme.textSecondary,
                             ),
                           ),
@@ -205,7 +205,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                             minimumSize: const Size(0, 32),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             textStyle: const TextStyle(
-                              fontSize: 12.5,
+                              fontSize: AppTextSize.s125,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -302,7 +302,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                     value,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 15, color: AppTheme.textPrimary),
+                    style: TextStyle(fontSize: AppTextSize.s15, color: AppTheme.textPrimary),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -310,7 +310,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: AppTextSize.s125,
                       color: AppTheme.textSecondary,
                     ),
                   ),
@@ -395,7 +395,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: AppTextSize.s15,
                       fontWeight: FontWeight.w600,
                       color: AppTheme.textPrimary,
                     ),
@@ -406,7 +406,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTextSize.s12,
                       color: AppTheme.textSecondary,
                     ),
                   ),
@@ -448,7 +448,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                 'YukCoin: $points${v2 ? ' · v2' : ''} · slot foto +$extraSlots',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                style: TextStyle(fontSize: AppTextSize.s13, color: AppTheme.textSecondary),
               ),
             ),
             InkWell(
@@ -459,7 +459,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                 child: Text(
                   '+ Slot',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.s13,
                     fontWeight: FontWeight.w700,
                     color: AppTheme.primary,
                   ),
@@ -495,7 +495,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                   Text(
                     s.titleDonate,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: AppTextSize.s14,
                       fontWeight: FontWeight.w700,
                       color: AppTheme.textSecondary,
                     ),
@@ -510,7 +510,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
             builder: (_, snap) => Text(
               'ChatYuk v${snap.data ?? ''}',
               style: TextStyle(
-                fontSize: 11.5,
+                fontSize: AppTextSize.s115,
                 color: AppTheme.textSecondary.withValues(alpha: 0.7),
               ),
             ),

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../services/chat_service.dart';
 import '../core/nav_guard.dart';
 import '../models/room_model.dart';
 import '../providers/riverpod/room_notifications_provider.dart';
@@ -154,7 +153,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.call_rounded, size: 20, color: kChatMenuText),
             title: Text(s.menuRecentCalls,
-                style: TextStyle(color: kChatMenuText, fontSize: 15)),
+                style: TextStyle(color: kChatMenuText, fontSize: AppTextSize.s15)),
           ),
         ),
         PopupMenuItem(
@@ -165,7 +164,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.group_add_rounded, size: 20, color: kChatMenuText),
             title: Text(s.menuNewGroup,
-                style: TextStyle(color: kChatMenuText, fontSize: 15)),
+                style: TextStyle(color: kChatMenuText, fontSize: AppTextSize.s15)),
           ),
         ),
         PopupMenuItem(
@@ -176,7 +175,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.done_all_rounded, size: 20, color: kChatMenuText),
             title: Text(s.menuReadAll,
-                style: TextStyle(color: kChatMenuText, fontSize: 15)),
+                style: TextStyle(color: kChatMenuText, fontSize: AppTextSize.s15)),
           ),
         ),
       ],

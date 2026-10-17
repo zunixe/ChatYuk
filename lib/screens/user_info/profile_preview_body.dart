@@ -282,7 +282,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: PColors.textStrong,
-                          fontSize: 17,
+                          fontSize: AppTextSize.s17,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -468,7 +468,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 26,
+                                  fontSize: AppTextSize.s26,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: -0.5,
                                 ),
@@ -491,7 +491,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                               : '${widget.genderLabel} · ${widget.country}',
                           style: const TextStyle(
                             color: Color(0xFFD5D9DE),
-                            fontSize: 14.5,
+                            fontSize: AppTextSize.s145,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -520,7 +520,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                                 widget.presence,
                                 style: const TextStyle(
                                   color: Color(0xFFD5D9DE),
-                                  fontSize: 12.5,
+                                  fontSize: AppTextSize.s125,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -577,8 +577,8 @@ class _PProfileBodyState extends State<_PProfileBody> {
               widget.bio!,
               style: const TextStyle(
                 color: PColors.text,
-                fontSize: 14.5,
-                height: 1.45,
+                fontSize: AppTextSize.s145,
+                height: AppTextSize.lh145,
               ),
             ),
           ),
@@ -592,7 +592,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                   'Minat',
                   style: TextStyle(
                     color: PColors.muted,
-                    fontSize: 13,
+                    fontSize: AppTextSize.s13,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -655,7 +655,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                 'Postingan',
                 style: TextStyle(
                   color: PColors.textStrong,
-                  fontSize: 15,
+                  fontSize: AppTextSize.s15,
                   fontWeight: FontWeight.w800,
                 ),
               ),
