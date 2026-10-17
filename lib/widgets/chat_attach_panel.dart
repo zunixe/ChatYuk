@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import '../config/theme.dart';
+import '../core/media/image_cache_hygiene.dart';
 
 /// Item menu lampiran ala WhatsApp: ikon kecil berwarna (tanpa lingkaran)
 /// + label di bawah. Lebar & tinggi ditentukan grid [ChatAttachPanel].
@@ -214,14 +215,28 @@ class _RecentGallery extends StatefulWidget {
 
 class _RecentGalleryState extends State<_RecentGallery> {
   static const int _limit = 60;
+
+  /// Cache thumb BERSAMA lintas buka-panel (state di-dispose saat panel
+  /// ditutup). Tanpa ini, tiap buka panel meminta 60 thumb ulang → grid abu
+  /// lalu terisi = "kedip". Bounded + dibersihkan saat logout.
+  static final Map<String, Future<Uint8List?>> _thumbCache = {};
+  static const int _thumbCacheCap = 160;
+  static bool _hygieneRegistered = false;
+
   List<AssetEntity> _assets = const [];
   bool _noAccess = false;
-  final Map<String, Future<Uint8List?>> _thumbs = {};
 
   @override
   void initState() {
     super.initState();
+    _registerHygiene();
     _load(request: false);
+  }
+
+  static void _registerHygiene() {
+    if (_hygieneRegistered) return;
+    _hygieneRegistered = true;
+    ImageCacheHygiene.registerAppCache(_thumbCache.clear);
   }
 
   Future<void> _load({required bool request}) async {
@@ -250,16 +265,28 @@ class _RecentGalleryState extends State<_RecentGallery> {
           _noAccess = false;
           _assets = list;
         });
+        // Warm 12 thumb pertama (≈3 baris grid 4 kolom) SELAMA animasi slide
+        // 180ms → saat panel terlihat, foto sudah tampil (bukan grid abu).
+        for (final a in list.take(12)) {
+          // ignore: unawaited_futures
+          _thumb(a);
+        }
       }
     } catch (_) {
       // Plugin tak tersedia (test) / error galeri → strip kosong.
     }
   }
 
-  Future<Uint8List?> _thumb(AssetEntity a) => _thumbs.putIfAbsent(
-    a.id,
-    () => a.thumbnailDataWithSize(const ThumbnailSize.square(240)),
-  );
+  Future<Uint8List?> _thumb(AssetEntity a) {
+    final hit = _thumbCache[a.id];
+    if (hit != null) return hit;
+    if (_thumbCache.length >= _thumbCacheCap) {
+      _thumbCache.remove(_thumbCache.keys.first);
+    }
+    final fut = a.thumbnailDataWithSize(const ThumbnailSize.square(240));
+    _thumbCache[a.id] = fut;
+    return fut;
+  }
 
   Future<void> _pick(AssetEntity a) async {
     final bytes = await a.originBytes;
