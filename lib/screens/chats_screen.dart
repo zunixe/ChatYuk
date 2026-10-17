@@ -16,6 +16,20 @@ import 'lobby_screen.dart';
 import 'call_history_screen.dart';
 import '../config/theme.dart';
 
+/// Section berikutnya setelah geser horizontal (ala Timeline).
+/// [velocity] negatif = geser ke KIRI → section berikutnya.
+/// null = tidak berpindah (velocity terlalu kecil / sudah di ujung).
+ChatSection? chatSectionAfterSwipe(
+  ChatSection current,
+  double velocity, {
+  double minVelocity = 260,
+}) {
+  if (velocity.abs() < minVelocity) return null;
+  final i = current.index + (velocity < 0 ? 1 : -1);
+  if (i < 0 || i >= ChatSection.values.length) return null;
+  return ChatSection.values[i];
+}
+
 /// Menu "Chat" gabungan: section Pesan (private) + Grup + Room.
 ///
 /// Header ringkas (ala Timeline) dengan menu pindah section; TabBar lama
@@ -99,13 +113,26 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
           onOpenRoom: _openNotifRoom,
         ),
       ),
-      body: IndexedStack(
-        index: _section.index,
-        children: [
-          PrivateChatsScreen(embedded: true, externalQuery: _query),
-          GroupScreen(externalQuery: _query),
-          LobbyScreen(embedded: true, externalQuery: _query),
-        ],
+      // SWIPE kiri/kanan pindah section (Pesan ⇄ Grup ⇄ Room) — sama seperti
+      // Timeline. GestureDetector horizontal TIDAK mengganggu scroll vertikal
+      // daftar; daftar yang punya scroll horizontal sendiri menang duluan.
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragEnd: (d) {
+          final next = chatSectionAfterSwipe(
+            _section,
+            d.primaryVelocity ?? 0,
+          );
+          if (next != null) _changeSection(next);
+        },
+        child: IndexedStack(
+          index: _section.index,
+          children: [
+            PrivateChatsScreen(embedded: true, externalQuery: _query),
+            GroupScreen(externalQuery: _query),
+            LobbyScreen(embedded: true, externalQuery: _query),
+          ],
+        ),
       ),
     );
   }

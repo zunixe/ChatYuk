@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/user_model.dart';
@@ -6,7 +7,9 @@ import '../../services/chat_service.dart';
 import '../../services/chat_stream_session.dart';
 export '../../services/chat_stream_session.dart' show ChatMessageStream;
 export '../../services/chat_service.dart' show PrivateChatInfo;
+import '../../core/cache/chat_poster_cache.dart';
 import '../../core/cache/message_cache.dart';
+import '../../core/cache/photo_aspect_cache.dart';
 import '../../core/cache/photo_cache.dart';
 
 /// State chat (immutable — yang di-watch widget).
@@ -367,6 +370,10 @@ class ChatNotifier extends Notifier<ChatState> {
     _service.clearCachedStreams();
     MessageCache.instance.clearAll();
     PhotoCache.instance.clearAll();
+    // Poster/aspek foto chat milik user lama — hanya di sini (logout), BUKAN
+    // saat background (poster harus persisten untuk cold start).
+    unawaited(ChatPosterCache.instance.clear());
+    unawaited(PhotoAspectCache.instance.clear());
     _emit();
   }
 

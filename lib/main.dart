@@ -646,11 +646,10 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
       await PhotoAspectCache.instance.prewarm();
       // Poster kecil foto chat (frame pertama langsung bergambar).
       await ChatPosterCache.instance.prewarm();
-      // Bersihkan bersama cache lain saat logout/ganti akun.
-      ImageCacheHygiene.registerAppCache(() {
-        unawaited(PhotoAspectCache.instance.clear());
-        unawaited(ChatPosterCache.instance.clear());
-      });
+      // CATATAN: poster/aspek TIDAK didaftarkan ke ImageCacheHygiene — hygiene
+      // dipanggil saat background/idle (app.dart) sehingga poster (yang justru
+      // harus PERSISTEN untuk cold start) akan terhapus. Keduanya dibersihkan
+      // HANYA saat logout (chat_provider.reset()).
     }, 15),
     guard('firebase', () async {
       try {

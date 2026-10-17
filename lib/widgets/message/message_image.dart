@@ -633,6 +633,7 @@ class _MessageImageState extends State<MessageImage> {
     // Lapor lebar render ke parent (sekali / berubah) → caption+jam rata kanan
     // sejajar tepi foto.
     if (!widget.fill) _reportWidth(width);
+    final posterBg = _poster;
     return GestureDetector(
       onTap: () => _openFullscreen(),
       child: ClipRRect(
@@ -641,7 +642,24 @@ class _MessageImageState extends State<MessageImage> {
         // InteractiveViewer + onDoubleTap zoom → foto di bubble bisa membesar
         // & digeser padahal hanya thumbnail. Zoom/geser HANYA di fullscreen
         // viewer (PhotoViewerScreen). Di sini cukup tap → buka fullscreen.
-        child: _bubbleImage(context, decoded, width, height, s),
+        // POSTER tetap DI BELAKANG foto: bila bitmap tajam belum siap
+        // (Image.memory masih decode), yang terlihat = poster (bukan kosong)
+        // → tidak ada kedip/blank saat transisi.
+        child: Stack(
+          fit: StackFit.passthrough,
+          children: [
+            if (posterBg != null && posterBg.isNotEmpty)
+              Positioned.fill(
+                child: Image.memory(
+                  posterBg,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.low,
+                ),
+              ),
+            _bubbleImage(context, decoded, width, height, s),
+          ],
+        ),
       ),
     );
   }
