@@ -921,65 +921,94 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
         ),
       ),
     ),
+            // Panel lampiran MUNCUL DARI BAWAH: slide-up + fade, bukan
+            // hanya AnimatedSize (dulu isi panel sudah penuh sejak frame
+            // pertama sehingga terlihat "keluar dari tengah").
+            // AnimatedSize membungkus AnimatedSwitcher agar tinggi panel ikut
+            // bertambah halus (tanpa lompatan layout composer).
             AnimatedSize(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              child: widget.showAttachRow
-                  ? ChatAttachPanel(
-                      onClose: widget.onToggleAttach,
-                      onPickGalleryPhoto: widget.onPickGalleryPhoto,
-                      allowGalleryLabel: s.galleryAllowAccess,
-                      children: [
-                          ChatAttachChip(
-                            icon: Icons.image_rounded,
-                            color: AppTheme.primary,
-                            label: s.menuSendPhoto,
-                            onTap: widget.onSendPhoto,
-                          ),
-                          if (widget.onSendVideo != null)
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.bottomCenter,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                reverseDuration: const Duration(milliseconds: 160),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, anim) {
+                  // Naik dari bawah (offset 0.35 → 0) sambil memudar masuk.
+                  // ClipRect mencegah isi meluber ke atas saat setengah jalan.
+                  final slide = Tween<Offset>(
+                    begin: const Offset(0, 0.35),
+                    end: Offset.zero,
+                  ).animate(anim);
+                  return ClipRect(
+                    child: SlideTransition(
+                      position: slide,
+                      child: FadeTransition(opacity: anim, child: child),
+                    ),
+                  );
+                },
+                child: widget.showAttachRow
+                    ? ChatAttachPanel(
+                        key: const ValueKey('attach-open'),
+                        onClose: widget.onToggleAttach,
+                        onPickGalleryPhoto: widget.onPickGalleryPhoto,
+                        allowGalleryLabel: s.galleryAllowAccess,
+                        children: [
                             ChatAttachChip(
-                              icon: Icons.videocam_rounded,
-                              color: const Color(0xFF7E57C2),
-                              label: s.menuSendVideo,
-                              onTap: widget.onSendVideo!,
+                              icon: Icons.image_rounded,
+                              color: AppTheme.primary,
+                              label: s.menuSendPhoto,
+                              onTap: widget.onSendPhoto,
                             ),
-                          ChatAttachChip(
-                            icon: Icons.timelapse_rounded,
-                            color: Colors.orange,
-                            label: s.menuViewOnce,
-                            onTap: widget.onSendViewOnce,
-                          ),
-                          if (widget.onSendFile != null)
-                          ChatAttachChip(
-                            icon: Icons.insert_drive_file_rounded,
-                            color: const Color(0xFF7C4DFF),
-                            label: s.menuSendFile,
-                            onTap: widget.onSendFile!,
-                          ),
-                        if (widget.onSendLocation != null)
+                            if (widget.onSendVideo != null)
+                              ChatAttachChip(
+                                icon: Icons.videocam_rounded,
+                                color: const Color(0xFF7E57C2),
+                                label: s.menuSendVideo,
+                                onTap: widget.onSendVideo!,
+                              ),
                             ChatAttachChip(
-                              icon: Icons.location_on_rounded,
-                              color: Colors.green,
-                              label: s.menuSendLocation,
-                              onTap: widget.onSendLocation!,
+                              icon: Icons.timelapse_rounded,
+                              color: Colors.orange,
+                              label: s.menuViewOnce,
+                              onTap: widget.onSendViewOnce,
                             ),
-                          if (widget.onSendCoin != null)
+                            if (widget.onSendFile != null)
                             ChatAttachChip(
-                              icon: Icons.monetization_on_rounded,
-                              color: const Color(0xFFFFB300),
-                              label: s.menuSendCoin,
-                              onTap: widget.onSendCoin!,
+                              icon: Icons.insert_drive_file_rounded,
+                              color: const Color(0xFF7C4DFF),
+                              label: s.menuSendFile,
+                              onTap: widget.onSendFile!,
                             ),
-                          if (widget.onOpenGiftPanel != null)
-                            ChatAttachChip(
-                              icon: Icons.card_giftcard_rounded,
-                              color: Colors.pinkAccent,
-                              label: s.menuSendGift,
-                              onTap: widget.onOpenGiftPanel!,
-                            ),
-                        ],
-                    )
-                  : const SizedBox.shrink(),
+                          if (widget.onSendLocation != null)
+                              ChatAttachChip(
+                                icon: Icons.location_on_rounded,
+                                color: Colors.green,
+                                label: s.menuSendLocation,
+                                onTap: widget.onSendLocation!,
+                              ),
+                            if (widget.onSendCoin != null)
+                              ChatAttachChip(
+                                icon: Icons.monetization_on_rounded,
+                                color: const Color(0xFFFFB300),
+                                label: s.menuSendCoin,
+                                onTap: widget.onSendCoin!,
+                              ),
+                            if (widget.onOpenGiftPanel != null)
+                              ChatAttachChip(
+                                icon: Icons.card_giftcard_rounded,
+                                color: Colors.pinkAccent,
+                                label: s.menuSendGift,
+                                onTap: widget.onOpenGiftPanel!,
+                              ),
+                          ],
+                      )
+                    : const SizedBox.shrink(
+                        key: ValueKey('attach-closed'),
+                      ),
+              ),
             ),
       ],
     );
