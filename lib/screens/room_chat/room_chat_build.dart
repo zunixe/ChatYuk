@@ -63,10 +63,23 @@ mixin _RcBuildMx on _RoomChatBase {
                 all,
                 day: DateTime(now.year, now.month, now.day),
               );
+              // Anti-kedip: key→index agar ListView MEMINDAHKAN bubble yang
+              // sama saat index bergeser (bukan membuat ulang). Sama private.
+              final keyIndex = <String, int>{};
+              for (var i = 0; i < items.length; i++) {
+                final it = items[items.length - 1 - i];
+                if (it.isAlbum) {
+                  keyIndex['album_${it.album.first.id}'] = i;
+                } else if (it.msg != null) {
+                  keyIndex['m_${it.msg!.id}'] = i;
+                }
+              }
               return ListView.builder(
                 controller: _scrollCtrl,
                 reverse: true,
                 padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+                findChildIndexCallback: (key) =>
+                    key is ValueKey<String> ? keyIndex[key.value] : null,
                 itemCount: items.length,
                 itemBuilder: (_, i) {
                   final item = items[items.length - 1 - i];
@@ -110,6 +123,7 @@ mixin _RcBuildMx on _RoomChatBase {
                   // (reaksi/star/centang/highlight) tidak merepaint seluruh
                   // list panjang. Pola sama seperti kartu list lain.
                   return RepaintBoundary(
+                    key: ValueKey('m_${m.id}'),
                     child: Container(
                       // Tanpa wash biru selebar baris (sama private chat —
                       // hanya border bubble). Wash tersisa hanya untuk flash

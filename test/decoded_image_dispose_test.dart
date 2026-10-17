@@ -25,16 +25,36 @@ void main() {
   });
 
   group('decodedImageCache replace kunci-sama (R10)', () {
-    test('objek lama untuk kunci sama di-dispose saat diganti', () {
+    test('isi sama (ukuran sama): objek lama yang TAMPIL dipertahankan, tak di-dispose', () {
+      // Bubble yang sedang tampil memegang objek lama — men-dispose-nya
+      // membuat bubble jatuh ke Image.memory async = kedip (log HP 2026-10-17).
       const key = 424242;
       final oldImg = DecodedImage(Uint8List.fromList([1]), 1, 1);
       final newImg = DecodedImage(Uint8List.fromList([2]), 1, 1);
       putDecodedCache(key, oldImg);
-      expect(oldImg.disposed, isFalse);
       putDecodedCache(key, newImg);
-      // Objek lama (digantikan) dilepas; objek baru tetap hidup.
-      expect(oldImg.disposed, isTrue);
+      expect(oldImg.disposed, isFalse);
       expect(newImg.disposed, isFalse);
+      expect(identical(getDecodedCache(key), oldImg), isTrue);
+    });
+
+    test('ukuran beda (upgrade): diganti, objek lama TIDAK di-dispose paksa', () {
+      const key = 424243;
+      final oldImg = DecodedImage(Uint8List.fromList([1]), 100, 100);
+      final newImg = DecodedImage(Uint8List.fromList([2]), 800, 800);
+      putDecodedCache(key, oldImg);
+      putDecodedCache(key, newImg);
+      expect(oldImg.disposed, isFalse);
+      expect(identical(getDecodedCache(key), newImg), isTrue);
+    });
+
+    test('objek lama yang sudah dilepas → diganti objek baru', () {
+      const key = 424244;
+      final oldImg = DecodedImage(Uint8List.fromList([1]), 1, 1);
+      final newImg = DecodedImage(Uint8List.fromList([2]), 1, 1);
+      putDecodedCache(key, oldImg);
+      oldImg.safeDispose();
+      putDecodedCache(key, newImg);
       expect(identical(getDecodedCache(key), newImg), isTrue);
     });
 

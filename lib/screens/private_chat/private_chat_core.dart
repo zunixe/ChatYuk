@@ -711,9 +711,29 @@ mixin _PcCoreMx on _PrivateChatBase {
                               }
                               // `items` (pesan + chip tanggal) sudah dihitung di
                               // _deriveItems (cache) — langsung pakai.
+                              // ANTI-KEDIP (rekaman HP 2026-10-17): saat data
+                              // server masuk, index item bergeser → ListView
+                              // (tanpa callback) MEMBUAT ULANG bubble foto/album
+                              // di index baru → foto tajam → poster → tajam.
+                              // Peta key→index membuat ListView MEMINDAHKAN
+                              // elemen yang sama (State + bitmap tetap).
+                              final keyIndex = <String, int>{};
+                              for (var di = 0; di < items.length; di++) {
+                                final it = items[items.length - 1 - di];
+                                if (it.isAlbum) {
+                                  keyIndex['album_${it.album.first.id}'] =
+                                      di + 1;
+                                } else if (it.msg != null) {
+                                  keyIndex['m_${it.msg!.id}'] = di + 1;
+                                }
+                              }
                               return ValueListenableBuilder<DateTime?>(
                                 valueListenable: _lastReadNotifier,
                                 builder: (_, lastReadValue, __) => ListView.builder(
+                                  findChildIndexCallback: (key) =>
+                                      key is ValueKey<String>
+                                      ? keyIndex[key.value]
+                                      : null,
                                   controller: _scrollCtrl,
                                   reverse: true,
                                   // PERF (mount pertama chat berat): default
@@ -856,6 +876,8 @@ mixin _PcCoreMx on _PrivateChatBase {
                                     // Dipakai HANYA di jalur bubble chat biasa —
                                     // kartu/typing-wrapper tetap seperti semula.
                                     return RepaintBoundary(
+                                      // Key akar (lihat findChildIndexCallback).
+                                      key: ValueKey('m_${msg.id}'),
                                       child: MessageBubble(
                                         key: searchKey ?? ValueKey(msg.id),
                                         link: linkFor(msg.id),

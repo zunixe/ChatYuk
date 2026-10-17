@@ -88,14 +88,26 @@ void _putDecodedCache(int key, DecodedImage img) {
     _hygieneRegistered = true;
     ImageCacheHygiene.registerAppCache(decodedImageCache.clear);
   }
-  // LRU: hapus dulu (kalau ada). Bila entri lama untuk kunci SAMA digantikan
-  // objek BARU → bitmap lama tak dipakai lagi → lepas (R10). HANYA di jalur
-  // replace kunci-sama (aman: tak ada widget lain memegang referensi objek
-  // yang baru saja digantikan dari cache). Entri yang dibuang karena evict LRU
-  // (keys.first) SENGAJA TIDAK di-dispose — bisa masih dirender widget lain.
+  // LRU: hapus dulu (kalau ada), lalu pasang ulang di posisi terbaru.
+  //
+  // 2026-10-17 (log HP: tile album tajam → poster 1 frame → tajam, TANPA
+  // mount ulang): dulu objek lama untuk kunci SAMA di-dispose saat diganti
+  // ("tak ada widget lain memegang referensinya") — ASUMSI SALAH: bubble yang
+  // SEDANG TAMPIL memegangnya. Data server masuk → path yang sama di-decode
+  // jadi objek baru → bitmap yang sedang dirender dilepas → bubble jatuh ke
+  // Image.memory (async) → kedip. Sekarang:
+  //  - ukuran sama (isi sama) → PERTAHANKAN objek lama yang masih hidup;
+  //  - ukuran beda (upgrade) → ganti, TANPA dispose paksa (bisa masih
+  //    dirender; bitmap dilepas GC saat tak direferensikan). Cache tetap
+  //    bounded per foto unik (lihat decodedCacheMaxUnique).
   final removed = decodedImageCache.remove(key);
-  if (removed != null && !identical(removed, img)) {
-    removed.safeDispose();
+  if (removed != null &&
+      !identical(removed, img) &&
+      !removed.disposed &&
+      removed.width == img.width &&
+      removed.height == img.height) {
+    decodedImageCache[key] = removed;
+    return;
   }
   decodedImageCache[key] = img;
   while (decodedImageCache.length > decodedCacheMaxKeys ||
