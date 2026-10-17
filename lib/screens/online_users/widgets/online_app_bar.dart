@@ -64,46 +64,42 @@ class OnlineAppBar extends ConsumerWidget implements PreferredSizeWidget {
       // search (leading) & mengisi lebar sampai tempat ikon Top Aktif.
       // Saat tidak searching, biarkan default agar judul tidak mepet.
       titleSpacing: isSearching ? 0 : null,
-      // Tombol search di KIRI ATAS (leading). Ikon Admin Panel pindah
-      // ke actions kanan (hanya tampil untuk admin sungguhan).
-      // Di samping search: ikon "Top Aktif" — pola Tooltip + GestureDetector
-      // + Padding(horizontal: 3) + Icon (tanpa IconButton yang memaksa
-      // 48px). Saat MODE SEARCH aktif, ikon Top Aktif disembunyikan — kalau
-      // tidak, field search (title) menutupi/menumpuk ikon tsb.
-      leadingWidth: isSearching ? 56 : 76,
-      leading: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Tooltip(
-            message: s.searchHint,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onToggleSearch,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: Icon(
-                  isSearching ? Icons.close : Icons.search_rounded,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ),
-          ),
-          if (!isSearching)
-            Tooltip(
-              message: s.topActiveTooltip,
+      // Ikon Search dipindah ke KANAN (actions) menggantikan tombol + story.
+      // Saat tidak searching, leading hanya "Top Aktif".
+      leadingWidth: isSearching ? 56 : 44,
+      leading: isSearching
+          ? Tooltip(
+              message: s.searchHint,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                // Tampil LANGSUNG di halaman ini sebagai bottom sheet
-                // (bukan push halaman baru) — sama seperti aksi titik-3.
-                onTap: () => LeaderboardSheet.show(context),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 3),
-                  child: Icon(Icons.emoji_events_rounded),
+                onTap: onToggleSearch,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: Icon(
+                    isSearching ? Icons.close : Icons.search_rounded,
+                    color: AppTheme.textPrimary,
+                  ),
                 ),
               ),
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Tooltip(
+                  message: s.topActiveTooltip,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    // Tampil LANGSUNG di halaman ini sebagai bottom sheet
+                    // (bukan push halaman baru) — sama seperti aksi titik-3.
+                    onTap: () => LeaderboardSheet.show(context),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 3),
+                      child: Icon(Icons.emoji_events_rounded),
+                    ),
+                  ),
+                ),
+              ],
             ),
-        ],
-      ),
       title: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
         transitionBuilder: (child, anim) => FadeTransition(
@@ -356,19 +352,20 @@ class OnlineAppBar extends ConsumerWidget implements PreferredSizeWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Tombol Admin Panel dipindah ke tombol melayang kiri-bawah
-              // (lihat _MainNav di app.dart) — tidak lagi di AppBar.
-              Tooltip(
-                message: s.storyAddTooltip,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onOpenStoryComposer,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 3),
-                    child: Icon(Icons.add_circle_outline),
+              // Tombol + story DIHAPUS. Ikon SEARCH kini di sini (kanan),
+              // menggantikan posisi tombol + (dipindah dari leading kiri).
+              if (!isSearching)
+                Tooltip(
+                  message: s.searchHint,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onToggleSearch,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 3),
+                      child: Icon(Icons.search_rounded),
+                    ),
                   ),
                 ),
-              ),
               // Dropdown channel (Semua / Teman / Orang Sekitar) — menu kecil
               // muncul di SAMPING tombol (PopupMenuButton). Ikon berubah
               // sesuai channel aktif. Gaya selaras tombol admin panel:
