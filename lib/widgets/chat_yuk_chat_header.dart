@@ -248,7 +248,12 @@ class ChatYukChatHeader extends StatelessWidget
         children: [
           Text(
             _label(section),
-            style: AppText.title.copyWith(color: kChatHeaderText),
+            style: TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              color: kChatHeaderText,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
