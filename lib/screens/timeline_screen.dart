@@ -11,6 +11,7 @@ import '../widgets/post/post_prefetch.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/skeleton_card.dart';
 import 'post_composer_screen.dart';
+import 'timeline/widgets/whats_new_row.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import '../core/perf/perf_probe.dart';
@@ -467,6 +468,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
       PostPrefetch.warmPosts(posts);
     }
     final effectiveSearch = _appliedSearch;
+    final showWhatsNew = effectiveSearch.isEmpty;
     final effectiveLoading = loading;
     final ctrl = _scrolls[scopeIndex];
 
@@ -594,10 +596,17 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                 // + decode foto post yang belum terlihat saat Timeline dibuka.
                 // Kombinasi dgn _loadImages post-frame di PostCard.
                 scrollCacheExtent: ScrollCacheExtent.pixels(100),
-                itemCount: posts.length +
+                // +1 di atas: baris "Apa yang baru?" (ala Threads) — tidak
+                // tampil saat search aktif.
+                itemCount: (showWhatsNew ? 1 : 0) +
+                      posts.length +
                       (effectiveLoading && hasMore ? 1 : 0) +
                       (!hasMore ? 1 : 0),
-                itemBuilder: (_, i) {
+                itemBuilder: (_, raw) {
+                  if (showWhatsNew && raw == 0) {
+                    return WhatsNewRow(onTap: _openComposer);
+                  }
+                  final i = showWhatsNew ? raw - 1 : raw;
                   if (i >= posts.length && effectiveLoading && hasMore) {
                     return const Padding(
                       padding: EdgeInsets.all(16),

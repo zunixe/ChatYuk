@@ -414,6 +414,8 @@ mixin SScreenMx {
   String get fileDownloading => isId ? 'Mengunduh...' : 'Downloading...';
   // ── Pemilih galeri (ala WhatsApp) ──
   String get galleryRecents => isId ? 'Terbaru' : 'Recents';
+  // ── Timeline: baris 'Apa yang baru?' (ala Threads) ──
+  String get whatsNewHint => isId ? 'Apa yang baru?' : "What's new?";
   String gallerySelectMax(int n) =>
       isId ? 'Maksimal $n foto' : 'Up to $n photos';
   String get galleryNoAccess => isId
