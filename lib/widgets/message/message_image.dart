@@ -199,9 +199,63 @@ class _MessageImageState extends State<MessageImage> {
     super.dispose();
   }
 
+  /// ANTI-KEDIP (terbukti rekaman HP 2026-10-17): saat data server masuk,
+  /// tile album di-MOUNT ULANG dengan `imageData` = path storage → kunci
+  /// path MISS (bitmap tersimpan di kunci base64 lokal) → kotak kosong 1–2
+  /// frame. Simpan juga bitmap yang SEDANG TAMPIL di kunci `thumb:<id>`
+  /// (yang dicek initState) → mount ulang langsung bergambar.
+  /// Hanya isi bila kosong / sudah dilepas — MENGGANTI objek lain akan
+  /// men-dispose bitmap yang mungkin sedang dirender widget lain.
+  void _rememberById(DecodedImage d) {
+    final id = widget.messageId;
+    if (id.isEmpty || d.disposed) return;
+    final k = 'thumb:$id'.hashCode;
+    final cur = getDecodedCache(k);
+    if (cur == null || cur.disposed) putDecodedCache(k, d);
+  }
+
+  /// Poster dibuat juga saat bitmap datang dari CACHE (dulu hanya setelah
+  /// decode → foto yang selalu cache-hit tak pernah punya poster).
+  bool _posterChecked = false;
+  void _ensurePoster(DecodedImage d) {
+    if (_posterChecked || widget.messageId.isEmpty) return;
+    _posterChecked = true;
+    if (!ChatPosterCache.instance.isReady) return;
+    if (ChatPosterCache.instance.posterSync(widget.messageId) != null) return;
+    _savePosterFrom(d.bytes);
+  }
+
   @override
   void didUpdateWidget(MessageImage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // State dipakai ulang untuk PESAN LAIN (list menggeser elemen) → jangan
+    // pertahankan bitmap pesan lama (foto salah). Cari bitmap pesan baru di
+    // cache (sinkron); tidak ada → poster/placeholder + decode.
+    if (widget.messageId != oldWidget.messageId) {
+      _gen++;
+      _posterChecked = false;
+      final key = widget.imageData.hashCode;
+      final hit = getDecodedCache(key) ??
+          (widget.messageId.isEmpty
+              ? null
+              : getDecodedCache('thumb:${widget.messageId}'.hashCode));
+      _poster = widget.messageId.isEmpty
+          ? null
+          : ChatPosterCache.instance.posterSync(widget.messageId);
+      if (hit != null && !hit.disposed) {
+        _decoded = hit;
+        _loading = false;
+        final sz = _sizeOf(hit.width, hit.height);
+        _phW = sz.width;
+        _phH = sz.height;
+      } else {
+        _decoded = null;
+        _loading = true;
+        _reservePlaceholder(widget.imageData);
+        if (widget.imageData.isNotEmpty) _decode(key, ++_gen);
+      }
+      return;
+    }
     // imageData berubah (fetch awal kosong → photo download selesai) → re-decode
     if (widget.imageData != oldWidget.imageData &&
         widget.imageData.isNotEmpty) {
@@ -571,6 +625,8 @@ class _MessageImageState extends State<MessageImage> {
         ),
       );
     }
+    _rememberById(decoded);
+    _ensurePoster(decoded);
     final size = _sizeOf(decoded.width, decoded.height);
     final width = widget.fill ? double.infinity : size.width;
     final height = widget.fill ? double.infinity : size.height;

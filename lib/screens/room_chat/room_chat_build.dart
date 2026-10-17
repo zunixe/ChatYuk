@@ -76,6 +76,7 @@ mixin _RcBuildMx on _RoomChatBase {
                   if (item.isAlbum) {
                     final ph = item.album;
                     return RepaintBoundary(
+                      key: ValueKey('album_${ph.first.id}'),
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Align(

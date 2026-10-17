@@ -66,8 +66,19 @@ Future<void> attachDecodedImage(DecodedImage di, {int? targetWidth}) async {
 // tampil bisa terbuang, sementara yang sudah off-screen tetap → re-decode =
 // kedip saat scroll chat foto-padat). 32 entri dianggap cukup untuk bubble
 // yang tampil sekaligus; tiap entri = bytes foto asli (bounded RAM).
+//
+// 2026-10-17 (rekaman HP: tile album KOSONG 1–2 frame saat data server
+// masuk): SATU foto disimpan di 3–4 kunci (base64 lokal, path storage,
+// `thumb:<id>`, isi data). Cap 32 KUNCI = efektif ~8–10 foto → chat ±27 foto
+// terus menggusur `thumb:<id>` → tile yang di-mount ulang MISS → kotak kosong.
+// Sekarang dibatasi per FOTO UNIK (objek) — kunci alias tidak menghabiskan
+// kuota — plus batas kunci total supaya peta tetap bounded.
 final decodedImageCache = <int, DecodedImage>{};
-const _decodedCacheMax = 32;
+const decodedCacheMaxUnique = 20;
+const decodedCacheMaxKeys = 128;
+
+int _uniqueCount() =>
+    (Set<DecodedImage>.identity()..addAll(decodedImageCache.values)).length;
 // Daftarkan pembersih ke hygiene logout (satu titik, lihat
 // core/media/image_cache_hygiene.dart) — bytes foto user lama tidak boleh
 // tinggal di RAM setelah ganti akun. Lazy: dipanggil saat cache pertama diisi.
@@ -86,10 +97,13 @@ void _putDecodedCache(int key, DecodedImage img) {
   if (removed != null && !identical(removed, img)) {
     removed.safeDispose();
   }
-  while (decodedImageCache.length >= _decodedCacheMax) {
-    decodedImageCache.remove(decodedImageCache.keys.first);
-  }
   decodedImageCache[key] = img;
+  while (decodedImageCache.length > decodedCacheMaxKeys ||
+      _uniqueCount() > decodedCacheMaxUnique) {
+    final first = decodedImageCache.keys.first;
+    if (first == key && decodedImageCache.length == 1) break;
+    decodedImageCache.remove(first);
+  }
 }
 
 /// Baca dari cache decode + REFRESH LRU (pindah ke posisi terbaru). Dipakai

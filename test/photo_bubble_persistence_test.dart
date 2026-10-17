@@ -294,5 +294,94 @@ void main() {
         expect(find.byType(TweenAnimationBuilder<double>), findsNothing);
       },
     );
+
+    testWidgets(
+      'ANTI-KEDIP MOUNT ULANG: base64 lokal → widget BARU dgn path → frame-1 bergambar',
+      (t) async {
+        // Alur nyata (rekaman HP 2026-10-17): foto tampil dari base64 lokal,
+        // lalu data server masuk & tile album di-MOUNT ULANG dgn imageData =
+        // PATH. Dulu: kunci path miss → kotak kosong 1–2 frame (kedip).
+        final im = img.Image(width: 300, height: 300);
+        final b64 = base64Encode(
+          Uint8List.fromList(img.encodeJpg(im, quality: 75)),
+        );
+        final bytes = base64Decode(b64);
+        final dims = parseImageDimensions(bytes)!;
+        // Bitmap tersimpan HANYA di kunci base64 (seperti loadPhotosAsync).
+        putDecodedCache(
+          b64.hashCode,
+          DecodedImage(bytes, dims.width, dims.height),
+        );
+
+        Widget tree(Key k, String data) => ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MessageImage(
+                key: k,
+                imageData: data,
+                chatKey: 'private_a_b',
+                messageId: 'remount-1',
+                fill: true,
+              ),
+            ),
+          ),
+        );
+
+        await t.pumpWidget(tree(const ValueKey('a'), b64));
+        await t.pump();
+        bool hasPic() =>
+            find.byType(RawImage).evaluate().isNotEmpty ||
+            find.byType(Image).evaluate().isNotEmpty;
+        expect(hasPic(), isTrue, reason: 'tampil dari base64 lokal');
+
+        // Mount ULANG (key beda = State baru) dengan PATH storage.
+        await t.pumpWidget(tree(const ValueKey('b'), 'chat/x/remount.jpg'));
+        expect(hasPic(), isTrue,
+            reason: 'frame-1 setelah mount ulang harus langsung bergambar');
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'State dipakai ulang untuk PESAN LAIN → tidak menampilkan foto lama',
+      (t) async {
+        final a = base64Encode(
+          Uint8List.fromList(img.encodeJpg(img.Image(width: 200, height: 100))),
+        );
+        final aBytes = base64Decode(a);
+        final aDims = parseImageDimensions(aBytes)!;
+        final aDec = DecodedImage(aBytes, aDims.width, aDims.height);
+        putDecodedCache(a.hashCode, aDec);
+
+        Widget tree(String data, String id) => ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MessageImage(
+                imageData: data,
+                chatKey: 'private_a_b',
+                messageId: id,
+                fill: true,
+              ),
+            ),
+          ),
+        );
+        await t.pumpWidget(tree(a, 'msg-A'));
+        await t.pump();
+        // Widget sama (tanpa key) kini untuk pesan B yang belum ada di cache.
+        await t.pumpWidget(tree('chat/x/msgB.jpg', 'msg-B'));
+        await t.pump();
+        final raws = t.widgetList<RawImage>(find.byType(RawImage));
+        for (final r in raws) {
+          expect(identical(r.image, aDec.image) && r.image != null, isFalse,
+              reason: 'bitmap pesan A tak boleh tampil untuk pesan B');
+        }
+        final imgs = t.widgetList<Image>(find.byType(Image));
+        for (final i in imgs) {
+          final p = i.image;
+          expect(p is MemoryImage && identical(p.bytes, aBytes), isFalse,
+              reason: 'bytes pesan A tak boleh tampil untuk pesan B');
+        }
+      },
+    );
   });
 }

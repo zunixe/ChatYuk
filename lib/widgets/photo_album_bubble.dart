@@ -125,6 +125,8 @@ class PhotoAlbumBubble extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         MessageImage(
+          // Key per pesan: tile tidak dipakai ulang untuk foto lain.
+          key: ValueKey(m.id),
           imageData: m.imageData,
           chatKey: chatKey,
           messageId: m.id,

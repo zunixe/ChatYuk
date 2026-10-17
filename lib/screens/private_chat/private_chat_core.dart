@@ -786,6 +786,9 @@ mixin _PcCoreMx on _PrivateChatBase {
                                             _lastReadNotifier.value,
                                           );
                                       return RepaintBoundary(
+                                        // Key album (id foto pertama): elemen
+                                        // tidak dipakai ulang untuk item lain.
+                                        key: ValueKey('album_${first.id}'),
                                         child: Padding(
                                           padding: const EdgeInsets.only(
                                             bottom: 8,
