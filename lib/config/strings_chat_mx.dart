@@ -25,9 +25,6 @@ mixin SChatMx {
   String get titleContactUs => isId ? 'Hubungi Kami' : 'Contact Us';
   String get contactUsSubtitle =>
       isId ? 'Bantuan, masukan & laporan' : 'Help, feedback & reports';
-  String get contactUsBody => isId
-      ? 'Kirim email ke support@chatyuk.app — kami balas maksimal 2×24 jam kerja.'
-      : 'Email support@chatyuk.app — we reply within 2 business days.';
   String get settingsSubtitle => isId
       ? 'Akun, privasi, notifikasi & lainnya'
       : 'Account, privacy, notifications & more';

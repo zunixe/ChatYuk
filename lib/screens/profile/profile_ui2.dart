@@ -94,24 +94,52 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                 )
               else
                 for (final ph in _photos) ...[
-                  GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProfilePhotoViewerScreen(
-                          photos: _photos,
-                          initialIndex: _photos.indexOf(ph),
+                  SizedBox(
+                    width: 92,
+                    height: 116,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ProfilePhotoViewerScreen(
+                                  photos: _photos,
+                                  initialIndex: _photos.indexOf(ph),
+                                ),
+                              ),
+                            ),
+                            onLongPress: () => _confirmDeletePhoto(ph),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: AsyncPhotoThumbnail(base64: ph.photo),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    onLongPress: () => _confirmDeletePhoto(ph),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: SizedBox(
-                        width: 92,
-                        height: 116,
-                        child: AsyncPhotoThumbnail(base64: ph.photo),
-                      ),
+                        // Tombol HAPUS per foto (pojok kanan atas) — tetap ada
+                        // di samping long-press supaya jelas & mudah ditemukan.
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: GestureDetector(
+                            onTap: () => _confirmDeletePhoto(ph),
+                            child: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.55),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -307,7 +335,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                   icon: Icons.help_outline,
                   title: s.titleContactUs,
                   subtitle: s.contactUsSubtitle,
-                  onTap: () => _contactUs(context, s),
+                  onTap: () => _contactUs(context),
                 ),
               ],
             ),
@@ -372,20 +400,11 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
-  void _contactUs(BuildContext context, S s) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _Pc.card,
-        title: Text(s.titleContactUs),
-        content: Text(s.contactUsBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s.btnClose),
-          ),
-        ],
-      ),
+  /// Buka FORM Hubungi Kami (halaman yang sudah ada — pesan masuk ke admin).
+  void _contactUs(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ContactScreen()),
     );
   }
 
