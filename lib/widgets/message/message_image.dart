@@ -31,6 +31,11 @@ class MessageImage extends StatefulWidget {  final String imageData;
   /// true = isi penuh kotak parent (tanpa sudut membulat) — dipakai tile
   /// album ala WhatsApp. Ukuran mengikuti constraint parent.
   final bool fill;
+
+  /// Tile ALBUM (isi penuh) → placeholder SENYAP (tanpa spinner) & tanpa
+  /// fade: buka chat album tidak "kedip" berulang (spinner×4 + fade×4).
+  bool get _albumTile => fill;
+
   const MessageImage({
     super.key,
     required this.imageData,
@@ -203,7 +208,7 @@ class _MessageImageState extends State<MessageImage> {
         // JANGAN kosongkan _decoded — foto lama tetap tampil sampai yang baru
         // siap (persistence, anti kedip). Hanya tandai loading untuk spinner
         // bila memang belum ada gambar sama sekali (lihat build).
-        _fadeNext = true;
+        _fadeNext = !widget._albumTile;
         if (mounted) {
           setState(() {
             _loading = true;
@@ -382,7 +387,7 @@ class _MessageImageState extends State<MessageImage> {
     // Piksel BARU didecode (belum pernah tampil di layar ini) → fade-in halus
     // supaya kemunculan tidak "pop". Bila ini sekadar re-decode isi yang sama
     // (sudah ditangani `contentHit`/`_decoded!=null` di atas), tak sampai sini.
-    _fadeNext = true;
+    _fadeNext = !widget._albumTile;
     setState(() {
       _decoded = decoded;
       _loading = false;
@@ -394,7 +399,7 @@ class _MessageImageState extends State<MessageImage> {
 
   void _retry() {
     final key = widget.imageData.hashCode;
-    _fadeNext = true;
+    _fadeNext = !widget._albumTile;
     setState(() {
       _loading = true;
     });
@@ -436,14 +441,18 @@ class _MessageImageState extends State<MessageImage> {
           color: AppTheme.bgInput,
           alignment: Alignment.center,
           child: _loading
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.4,
-                    color: AppTheme.primary,
-                  ),
-                )
+              ? (widget._albumTile
+                    // Tile album: placeholder SENYAP — kotak warna saja, tanpa
+                    // spinner beranimasi (sumber kesan "kedip" ×4).
+                    ? const SizedBox.shrink()
+                    : const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: AppTheme.primary,
+                        ),
+                      ))
               : Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
