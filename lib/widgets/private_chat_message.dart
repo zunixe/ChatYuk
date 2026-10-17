@@ -158,6 +158,12 @@ class MessageBubble extends StatelessWidget {
     final timeStr = formatBubbleTime(msg.timestamp);
     // Stiker ala Telegram: melayang TANPA card bubble & TANPA jam/centang.
     final isSticker = msg.type == 'sticker';
+    // Media (foto/video/lokasi): border card tipis 4px seperti album & room.
+    final isMediaCard = msg.type == 'image' ||
+        msg.type == 'video' ||
+        msg.type == 'video_once' ||
+        msg.type == 'video_once_expired' ||
+        msg.type == 'location';
     // Pesan yang dihapus (soft delete).
     // - Chat biasa: cukup teks redup "Pesan ini telah dihapus".
     // - Monitor admin: TETAP tampilkan ISI ASLI (teks/foto/video) + banner
@@ -211,7 +217,11 @@ class MessageBubble extends StatelessWidget {
                     maxWidth: MediaQuery.sizeOf(context).width * 0.8,
                   ),
                   // Stiker melayang: tanpa padding card.
-                  padding: isSticker ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: isSticker
+                      ? EdgeInsets.zero
+                      : (isMediaCard
+                            ? const EdgeInsets.all(4)
+                            : const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
                   decoration: BoxDecoration(
                     // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
                     // Bubble lawan (other) pakai bgCard (putih di light mode) + shadow
