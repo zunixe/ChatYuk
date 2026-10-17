@@ -168,17 +168,24 @@ void main() {
     await flush(tester);
   });
 
-  testWidgets('TextField: latar terlihat tapi tanpa border/radius (persegi)',
+  testWidgets('TextField: ROUNDED (12) + ada latar, tanpa garis',
       (tester) async {
     await pumpComposer(tester);
     final tf = tester.widget<TextField>(find.byType(TextField).first);
-    // Latar harus ada (jelas area menulis) — warna isian di-set eksplisit.
+    // Latar harus ada (jelas area menulis).
     expect(tf.decoration!.filled, isTrue);
     expect(tf.decoration!.fillColor, isNotNull);
-    // Tanpa garis & tanpa radius (InputBorder.none → fill persegi, bukan
-    // rounded 12 dari tema global).
-    expect(tf.decoration!.border, InputBorder.none);
-    expect(tf.decoration!.enabledBorder, InputBorder.none);
+    // Sudut membulat 12 di ketiga state, tapi tanpa garis.
+    for (final b in [
+      tf.decoration!.border,
+      tf.decoration!.enabledBorder,
+      tf.decoration!.focusedBorder,
+    ]) {
+      expect(b, isA<OutlineInputBorder>());
+      final o = b as OutlineInputBorder;
+      expect(o.borderRadius, BorderRadius.circular(12));
+      expect(o.borderSide, BorderSide.none);
+    }
     await flush(tester);
   });
 

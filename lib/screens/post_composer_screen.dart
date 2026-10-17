@@ -542,6 +542,12 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
     );
   }
 
+  /// Kotak input: sudut membulat 12, tanpa garis.
+  OutlineInputBorder _fieldBorder() => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(12),
+    borderSide: BorderSide.none,
+  );
+
   /// TextField tanpa border/fill, tumbuh otomatis, batas 500 karakter.
   Widget _textField(S s) {
     return TextField(
@@ -558,14 +564,14 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       ),
       decoration: InputDecoration(
         isCollapsed: true,
-        // Latar DIBERI (jelas di mana menulis) tapi PERSEGI penuh — tema global
-        // memakai radius 12 untuk fill DAN focusedBorder, sehingga tampak
-        // seperti kotak mengambang. Semua border dimatikan eksplisit.
+        // ROUNDED + latar: kotak sudut membulat (12) dengan fill, TANPA garis.
+        // (Tema global memberi garis divider + radius 12; di sini garis
+        // dimatikan tapi radius dipertahankan.)
         filled: true,
         fillColor: AppTheme.bgInput,
-        border: InputBorder.none,
-        enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
+        border: _fieldBorder(),
+        enabledBorder: _fieldBorder(),
+        focusedBorder: _fieldBorder(),
         hintText: s.composerHintShare,
         hintStyle: TextStyle(
           fontSize: AppTextSize.s16,
