@@ -49,7 +49,10 @@ class ChatIconButton extends StatelessWidget {
           child: Icon(
             icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
             color: AppTheme.primary,
-            size: 20,
+            // 18px di kotak 30px → margin 6px tiap sisi. Glif "+" polos
+            // terbaca lebih ringan/proporsional daripada 20px (dulu memakai
+            // add_circle_outline yang lingkarannya memenuhi kotak).
+            size: 18,
           ),
         ),
       ),

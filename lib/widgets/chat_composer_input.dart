@@ -779,9 +779,14 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                                 ),
                               ),
                               ChatIconButton(
+                                // Ikon plus POLOS (bukan add_circle) supaya
+                                // rotasi 45° menghasilkan ✕ yang rapi &
+                                // seukuran — dulu add_circle_outline → close
+                                // = dua glif beda besar (terlihat "kebesaran"
+                                // setelah diklik).
                                 icon: widget.showAttachRow
-                                    ? Icons.close
-                                    : Icons.add_circle_outline,
+                                    ? Icons.close_rounded
+                                    : Icons.add_rounded,
                                 open: widget.showAttachRow,
                                 onTap: widget.onToggleAttach,
                                 tooltip: s.menuSendPhoto,
