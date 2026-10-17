@@ -12,6 +12,7 @@ import '../../../core/chat/chat_location.dart';
 import '../../../widgets/location_bubble.dart';
 import '../../../widgets/link_preview.dart';
 import '../../../widgets/mention_spans.dart';
+import '../../../widgets/message/file_bubble.dart';
 import '../../../widgets/message/message_image.dart';
 import '../../../widgets/message/view_once_image.dart';
 import '../../../widgets/message/message_text_with_time.dart';
@@ -69,7 +70,8 @@ class RoomMessageBubble extends StatelessWidget {
       msg.type == 'image' ||
       msg.type == 'view_once' ||
       msg.type == 'view_once_expired' ||
-      msg.type == 'location';
+      msg.type == 'location' ||
+      msg.type == 'file';
 
   /// Stiker ala Telegram: TANPA card bubble (transparan, tanpa shadow/pad)
   /// & tanpa baris jam — sama seperti private chat.
@@ -105,6 +107,20 @@ class RoomMessageBubble extends StatelessWidget {
             durationMs: msg.durationMs ?? 0,
             isMe: isMe,
             timeStr: timeStr,
+          ),
+        ],
+      );
+    }
+    if (msg.type == 'file') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _replyQuote(context),
+          FileBubble(
+            msg: msg,
+            timeStr: timeStr,
+            isMe: isMe,
+            isPending: isPending,
           ),
         ],
       );

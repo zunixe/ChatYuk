@@ -1,4 +1,15 @@
-﻿
+## 2026-10-17 — Pesan tipe FILE/dokumen (SUDAH APPLY via Management API)
+
+- **Migrasi** `20261017180000_file_message_type.sql`: tambah `'file'` ke
+  `private_messages_type_check` & `messages_type_check` (aditif, basis =
+  constraint live). Tanpa kolom baru: `text` = nama file, `image_path` =
+  `chat/<chatId>/<stamp>_f.<ext>`, `duration_ms` = ukuran (byte).
+- Fungsi notif/last_message (FROZEN) TIDAK disentuh — cabang `else new.text`
+  sudah menampilkan nama file.
+- **Verifikasi:** kedua constraint memuat `'file'`; versi tercatat di
+  `supabase_migrations.schema_migrations`; `check_migrations.sh` OK.
+
+
 ## 2026-10-06 — call_billing_tick hormati master toggle koin (SUDAH APPLY via Management API)
 
 - **Masalah:** banner `X coin/menit` + dialog "koin kurang" tetap muncul saat

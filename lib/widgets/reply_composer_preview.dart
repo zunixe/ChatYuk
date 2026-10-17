@@ -34,6 +34,9 @@ class ReplyComposerPreview extends StatelessWidget {
       return (icon: Icons.location_on_outlined, text: s.msgLocation);
     }
     if (m.type == 'voice') return (icon: Icons.mic_none, text: s.msgVoice);
+    if (m.type == 'file') {
+      return (icon: Icons.insert_drive_file_outlined, text: t);
+    }
     return (icon: null, text: t.isNotEmpty ? t : s.msgPhoto);
   }
 

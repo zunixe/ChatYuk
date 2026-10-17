@@ -523,6 +523,68 @@ class StoragePhotoService {
 
   bool isVoicePath(String v) => v.startsWith('voice/') && v.contains('.m4a');
 
+  // ── FILE / DOKUMEN CHAT ──
+
+  /// Batas ukuran file chat (50 MB) — file dibaca utuh ke memori saat kirim.
+  /// Sinkron dengan `ChatFile.maxBytes` (lib/core/chat/chat_file.dart).
+  static const int chatFileMaxBytes = 50 * 1024 * 1024;
+
+  /// Ekstensi aman untuk path storage (huruf/angka, maks 8) — nama asli
+  /// file disimpan terpisah di kolom `text`, BUKAN di path.
+  static String safeFileExt(String fileName) {
+    final dot = fileName.lastIndexOf('.');
+    if (dot < 0 || dot == fileName.length - 1) return 'bin';
+    final ext = fileName.substring(dot + 1).toLowerCase();
+    final ok = RegExp(r'^[a-z0-9]{1,8}$').hasMatch(ext);
+    return ok ? ext : 'bin';
+  }
+
+  /// Path file chat: `chat/<chatId>/<stamp>_f.<ext>`.
+  String chatFilePath(String chatId, String fileName) =>
+      'chat/$chatId/${_stamp()}_f.${safeFileExt(fileName)}';
+
+  /// True bila path file/dokumen chat.
+  bool isChatFilePath(String v) =>
+      v.startsWith('chat/') && v.contains('_f.') && !v.contains('..');
+
+  /// Upload file chat → Storage. Return path atau null.
+  Future<String?> uploadChatFile({
+    required String chatId,
+    required String fileName,
+    required Uint8List bytes,
+    String? contentType,
+  }) async {
+    try {
+      if (bytes.isEmpty || bytes.length > chatFileMaxBytes) return null;
+      final path = chatFilePath(chatId, fileName);
+      await _sb.storage.from(_bucket).uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: contentType ?? 'application/octet-stream',
+            ),
+          );
+      return path;
+    } catch (e) {
+      dlog('[StoragePhoto] uploadChatFile error: $e');
+      return null;
+    }
+  }
+
+  /// Unduh file chat (timeout panjang — file bisa puluhan MB).
+  Future<Uint8List?> downloadChatFile(String path) async {
+    try {
+      final bytes = await _sb.storage
+          .from(_bucket)
+          .download(path)
+          .timeout(const Duration(minutes: 3));
+      return bytes.isEmpty ? null : bytes;
+    } catch (e) {
+      dlog('[StoragePhoto] downloadChatFile error: $e');
+      return null;
+    }
+  }
+
   // Timeout sentral download: tanpa ini, koneksi stall menggantung
   // selamanya → foto "ketuk untuk memuat" tak pernah selesai (kasus nyata:
   // monitor admin 9436). Timeout → null → pemanggil bisa retry.

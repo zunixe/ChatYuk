@@ -196,6 +196,8 @@ mixin ChatServicePrivateMx on ChatBase {
       'video_once_expired',
       // Stiker (ala Telegram) — path `stickers/...` atau base64 pending.
       'sticker',
+      // File/dokumen: text = nama file, image_path = path, duration_ms = ukuran.
+      'file',
     ].contains(type)) {
       throw Exception('Invalid message type');
     }
@@ -204,7 +206,9 @@ mixin ChatServicePrivateMx on ChatBase {
         imageData.isNotEmpty &&
         !isValidImageBase64(imageData) &&
         !StoragePhotoService.instance.isPath(imageData) &&
-        !StoragePhotoService.instance.isVoicePath(imageData)) {
+        !StoragePhotoService.instance.isVoicePath(imageData) &&
+        !(type == 'file' &&
+            StoragePhotoService.instance.isChatFilePath(imageData))) {
       throw Exception('Invalid image data');
     }
     // Batasi panjang teks pesan
@@ -236,6 +240,9 @@ mixin ChatServicePrivateMx on ChatBase {
       if (type == 'view_once' && durationMs != null)
         'duration_ms': durationMs,
       if (type == 'image' && imageData.isNotEmpty) 'image_path': imageData,
+      // FILE: image_path = path storage, duration_ms = ukuran (byte).
+      if (type == 'file' && imageData.isNotEmpty) 'image_path': imageData,
+      if (type == 'file' && durationMs != null) 'duration_ms': durationMs,
       // VIDEO: duration_ms = PANJANG video (bukan timer), image_path =
       // path storage .mp4. Ketiga type video diperlakukan sama.
       if ((type == 'video' ||

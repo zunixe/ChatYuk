@@ -757,8 +757,10 @@ class ChatStreamSession {
         final bcIsVideo = msg.type == 'video' ||
             msg.type == 'video_once' ||
             msg.type == 'video_once_expired';
+        // File/dokumen: path BUKAN foto → jangan diunduh sebagai foto.
         final bcNeedsPhoto = msg.imageData.isNotEmpty &&
             msg.type != 'voice' &&
+            msg.type != 'file' &&
             !bcIsVideo;
         // Sisipkan kronologis
         var idx = _current.indexWhere((m) => m.timestamp.isAfter(msg.timestamp));

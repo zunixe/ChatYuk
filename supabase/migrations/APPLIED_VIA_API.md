@@ -2,6 +2,11 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-17 — Pesan tipe FILE
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261017180000_file_message_type.sql`
+  (tambah `'file'` ke type check `private_messages` & `messages`).
+
 ## 2026-10-17 — BlurHash foto post (Timeline)
 
 - **Backfill:** `20261017140000_posts_blurhash_backfill.sql` — 22 post lama

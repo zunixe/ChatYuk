@@ -210,6 +210,21 @@ mixin _PcChatMx on _PrivateChatBase {
                 }
               }
               break;
+            case 'file':
+              {
+                final idx = consumeConfirmedFile(
+                  server: m,
+                  openedAt: _openedAt,
+                  consumedIds: _confirmedVideoIds,
+                  pendings: _pending,
+                );
+                _trimConfirmed(_confirmedVideoIds);
+                if (idx != -1) {
+                  _pending.removeAt(idx);
+                  changed = true;
+                }
+              }
+              break;
             default:
               // Teks: cocokkan via consumeConfirmedText (recency + sekali pakai
               // + FIFO). JANGAN cocokkan mentah via isi.

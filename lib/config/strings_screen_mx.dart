@@ -401,6 +401,17 @@ mixin SScreenMx {
   String get menuSendLocation => isId ? 'Lokasi' : 'Location';
   String get galleryAllowAccess =>
       isId ? 'Izinkan akses galeri' : 'Allow gallery access';
+  // ── Kirim File / Dokumen ──
+  String get menuSendFile => isId ? 'Dokumen' : 'Document';
+  String errFileTooLarge(int mb) => isId
+      ? 'File terlalu besar (maks $mb MB)'
+      : 'File too large (max $mb MB)';
+  String get errSendFile =>
+      isId ? 'Gagal mengirim file' : 'Failed to send file';
+  String get errOpenFile =>
+      isId ? 'Gagal membuka file' : 'Could not open file';
+  String get fileUploading => isId ? 'Mengirim...' : 'Sending...';
+  String get fileDownloading => isId ? 'Mengunduh...' : 'Downloading...';
   String get msgLocation => isId ? '[Lokasi]' : '[Location]';
   String get locSendTitle => isId ? 'Kirim Lokasi' : 'Send Location';
   String get locFetching =>

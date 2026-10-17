@@ -117,6 +117,20 @@ mixin _RcRoomMx on _RoomChatBase {
             }
           }
         }
+        // File: id server sekali pakai + nama file (FIFO).
+        for (final m in msgs) {
+          if (m.senderId != myId) continue;
+          final idx = consumeConfirmedFile(
+            server: m,
+            openedAt: _openedAt,
+            consumedIds: _confirmedVoiceIds,
+            pendings: _pending,
+          );
+          if (idx != -1) {
+            _pending.removeAt(idx);
+            changed = true;
+          }
+        }
       }
       if (changed && mounted) setState(() {});
     }

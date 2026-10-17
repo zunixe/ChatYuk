@@ -29,3 +29,20 @@ int consumeConfirmedText({
     (p) => p.type == 'text' && p.text == server.text,
   );
 }
+
+/// Dedupe bubble FILE pending vs gema server: id server sekali pakai,
+/// hanya pesan setelah [openedAt], pending dicocokkan via nama file (FIFO).
+/// Return index pending yang dibuang atau -1.
+int consumeConfirmedFile({
+  required MessageModel server,
+  required DateTime openedAt,
+  required Set<String> consumedIds,
+  required List<MessageModel> pendings,
+}) {
+  if (server.type != 'file') return -1;
+  if (!server.timestamp.isAfter(openedAt)) return -1;
+  if (!consumedIds.add(server.id)) return -1;
+  return pendings.indexWhere(
+    (p) => p.type == 'file' && p.text == server.text,
+  );
+}

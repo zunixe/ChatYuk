@@ -39,6 +39,8 @@ mixin ChatServiceRoomMx on ChatBase {
       'video_once_expired',
       // Stiker (ala Telegram) — sama seperti private.
       'sticker',
+      // File/dokumen: text = nama file, image_path = path, duration_ms = ukuran.
+      'file',
     ].contains(type)) {
       throw Exception('Invalid message type');
     }
@@ -46,7 +48,9 @@ mixin ChatServiceRoomMx on ChatBase {
     if (imageData.isNotEmpty &&
         !isValidImageBase64(imageData) &&
         !StoragePhotoService.instance.isPath(imageData) &&
-        !StoragePhotoService.instance.isVoicePath(imageData)) {
+        !StoragePhotoService.instance.isVoicePath(imageData) &&
+        !(type == 'file' &&
+            StoragePhotoService.instance.isChatFilePath(imageData))) {
       throw Exception('Invalid image data');
     }
     if (type == 'text' && text.isEmpty) return null;
@@ -68,6 +72,9 @@ mixin ChatServiceRoomMx on ChatBase {
       if (type == 'view_once' && durationMs != null)
         'duration_ms': durationMs,
       if (type == 'image' && imageData.isNotEmpty) 'image_path': imageData,
+      // FILE: image_path = path storage, duration_ms = ukuran (byte).
+      if (type == 'file' && imageData.isNotEmpty) 'image_path': imageData,
+      if (type == 'file' && durationMs != null) 'duration_ms': durationMs,
       // VIDEO: duration_ms = panjang video; image_path = path .mp4.
       if ((type == 'video' ||
               type == 'video_once' ||

@@ -8,6 +8,7 @@ import 'sticker_bubble.dart';
 import 'media_caption_time.dart';
 import 'package:flutter/material.dart';
 import '../core/media/chat_photo_helper.dart';
+import 'message/file_bubble.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/strings_admin.dart';
 import '../config/gifts.dart';
@@ -163,7 +164,8 @@ class MessageBubble extends StatelessWidget {
         msg.type == 'video' ||
         msg.type == 'video_once' ||
         msg.type == 'video_once_expired' ||
-        msg.type == 'location';
+        msg.type == 'location' ||
+        msg.type == 'file';
     // Pesan yang dihapus (soft delete).
     // - Chat biasa: cukup teks redup "Pesan ini telah dihapus".
     // - Monitor admin: TETAP tampilkan ISI ASLI (teks/foto/video) + banner
@@ -508,6 +510,16 @@ class MessageBubble extends StatelessWidget {
                           isImageDeferred)
                         DeferredImage(
                           onTap: () async => onRetryImage?.call(msg.id),
+                        )
+                      else if (msg.type == 'file')
+                        FileBubble(
+                          msg: msg,
+                          timeStr: timeStr,
+                          isMe: isMe,
+                          showChecks: isMe || showChecksBothSides,
+                          isPending: isPending,
+                          isQueued: isQueued,
+                          isRead: isRead,
                         )
                       else if (msg.type == 'location' &&
                           parseLocation(msg.text) != null)

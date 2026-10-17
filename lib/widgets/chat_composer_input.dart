@@ -82,6 +82,8 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   /// Foto dari strip galeri panel lampiran diketuk (bytes asli) → preview.
   /// null = panel tanpa galeri.
   final ValueChanged<Uint8List>? onPickGalleryPhoto;
+  /// Kirim file/dokumen. null = chip tidak tampil.
+  final VoidCallback? onSendFile;
   const ChatComposerInput({
     required this.controller,
     this.focusNode,
@@ -120,6 +122,7 @@ class ChatComposerInput extends ConsumerStatefulWidget {
     this.mentionAllExpansion = const [],
     this.inputFillColor,
     this.onPickGalleryPhoto,
+    this.onSendFile,
   });
 
   @override
@@ -943,7 +946,14 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                             label: s.menuViewOnce,
                             onTap: widget.onSendViewOnce,
                           ),
-                          if (widget.onSendLocation != null)
+                          if (widget.onSendFile != null)
+                          ChatAttachChip(
+                            icon: Icons.insert_drive_file_rounded,
+                            color: const Color(0xFF7C4DFF),
+                            label: s.menuSendFile,
+                            onTap: widget.onSendFile!,
+                          ),
+                        if (widget.onSendLocation != null)
                             ChatAttachChip(
                               icon: Icons.location_on_rounded,
                               color: Colors.green,

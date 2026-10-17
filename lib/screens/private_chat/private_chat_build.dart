@@ -664,6 +664,10 @@ mixin _PcBuildMx on _PrivateChatBase {
                   onSend: sendMessage,
                   showAttachRow: _showAttachRow,
                   onToggleAttach: _toggleAttachRow,
+                  onSendFile: () {
+                    setState(() => _showAttachRow = false);
+                    pickAndSendFile();
+                  },
                   onPickGalleryPhoto: (bytes) {
                     setState(() => _showAttachRow = false);
                     photoFromFileToPreview(bytes);
