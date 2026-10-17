@@ -4,26 +4,16 @@ part of '../user_info_screen.dart';
 // base tampak 'unused' walau dipanggil lintas-mixin. Aman diabaikan.
 // ignore_for_file: unused_element
 
-mixin _UiBuildMx on _UserInfoBase {
-  Widget build(BuildContext context) {
+mixin _UiBuildMx on _UserInfoBase {  Widget build(BuildContext context) {
     PerfProbe.buildCount('UserInfo');
     ref.watch(themeProvider);
     final s = ref.watch(localeProvider).s;
     final profile = _profile;
-    final pointsEnabled = ref.watch(pointsProvider.select((p) => p.enabled));
-    // Tombol sosial (pengikut/mengikuti/subscriber + ikuti/tambah teman)
-    // SELALU tampil — viewer anon yang mengetuk diberi snackbar daftar
-    // (guard di _toggleFollow/_addFriend). Jangan disembunyikan.
-    // PERF (§26b): dulu `watch<AuthNotifier>()` penuh → seluruh halaman
-    // rebuild tiap AuthNotifier notify. `select` snapshot field yang dipakai
-    // render (value-type) saja.
     final authSnap = ref.watch(
       authProvider.select(
         (a) => (isAnon: a.isAnonymous, callAll: a.callAllEnabled, uid: a.uid),
       ),
     );
-    final isAnonViewer = authSnap.isAnon;
-
     final name = profile?.nickname ?? widget.fallbackName;
     final genderLabel = profile?.gender == 'male'
         ? s.genderLabelMale
@@ -31,350 +21,77 @@ mixin _UiBuildMx on _UserInfoBase {
         ? s.genderLabelFemale
         : s.genderLabelOther;
     final status = _status;
-    final statusLabel = status == 'online'
-        ? s.statusOnline
-        : status == 'idle'
-        ? s.statusIdle
-        : s.statusOffline;
-    final statusColor = AppTheme.statusColor(status);
+    final presence = status == 'online'
+        ? 'Online'
+        : (status == 'idle' ? s.statusIdle : s.statusOffline);
+    final isSelf = authSnap.uid == widget.userId;
+    final photos = _photos.where((p) => p.unlocked).toList();
+    final galleryCount = photos.length + (_avatarB64.isEmpty ? 0 : 1);
+    final initial = (name.isNotEmpty ? name[0] : '?').toUpperCase();
+    // Foto masih kosong padahal profil punya path -> coba sekali lagi
+    // (kegagalan pertama bisa sesaat). Guard `_avatarRetried` anti-loop.
+    if (_avatarB64.isEmpty && _avatarPath.isNotEmpty && !_avatarRetried) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _avatarB64.isEmpty) _loadAvatar(_avatarPath);
+      });
+    }
+    final location = profile == null
+        ? ''
+        : [profile.city, profile.country].where((e) => e.isNotEmpty).join(', ');
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(s.titleProfile),
-        actions: [
-          // Tombol call: default hanya untuk viewer terdaftar & target
-          // terdaftar. Admin bisa membukanya ke SEMUA user via panel
-          // (app_settings.call_all_enabled).
-          if (authSnap.callAll ||
-              (!isAnonViewer && profile?.isRegistered == true)) ...[
-            PopupMenuButton<String>(
-              icon: Icon(Icons.call, size: 22),
-              color: AppTheme.bgCard,
-              tooltip: s.callAudio,
-              onSelected: (val) => _startCall(context, val),
-              itemBuilder: (ctx) => [
-                PopupMenuItem(
-                  value: 'audio',
-                  child: Row(
-                    children: [
-                      Icon(Icons.call, size: 18),
-                      const SizedBox(width: 12),
-                      Text(s.callAudio),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'video',
-                  child: Row(
-                    children: [
-                      Icon(Icons.videocam, size: 18),
-                      const SizedBox(width: 12),
-                      Text(s.callVideo),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
+      backgroundColor: PColors.bg,
+      extendBody: true,
       body: _loading
           ? UserInfoLoadingPlaceholder(name: widget.fallbackName)
           : (_loadError && _profile == null)
           ? UserInfoLoadErrorView(onRetry: _retryLoad)
-          : SafeArea(
-              // Cegah konten menembus system UI (nav bar/gesture bar
-              // Android). top: false — AppBar sudah menangani status bar.
-              top: false,
-              child: Builder(
-                builder: (_) {
-                  // Foto masih kosong padahal profil punya path → coba sekali lagi
-                  // (kegagalan pertama bisa sesaat). Guard `_avatarRetried` supaya
-                  // tidak memicu loop kalau memang tidak ada fotonya.
-                  if (_avatarB64.isEmpty &&
-                      _avatarPath.isNotEmpty &&
-                      !_avatarRetried) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted && _avatarB64.isEmpty)
-                        _loadAvatar(_avatarPath);
-                    });
-                  }
-                  return SingleChildScrollView(
-                    // padding bawah + tinggi nav bar Android supaya card galeri
-                    // (terakhir) tidak tertutup gesture bar / 3-tombol.
-                    padding: EdgeInsets.fromLTRB(
-                      24,
-                      24,
-                      24,
-                      24 + MediaQuery.paddingOf(context).bottom,
-                    ),
-                    child: Column(
-                      children: [
-                        SizedBox(height: 8),
-
-                        // Galeri geser: avatar + foto terbuka, slide kiri-kanan.
-                        // Ketuk foto = tampil penuh.
-                        _profileCarousel(
-                          avatarB64: _avatarB64,
-                          avatarBg: profile?.gender == 'male'
-                              ? AppTheme.male
-                              : profile?.gender == 'female'
-                              ? AppTheme.female
-                              : AppTheme.accent,
-                          initial: (name.isNotEmpty ? name[0] : '?')
-                              .toUpperCase(),
-                          statusColor: statusColor,
-                          unlocked: _photos.where((p) => p.unlocked).toList(),
-                        ),
-                        SizedBox(height: 12),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                name,
-                                style: AppText.headline.copyWith(
-                                  color: AppTheme.textPrimary,
-                                ),
-                              ),
-                            ),
-                            if (profile?.isRegistered == true) ...[
-                              SizedBox(width: 5),
-                              VerifiedBadgeForUid(uid: widget.userId, size: 20),
-                            ],
-                            // Ikon chat kecil di samping username — klik langsung chat.
-                            // Anon BOLEH chat (sama dengan perilaku menu online) —
-                            // dulu disembunyikan untuk anon = inkonsisten.
-                            if (authSnap.uid != widget.userId) ...[
-                              SizedBox(width: 8),
-                              UserChatIconButton(onTap: _startChat),
-                            ],
-                          ],
-                        ),
-                        SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              genderLabel,
-                              style: AppText.bodyStrong.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                            if (profile?.age != null && profile!.age > 0) ...[
-                              SizedBox(width: 12),
-                              Text(
-                                '${profile.age} ${s.labelYears}',
-                                style: AppText.bodyStrong.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        SizedBox(height: 24),
-
-                        if (profile != null && profile.hashtags.isNotEmpty) ...[
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            alignment: WrapAlignment.center,
-                            children: profile.hashtags
-                                .map(
-                                  (tag) => Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.accent.withValues(
-                                        alpha: 0.08,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: AppTheme.accent.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '#$tag',
-                                      style: AppText.label.copyWith(
-                                        letterSpacing: 0,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                          SizedBox(height: 24),
-                        ],
-
-                        // Info card
-                        Card(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Column(
-                              children: [
-                                _infoRow(s.labelStatus, statusLabel),
-                                if (profile != null) ...[
-                                  Divider(color: AppTheme.divider),
-                                  _infoRow(
-                                    s.labelCountry,
-                                    profile.country.isEmpty
-                                        ? '-'
-                                        : profile.country,
-                                  ),
-                                  Divider(color: AppTheme.divider),
-                                  _infoRow(
-                                    s.labelCity,
-                                    profile.city.isEmpty ? '-' : profile.city,
-                                  ),
-                                ],
-                                Divider(color: AppTheme.divider),
-                                _infoRow(
-                                  s.labelUserId,
-                                  widget.userId.substring(0, 8),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 16),
-
-                        // Sosial kompak: stat mini + tombol ikon kecil, langsung
-                        // terlihat tanpa scroll. Selalu tampil (termasuk viewer
-                        // anon) — guard daftar ada di tiap aksi.
-                        if (profile != null) ...[
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _miniStat(
-                                Icons.favorite_rounded,
-                                const Color(0xFFE91E63),
-                                profile.followersCount,
-                                s.socialFollowers,
-                                onTap: () => _openSocialList('followers'),
-                              ),
-                              _miniStat(
-                                Icons.person_rounded,
-                                AppTheme.primary,
-                                profile.followingCount,
-                                s.socialFollowing,
-                                onTap: () => _openSocialList('following'),
-                              ),
-                              _miniStat(
-                                Icons.star_rounded,
-                                const Color(0xFFB8860B),
-                                profile.subscriberCount,
-                                s.socialSubscribers,
-                                onTap: () => _openSocialList('subscribers'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          if (_busySocial)
-                            const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          else
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                _friend
-                                    ? _iconActionBtn(
-                                        icon: Icons.group_rounded,
-                                        label: s.btnFriends,
-                                        color: Colors.green,
-                                        active: true,
-                                        onTap: _unfriend,
-                                      )
-                                    : _friendRequestSent
-                                    ? _iconActionBtn(
-                                        icon: Icons.schedule_rounded,
-                                        label: s.btnCancelRequest,
-                                        color: Colors.orange,
-                                        active: true,
-                                        onTap: _cancelFriendRequest,
-                                      )
-                                    : _iconActionBtn(
-                                        icon: Icons.group_add_rounded,
-                                        label: s.btnAddFriend,
-                                        color: Colors.green,
-                                        active: false,
-                                        onTap: _addFriend,
-                                      ),
-                                const SizedBox(width: 12),
-                                // Saat berteman, tombol ini = "Putus Teman" (unfollow
-                                // juga memutus friend_requests di server).
-                                _iconActionBtn(
-                                  icon: _friend
-                                      ? Icons.group_remove_rounded
-                                      : (_following
-                                            ? Icons.check_rounded
-                                            : Icons.person_add_alt_1_rounded),
-                                  label: _friend
-                                      ? s.btnUnfriend
-                                      : (_following
-                                            ? s.btnUnfollow
-                                            : s.btnFollow),
-                                  color: _friend
-                                      ? AppTheme.danger
-                                      : (_following
-                                            ? AppTheme.textSecondary
-                                            : AppTheme.primary),
-                                  active: _friend || _following,
-                                  onTap: _friend ? _unfriend : _toggleFollow,
-                                ),
-                                const SizedBox(width: 6),
-                                // Info: beda Follow vs Tambah Teman.
-                                IconButton(
-                                  tooltip: s.sheetFollowVsFriendTitle,
-                                  visualDensity: VisualDensity.compact,
-                                  icon: Icon(
-                                    Icons.info_outline_rounded,
-                                    size: 20,
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                  onPressed: () =>
-                                      _showFollowVsFriendInfo(context, s),
-                                ),
-                                if (pointsEnabled &&
-                                    profile.subscriptionPrice > 0) ...[
-                                  const SizedBox(width: 12),
-                                  _subscribed
-                                      ? _iconActionBtn(
-                                          icon: Icons.star_rounded,
-                                          label: s.btnSubscribed,
-                                          color: const Color(0xFFB8860B),
-                                          active: true,
-                                          onTap: () {},
-                                        )
-                                      : _iconActionBtn(
-                                          icon: Icons.star_rounded,
-                                          label:
-                                              '${s.btnSubscribe} · ${s.subscribePrice(profile.subscriptionPrice)}',
-                                          color: const Color(0xFFB8860B),
-                                          active: false,
-                                          onTap: _subscribe,
-                                        ),
-                                ],
-                              ],
-                            ),
-                          const SizedBox(height: 8),
-                        ],
-
-                        // Galeri Foto Profil dihapus sesuai permintaan — tidak
-                        // ditampilkan lagi di halaman profil orang lain.
-                        const SizedBox.shrink(),
-                      ],
-                    ),
-                  );
-                },
-              ),
+          : _PProfileBody(
+              name: name,
+              age: profile?.age ?? 0,
+              genderLabel: genderLabel,
+              country: profile?.country ?? '',
+              presence: presence,
+              isOnline: status == 'online',
+              verified: profile?.isRegistered == true,
+              avatarBytes: _decodedAvatarBytes(),
+              gallery: photos,
+              galleryBytes: _galleryBytesOf,
+              avatarBytesFallback: _avatarB64.isNotEmpty
+                  ? _decodedAvatarBytes()
+                  : null,
+              initial: initial,
+              hashtags: profile?.hashtags ?? const <String>[],
+              bio: null,
+              location: location,
+              userId: widget.userId,
+              followers: profile?.followersCount ?? 0,
+              following: profile?.followingCount ?? 0,
+              subscribers: profile?.subscriberCount ?? 0,
+              isFriend: _friend,
+              isFriendRequestSent: _friendRequestSent,
+              isFollowing: _following,
+              isSubscribed: _subscribed,
+              isSelf: isSelf,
+              canCall:
+                  authSnap.callAll || (!authSnap.isAnon && profile?.isRegistered == true),
+              s: s,
+              onCall: (type) => _startCall(context, type),
+              onMessage: _startChat,
+              onAddFriend: _addFriend,
+              onUnfriend: _unfriend,
+              onToggleFollow: _toggleFollow,
+              onSubscribe: _subscribe,
+              onCancelFriendRequest: _cancelFriendRequest,
+              onFollowersTap: () => _openSocialList('followers'),
+              onFollowingTap: () => _openSocialList('following'),
+              onOpenPhoto: (i) {
+                if (photos.isEmpty) return;
+                _showPhotoViewer(photos, i);
+              },
+              onCopyId: () => copyWithToast(context, widget.userId, 'User ID disalin'),
+              onFollowInfo: () => _showFollowVsFriendInfo(context, s),
+              galleryCount: galleryCount,
             ),
     );
   }

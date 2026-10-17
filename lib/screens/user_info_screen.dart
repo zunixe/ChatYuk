@@ -16,7 +16,7 @@ import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
 import 'user_info/user_info_widgets.dart';
-import '../widgets/verified_badge.dart';
+import '../widgets/profile_style.dart';
 import '../widgets/social_actions.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../core/call/call_permissions.dart';
@@ -32,6 +32,7 @@ import '../config/theme.dart';
 part 'user_info/user_info_init.dart';
 part 'user_info/user_info_actions.dart';
 part 'user_info/user_info_build.dart';
+part 'user_info/profile_preview_body.dart';
 
 const Duration _loadTimeout = Duration(seconds: 10);
 
