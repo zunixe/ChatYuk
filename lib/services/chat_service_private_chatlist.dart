@@ -281,35 +281,44 @@ mixin ChatServicePrivateChatListMx on ChatBase {
   /// refresh saat stream cached di-subscribe ulang.
   Future<List<PrivateChatInfo>> _fetchPrivateChatRows(String myUid) async {
     // ── Kolom EKSPLISIT (dulu `select()` = semua kolom) ──
-    // `hidden_by`/`hidden_at` TIDAK diambil di sini: chat tersembunyi
-    // disaring lewat `getHiddenChats` (query terpisah, sudah ada) sehingga
-    // kolom itu tidak pernah dibaca dari hasil fetch. Membuangnya memangkas
-    // payload per baris × baris — jalur ini terukur 505-788ms.
+    // `hidden_by` IKUT diambil di query yang SAMA lalu disaring di klien.
+    //
+    // Kenapa berubah (2026-10-18, terukur di HP): dulu chat tersembunyi
+    // diambil lewat query KEDUA (`getHiddenChats`) yang berjalan paralel.
+    // Walau paralel, request itu menambah satu round-trip penuh ke Supabase
+    // dan terukur 1947ms saat app baru bangun dari idle — LEBIH LAMBAT dari
+    // query utama (1734ms). Karena `Future.wait` menunggu SEMUA, daftar chat
+    // tertahan sampai request tersembunyi selesai. Query-nya sendiri hanya
+    // 1.4ms di server (1450 baris) — jadi biayanya murni jaringan.
+    // Sekarang cukup SATU round-trip: `hidden_by` (uuid[]) ikut di select.
     const cols =
         'chat_id,participants,participant_names,participant_genders,'
         'participant_locations,participant_ages,participant_registered,'
         'last_message,last_message_at,last_sender_id,message_count,'
         'unread_counts,last_read_at,pinned_by,pinned_at,muted_by,archived_by,'
-        'deleted_participants';
+        'deleted_participants,hidden_by';
     // Limit 50 → 200: daftar Pesan memaginasi di klien (`take(page*20)`),
     // jadi chat ke-51+ dulu TIDAK PERNAH termuat (paginasi klien palsu bila
     // server cuma kirim 50). 200 menutup celah itu untuk mayoritas user tanpa
     // payload berat (payload per baris sudah dipangkas di atas). Realtime
     // tetap menjaga baris ini fresh; refetch penuh sudah 30s-gated.
-    final results = await Future.wait([
-      PerfProbe.timed(
-        'chat.listFetch',
-        () => _sb
-            .from('private_chats')
-            .select(cols)
-            .contains('participants', [myUid])
-            .order('last_message_at', ascending: false)
-            .limit(200),
-      ),
-      PerfProbe.timed('chat.hiddenFetch', () => getHiddenChats(myUid)),
-    ]);
-    final rows = results[0] as List<dynamic>;
-    final hiddenSet = results[1] as Set<String>;
+    final rows = await PerfProbe.timed(
+      'chat.listFetch',
+      () => _sb
+          .from('private_chats')
+          .select(cols)
+          .contains('participants', [myUid])
+          .order('last_message_at', ascending: false)
+          .limit(200),
+    );
+    // Saring chat yang disembunyikan user ini — di klien, tanpa round-trip.
+    final hiddenSet = <String>{};
+    for (final r in rows) {
+      final hb = (r as Map)['hidden_by'];
+      if (hb is List && hb.any((e) => '$e' == myUid)) {
+        hiddenSet.add('${r['chat_id']}');
+      }
+    }
     _privateChatsHidden[myUid] = hiddenSet;
     // [PERF] parse 50 baris → PrivateChatInfo (sinkron). Kandidat blokir UI
     // saat kembali ke daftar — diukur supaya tak menebak.
@@ -463,8 +472,31 @@ mixin ChatServicePrivateChatListMx on ChatBase {
   /// Snapshot terakhir list private chat — dipakai initialData StreamBuilder
   /// supaya tab Pesan tidak spinner saat di-mount ulang (broadcast stream
   /// tidak me-replay event yang di-add sebelum subscriber terpasang).
-  List<PrivateChatInfo>? lastPrivateChatsSnapshot(String myUid) =>
-      _privateChatsLast[myUid];
+  ///
+  /// FALLBACK SINKRON dari cache mentah (2026-10-18): setelah app idle lama /
+  /// proses di-recreate, `_privateChatsLast` bisa kosong padahal disk masih
+  /// menyimpan snapshot. `MessageCache.peekRawList` membaca MEMORI tanpa
+  /// await → daftar chat langsung tampil dari cache, sementara fetch jaringan
+  /// menyusul di belakang. Tanpa ini user melihat layar kosong ~2 detik.
+  List<PrivateChatInfo>? lastPrivateChatsSnapshot(String myUid) {
+    final hot = _privateChatsLast[myUid];
+    if (hot != null && hot.isNotEmpty) return hot;
+    final raw = MessageCache.instance.peekRawList(myUid);
+    if (raw.isEmpty) return hot;
+    try {
+      final list = raw
+          .map((r) => PrivateChatInfo.fromMap(Map<String, dynamic>.from(r)))
+          .where((c) => c.messageCount > 0)
+          .toList();
+      if (list.isEmpty) return hot;
+      list_sort(list, myUid);
+      // Simpan juga ke memori panas agar panggilan berikutnya instan.
+      _privateChatsLast[myUid] = list;
+      return list;
+    } catch (_) {
+      return hot;
+    }
+  }
 
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
     // Cache: kembali stream yang sudah ada agar channel Supabase
