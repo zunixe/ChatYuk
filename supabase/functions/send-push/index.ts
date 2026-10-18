@@ -5,6 +5,10 @@
 
 import { checkAppSecret, unauthorized } from '../_shared/auth.ts';
 import { getAccessToken } from '../_shared/fcm.ts';
+import {
+  extractFirstUrl,
+  fetchPreviewWithFallback,
+} from '../_shared/link_preview.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // Satu project Firebase: chatyuk-7c9e4 (milik zunixe). Semua app (user &
@@ -27,6 +31,29 @@ Deno.serve(async (req) => {
     if (!token && !topic) {
       return new Response(JSON.stringify({ error: 'no token/topic' }), { status: 400 });
     }
+    // PESAN TEKS berisi LINK → notifikasi penerima memakai JUDUL/DESKRIPSI +
+    // GAMBAR preview (bukan URL mentah). Dikerjakan DI SINI (edge) supaya
+    // klien tak perlu fetch saat menampilkan notifikasi (hemat baterai &
+    // notifikasi langsung berisi). Gagal/timeout = notifikasi biasa.
+    if (data && (data.type === 'message' || data.type === 'mention')) {
+      try {
+        const raw = `${data.message ?? ''} ${data.body ?? ''} ${msgBody ?? ''}`;
+        const link = extractFirstUrl(raw);
+        if (link) {
+          const p = await fetchPreviewWithFallback(link, 1500);
+          if (p) {
+            if (p.title) data.previewTitle = p.title;
+            if (p.description) data.previewDesc = p.description;
+            // Hanya https (hindari blokir cleartext di Android).
+            if (p.image && /^https:\/\//i.test(p.image)) data.previewImage = p.image;
+            if (p.siteName) data.previewSite = p.siteName;
+          }
+        }
+      } catch (e) {
+        console.log('[send-push] preview error', e);
+      }
+    }
+
     // Resolve avatar path -> public URL untuk BigPicture (Android) / image (iOS)
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     if (data?.avatarUrl && data.avatarUrl.startsWith('avatars/')) {

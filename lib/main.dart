@@ -54,6 +54,7 @@ import 'core/cache/photo_aspect_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/chat_background.dart';
 import 'core/media/link_preview_service.dart';
+import 'core/notif/link_preview_notif.dart';
 import 'core/perf/perf_probe.dart';
 import 'services/meta_analytics_service.dart';
 import 'services/notification_prefs_service.dart';

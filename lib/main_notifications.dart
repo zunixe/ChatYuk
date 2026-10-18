@@ -107,6 +107,44 @@ Future<void> _clearChatNotif(String chatKey, {bool cancelShade = true}) async {
   } catch (_) {}
 }
 
+/// Unduh gambar untuk BigPicture notifikasi (avatar ATAU gambar preview link).
+///
+/// Cache per-URL (nama file = hash) + prune (maks [_notifMediaKeep]) supaya
+/// folder temp tidak menumpuk — dulu 1 file baru per notifikasi (bocor).
+const int _notifMediaKeep = 24;
+
+Future<String?> _notifImageFile(String url, {String tag = 'img'}) async {
+  if (url.isEmpty || !url.startsWith('http')) return null;
+  try {
+    final dir = Directory('${(await getTemporaryDirectory()).path}/notif_media');
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    final f = File('${dir.path}/${tag}_${url.hashCode.toRadixString(16)}.img');
+    if (f.existsSync() && f.lengthSync() > 0) return f.path;
+    final resp = await http
+        .get(Uri.parse(url))
+        .timeout(const Duration(seconds: 4));
+    if (resp.statusCode != 200 || resp.bodyBytes.isEmpty) return null;
+    if (resp.bodyBytes.length > 3 * 1024 * 1024) return null;
+    await f.writeAsBytes(resp.bodyBytes, flush: true);
+    try {
+      final files = dir.listSync().whereType<File>().toList();
+      if (files.length > _notifMediaKeep) {
+        files.sort(
+          (a, b) => a.statSync().modified.compareTo(b.statSync().modified),
+        );
+        for (final old in files.take(files.length - _notifMediaKeep)) {
+          try {
+            old.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return f.path;
+  } catch (_) {
+    return null;
+  }
+}
+
 void _appendNotifThread(String chatKey, String sender, String text) {
   final list = _notifThreads.putIfAbsent(chatKey, () => []);
   list.add(_ThreadMsg(sender, text, DateTime.now()));
@@ -547,6 +585,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await plugin.initialize(settings: settings);
   await _ensureAndroidChannels(plugin);
 
+  // Pesan TEKS berisi LINK → deskripsi/judul preview (bukan URL mentah).
+  final isChatMsg = type == 'message' || type == 'mention';
+  final notifText = isChatMsg
+      ? notifBodyForLinkPreview(Map<String, dynamic>.from(data as Map), body)
+      : body;
+
   // Panggilan masuk → notifikasi gaya telepon: suara alarm (loop channel),
   // heads-up di lockscreen. fullScreenIntent dihapus — USE_FULL_SCREEN_INTENT
   // ditolak Google Play (kebijakan hanya untuk app alarm/telepon).
@@ -586,12 +630,37 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       ? bgThread.title
       : title;
   final bgGrouped = bgThread?.grouped ?? type == 'broadcast';
+  // Gambar preview LINK untuk BigPicture (hanya bila notifikasi TIDAK
+  // ber-thread — MessagingStyle tidak bisa digabung BigPicture).
+  final previewImg = isChatMsg ? '${data['previewImage'] ?? ''}' : '';
+  final linkPic = (bgKey == null && isNotifPreviewImage(previewImg))
+      ? await _notifImageFile(previewImg, tag: 'link')
+      : null;
+  final bgAndroid = linkPic != null
+      ? lpn.AndroidNotificationDetails(
+          _channelId,
+          'Chat Notifications',
+          channelDescription: 'New message notifications from chat',
+          importance: lpn.Importance.max,
+          priority: lpn.Priority.max,
+          styleInformation: lpn.BigPictureStyleInformation(
+            lpn.FilePathAndroidBitmap(linkPic),
+            contentTitle: notifPreviewImageTitle(
+              Map<String, dynamic>.from(data as Map),
+            ),
+            summaryText: notifText,
+            hideExpandedLargeIcon: true,
+          ),
+          largeIcon: lpn.FilePathAndroidBitmap(linkPic),
+        )
+      : null;
+
   await plugin.show(
     id: notifIdForKey(
       data['callId'] ?? data['chatId'] ?? data['roomId'] ?? 'bg',
     ),
     title: bgKey != null ? bgTitle : title,
-    body: body,
+    body: notifText,
     notificationDetails: lpn.NotificationDetails(
       android: bgKey != null
           ? lpn.AndroidNotificationDetails(
@@ -615,7 +684,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
                 canMarkRead: bgThread?.canMarkRead ?? false,
               ),
             )
-          : androidDetails,
+          : (bgAndroid ?? androidDetails),
     ),
     payload: jsonEncode(data),
   );
@@ -832,7 +901,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
             : data['otherName'] ?? data['fromName'] ?? s.unknownUser)
       : message.notification?.title ??
             (type == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
-  final body = isDataOnly
+  final rawBody = isDataOnly
       ? (type == 'call'
             ? (data['callType'] == 'video'
                 ? s.notifCallingVideoBody
@@ -858,21 +927,23 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
             ? s.notifFriendRequestBody
             : s.notifSubscribeBody)
       : message.notification?.body ?? s.notifNewMessageBody;
+  // Pesan berisi LINK → deskripsi/judul preview (bukan URL mentah).
+  final isChatMsgFg = type == 'message' || type == 'mention';
+  final body = isChatMsgFg
+      ? notifBodyForLinkPreview(
+          Map<String, dynamic>.from(data as Map),
+          rawBody,
+        )
+      : rawBody;
 
-  // Avatar BigPicture jika ada avatarUrl http
-  String? bigPicPath;
-  final avatarUrl = data['avatarUrl'] as String?;
-  if (avatarUrl != null && avatarUrl.startsWith('http')) {
-    try {
-      final resp = await http.get(Uri.parse(avatarUrl)).timeout(const Duration(seconds: 4));
-      if (resp.statusCode == 200) {
-        final dir = await getTemporaryDirectory();
-        final file = File('${dir.path}/notif_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await file.writeAsBytes(resp.bodyBytes);
-        bigPicPath = file.path;
-      }
-    } catch (_) {}
-  }
+  // BigPicture: gambar preview LINK diutamakan (pesan berisi link), lalu
+  // avatar pengirim. Cache + prune di `_notifImageFile`.
+  final previewImgFg = isChatMsgFg ? '${data['previewImage'] ?? ''}' : '';
+  final preferLink = isNotifPreviewImage(previewImgFg);
+  final picUrl = preferLink ? previewImgFg : (data['avatarUrl'] as String?);
+  final String? bigPicPath = picUrl == null
+      ? null
+      : await _notifImageFile(picUrl, tag: preferLink ? 'link' : 'avatar');
   // Gaya WhatsApp: thread MessagingStyle + grup + aksi (hanya untuk
   // pesan chat/room/broadcast; notif lain tetap teks polos + BigPicture).
   final threadInfo = notifThreadOf(
