@@ -28,4 +28,26 @@ void main() {
     expect(ex('versi v1.2.3'), isNull);
     expect(ex('kirim ke user@mail.com'), isNull);
   });
+
+  test('skema HURUF BESAR dinormalisasi', () {
+    expect(ex('Https://s.shopee.co.id/abc'), 'https://s.shopee.co.id/abc');
+  });
+
+  test('cache gagal/tanpa judul TIDAK dipakai (harus re-fetch)', () {
+    expect(
+      LinkPreviewService.isUsableCachedPreview(const LinkPreviewData(
+        url: 'https://x.com', title: 'X', ok: true)),
+      isTrue,
+    );
+    expect(
+      LinkPreviewService.isUsableCachedPreview(const LinkPreviewData(
+        url: 'https://x.com', title: 'x.com', ok: false)),
+      isFalse,
+    );
+    expect(
+      LinkPreviewService.isUsableCachedPreview(const LinkPreviewData(
+        url: 'https://x.com', title: '', ok: true)),
+      isFalse,
+    );
+  });
 }

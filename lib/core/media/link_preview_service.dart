@@ -170,6 +170,14 @@ class LinkPreviewService {
     return out;
   }
 
+  /// Entri cache (disk/RAM) layak dipakai TANPA re-fetch?
+  /// Hanya hasil FINAL (`ok`) dengan judul nyata. Entri gagal/fallback
+  /// (ok:false / title kosong) TIDAK boleh "membeku" selamanya — dulu
+  /// `_fetchInner` mengembalikan cache disk apa adanya, jadi URL yang pernah
+  /// gagal tak pernah punya kartu.
+  static bool isUsableCachedPreview(LinkPreviewData d) =>
+      d.ok && d.title.trim().isNotEmpty;
+
   /// Ambil preview dari RAM SINKRON (bila sudah ada) — dipakai widget supaya
   /// frame pertama tanpa spinner saat scroll balik (LP-A). Null bila belum ada.
   LinkPreviewData? peek(String url) => _cache[url];
@@ -184,6 +192,12 @@ class LinkPreviewService {
       url = 'https://${m.group(0)}';
     }
     url = _trimUrlTail(url);
+    // Normalisasi SKEMA ke huruf kecil: copy-paste kadang "Https://…" →
+    // cache key & fetch harus konsisten (hindari entri ganda).
+    final sm = RegExp(r'^(https?)', caseSensitive: false).firstMatch(url);
+    if (sm != null) {
+      url = url.replaceRange(0, sm.end, sm.group(1)!.toLowerCase());
+    }
     if (url.isEmpty) return null;
     if (!isPreviewCandidate(url)) {
       urlSkipCount++;
@@ -260,8 +274,11 @@ class LinkPreviewService {
         final d = LinkPreviewData.fromJson(
           jsonDecode(utf8.decode(disk)) as Map<String, dynamic>,
         );
-        _put(url, d);
-        return d;
+        // Gagal/fallback → JANGAN dipakai; lanjut fetch ulang.
+        if (isUsableCachedPreview(d)) {
+          _put(url, d);
+          return d;
+        }
       }
     } catch (_) {}
 
