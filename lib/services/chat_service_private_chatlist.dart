@@ -695,8 +695,9 @@ mixin ChatServicePrivateChatListMx on ChatBase {
 
     // PERF: defer reload pertama ~250ms supaya frame boot bersih. List sudah
     // tampil dari cache disk (di atas) → tak perlu nunggu RPC. RPC network
-    // (listFetch+hiddenFetch, 1 RTT) tetap jalan, sekadar tidak menyerobot
-    // frame pertama. Dedupe in-flight tetap berlaku.
+    // (`listFetch` — 1 RTT; chat tersembunyi disaring di klien dari kolom
+    // `hidden_by`, lihat §57 PERFORMANCE.md) tetap jalan, sekadar tidak
+    // menyerobot frame pertama. Dedupe in-flight tetap berlaku.
     Timer(const Duration(milliseconds: 250), reload);
 
     controller.onCancel = () {
@@ -743,6 +744,14 @@ mixin ChatServicePrivateChatListMx on ChatBase {
   }
 
 
+  /// Query chat tersembunyi TERPISAH.
+  ///
+  /// PERF (2026-10-18, §57): **TIDAK dipakai lagi** oleh `_fetchPrivateChatRows`
+  /// — kolom `hidden_by` kini ikut di-select pada query utama lalu disaring di
+  /// klien, memangkas satu round-trip (terukur 1947 ms saat app bangun dari
+  /// idle). Dipertahankan karena masih diekspos `chatProvider.getHiddenChats`
+  /// untuk pemakaian lain di masa depan; jangan dipakai lagi di jalur daftar
+  /// chat tanpa mengukur dampaknya.
   Future<Set<String>> getHiddenChats(String myUid) async {
     try {
       final rows = await _sb.from('private_chats').select('chat_id').contains(

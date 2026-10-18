@@ -4748,6 +4748,11 @@ Keluhan: "dari list chat pas diklik ngebukanya aga lambat", "slide admin ngelag"
 Lanjutan §56. Keluhan lanjutan user: **"WhatsApp lancar walaupun ga dingin"**,
 dan **"yang banyak pesannya ngelag"** — spesifik chat ChatYuk Admin.
 
+**Ringkas:** transisi buka chat TIDAK janky (build p50 0,3 ms, raster p50
+2,7 ms, 0 jank). Yang benar-benar membebani adalah (a) kerja CPU/IO foto &
+voice yang berebut dengan animasi, dan (b) latensi RPC/round-trip. Keduanya
+sudah diperbaiki & terukur di bawah.
+
 ### Jebakan alat ukur (WAJIB dibaca sebelum mengulang diagnosa)
 
 1. **`dumpsys gfxinfo` menyesatkan.** Untuk Impeller/Vulkan hasilnya
@@ -4811,19 +4816,28 @@ Penyebab (di kode, bukan GPU):
 
 ### Perbaikan lain di sesi yang sama (semua terukur)
 
-| Perubahan | Sebelum | Sesudah |
-|---|---|---|
-| RPC `hiddenFetch` (query ke-2 saat list chat) | 1947 ms | **dihapus** — `hidden_by` ikut di select utama, saring di klien |
-| `chat.listFetch` (idle → list) | 1734 ms | **274–373 ms** |
-| HTTP keep-alive `idleTimeout` | 15 s | **120 s** (cold handshake 792 ms vs warm 110–140 ms) |
-| Warmup koneksi saat app resume | tidak ada | **`ConnectionWarmup`** (probe `/auth/v1/health` post-frame) |
-| `markAsRead` | `await` RPC 161 ms di jalur buka chat | update lokal sinkron; RPC **fire-and-forget** |
-| Poll fallback pesan | 8 s + gate realtime 6 s | **20 s** + gate realtime 25 s + gate `activeChatId` |
-| Transisi buka chat | 120 ms `easeOutCubic` + Fade | **250 ms** `easeOutQuint`, slide murni (tanpa Fade) |
-| Cache snapshot list chat | hanya memori provider | **fallback sinkron** `MessageCache.peekRawList` |
+Semua angka di bawah diukur pada HP yang sama. Pengukuran frame memakai build
+`--profile` + `PERF_PROBE=true` — **konservatif**: rilis (AOT) ≥ sebaik ini.
 
-Bukti RPC membaik: `online.rpc` 190 → **13,9 ms**, `count_room_presence`
-246 → **14,7 ms** (koneksi hangat).
+| Perubahan | Sebelum | Sesudah | Bukti di kode |
+|---|---|---|---|
+| RPC `hiddenFetch` (query ke-2 saat list chat) | 1947 ms | **hilang** (1 RTT) | `chat_service_private_chatlist.dart` — `hidden_by` ikut di `cols`, disaring di klien |
+| `chat.listFetch` (idle → list) | 1734 ms | **274–373 ms** | idem |
+| HTTP keep-alive `idleTimeout` | 15 s | **120 s** | `config/supabase_config.dart` (`_buildHttpClient`) |
+| Warmup koneksi saat app resume | tidak ada | **`ConnectionWarmup`** | `core/connection_warmup.dart`; dipanggil di `app.dart` cabang `resumed` |
+| `markAsRead` | `await` RPC ~161 ms di jalur buka chat | update lokal sinkron, RPC **fire-and-forget** | `chat_service_private_chatlist.dart::markAsRead` |
+| Poll fallback pesan | 8 s + gate realtime 6 s | **20 s** + gate realtime 25 s + gate `activeChatId` | `services/chat_stream_session.dart` (`pollTimer`) |
+| Transisi buka chat | 120 ms `easeOutCubic` + Fade | **250 ms** `easeOutQuint`, slide murni | `widgets/chat_route.dart` (`kChatRouteDuration`), `config/theme.dart` |
+| Cache snapshot list chat | hanya memori provider | **fallback sinkron** dari disk | `chat_service_private_chatlist.dart::lastPrivateChatsSnapshot` → `MessageCache.peekRawList` |
+
+(Perbaikan foto/warm-voice ada di tabel "Perbaikan (terukur)" di atas.)
+
+Bukti RPC membaik setelah koneksi hangat: `online.rpc` 190 → **13,9 ms**,
+`count_room_presence` 246 → **14,7 ms**.
+
+Catatan: `chat_service_private_chatlist.dart::getHiddenChats` kini **tidak
+dipakai lagi** di jalur daftar chat (masih diekspos provider untuk pemakaian
+lain). Jangan dipakai ulang di jalur list tanpa mengukur dampaknya.
 
 ### JANGAN dibalik
 
