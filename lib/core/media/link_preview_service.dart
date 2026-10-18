@@ -145,14 +145,46 @@ class LinkPreviewService {
 
   static final _urlRegex = RegExp(r'https?:\/\/[^\s]+', caseSensitive: false);
 
+  /// URL TANPA skema (hasil copy-paste umum: `www.tokopedia.com/x`,
+  /// `shopee.co.id/y`). Hanya TLD yang dikenal supaya kalimat seperti
+  /// "file.txt" / "v1.2.3" TIDAK dianggap link.
+  static final _schemeLessRe = RegExp(
+    r'(?<![-@\w.])'
+    r'(?:www\.)?'
+    r'(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+'
+    r'(?:com|net|org|id|io|co|me|app|dev|xyz|site|shop|store|link|ly|be|tv|'
+    r'info|biz|online|tech|club|pro|edu|gov|ac|sch|web|top|live|news|blog|'
+    r'page|cloud|ai|my|sg|us|uk|jp|kr|de|fr|au|ca|in|cn|hk|tw|th|vn|ph)'
+    r'(?::\d+)?'
+    r'(?:\/[^\s]*)?',
+    caseSensitive: false,
+  );
+
+  /// Buang tanda baca penutup kalimat di ujung URL (titik/koma/kurung).
+  static String _trimUrlTail(String u) {
+    var out = u;
+    const tail = '.,!?;:)]}\'"';
+    while (out.isNotEmpty && tail.contains(out[out.length - 1])) {
+      out = out.substring(0, out.length - 1);
+    }
+    return out;
+  }
+
   /// Ambil preview dari RAM SINKRON (bila sudah ada) — dipakai widget supaya
   /// frame pertama tanpa spinner saat scroll balik (LP-A). Null bila belum ada.
   LinkPreviewData? peek(String url) => _cache[url];
 
   String? extractUrl(String text) {
-    final m = _urlRegex.firstMatch(text);
-    final url = m?.group(0);
-    if (url == null) return null;
+    var url = _urlRegex.firstMatch(text)?.group(0);
+    // Copy-paste sering TANPA skema → normalisasi ke https:// untuk fetch
+    // (teks pesan tetap seperti aslinya).
+    if (url == null) {
+      final m = _schemeLessRe.firstMatch(text);
+      if (m == null) return null;
+      url = 'https://${m.group(0)}';
+    }
+    url = _trimUrlTail(url);
+    if (url.isEmpty) return null;
     if (!isPreviewCandidate(url)) {
       urlSkipCount++;
       return null;
