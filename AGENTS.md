@@ -193,6 +193,16 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
 - [ ] Tidak ada `copyWith(fontSize:` di mana pun
 - [ ] `flutter analyze` → 0 error, 0 warning
 
+### Kartu di bubble chat (WAJIB — lihat `docs/UI_CONSISTENCY.md`)
+
+Semua kartu di dalam bubble (foto/video/lokasi/file/**kontak**): lebar
+`chatMediaWidth(...)`, **padding bubble 4** (daftarkan tipe di `isMediaCard`
+private & `_isMedia` room), padding dalam 10, baris jam
+`fromLTRB(0,3,4,1)`, tombol aksi `Row`+`Expanded` (lebar sama). Tipe/payload
+baru WAJIB ikut `privateCols`/`roomCols` (`chat_stream_session.dart`) +
+consumer dedupe pending (`pending_confirm.dart`) — tanpa itu kartu HILANG
+setelah keluar-masuk chat atau DOBEL sesaat. Guard: `test/ui_consistency_test.dart`.
+
 ## SQL / Migrasi (WAJIB — baca SEBELUM mengubah DB)
 
 **Latar:** di project ini fungsi SQL sering di-`create or replace` dengan

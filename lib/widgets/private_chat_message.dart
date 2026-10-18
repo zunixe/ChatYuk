@@ -190,7 +190,11 @@ class MessageBubble extends StatelessWidget {
         msg.type == 'video_once' ||
         msg.type == 'video_once_expired' ||
         msg.type == 'location' ||
-        msg.type == 'file';
+        msg.type == 'file' ||
+        // Kartu kontak: bentuk KARTU (bg + padding dalam 10) → padding bubble
+        // 4 seperti foto/file/lokasi supaya margin kiri-kanan konsisten
+        // (lihat docs/UI_CONSISTENCY.md).
+        msg.type == 'contact';
     // Pesan yang dihapus (soft delete).
     // - Chat biasa: cukup teks redup "Pesan ini telah dihapus".
     // - Monitor admin: TETAP tampilkan ISI ASLI (teks/foto/video) + banner

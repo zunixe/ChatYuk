@@ -73,7 +73,9 @@ class RoomMessageBubble extends StatelessWidget {
       msg.type == 'view_once' ||
       msg.type == 'view_once_expired' ||
       msg.type == 'location' ||
-      msg.type == 'file';
+      msg.type == 'file' ||
+      // Kartu kontak — sama seperti private (docs/UI_CONSISTENCY.md).
+      msg.type == 'contact';
 
   /// Stiker ala Telegram: TANPA card bubble (transparan, tanpa shadow/pad)
   /// & tanpa baris jam — sama seperti private chat.

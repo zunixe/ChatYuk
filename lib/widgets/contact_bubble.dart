@@ -256,12 +256,15 @@ class _ContactBubbleState extends ConsumerState<ContactBubble> {
             ],
           ),
         ),
-        const SizedBox(height: 2),
-        Align(
-          alignment: Alignment.centerRight,
-          child: Text(
-            widget.timeStr,
-            style: AppText.micro.copyWith(color: AppTheme.textSecondary),
+        // Baris jam: inset SAMA dengan FileBubble (docs/UI_CONSISTENCY.md).
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 3, 4, 1),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              widget.timeStr,
+              style: AppText.chatTime.copyWith(color: AppTheme.textSecondary),
+            ),
           ),
         ),
       ],
