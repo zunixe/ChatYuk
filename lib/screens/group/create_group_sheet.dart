@@ -372,6 +372,9 @@ class _CreateGroupSheetState<T> extends State<CreateGroupSheet<T>> {
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 isCollapsed: true,
+                // Tema global memberi contentPadding 16 horizontal — nolkan
+                // agar teks rapat 10dp dari kotak ikon (sesuai desain).
+                contentPadding: EdgeInsets.zero,
               ),
             ),
           ),
@@ -576,6 +579,7 @@ class _CreateGroupSheetState<T> extends State<CreateGroupSheet<T>> {
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,
                       isCollapsed: true,
+                      contentPadding: EdgeInsets.zero,
                     ),
                   ),
                 ),
