@@ -241,6 +241,21 @@ mixin _PcChatMx on _PrivateChatBase {
                 }
               }
               break;
+            case 'contact':
+              {
+                final idx = consumeConfirmedContact(
+                  server: m,
+                  openedAt: _openedAt,
+                  consumedIds: _confirmedTextIds,
+                  pendings: _pending,
+                );
+                _trimConfirmed(_confirmedTextIds);
+                if (idx != -1) {
+                  _pending.removeAt(idx);
+                  changed = true;
+                }
+              }
+              break;
             case 'file':
               {
                 final idx = consumeConfirmedFile(

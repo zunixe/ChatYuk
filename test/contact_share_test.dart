@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:chatyuk/core/chat/pending_confirm.dart';
 
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/models/chat_contact.dart';
@@ -101,6 +105,113 @@ void main() {
     test('tidak ada hasil', () {
       expect(DeviceContactsService.filter(all, 'zzz'), isEmpty);
     });
+  });
+
+  group('dedupe pending kontak vs gema server', () {
+    MessageModel srv(String id, {DateTime? at}) => MessageModel(
+      id: id,
+      senderId: 'me',
+      senderName: 'A',
+      senderGender: 'male',
+      isRegistered: true,
+      text: '📇 Budi',
+      type: 'contact',
+      imageData: '',
+      timestamp: at ?? DateTime(2026, 10, 18, 21),
+      contact: ChatContact.user('u-2'),
+    );
+
+    test('pending kontak terpakai sekali (anti kartu dobel)', () {
+      final openedAt = DateTime(2026, 10, 18, 20);
+      final pendings = [
+        MessageModel(
+          id: 'pending-1',
+          senderId: 'me',
+          senderName: 'A',
+          senderGender: 'male',
+          isRegistered: true,
+          text: '📇 Budi',
+          type: 'contact',
+          imageData: '',
+          timestamp: DateTime(2026, 10, 18, 20, 30),
+          contact: ChatContact.user('u-2'),
+        ),
+      ];
+      final used = <String>{};
+      expect(
+        consumeConfirmedContact(
+          server: srv('11'),
+          openedAt: openedAt,
+          consumedIds: used,
+          pendings: pendings,
+        ),
+        0,
+      );
+      // Id server sekali pakai → panggilan kedua tak membuang pending lain.
+      expect(
+        consumeConfirmedContact(
+          server: srv('11'),
+          openedAt: openedAt,
+          consumedIds: used,
+          pendings: pendings,
+        ),
+        -1,
+      );
+    });
+
+    test('abaikan pesan lama & tipe lain', () {
+      final openedAt = DateTime(2026, 10, 18, 20);
+      expect(
+        consumeConfirmedContact(
+          server: srv('12', at: DateTime(2026, 10, 18, 19)),
+          openedAt: openedAt,
+          consumedIds: <String>{},
+          pendings: const [],
+        ),
+        -1,
+      );
+      expect(
+        consumeConfirmedContact(
+          server: MessageModel(
+            id: '13',
+            senderId: 'me',
+            senderName: 'A',
+            senderGender: 'male',
+            isRegistered: true,
+            text: 'halo',
+            type: 'text',
+            imageData: '',
+            timestamp: DateTime(2026, 10, 18, 21),
+          ),
+          openedAt: openedAt,
+          consumedIds: <String>{},
+          pendings: const [],
+        ),
+        -1,
+      );
+    });
+  });
+
+  test('GUARD: kolom fetch pesan memuat payload fitur (poll & contact)', () {
+    // Regresi nyata: kartu hilang setelah keluar-masuk chat karena kolom
+    // `contact` (dan `poll` di room) tidak ikut di-select → pesan dari
+    // server/cache kehilangan payload. Uji langsung ke sumbernya.
+    final src = File(
+      'lib/services/chat_stream_session.dart',
+    ).readAsStringSync();
+    expect(src.contains('album_id,poll,contact'), isTrue);
+    expect(
+      RegExp(r'const privateCols[\s\S]{0,400}?contact').hasMatch(src),
+      isTrue,
+    );
+    expect(
+      RegExp(r'const roomCols[\s\S]{0,400}?poll').hasMatch(src),
+      isTrue,
+    );
+    expect(
+      RegExp(r'const roomCols[\s\S]{0,400}?contact').hasMatch(src),
+      isTrue,
+    );
   });
 
   test('label kontak bilingual', () {

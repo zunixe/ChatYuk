@@ -131,6 +131,36 @@ mixin _RcRoomMx on _RoomChatBase {
             changed = true;
           }
         }
+        // Poll room: id server sekali pakai + teks '📊 <tanya>' (FIFO).
+        for (final m in msgs) {
+          if (m.senderId != myId) continue;
+          final idx = consumeConfirmedPoll(
+            server: m,
+            openedAt: _openedAt,
+            consumedIds: _confirmedTextIds,
+            pendings: _pending,
+          );
+          if (idx != -1) {
+            _queuedIds.remove(_pending[idx].id);
+            _pending.removeAt(idx);
+            changed = true;
+          }
+        }
+        // Kontak: id server sekali pakai + teks '📇 <nama>' (FIFO).
+        for (final m in msgs) {
+          if (m.senderId != myId) continue;
+          final idx = consumeConfirmedContact(
+            server: m,
+            openedAt: _openedAt,
+            consumedIds: _confirmedTextIds,
+            pendings: _pending,
+          );
+          if (idx != -1) {
+            _queuedIds.remove(_pending[idx].id);
+            _pending.removeAt(idx);
+            changed = true;
+          }
+        }
         // File: id server sekali pakai + nama file (FIFO).
         for (final m in msgs) {
           if (m.senderId != myId) continue;
