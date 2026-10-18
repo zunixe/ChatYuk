@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' show Random;
 import 'package:flutter/foundation.dart' show ValueNotifier, ValueListenable;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../main.dart' show activeChatId;
 import '../models/message_model.dart';
 import '../utils.dart';
 import '../core/app_foreground.dart';
@@ -864,16 +865,31 @@ class ChatStreamSession {
 
     reload();
 
-    // Fallback polling: 8s (dulu 30s). Realtime sehat = 0 fetch (dilewati
-    // oleh gate `lastRealtime`), tapi bila realtime telat/mati, pesan masuk
-    // & centang-2 menyusul dalam ≤8s — dulu 30s terasa "lama banget".
-    // Baterai: tetap di-skip saat app di-background.
-    final pollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+    // Fallback polling — JARING PENGAMAN saja, bukan jalur utama.
+    //
+    // Riwayat: 30s → 8s (2026-10: "terasa lama") → 20s (2026-10-18, audit).
+    // 8s terlalu agresif: app tetap BANGUN 7,5×/menit hanya untuk memeriksa
+    // kondisi, dan begitu realtime sedikit telat (>6s) langsung menembak
+    // query. Terukur sebagai sumber beban timer global (audit: 58 timer
+    // periodic vs ±3 di WhatsApp yang push-only). 20s = 3×/menit: masih
+    // terasa responsif sebagai cadangan, beban turun ~60%.
+    final pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       // BATERAI (P2): JANGAN poll saat app di-background (layar mati/tidak
       // dilihat). Dulu timer hidup terus → wake + query DB saat diam.
       // Pesan saat background tetap andal via FCM; sinkron saat resume.
       if (!AppForeground.now) return;
-      if (DateTime.now().difference(lastRealtime).inSeconds < 6) return;
+      // P1c (2026-10-18): JANGAN poll saat layar chat ini TIDAK terlihat.
+      // Timer hidup selama sesi chat terbuka; kalau user sudah kembali ke
+      // daftar chat / tab lain (layar di bawah tumpukan), polling hanya
+      // membuang I/O. Gate sama seperti daftar chat (chat_service_private_
+      // chatlist). Saat layar chat dibuka lagi, stream memicu reload sendiri.
+      // Layar chat ini tidak terlihat (user sudah kembali ke daftar chat /
+      // tab lain, tetapi sesi masih hidup di bawah tumpukan) → jangan poll.
+      if (activeChatId.value != filterVal) return;
+      // Realtime sehat (<25s ada event) → tak perlu fetch. Dulu 6s: terlalu
+      // ketat sehingga sepi wajar pun dianggap "realtime mati" lalu memicu
+      // query berulang saat chat memang sepi.
+      if (DateTime.now().difference(lastRealtime).inSeconds < 25) return;
       reload();
     });
 
