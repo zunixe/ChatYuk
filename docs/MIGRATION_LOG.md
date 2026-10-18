@@ -16,6 +16,20 @@
 - **Catatan:** stiker yang DIHAPUS sebagai pesan terakhir tetap membuat
   last_message kosong (perilaku alur hapus, di luar cakupan).
 
+## 2026-10-18 — HARDENING fungsi poll: cabut EXECUTE dari PUBLIC/anon (SUDAH APPLY via Management API)
+
+- **Migrasi** `20261018160000_poll_fn_hardening.sql`. Temuan saat cek ulang
+  fitur poll: `revoke execute ... from anon` (di 20261018130000 & 20261018150000)
+  TIDAK menghapus grant implisit **PUBLIC** dari Postgres → verifikasi
+  `has_function_privilege('anon', …)` = **true** untuk `get_poll_results`,
+  `vote_poll`, `get_room_poll_results`, `vote_room_poll`, padahal RPC lain
+  (`pin_private_chat`, `mark_chat_read`, `mute_room`) = false.
+- **Fix:** `revoke execute ... from public, anon` + `grant execute ... to
+  authenticated` untuk keempat fungsi.
+- **Verifikasi:** anon=false, public=false, authenticated=true (keempat).
+  pgTAP `chat_poll_test.sql` 9/9 & `room_poll_test.sql` 9/9 + seluruh SQL
+  suite tetap lolos (jalur authenticated tak terpengaruh).
+
 ## 2026-10-18 — POLLING grup & global room (SUDAH APPLY via Management API)
 
 - **Migrasi** `20261018150000_room_poll.sql` — paritas dengan poll private
