@@ -649,14 +649,10 @@ class _MessageImageState extends State<MessageImage> {
           fit: StackFit.passthrough,
           children: [
             if (posterBg != null && posterBg.isNotEmpty)
-              Positioned.fill(
-                child: Image.memory(
-                  posterBg,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  filterQuality: FilterQuality.low,
-                ),
-              ),
+              // Poster = RGBA mentah (8×8) → WAJIB dilukis (PosterGrid),
+              // BUKAN Image.memory (bytes RGBA bukan file gambar → "Invalid
+              // image data").
+              Positioned.fill(child: PosterGrid(rgba: posterBg)),
             _bubbleImage(context, decoded, width, height, s),
           ],
         ),
