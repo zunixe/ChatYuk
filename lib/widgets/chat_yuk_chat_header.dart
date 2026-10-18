@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
@@ -5,6 +6,17 @@ import '../config/theme.dart';
 /// Bagian (section) halaman Chat — menggantikan TabBar "Pesan / Grup /
 /// Global Room". Dipakai [ChatYukChatHeader] & halaman pemanggil.
 enum ChatSection { messages, rooms }
+
+/// PERMINTAAN pindah SECTION dari luar halaman Chat (Pesan ⇄ Global Room).
+///
+/// Kenapa perlu: pintasan "Global Room" di halaman Online dulu membuka
+/// `LobbyScreen` STANDALONE — itu jadi halaman Global Room KEDUA (header
+/// sendiri), berbeda dari tab Rooms di halaman Chat (yang punya lonceng +
+/// cari). Sekarang pintasan cukup mengalihkan ke tab Chat + section Rooms
+/// lewat sinyal ini, sehingga hanya ADA SATU halaman Global Room.
+///
+/// Sekali-pakai: pembaca (ChatsScreen) meng-apply lalu mengosongkannya.
+final ValueNotifier<ChatSection?> requestedChatSection = ValueNotifier(null);
 
 /// Warna header disamakan dengan halaman Timeline (ChatYukHeader) supaya
 /// konsisten antar halaman. DINAMIS mengikuti tema (mode terang ≠ hitam).

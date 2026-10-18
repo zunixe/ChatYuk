@@ -17,9 +17,10 @@ import '../providers/riverpod/locale_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import '../providers/riverpod/online_users_provider.dart';
+import '../providers/riverpod/nav_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/room_provider.dart';
-import 'online_users/widgets/global_room_nav.dart';
+import '../widgets/chat_yuk_chat_header.dart' show ChatSection, requestedChatSection;
 import 'online_users/widgets/my_status_sheet.dart';
 import 'online_users/widgets/unread_bubble.dart';
 import 'online_users/widgets/user_list_section.dart';
@@ -37,7 +38,6 @@ import '../providers/riverpod/social_provider.dart';
 import 'nearby_screen.dart';
 import '../widgets/user_avatar.dart' as ua;
 import 'room_chat_screen.dart';
-import 'lobby_screen.dart';
 import 'group_screen.dart';
 import 'story_composer_screen.dart';
 import 'story_camera_capture_screen.dart';
@@ -902,33 +902,33 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     }
     if (!context.mounted) return;
 
+    // ALIHKAN ke halaman Global Room TUNGGAL: tab Chat → section Rooms
+    // (yang punya lonceng notifikasi + tombol cari di header, dan bisa pindah
+    // ke "Pesan" lewat swipe/tab). Dulu pintasan ini membuka `LobbyScreen`
+    // STANDALONE yang jadi halaman Global Room KEDUA (header sendiri) —
+    // keluhan user: "sekarang jadi kaya ada dua halaman".
+    // Dengan mengalihkan tab, back dari chat room mendarat di tab Chat
+    // section Rooms, bukan halaman terpisah.
+    final nav = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(navProvider.notifier);
+    nav.goTo(1); // 0=Online, 1=Chat, 2=Timeline, 3=Profil
+    requestedChatSection.value = ChatSection.rooms;
+    rp.setExploreCategory('general');
+
     if (room != null) {
       final target = room;
       unawaited(rp.markRoomRead(target.id));
       final navKey = navKeyRoom(target.id);
       if (!tryClaimNav(navKey)) return;
-      // Menu Global Room di BAWAH chat room → back dari room = menu.
-      await openRoomWithMenuBelow(
-        Navigator.of(context),
-        menu: (_) => const LobbyScreen(initialCategory: 'general'),
-        room: (_) => RoomChatScreen(room: target),
-      ).then((_) => releaseNav(navKey));
-      return;
+      // Back dari room → tab Chat section Rooms (halaman Global Room tunggal).
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => RoomChatScreen(room: target)))
+          .then((_) => releaseNav(navKey));
     }
-
-    // Room resmi belum ada (seeding belum jalan) → buka HALAMAN Global Room
-    // dengan kategori General terpilih.
-    // Back dari chat room = kembali ke MENU GLOBAL ROOM (daftar room) ini,
-    // sesuai permintaan user — jadi Lobby dibiarkan TETAP di tumpukan
-    // (push biasa, bukan replace).
-    rp.setExploreCategory('general');
-    if (!context.mounted) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const LobbyScreen(initialCategory: 'general'),
-      ),
-    );
+    // Room belum ada (seeding belum jalan): sudah cukup pindah ke section
+    // Rooms — daftar akan termuat sendiri di sana. Tidak push halaman lain.
   }
 
   /// Terapkan filter gender (dari SearchDropdown). Filter gender berbayar

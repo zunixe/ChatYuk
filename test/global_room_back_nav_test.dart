@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Navigasi pintasan Global Room dari halaman Online (SESUAI PERMINTAAN USER).
+/// Ekspektasi navigasi pintasan Global Room dari halaman Online.
 ///
-/// Alur: Online → (ikon Global Room) → Menu Global Room (daftar room)
-///       → Chat Room.
-/// BACK dari Chat Room harus kembali ke **MENU GLOBAL ROOM**, bukan ke
-/// halaman Online.
+/// Alur yang diinginkan: Online → (ikon Global Room) → **halaman Global Room**
+/// → Chat Room, dan BACK dari Chat Room kembali ke halaman Global Room itu
+/// (bukan langsung ke Online).
+///
+/// CATATAN PENTING (2026-10-18): "halaman Global Room" itu SEKARANG = tab Chat
+/// section **Rooms** di dalam `ChatsScreen` (punya lonceng + cari) — BUKAN
+/// halaman `LobbyScreen` terpisah. Pintasan Online mengalihkan tab + section
+/// lewat `requestedChatSection` (diuji di `chat_section_request_test.dart`).
+///
+/// Test DI SINI memakai harness sendiri untuk mengunci URUTAN back
+/// (room → halaman room list → Online); ia tidak menjalankan layar asli
+/// (butuh Supabase). Jadi ia dokumentasi perilaku, bukan uji integrasi.
 void main() {
   testWidgets('back dari chat room kembali ke menu Global Room', (t) async {
     await t.pumpWidget(const MaterialApp(home: _OnlinePage()));

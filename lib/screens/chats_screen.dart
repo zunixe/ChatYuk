@@ -61,6 +61,23 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
         ref.read(roomProvider.notifier).loadMyGlobalRooms(refresh: true);
       }
     });
+    // Terima permintaan pindah section dari luar (mis. pintasan Global Room
+    // di halaman Online) → tampilkan section Rooms tanpa perlu halaman kedua.
+    requestedChatSection.addListener(_applyRequestedSection);
+    // Bisa saja permintaan sudah di-set SEBELUM layar ini mount pertama kali.
+    _applyRequestedSection();
+  }
+
+  void _applyRequestedSection() {
+    final want = requestedChatSection.value;
+    if (want == null) return;
+    requestedChatSection.value = null; // sekali pakai
+    if (!mounted) {
+      // Layar belum ter-mount: simpan lagi agar dibaca di initState berikut.
+      requestedChatSection.value = want;
+      return;
+    }
+    _changeSection(want);
   }
 
   /// Buka room/grup dari sidebar notifikasi (langsung, dengan nav guard).
@@ -76,6 +93,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
 
   @override
   void dispose() {
+    requestedChatSection.removeListener(_applyRequestedSection);
     _searchCtrl.dispose();
     super.dispose();
   }
