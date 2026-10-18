@@ -64,7 +64,9 @@ class ReplyQuote extends StatelessWidget {
         ? s.messageDeleted
         : (isLocationPayload(text) ? '📍 ${s.msgLocation}' : text);
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
+      // Margin KIRI kecil: garis aksen kutipan jangan menempel tepi bubble
+      // (terukur ~6 px logical dari tepi → terlalu rapat; minta user).
+      margin: const EdgeInsets.only(left: 2, bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isMe

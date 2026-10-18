@@ -1,6 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:chatyuk/widgets/reply_quote.dart';
 
 /// GUARD aturan kartu bubble chat — lihat `docs/UI_CONSISTENCY.md`.
 ///
@@ -43,4 +47,49 @@ void main() {
     // Aksi WAJIB Row+Expanded (lebar sama), bukan Wrap.
     expect(src.contains('Wrap('), isFalse);
   });
+
+  testWidgets(
+    'kutipan balasan TIDAK menempel tepi bubble (min 6 logical dari tepi)',
+    (tester) async {
+      // Meniru bubble balasan: padding horizontal 4 (lihat
+      // private_chat_message.dart branch `stretchReply`) + margin kiri kutipan 2.
+      const pad = 4.0;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: Container(
+                  key: const ValueKey('bubble'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: pad,
+                    vertical: 6,
+                  ),
+                  child: const ReplyQuote(
+                    senderName: 'Budi',
+                    text: 'pesan yang dibalas',
+                    isMe: true,
+                    targetDeleted: false,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final bubbleLeft = tester
+          .getTopLeft(find.byKey(const ValueKey('bubble')))
+          .dx;
+      // Isi kutipan = padding bubble 4 + margin kiri 2 + border aksen 3 +
+      // padding dalam kutipan 8 → teks minimal 17 px dari tepi bubble.
+      final textLeft = tester.getTopLeft(find.text('pesan yang dibalas')).dx;
+      final gap = textLeft - bubbleLeft;
+      expect(
+        gap,
+        greaterThanOrEqualTo(pad + 2 + 3 + 8 - 0.1),
+        reason: 'kutipan jangan menempel tepi bubble (gap=$gap)',
+      );
+    },
+  );
 }
