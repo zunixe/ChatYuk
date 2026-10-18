@@ -105,6 +105,15 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(find.text('Salin nomor'), findsOneWidget);
+    // Tombol aksi LEBAR SAMA (rapi/sejajar) — permintaan user.
+    double w(String label) => tester
+        .getSize(find.ancestor(
+          of: find.text(label),
+          matching: find.byType(Container),
+        ).first)
+        .width;
+    expect((w('Salin nomor') - w('WhatsApp')).abs(), lessThan(0.5));
+    expect((w('WhatsApp') - w('Telepon')).abs(), lessThan(0.5));
     final size = tester.getSize(find.byType(ContactBubble));
     final screenW = tester.view.physicalSize.width / tester.view.devicePixelRatio;
     expect(size.width, lessThanOrEqualTo(chatMediaWidth(screenW)));

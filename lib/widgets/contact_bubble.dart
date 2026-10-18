@@ -201,45 +201,53 @@ class _ContactBubbleState extends ConsumerState<ContactBubble> {
                 ),
               ] else ...[
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
+                Row(
                   children: _c.isUser
                       ? [
-                          _action(
-                            icon: Icons.chat_bubble_outline_rounded,
-                            label: s.btnChatContact,
-                            onTap: _openChat,
+                          Expanded(
+                            child: _action(
+                              icon: Icons.chat_bubble_outline_rounded,
+                              label: s.btnChatContact,
+                              onTap: _openChat,
+                            ),
                           ),
                           const SizedBox(width: 8),
-                          _action(
-                            icon: Icons.person_outline_rounded,
-                            label: s.btnViewProfile,
-                            onTap: _openProfile,
+                          Expanded(
+                            child: _action(
+                              icon: Icons.person_outline_rounded,
+                              label: s.btnViewProfile,
+                              onTap: _openProfile,
+                            ),
                           ),
                         ]
                       : [
-                          _action(
-                            icon: Icons.copy_rounded,
-                            label: s.btnCopyNumber,
-                            onTap: () => _copyNumber(_c.phones.first),
+                          Expanded(
+                            child: _action(
+                              icon: Icons.copy_rounded,
+                              label: s.btnCopyNumber,
+                              onTap: () => _copyNumber(_c.phones.first),
+                            ),
                           ),
                           const SizedBox(width: 8),
-                          _action(
-                            icon: Icons.chat_rounded,
-                            label: 'WhatsApp',
-                            onTap: () => _openUri(
-                              Uri.parse(
-                                'https://wa.me/${_digits(_c.phones.first)}',
+                          Expanded(
+                            child: _action(
+                              icon: Icons.chat_rounded,
+                              label: 'WhatsApp',
+                              onTap: () => _openUri(
+                                Uri.parse(
+                                  'https://wa.me/${_digits(_c.phones.first)}',
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          _action(
-                            icon: Icons.call_rounded,
-                            label: s.btnCallContact,
-                            onTap: () => _openUri(
-                              Uri(scheme: 'tel', path: _c.phones.first),
+                          Expanded(
+                            child: _action(
+                              icon: Icons.call_rounded,
+                              label: s.btnCallContact,
+                              onTap: () => _openUri(
+                                Uri(scheme: 'tel', path: _c.phones.first),
+                              ),
                             ),
                           ),
                         ],
@@ -272,20 +280,27 @@ class _ContactBubbleState extends ConsumerState<ContactBubble> {
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
+      // Lebar disamakan oleh Expanded (Row) → tombol tampak rapi/sejajar.
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppTheme.primary),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 14, color: AppTheme.primary),
             const SizedBox(width: 4),
-            Text(
-              label,
-              style: AppText.label.copyWith(color: AppTheme.primary),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: AppText.label.copyWith(color: AppTheme.primary),
+              ),
             ),
           ],
         ),
