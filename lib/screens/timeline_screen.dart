@@ -19,9 +19,10 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 
 // ── Warna header ringkas ala Instagram (DINAMIS mengikuti tema) ──
-Color get _kHeaderBg => AppTheme.isDark ? const Color(0xFF0F1115) : Colors.white;
-Color get _kHeaderText =>
-    AppTheme.isDark ? const Color(0xFFF2F4F7) : const Color(0xFF14171C);
+// SAMA dengan header halaman Profil: bg = bgScreen, teks = textPrimary
+// (mode terang & gelap konsisten antar halaman).
+Color get _kHeaderBg => AppTheme.bgScreen;
+Color get _kHeaderText => AppTheme.textPrimary;
 const Color _kAccentBlue = Color(0xFF4FB3F6);
 Color get _kMenuBg => AppTheme.isDark ? const Color(0xFF1A1E26) : Colors.white;
 Color get _kMenuBorder =>

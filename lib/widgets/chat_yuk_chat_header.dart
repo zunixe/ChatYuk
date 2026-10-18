@@ -8,12 +8,11 @@ enum ChatSection { messages, rooms }
 
 /// Warna header disamakan dengan halaman Timeline (ChatYukHeader) supaya
 /// konsisten antar halaman. DINAMIS mengikuti tema (mode terang ≠ hitam).
-Color get kChatHeaderBg =>
-    AppTheme.isDark ? const Color(0xFF0F1115) : Colors.white;
-Color get kChatHeaderText =>
-    AppTheme.isDark ? const Color(0xFFF2F4F7) : const Color(0xFF14171C);
-Color get kChatHeaderLine =>
-    AppTheme.isDark ? const Color(0xFF1C2028) : const Color(0xFFE4E7EC);
+// SAMA dengan header halaman Profil (bgScreen / textPrimary / divider),
+// mode terang & gelap konsisten antar halaman.
+Color get kChatHeaderBg => AppTheme.bgScreen;
+Color get kChatHeaderText => AppTheme.textPrimary;
+Color get kChatHeaderLine => AppTheme.divider;
 Color get kChatMenuBg =>
     AppTheme.isDark ? const Color(0xFF1A1E26) : Colors.white;
 Color get kChatMenuBorder =>
