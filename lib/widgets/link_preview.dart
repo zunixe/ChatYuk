@@ -182,15 +182,9 @@ class _LinkPreviewState extends ConsumerState<LinkPreview> {
           children: [
             if (d.image.isNotEmpty)
               // Cache DISK (LP-E): unduh sekali → simpan MediaDiskCache →
-              // frame berikut instan & persist lintas sesi.
-              LayoutBuilder(
-                builder: (_, c) => LinkPreviewImage(
-                  url: d.image,
-                  height: c.maxWidth.isFinite
-                      ? (c.maxWidth * 0.75).clamp(140.0, 260.0)
-                      : 180,
-                ),
-              ),
+              // frame berikut instan & persist lintas sesi. Lebar penuh kartu,
+              // tinggi mengikuti rasio ASLI gambar (ala WhatsApp).
+              LinkPreviewImage(url: d.image),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
               child: Column(

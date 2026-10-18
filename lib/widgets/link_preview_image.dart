@@ -19,8 +19,7 @@ import '../core/media/chat_photo_helper.dart';
 /// stabil. Disk menahan gambar preview walau RAM dibersihkan.
 class LinkPreviewImage extends StatefulWidget {
   final String url;
-  final double height;
-  const LinkPreviewImage({super.key, required this.url, this.height = 140});
+  const LinkPreviewImage({super.key, required this.url});
 
   @override
   State<LinkPreviewImage> createState() => _LinkPreviewImageState();
@@ -110,7 +109,7 @@ class _LinkPreviewImageState extends State<LinkPreviewImage> {
           fit: BoxFit.cover,
           cacheWidth: 480,
           gaplessPlayback: true,
-          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
         ),
       ),
     );
