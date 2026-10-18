@@ -162,7 +162,14 @@ class SupabaseConfig {
   static http.Client _buildHttpClient() {
     final inner = HttpClient()
       ..connectionTimeout = const Duration(seconds: 5)
-      ..idleTimeout = const Duration(seconds: 15)
+      // IDLE 15s → 120s (2026-10-18). Terukur ke Supabase (region Tokyo):
+      //   request COLD (DNS+TCP+TLS) = 792ms
+      //   request WARM (keep-alive)  = 110-140ms
+      // Dengan 15s, HP yang idle sebentar (<2 menit) sudah kehilangan koneksi
+      // → buka chat list harus bayar handshake 792ms lagi. Itulah "ngelag
+      // setelah idle" yang dilaporkan. 120s menutup jendela itu; koneksi
+      // tetap ditutup saat benar-benar lama (tidak menumpuk selamanya).
+      ..idleTimeout = const Duration(seconds: 120)
       // Keep-alive tetap aktif (untuk performa request beruntun normal).
       // PERF (2026-10-12, terukur): `maxConnectionsPerHost = 8` membuat ~21 RPC
       // saat boot BEREREBUT 8 koneksi → antre ~900-1080 ms (semua selesai di

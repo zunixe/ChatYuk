@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'config/supabase_config.dart';
 import 'config/theme.dart';
 import 'models/auth_data.dart';
 import 'providers/riverpod/auth_provider.dart';
@@ -15,6 +16,7 @@ import 'services/device_info_service.dart';
 import 'providers/riverpod/message_reaction_provider.dart';
 import 'providers/riverpod/online_users_provider.dart';
 import 'core/admin_gate.dart';
+import 'core/connection_warmup.dart';
 import 'providers/riverpod/locale_provider.dart';
 import 'core/cache/message_cache.dart';
 import 'core/nav_journal.dart';
@@ -461,6 +463,12 @@ class _MainNavState extends ConsumerState<_MainNav>
       auth.goIdle();
     } else if (state == AppLifecycleState.resumed) {
       _perfReportedOnLeave = false; // siklus baru → boleh report lagi nanti.
+      // HANGATKAN KONEKSI segera setelah resume (2026-10-18).
+      // Terukur ke Supabase (Tokyo): COLD = 792ms (DNS+TCP+TLS handshake),
+      // WARM = 110-140ms. Tanpa ini, request pertama setelah HP idle membayar
+      // handshake penuh → "ngelag setelah idle" saat buka daftar chat.
+      // Probe jalan di post-frame (tidak menahan animasi resume).
+      ConnectionWarmup.warm(SupabaseConfig.url);
       // CATATAN (dicoba & TIDAK berhasil — jangan ulangi): stall 181ms pada
       // frame pertama setelah resume BUKAN kode kita, melainkan DDIC idle
       // mode MIUI. Bukti: framestats ui_work=0ms, Vsync melompat +181ms;
