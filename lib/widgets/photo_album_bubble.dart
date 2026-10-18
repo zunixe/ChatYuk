@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../core/media/chat_photo_helper.dart';
 import '../models/message_model.dart';
+import 'media_caption_time.dart';
 import 'message/message_image.dart';
 
 /// Bubble ALBUM foto (bundle multi-foto ala WhatsApp).
@@ -65,26 +66,34 @@ class PhotoAlbumBubble extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              width: side,
-              height: side,
-              child: Stack(
-                children: [
-                  Positioned.fill(child: _grid(context)),
-                  // Jam + centang sekali untuk seluruh album.
-                  Positioned(right: 6, bottom: 6, child: _timePill()),
-                ],
-              ),
-            ),
+            child: SizedBox(width: side, height: side, child: _grid(context)),
           ),
-          if (caption.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 5, left: 2, right: 2),
-              child: Text(
-                caption,
-                style: AppText.chatBody.copyWith(color: AppTheme.textPrimary),
-              ),
-            ),
+          // JAM + CAPTION di BAWAH grid, rata KANAN — sama seperti bubble
+          // pesan biasa. Dulu jam ditumpuk sebagai pill DI ATAS foto (bikin
+          // tidak sejajar dengan waktu bubble lain). Sekarang: caption (bila
+          // ada) di kiri, jam nempel tepi kanan; tanpa caption jam saja.
+          Padding(
+            padding: const EdgeInsets.only(top: 5, left: 2, right: 2),
+            child: caption.isNotEmpty
+                ? MediaCaptionTime(
+                    text: caption,
+                    timeStr: timeStr,
+                    textStyle: AppText.chatBody.copyWith(
+                      color: AppTheme.textPrimary,
+                    ),
+                    timeStyle: AppText.chatTime.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                    showChecks: showChecks,
+                    isPending: isPending,
+                    isQueued: isQueued,
+                    isRead: isRead,
+                  )
+                : Align(
+                    alignment: Alignment.centerRight,
+                    child: _plainTimeRow(),
+                  ),
+          ),
         ],
       ),
     );
@@ -190,29 +199,27 @@ class PhotoAlbumBubble extends StatelessWidget {
     ]);
   }
 
-  Widget _timePill() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(timeStr, style: AppText.chatTime.copyWith(color: Colors.white)),
-          if (showChecks) ...[
-            const SizedBox(width: 3),
-            Icon(
-              (isPending || isQueued) ? Icons.done : Icons.done_all,
-              size: 12,
-              color: (isRead && !isPending && !isQueued)
-                  ? AppTheme.primary
-                  : Colors.white70,
-            ),
-          ],
+  /// Jam + centang polos (tanpa pill) — gaya sama dengan bubble teks.
+  Widget _plainTimeRow() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          timeStr,
+          style: AppText.chatTime.copyWith(color: AppTheme.textSecondary),
+        ),
+        if (showChecks) ...[
+          const SizedBox(width: 3),
+          Icon(
+            (isPending || isQueued) ? Icons.done : Icons.done_all,
+            size: 12,
+            color: (isRead && !isPending && !isQueued)
+                ? AppTheme.primary
+                : AppTheme.textSecondary,
+          ),
         ],
-      ),
+      ],
     );
   }
 }

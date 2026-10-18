@@ -790,7 +790,14 @@ class MessageBubble extends StatelessWidget {
                         )
                       else
                         Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          // Ada KARTU LINK → bubble menjadi lebih lebar dari
+                          // blok teks+jam, sehingga jam menggantung di tengah.
+                          // Ratakan ke KANAN agar jam nempel tepi kanan seperti
+                          // bubble lain (kartu link yang terlebar tetap penuh,
+                          // hanya baris teks+jam yang ikut ke kanan).
+                          crossAxisAlignment: hasLinkCard
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
                           children: [
                             // LINK PREVIEW utk PESAN TEKS (bukan foto) — dulu
                             // preview HANYA di _PhotoBubble (foto+caption),

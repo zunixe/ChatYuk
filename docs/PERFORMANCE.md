@@ -4766,7 +4766,13 @@ sudah diperbaiki & terukur di bawah.
    `[PERF]` sama sekali padahal `--dart-define=PERF_PROBE=true` dikirim.
    **Obat:** `rm -rf build/app/intermediates/flutter .dart_tool/flutter_build`
    lalu build ulang. Terjadi nyata di sesi ini (membingungkan cukup lama).
-4. **Jangan uji dengan APK `--profile`** lalu menyimpulkan beratnya app.
+4. **`rm -rf build/app/intermediates/flutter` bisa merusak `GeneratedPluginRegistrant.java`.**
+   Gejala: `compileApkpureProdReleaseJavaWithJavac` gagal dengan
+   `package com.github.s0nerik.fast_contacts does not exist` (plugin apa pun
+   yang hilang dari classpath). **Obat:** `flutter clean` + `flutter pub get`
+   lalu build ulang — membersihkan folder itu saja TIDAK cukup. Jadi kalau
+   memakai trik cache di atas, siap-siap perlu `flutter clean` penuh setelahnya.
+5. **Jangan uji dengan APK `--profile`** lalu menyimpulkan beratnya app.
    `--profile` = Dart JIT + bukan AOT → lebih berat dari release. Cek:
    `adb shell dumpsys package <pkg> | grep pkgFlags` — rilis TIDAK memuat
    `DEBUGGABLE`. Kirim user **release** untuk uji rasa.
