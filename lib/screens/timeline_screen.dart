@@ -237,10 +237,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                   ),
                 ),
               ],
-        shape: const Border(
-          // Tanpa garis bawah: PostCard pertama sudah punya Divider di
-          // atasnya — kalau ditambah di sini jadi garis dobel.
-        ),
+        // Garis bawah header — SAMA dengan Chat & Profil (mode terang &
+        // gelap). PostCard PERTAMA tidak menggambar divider atas (lihat
+        // showTopDivider) supaya tidak dobel.
+        shape: Border(bottom: BorderSide(color: AppTheme.divider)),
       ),
       // SWIPE kiri/kanan untuk pindah scope (Semua ⇄ Mengikuti ⇄
       // Postinganku). GestureDetector horizontal TIDAK mengganggu scroll
@@ -632,6 +632,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                     child: PostCard(
                       key: ValueKey('${posts[i]['id']}'),
                       post: posts[i],
+                      // Kartu pertama: header sudah punya garis bawah →
+                      // jangan tambah divider atas (anti garis dobel).
+                      showTopDivider: i != 0,
                     ),
                   );
                  },

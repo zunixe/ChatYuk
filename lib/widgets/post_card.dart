@@ -41,7 +41,16 @@ class PostCard extends ConsumerStatefulWidget {
   /// untuk pop kembali ke feed.
   final VoidCallback? onDeleted;
 
-  const PostCard({super.key, required this.post, this.onDeleted});
+  /// Garis atas kartu. Di Timeline kartu PERTAMA tidak perlu (header sudah
+  /// punya garis bawah) → hindari garis dobel.
+  final bool showTopDivider;
+
+  const PostCard({
+    super.key,
+    required this.post,
+    this.onDeleted,
+    this.showTopDivider = true,
+  });
 
   @override
   ConsumerState<PostCard> createState() => _PostCardState();
@@ -682,7 +691,8 @@ class _PostCardState extends ConsumerState<PostCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Divider(height: 1, thickness: 0.5),
+        if (widget.showTopDivider)
+          const Divider(height: 1, thickness: 0.5),
         // Header + teks (avatar di kolom kiri 40).
         Padding(
           padding: const EdgeInsets.fromLTRB(_kItemPadH, 12, _kItemPadH, 0),
