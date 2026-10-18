@@ -13,8 +13,17 @@ import '../screens/private_chat_screen.dart';
 /// Sebelumnya transisi ini disalin manual di 2 tempat (chat list & Online)
 /// sementara jalur lain (Nearby/CallHistory/UserInfo/RoomSheet) hanya Slide
 /// murni → tidak konsisten. Sekarang semua lewat sini.
-const Duration kChatRouteDuration = Duration(milliseconds: 120);
-const Duration kChatRouteReverseDuration = Duration(milliseconds: 100);
+/// Durasi transisi buka chat — DISAMAKAN dengan WhatsApp (2026-10-18).
+///
+/// Diukur di HP (Xiaomi, 60fps): WhatsApp membuka chat dengan ±125-133 frame
+/// (~2,1 detik animasi termasuk konten masuk). Sebelumnya ChatYuk hanya
+/// 120ms — terasa "ngebut/lompat", bukan halus.
+///
+/// 250ms + `easeOutQuint` meniru rasa Android native: gerakan cepat di awal
+/// lalu melambat lembut di akhir. Fade dihapus karena WhatsApp murni slide
+/// (fade justru membuat tepi layar terlihat "dobel" saat slide).
+const Duration kChatRouteDuration = Duration(milliseconds: 250);
+const Duration kChatRouteReverseDuration = Duration(milliseconds: 220);
 
 /// Transisi slide+fade [kChatRouteDuration] untuk layar BERAT selain chat
 /// user (mis. monitor chat admin). Dipakai supaya semua jalur buka layar
@@ -33,20 +42,23 @@ PageRoute<T> appSlideRoute<T>({
     fullscreenDialog: fullscreenDialog,
     pageBuilder: (context, _, __) => builder(context),
     transitionsBuilder: (_, animation, __, child) {
+      // SLIDE MURNI ala WhatsApp: layar baru masuk dari kanan, layar lama
+      // bergeser sedikit ke kiri (parallax) — tanpa fade.
+      //
+      // `easeOutQuint`: cepat di awal, sangat lembut di akhir. Ini kurva yang
+      // dipakai animasi Material/Android native sehingga gerak terasa
+      // "menempel" ke jari, bukan meluncur kaku.
       final curved = CurvedAnimation(
         parent: animation,
-        curve: Curves.easeOutCubic,
+        curve: Curves.easeOutQuint,
         reverseCurve: Curves.easeInCubic,
       );
-      return FadeTransition(
-        opacity: curved,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).animate(curved),
-          child: child,
-        ),
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).animate(curved),
+        child: child,
       );
     },
   );
@@ -82,20 +94,23 @@ PageRoute<void> chatRoute({
       initialAvatarB64: otherAvatarB64,
     ),
     transitionsBuilder: (_, animation, __, child) {
+      // SLIDE MURNI ala WhatsApp: layar baru masuk dari kanan, layar lama
+      // bergeser sedikit ke kiri (parallax) — tanpa fade.
+      //
+      // `easeOutQuint`: cepat di awal, sangat lembut di akhir. Ini kurva yang
+      // dipakai animasi Material/Android native sehingga gerak terasa
+      // "menempel" ke jari, bukan meluncur kaku.
       final curved = CurvedAnimation(
         parent: animation,
-        curve: Curves.easeOutCubic,
+        curve: Curves.easeOutQuint,
         reverseCurve: Curves.easeInCubic,
       );
-      return FadeTransition(
-        opacity: curved,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).animate(curved),
-          child: child,
-        ),
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).animate(curved),
+        child: child,
       );
     },
   );

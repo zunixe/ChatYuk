@@ -828,10 +828,12 @@ class AppSlidePageTransitionsBuilder extends PageTransitionsBuilder {
   const AppSlidePageTransitionsBuilder();
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 120);
+  // Disamakan dengan WhatsApp (lihat chat_route.dart): 250ms buka / 220ms
+  // tutup. Dulu 120/100ms terasa "ngebut".
+  Duration get transitionDuration => const Duration(milliseconds: 250);
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 100);
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 220);
 
   // Builder default untuk kasus fullscreen dialog (bottom-up) — dipakai apa
   // adanya supaya panggilan tidak ikut slide horizontal.
@@ -857,9 +859,10 @@ class AppSlidePageTransitionsBuilder extends PageTransitionsBuilder {
       );
     }
     // Halaman biasa → slide dari kanan, sama seperti private chat.
+    // Slide murni + easeOutQuint (rasa Android native / WhatsApp).
     final curved = CurvedAnimation(
       parent: animation,
-      curve: Curves.easeOutCubic,
+      curve: Curves.easeOutQuint,
       reverseCurve: Curves.easeInCubic,
     );
     return SlideTransition(

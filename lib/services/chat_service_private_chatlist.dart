@@ -14,30 +14,38 @@ mixin ChatServicePrivateChatListMx on ChatBase {
   // kebijakan throttle untuk chatId yang sama, apa pun instance-nya.
   // (map throttle lihat top-level `_markReadLastAt` di bawah mixin)
 
+  /// Tandai chat dibaca.
+  ///
+  /// PENTING (2026-10-18, terukur): update LOKAL dilakukan SINKRON lebih dulu
+  /// (UI centang-2 instan), RPC dikirim di BELAKANG tanpa di-await. Dulu
+  /// fungsi ini `await` RPC `mark_chat_read` (terukur 161ms) sehingga
+  /// pemanggil — jalur buka chat — ikut menunggu sebelum layar dianggap
+  /// siap. Penanda dibaca tidak perlu memblokir apa pun: kalau RPC gagal,
+  /// percobaan berikutnya (throttle 1s) akan mengulang.
   Future<void> markAsRead(String chatId, String uid) async {
-    try {
-      final now = DateTime.now();
-      final last = _markReadLastAt[chatId];
-      // 1000ms (dulu 2500ms): batas ini menentukan seberapa cepat LAWAN
-      // melihat centang-2 setelah kita membuka chat. 2.5s terasa "lama
-      // update centangnya". 1s cukup meredam burst pesan tapi responsif.
-      if (last != null && now.difference(last).inMilliseconds < 1000) {
-        // Masih dalam window throttle → tetap update snapshot lokal (murah,
-        // UI centang-2 instan) tanpa RPC.
-        _applyLocalRead(uid, chatId);
-        return;
+    // 1) UI dulu: snapshot lokal + centang-2 langsung terlihat.
+    _applyLocalRead(uid, chatId);
+    // 2) Throttle: cegah burst RPC (buka-tutup chat berulang).
+    final now = DateTime.now();
+    final last = _markReadLastAt[chatId];
+    // 1000ms (dulu 2500ms): batas ini menentukan seberapa cepat LAWAN
+    // melihat centang-2 setelah kita membuka chat. 2.5s terasa "lama
+    // update centangnya". 1s cukup meredam burst pesan tapi responsif.
+    if (last != null && now.difference(last).inMilliseconds < 1000) return;
+    _markReadLastAt[chatId] = now;
+    // 3) RPC di latar — JANGAN ditunggu pemanggil.
+    unawaited(() async {
+      try {
+        await measuredRpc(
+          _sb,
+          'mark_chat_read',
+          params: {'p_chat_id': chatId, 'p_uid': uid},
+        );
+        // Event realtime dari RPC ini menyusul & menyinkronkan snapshot.
+      } catch (e) {
+        dlog('[DEBUG-READ] RPC FAIL chat=$chatId uid=$uid err=$e');
       }
-      _markReadLastAt[chatId] = now;
-      await measuredRpc(_sb, 
-        'mark_chat_read',
-        params: {'p_chat_id': chatId, 'p_uid': uid},
-      );
-      // Update snapshot lokal langsung (tanpa refetch 500 row) — event
-      // realtime dari RPC ini menyusul dan menyinkronkan via _applyChatEvent.
-      _applyLocalRead(uid, chatId);
-    } catch (e) {
-      dlog('[DEBUG-READ] RPC FAIL chat=$chatId uid=$uid err=$e');
-    }
+    }());
   }
 
   /// Tandai dibaca atas nama peserta dari monitor admin. Pakai RPC khusus
