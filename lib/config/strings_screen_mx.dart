@@ -92,6 +92,58 @@ mixin SScreenMx {
   String get errGroupLimit =>
       isId ? 'Maksimal 2 grup aktif' : 'Max 2 active groups';
   String get groupCreated => isId ? 'Grup berhasil dibuat' : 'Group created';
+  // ── Sheet Buat Grup (desain 2026-10-18) ──
+  String get groupNameExample =>
+      isId ? 'Contoh: Futsal Bogor' : 'e.g. Weekend Futsal';
+  String get groupNameHelper => isId
+      ? 'Minimal 3 karakter. Nama bisa diubah nanti.'
+      : 'At least 3 characters. You can rename it later.';
+  String get groupIconTitle => isId ? 'Ikon grup' : 'Group icon';
+  String get groupNoPwSubtitle =>
+      isId ? 'Siapa saja bisa bergabung' : 'Anyone can join';
+  String get groupPwSubtitle => isId
+      ? 'Berlaku 7 hari, bisa diperpanjang'
+      : 'Valid for 7 days, extendable';
+  String get groupPasswordLabel => isId ? 'Password grup' : 'Group password';
+  String get groupPasswordHint =>
+      isId ? 'Minimal 6 karakter' : 'At least 6 characters';
+  String get groupPasswordHelper => isId
+      ? 'Pengguna perlu password ini untuk bergabung. Berlaku 7 hari, bisa diperpanjang.'
+      : 'People need this password to join. Valid for 7 days, extendable.';
+  String get errCreateGroupRetry =>
+      isId ? 'Gagal membuat grup. Coba lagi.' : 'Could not create the group. Try again.';
+  String groupCreatedNamed(String name) =>
+      isId ? 'Grup "$name" berhasil dibuat' : 'Group "$name" created';
+  String groupIconLabel(String key) {
+    switch (key) {
+      case 'chat':
+        return isId ? 'Obrolan' : 'Chat';
+      case 'users':
+        return isId ? 'Komunitas' : 'Community';
+      case 'sparkle':
+        return isId ? 'Seru-seruan' : 'Fun';
+      case 'game':
+        return 'Gaming';
+      case 'music':
+        return isId ? 'Musik' : 'Music';
+      case 'heart':
+        return isId ? 'Komunitas kasih' : 'Love';
+      case 'flame':
+        return isId ? 'Populer' : 'Popular';
+      case 'star':
+        return isId ? 'Favorit' : 'Favorite';
+      case 'moon':
+        return isId ? 'Malam' : 'Night';
+      case 'crown':
+        return isId ? 'Eksklusif' : 'Exclusive';
+      case 'coffee':
+        return isId ? 'Ngobrol santai' : 'Chill';
+      case 'lock':
+        return isId ? 'Privat' : 'Private';
+      default:
+        return key;
+    }
+  }
   String get joinRoomTitle => isId ? 'Masuk Room' : 'Join Room';
   String joinRoomCost(int c) =>
       isId ? 'Biaya masuk: $c YukCoin' : 'Entry cost: $c YukCoin';
