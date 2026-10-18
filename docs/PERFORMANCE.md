@@ -4738,4 +4738,108 @@ Keluhan: "dari list chat pas diklik ngebukanya aga lambat", "slide admin ngelag"
 - Jangan hapus `PhotoCache.instance.trimHeavyCache()` di `dispose()` private
   chat (menahan PSS → HP men-swap → "kadang ngadat").
 - Jangan simpulkan jank dari `dumpsys gfxinfo` (nol frame untuk Impeller).
-- Durasi transisi chat TETAP 120 ms (dikonfirmasi user 2026-10-18).
+- Durasi transisi chat 120 ms → **diganti 250 ms** (lihat §57); keputusan
+  120 ms dibatalkan karena disamakan dengan WhatsApp atas permintaan user.
+
+---
+
+## §57. "Masih berat buka chat" — banding WhatsApp, chat banyak pesan/media (2026-10-18)
+
+Lanjutan §56. Keluhan lanjutan user: **"WhatsApp lancar walaupun ga dingin"**,
+dan **"yang banyak pesannya ngelag"** — spesifik chat ChatYuk Admin.
+
+### Jebakan alat ukur (WAJIB dibaca sebelum mengulang diagnosa)
+
+1. **`dumpsys gfxinfo` menyesatkan.** Untuk Impeller/Vulkan hasilnya
+   `Total frames rendered: 0` + percentile palsu 4950 ms; kadang muncul angka
+   acak. Sudah dua kali menyesatkan sesi ini. **Jangan dipakai.**
+2. **`screenrecord` + hitung frame TIDAK andal di MIUI.** Encoder menjatuhkan
+   frame sendiri saat layar diam; perbandingan "73 drop vs 3 drop" yang
+   sempat dibuat dari metode ini tidak dapat dipercaya. Jangan pakai sebagai
+   bukti tunggal.
+3. **`PERF_PROBE` bisa "diam" karena build cache basi.** Gejala: tidak ada
+   `[PERF]` sama sekali padahal `--dart-define=PERF_PROBE=true` dikirim.
+   **Obat:** `rm -rf build/app/intermediates/flutter .dart_tool/flutter_build`
+   lalu build ulang. Terjadi nyata di sesi ini (membingungkan cukup lama).
+4. **Jangan uji dengan APK `--profile`** lalu menyimpulkan beratnya app.
+   `--profile` = Dart JIT + bukan AOT → lebih berat dari release. Cek:
+   `adb shell dumpsys package <pkg> | grep pkgFlags` — rilis TIDAK memuat
+   `DEBUGGABLE`. Kirim user **release** untuk uji rasa.
+
+Alat yang dipakai sesi ini: `PerfProbe.traceFrames()` (baru) → catat frame
+>12 ms selama jendela transisi; log `SLOWFRAME build=..ms raster=..ms`.
+
+### Perbandingan langsung dengan WhatsApp (HP yang sama)
+
+| Metrik | WhatsApp | ChatYuk (profil) |
+|---|---|---|
+| Frame saat buka chat | 125–133 | 45–62 |
+| p95 frame | 15 ms | 6 ms |
+| Janky | 4 (2,05%) | 0 |
+| Thread proses | 147 | 97 |
+
+WhatsApp justru punya janky LEBIH BANYAK, tapi terasa lebih halus karena
+**animasinya jauh lebih panjang** (~2,1 dtk vs 120 ms). Kunci "merasa halus",
+bukan angka jank. → durasi transisi disamakan (lihat tabel perbaikan).
+
+### Akar "chat banyak pesan berat"
+
+Chat ChatYuk Admin: 622 total; chat aktif **153 pesan** =
+68 teks + **28 foto + 21 stiker + 18 video** + 8 voice + 10 lain.
+**67 dari 153 = media.** Chat teks biasa lancar.
+
+Penyebab (di kode, bukan GPU):
+
+- **Generate thumbnail foto jalan di ROOT ISOLATE.** Komentar resmi di
+  `photo_cache.dart::_genThumbsLimited`: *"Decode via Skia targetWidth (bukan
+  compute isolate): `ui.instantiateImageCodec` butuh root isolate engine"*.
+  Jadi dekripsi + pembuatan thumb berebut CPU dengan frame animasi.
+- **Warm voice** dijadwalkan *"tepat setelah frame pertama"* = tepat saat
+  slide berjalan; isinya baca file + DEKRIPSI (CPU isolate utama).
+
+### Perbaikan (terukur)
+
+| Perubahan | Sebelum | Sesudah |
+|---|---|---|
+| `_lazyPhotoHeadCount` (foto diproses saat buka) | 12 | **6** |
+| Batch foto pertama | mulai langsung | **ditunda 280 ms** (di atas slide 250 ms) |
+| Warm voice | mulai tepat setelah frame-1 | **ditunda 280 ms** |
+| Frame >12 ms (SLOWFRAME) | 1 | **0** |
+| Max build | 12,2 ms | **10,9 ms** |
+| Build p50 / p90 | 0,3 / 1,8 ms | **0,3 / 1,5 ms** |
+| Raster p50 | 3,0 ms | **2,7 ms** |
+
+### Perbaikan lain di sesi yang sama (semua terukur)
+
+| Perubahan | Sebelum | Sesudah |
+|---|---|---|
+| RPC `hiddenFetch` (query ke-2 saat list chat) | 1947 ms | **dihapus** — `hidden_by` ikut di select utama, saring di klien |
+| `chat.listFetch` (idle → list) | 1734 ms | **274–373 ms** |
+| HTTP keep-alive `idleTimeout` | 15 s | **120 s** (cold handshake 792 ms vs warm 110–140 ms) |
+| Warmup koneksi saat app resume | tidak ada | **`ConnectionWarmup`** (probe `/auth/v1/health` post-frame) |
+| `markAsRead` | `await` RPC 161 ms di jalur buka chat | update lokal sinkron; RPC **fire-and-forget** |
+| Poll fallback pesan | 8 s + gate realtime 6 s | **20 s** + gate realtime 25 s + gate `activeChatId` |
+| Transisi buka chat | 120 ms `easeOutCubic` + Fade | **250 ms** `easeOutQuint`, slide murni (tanpa Fade) |
+| Cache snapshot list chat | hanya memori provider | **fallback sinkron** `MessageCache.peekRawList` |
+
+Bukti RPC membaik: `online.rpc` 190 → **13,9 ms**, `count_room_presence`
+246 → **14,7 ms** (koneksi hangat).
+
+### JANGAN dibalik
+
+- Jangan naikkan lagi `_lazyPhotoHeadCount` tanpa ukur ulang: chat media-berat
+  (30+ foto) langsung terasa di slide.
+- Jangan hapus penundaan 280 ms batch foto pertama & warm voice — keduanya
+  sengaja digeser melewati durasi slide.
+- Jangan buat animasi transisi chat < 250 ms: rasa "halus" user bergantung
+  pada durasi, bukan pada angka jank (lihat tabel WhatsApp).
+- Jangan pakai `dumpsys gfxinfo` / hitung-frame-screenrecord sebagai bukti
+  jank untuk app Flutter di HP ini.
+- Kalau `PERF_PROBE` diam: bersihkan `intermediates/flutter` +
+  `.dart_tool/flutter_build`, JANGAN langsung menyimpulkan "tidak ada jank".
+
+### Sisa yang belum dikerjakan (kandidat berikutnya)
+
+- Buka chat menghasilkan **3 emit berturut** (memori → disk → server); tiap
+  emit me-rebuild list. Menggabungnya jadi satu bisa memangkas kerja 3×.
+- `presence_for` (152 ms) masih ditunggu di buka chat (header online).
