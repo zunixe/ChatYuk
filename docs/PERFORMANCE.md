@@ -5,7 +5,7 @@
 > bukan **merusak** (mis. mengembalikan `context.watch` yang sudah diganti
 > `select`, atau menghapus `TickerMode`/`RepaintBoundary`).
 
-Terakhir diperbarui: 2026-09-30 (branch `develop`).
+Terakhir diperbarui: 2026-10-18 (branch `develop`) — lihat §55.
 
 ---
 
@@ -4583,3 +4583,95 @@ persis (1 pesan = 1 bubble) — **nol regresi**.
 
 **Catatan:** HD (`photoHd`) diterapkan ke SEMUA foto batch dengan memproses
 ulang dari berkas aslinya, bukan mengompres ulang hasil preview.
+
+---
+
+## §55. Private chat: anti-kedip foto/album, pesan terhapus, lag buka pertama (2026-10-17/18)
+
+Semua angka diukur DI HP (Xiaomi 24129PN74G, build `--profile`), bukan
+perkiraan. Frame mulus = < 16,7 ms.
+
+### Cara mengukur (pakai ini lagi)
+
+- **`PerfProbe.routeOpen('private-chat')`** (dipanggil di `initState` private
+  chat): reset hitungan frame saat chat dibuka → 2 dtk kemudian cetak ringkasan
+  `[PERF] ── buka private-chat` (fase BUKA), lalu reset lagi → laporan saat app
+  ke background = fase SCROLL saja. Nol overhead tanpa `--dart-define=PERF_PROBE=true`.
+- **Rekam layar + pecah per frame**: `adb shell screenrecord` lalu
+  `ffmpeg … tile=8x6` → lihat frame demi frame. Ini yang menemukan "tajam →
+  kosong/blur → tajam" yang TIDAK tertangkap test widget.
+- **WAJIB guard aplikasi depan** sebelum SETIAP `adb input tap`:
+  `dumpsys window | grep mCurrentFocus | grep com.chatyuk.chatyuk/` — HP bisa
+  sedang dipakai user (pernah mengetuk di Telegram user). Jangan pernah tap
+  di chat user asli selain membuka chat (read-only).
+- Kalau ada pihak lain memasang APK ke HP yang sama, HENTIKAN ukur (hasil
+  bercampur) — cek `dumpsys package com.chatyuk.chatyuk | grep lastUpdateTime`.
+
+### 1) Album/foto "kedip" saat buka chat — 3 akar bertumpuk
+
+| Akar | Bukti | Perbaikan |
+|---|---|---|
+| Poster v1 (JPEG 24px) ditampilkan via `Image.memory` = decode SELALU async → frame-1 tetap kosong | rekaman: kosong → blur → tajam | **Poster v2** = grid RGBA 8×8 (256 B) dilukis `CustomPaint` + blur (`PosterGrid`) → frame-1 bergambar. `Image.memory` fallback pakai `frameBuilder` → poster sampai frame foto siap |
+| Cache decode **32 KUNCI**, padahal 1 foto = 3–4 alias (base64 lokal, path, `thumb:<id>`, isi) → chat ±27 foto terus menggusur | log: tile mount ulang `hit=false` | Batas per **FOTO UNIK** (`decodedCacheMaxUnique=20`) + kunci total 128. Bitmap yang tampil disimpan juga di `thumb:<id>` (`_rememberById`) |
+| Data server masuk → index item bergeser → ListView **membuat ulang** bubble | log `[IMGDBG] init` setelah `fetchServer` | `findChildIndexCallback` + key akar `album_<id>` / `m_<id>` (private & room) → elemen DIPINDAH, State + bitmap tetap. Log sesudah: 0 init setelah fetch |
+| `_putDecodedCache` men-dispose objek lama saat kunci sama diisi objek baru — padahal bubble yang tampil memegangnya | rekaman: tajam → poster 1 frame → tajam tanpa mount ulang | Ukuran sama = **pertahankan objek lama**; ukuran beda = ganti TANPA dispose paksa (GC) |
+
+Hasil akhir (cold start, chat 149 pesan banyak foto): tile langsung tajam;
+foto tanpa cache: blur 2 frame → tajam (sekali), tanpa kotak kosong/kedip balik.
+Commit: `b662b8ef`, `15ad9fb5`, `f6553e44`.
+
+### 2) Pesan terhapus "sempat muncul" saat buka chat
+
+- **Akar:** tanda tangan tulis-cache = `'jumlah:idTerakhir'`. Hapus/edit pesan
+  TIDAK mengubahnya → status terhapus/teks editan **tidak pernah disimpan** ke
+  cache lokal (debounce maupun `onCancel`). Buka berikutnya: isi lama dari
+  cache → server ganti "Pesan dihapus" = kedip.
+- **Perbaikan:** `messageCacheSignature()` (id + hapus + edit + teks tiap
+  pesan, O(n)); `ChatMessageStream.markDeleted` → hapus/undo menandai sesi +
+  tulis cache SEKETIKA (gema realtime bisa terlewat bila chat langsung ditutup).
+  Commit `719de610`.
+
+### 3) Lag "kadang-kadang, dicoba terus jadi tidak" saat buka chat
+
+- **Terukur:** setelah APK DIPASANG ULANG, buka private chat ke-1 & ke-2 ada
+  1 frame raster ~26 ms; ke-3 mulus. Impeller (Vulkan, sudah aktif) membuat
+  **pipeline GPU** untuk efek yang BARU pertama dipakai (opacity FadeTransition,
+  ShaderMask lencana verifikasi, blur poster, bayangan bubble, wallpaper).
+- **Perbaikan:** `GpuWarmup` (root Stack di `app.dart`): sekali per proses,
+  ±2 dtk setelah frame pertama, gambar efek-efek itu di 2×2 px pojok kiri-atas
+  (tak bisa disentuh) selama 8 frame lalu lepas. Digambar DI LAYAR (bukan
+  `toImage` offscreen) agar varian pipeline sama dengan layar chat.
+
+| Buka setelah pasang ulang | Sebelum | Sesudah (3× pasang ulang) |
+|---|---|---|
+| ke-1 | 1 jank, raster maks **25,9 ms** | 0 jank, raster maks **11,7–14,0 ms** |
+| ke-2 | 1 jank, **26,4 ms** | 0 jank, 12,4 ms |
+| buka 3 dtk setelah start | — | 0 jank, 13,8 ms |
+
+Baseline lain (cache hangat, chat terberat): buka 0 jank (raster maks 13–15 ms),
+scroll cepat 25× 0 jank (raster maks 3,6 ms). Jalur masuk dari daftar chat &
+Online SUDAH push instan (prefetch fire-and-forget) — bukan sumber lag.
+Commit `39303b17`.
+
+### 4) Fitur baru yang dirancang ringan sejak awal
+
+- **Stiker instan** (`a55636d4`): sheet tutup SEKETIKA + bubble pending
+  (dulu sheet menunggu unduh ulang + upload + insert); stiker koleksi tidak
+  diunduh ulang; `ChatStickerSendMixin` bersama private & room.
+- **Polling** (`fdd0660f`): definisi poll di baris pesan (ikut cache → bubble
+  lengkap frame-1, nol fetch); hasil suara lazy (request dikumpulkan 60 ms →
+  1 RPC), `ValueListenable` per bubble (list tak rebuild), tinggi opsi/bar/kolom
+  angka TETAP (nol lompatan layout); realtime suara hanya bila ada bubble poll,
+  tertunda 900 ms (transisi buka chat bebas I/O). Terukur: buka chat 0 jank.
+
+### JANGAN dibalik
+
+- Jangan kembalikan poster ke `Image.memory` (async = frame-1 kosong).
+- Jangan kembalikan batas cache decode per KUNCI; jangan dispose objek lama
+  yang ukurannya sama di `_putDecodedCache`.
+- Jangan hapus `findChildIndexCallback` / key akar `album_*` / `m_*` di list
+  private & room.
+- Jangan kembalikan tanda tangan cache ke `jumlah:idTerakhir`.
+- Jangan hapus `GpuWarmup` tanpa mengukur ulang buka chat PERTAMA setelah
+  pasang ulang APK (bukan setelah beberapa kali percobaan — cache pipeline
+  menyembunyikan masalahnya).
