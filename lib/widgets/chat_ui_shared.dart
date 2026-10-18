@@ -36,8 +36,11 @@ class ChatIconButton extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
-        width: 30,
-        height: 30,
+        // 30 → 28 (2026-10-18, minta user: ikon "+" di composer sedikit
+        // lebih kecil). Target sentuh TIDAK berubah (SizedBox 32×44 di bawah),
+        // jadi hanya tampilan yang mengecil.
+        width: 28,
+        height: 28,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: AppTheme.primary.withValues(alpha: open ? 0.16 : 0.12),
@@ -55,8 +58,9 @@ class ChatIconButton extends StatelessWidget {
           child: Icon(
             icon ?? Icons.add_rounded,
             color: AppTheme.primary,
-            // 18px di kotak 30px → margin 6px tiap sisi (proporsional).
-            size: 18,
+            // 16px di kotak 28px → margin 6px tiap sisi (rasio sama seperti
+            // sebelumnya 18/30; keseluruhan lebih kecil sesuai minta user).
+            size: 16,
           ),
         ),
       ),

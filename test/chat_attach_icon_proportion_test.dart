@@ -26,11 +26,11 @@ void main() {
     );
   }
 
-  testWidgets('SATU glif + (18px) diputar jadi ✕, ukuran tak berubah', (t) async {
+  testWidgets('SATU glif + (16px) diputar jadi ✕, ukuran tak berubah', (t) async {
     await pump(t, open: false);
     final plus = t.widget<Icon>(find.byType(Icon));
     expect(plus.icon, Icons.add_rounded);
-    expect(plus.size, 18.0);
+    expect(plus.size, 16.0);
     final plusSize = t.getSize(find.byType(Icon));
 
     await pump(t, open: true);
@@ -38,11 +38,11 @@ void main() {
     // Ikon TIDAK diganti — tetap "+", hanya dirotasi.
     final close = t.widget<Icon>(find.byType(Icon));
     expect(close.icon, Icons.add_rounded);
-    expect(close.size, 18.0);
+    expect(close.size, 16.0);
     expect(t.getSize(find.byType(Icon)), plusSize);
   });
 
-  testWidgets('lingkaran latar tetap 30px & ikon muat proporsional', (t) async {
+  testWidgets('lingkaran latar 28px & ikon muat proporsional', (t) async {
     await pump(t, open: false);
     // Container lingkaran = leluhur langsung AnimatedRotation.
     final circleFinder = find.ancestor(
@@ -50,11 +50,11 @@ void main() {
       matching: find.byType(Container),
     );
     final circle = t.getSize(circleFinder.first);
-    expect(circle, const Size(30, 30));
-    // Glif digambar 18px di tengah kotak 30px → margin visual 6px tiap sisi,
+    expect(circle, const Size(28, 28));
+    // Glif digambar 16px di tengah kotak 28px → margin visual 6px tiap sisi,
     // jadi "+" tidak menyentuh tepi lingkaran (proporsional).
     final icon = t.widget<Icon>(find.byType(Icon));
-    expect(icon.size, 18.0);
+    expect(icon.size, 16.0);
     expect(icon.size! < circle.width, isTrue);
   });
 
