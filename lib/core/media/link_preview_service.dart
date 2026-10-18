@@ -14,6 +14,10 @@ class LinkPreviewData {
   final String image;
   final String siteName;
 
+  /// Ikon situs (favicon) — `<link rel=…icon>` atau `/favicon.ico` domain.
+  /// Ditampilkan di ujung kanan baris domain (ala WhatsApp).
+  final String icon;
+
   /// True bila di-cache/fetch SUDAH FINAL (bukan hasil fallback sementara).
   final bool ok;
 
@@ -23,6 +27,7 @@ class LinkPreviewData {
     this.description = '',
     this.image = '',
     this.siteName = '',
+    this.icon = '',
     this.ok = true,
   });
 
@@ -32,6 +37,7 @@ class LinkPreviewData {
         'description': description,
         'image': image,
         'siteName': siteName,
+        'icon': icon,
         'ok': ok,
       };
 
@@ -41,6 +47,7 @@ class LinkPreviewData {
         description: '${j['description'] ?? ''}',
         image: '${j['image'] ?? ''}',
         siteName: '${j['siteName'] ?? ''}',
+        icon: '${j['icon'] ?? ''}',
         ok: j['ok'] != false,
       );
 }
@@ -179,11 +186,11 @@ class LinkPreviewService {
     return true;
   }
 
-  // v2 (2026-10-18): fetch kini memakai UA pengambil-preview (lihat
+  // v3 (2026-10-18): + ikon situs. v2: fetch kini memakai UA pengambil-preview (lihat
   // [_fetchNetwork]) + dekode entitas HTML. Preview lama di disk (mis. link
   // pendek Shopee yang tersimpan sebagai BERANDA Shopee) diabaikan → diambil
   // ulang sekali dengan benar.
-  String _diskKey(String url) => 'linkpreview2:$url';
+  String _diskKey(String url) => 'linkpreview3:$url';
 
   /// UA pengambil preview ala WhatsApp. Terukur 2026-10-18 (curl, IP rumah):
   /// link pendek Shopee hanya memberi metadata PRODUK ke UA ini (UA browser
@@ -327,6 +334,7 @@ class LinkPreviewService {
         : getName('description');
     final img = getMeta('og:image');
     final site = getMeta('og:site_name');
+    final icon = findIcon(url, html);
     return LinkPreviewData(
       url: url,
       title: decodeHtmlEntities(title),
@@ -334,7 +342,40 @@ class LinkPreviewService {
       // URL gambar juga bisa ber-`&amp;` (query string) → wajib didekode.
       image: decodeHtmlEntities(img),
       siteName: decodeHtmlEntities(site.isNotEmpty ? site : host),
+      icon: icon,
     );
+  }
+
+  static final _linkTagRe = RegExp(r'<link\b[^>]*>', caseSensitive: false);
+  static final _relRe = RegExp(r'''rel\s*=\s*["']([^"']+)["']''', caseSensitive: false);
+  static final _hrefRe = RegExp(r'''href\s*=\s*["']([^"']+)["']''', caseSensitive: false);
+
+  /// URL ikon situs: `apple-touch-icon` → `icon`/`shortcut icon` (bukan
+  /// `mask-icon` SVG) → cadangan `https://<host>/favicon.ico` (pola
+  /// WhatsApp; terukur ada di Shopee/YouTube/Kompas/GitHub). Relatif
+  /// diselesaikan terhadap URL halaman. Murni & testable.
+  static String findIcon(String pageUrl, String html) {
+    final base = Uri.tryParse(pageUrl);
+    if (base == null || base.host.isEmpty) return '';
+    String? touch;
+    String? plain;
+    for (final m in _linkTagRe.allMatches(html)) {
+      final tag = m.group(0)!;
+      final rel = _relRe.firstMatch(tag)?.group(1)?.toLowerCase() ?? '';
+      final href = _hrefRe.firstMatch(tag)?.group(1)?.trim() ?? '';
+      if (href.isEmpty || rel.contains('mask-icon')) continue;
+      if (rel.contains('apple-touch-icon')) {
+        touch ??= href;
+      } else if (rel.split(RegExp(r'\s+')).contains('icon')) {
+        plain ??= href;
+      }
+    }
+    final pick = touch ?? plain;
+    if (pick != null) {
+      final r = Uri.tryParse(decodeHtmlEntities(pick));
+      if (r != null) return base.resolveUri(r).toString();
+    }
+    return '${base.scheme.isEmpty ? 'https' : base.scheme}://${base.host}/favicon.ico';
   }
 
   static const Map<String, String> _namedEntities = {

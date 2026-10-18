@@ -116,3 +116,74 @@ class _LinkPreviewImageState extends State<LinkPreviewImage> {
     );
   }
 }
+
+/// Ikon situs kecil (favicon) di ujung kanan baris domain kartu link
+/// (ala WhatsApp). Cache DISK sama dengan [LinkPreviewImage]; ukuran TETAP
+/// [size] (placeholder kosong ukuran sama → tanpa lompatan layout); gagal /
+/// format tak didukung → ruang kosong (bukan ikon rusak).
+class LinkPreviewIcon extends StatefulWidget {
+  final String url;
+  final double size;
+  const LinkPreviewIcon({super.key, required this.url, this.size = 18});
+
+  @override
+  State<LinkPreviewIcon> createState() => _LinkPreviewIconState();
+}
+
+class _LinkPreviewIconState extends State<LinkPreviewIcon> {
+  static const String _kPrefix = 'linkicon:';
+  Uint8List? _bytes;
+  bool _failed = false;
+
+  String get _key => '$_kPrefix${widget.url}';
+
+  @override
+  void initState() {
+    super.initState();
+    final sync = MediaDiskCache.instance.readSync(_key);
+    if (sync != null && sync.isNotEmpty) {
+      _bytes = sync;
+    } else {
+      _fetch();
+    }
+  }
+
+  Future<void> _fetch() async {
+    if (!widget.url.startsWith('http')) return;
+    try {
+      final res = await http
+          .get(Uri.parse(widget.url), headers: {'User-Agent': 'Mozilla/5.0'})
+          .timeout(const Duration(seconds: 8));
+      final ct = res.headers['content-type'] ?? '';
+      final bytes = res.statusCode == 200 ? res.bodyBytes : null;
+      // HTML (halaman error/redirect) bukan ikon → anggap gagal.
+      if (bytes == null || bytes.isEmpty || ct.contains('text/html')) {
+        if (mounted) setState(() => _failed = true);
+        return;
+      }
+      unawaited(MediaDiskCache.instance.write(_key, bytes));
+      if (mounted) setState(() => _bytes = bytes);
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.size;
+    final bytes = _bytes;
+    if (_failed || bytes == null) return SizedBox(width: s, height: s);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: Image.memory(
+        bytes,
+        width: s,
+        height: s,
+        fit: BoxFit.contain,
+        cacheWidth: 64,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => SizedBox(width: s, height: s),
+      ),
+    );
+  }
+}

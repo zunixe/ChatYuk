@@ -56,4 +56,28 @@ void main() {
     expect(LinkPreviewService.decodeHtmlEntities('a.jpg?w=1&amp;h=2'), 'a.jpg?w=1&h=2');
     expect(LinkPreviewService.decodeHtmlEntities('&bogus; tetap'), '&bogus; tetap');
   });
+
+  group('ikon situs (favicon)', () {
+    test('Shopee (tanpa <link rel=icon>) → /favicon.ico domain link', () {
+      expect(LinkPreviewService.findIcon('https://s.shopee.co.id/7KxpwnGmyj', waHtml),
+          'https://s.shopee.co.id/favicon.ico');
+      expect(LinkPreviewService.parseHtml('https://s.shopee.co.id/7KxpwnGmyj', waHtml).icon,
+          'https://s.shopee.co.id/favicon.ico');
+    });
+
+    test('apple-touch-icon didahulukan; relatif diselesaikan; mask-icon diabaikan', () {
+      const html = '<link rel="mask-icon" href="/m.svg">'
+          '<link rel="icon" href="/fav.png">'
+          '<link rel="apple-touch-icon" href="/touch.png">';
+      expect(LinkPreviewService.findIcon('https://contoh.id/a/b', html), 'https://contoh.id/touch.png');
+      expect(LinkPreviewService.findIcon('https://contoh.id/a/b', '<link rel="shortcut icon" href="https://cdn.x/i.ico">'),
+          'https://cdn.x/i.ico');
+    });
+
+    test('ikon ikut cache JSON', () {
+      const d = LinkPreviewData(url: 'https://a.id', title: 't', icon: 'https://a.id/favicon.ico');
+      expect(LinkPreviewData.fromJson(d.toJson()).icon, 'https://a.id/favicon.ico');
+    });
+  });
 }
+

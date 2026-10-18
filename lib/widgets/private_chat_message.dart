@@ -162,6 +162,12 @@ class MessageBubble extends StatelessWidget {
     // Stiker ala Telegram: melayang TANPA card bubble & TANPA jam/centang.
     final isSticker = msg.type == 'sticker';
     // Media (foto/video/lokasi): border card tipis 4px seperti album & room.
+    // Pesan TEKS ber-link (kartu preview): bingkai bubble TIPIS 4px di kiri/
+    // kanan/atas seperti media (ala WhatsApp); teks di bawah kartu diberi
+    // jarak teks normal sendiri (lihat Padding di sekitar MessageTextWithTime).
+    final hasLinkCard = msg.type == 'text' &&
+        !msg.isDeleted &&
+        LinkPreviewService.instance.extractUrl(msg.text) != null;
     // Pesan TEKS yang membalas → kutipan selebar bubble (lihat _replyWidth).
     final stretchReply = msg.type == 'text' &&
         !msg.isDeleted &&
@@ -233,6 +239,8 @@ class MessageBubble extends StatelessWidget {
                       ? EdgeInsets.zero
                       : (isMediaCard
                             ? const EdgeInsets.all(4)
+                            : hasLinkCard
+                            ? const EdgeInsets.fromLTRB(4, 4, 4, 6)
                             : const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
                   decoration: BoxDecoration(
                     // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
@@ -798,7 +806,12 @@ class MessageBubble extends StatelessWidget {
                                   enabled: autoLinkPreview,
                                 ),
                               ),
-                            MessageTextWithTime(
+                            Padding(
+                              // Bingkai tipis 4px + 6px = jarak teks normal (10px).
+                              padding: hasLinkCard
+                                  ? const EdgeInsets.symmetric(horizontal: 6)
+                                  : EdgeInsets.zero,
+                              child: MessageTextWithTime(
                               text: msg.text,
                               timeStr: msg.edited
                                   ? '$timeStr ${s.msgEdited}'
@@ -831,6 +844,7 @@ class MessageBubble extends StatelessWidget {
                                       ),
                                     )
                                   : null,
+                            ),
                             ),
                           ],
                         ),

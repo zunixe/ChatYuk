@@ -229,6 +229,9 @@ class _LinkPreviewState extends ConsumerState<LinkPreview> {
                           ),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      // Ikon situs (favicon) di ujung kanan, ala WhatsApp.
+                      LinkPreviewIcon(url: _iconUrl(d)),
                     ],
                   ),
                 ],
@@ -239,4 +242,13 @@ class _LinkPreviewState extends ConsumerState<LinkPreview> {
       ),
     );
   }
+}
+
+/// Ikon situs untuk kartu: dari metadata, atau `/favicon.ico` domain link
+/// (data lama / hasil server cadangan belum membawa ikon).
+String _iconUrl(LinkPreviewData d) {
+  if (d.icon.isNotEmpty) return d.icon;
+  final u = Uri.tryParse(d.url);
+  if (u == null || u.host.isEmpty) return '';
+  return '${u.scheme.isEmpty ? 'https' : u.scheme}://${u.host}/favicon.ico';
 }
