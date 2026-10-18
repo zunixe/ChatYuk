@@ -85,7 +85,7 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   final ValueChanged<Uint8List>? onPickGalleryPhoto;
   /// Kirim file/dokumen. null = chip tidak tampil.
   final VoidCallback? onSendFile;
-  /// Buat polling (private). null = chip tidak tampil.
+  /// Buat polling (private, grup & global room). null = chip tidak tampil.
   final VoidCallback? onCreatePoll;
   const ChatComposerInput({
     required this.controller,
