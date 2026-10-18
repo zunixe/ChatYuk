@@ -164,32 +164,73 @@ class _LinkPreviewState extends ConsumerState<LinkPreview> {
         final uri = Uri.tryParse(d.url);
         if (uri != null && await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
       },
+      // Kartu ala WhatsApp (2026-10-18): tanpa garis aksen kiri, gambar
+      // tinggi mengikuti lebar kartu, deskripsi s.d. 4 baris, baris domain
+      // berikon tautan.
       child: Container(
         margin: const EdgeInsets.only(bottom: 6),
-        decoration: BoxDecoration(color: AppTheme.bgInput, borderRadius: BorderRadius.circular(8), border: Border(left: BorderSide(color: AppTheme.primary, width: 3))),
+        decoration: BoxDecoration(
+          color: AppTheme.bgInput,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (d.image.isNotEmpty)
-              ClipRRect(
-                borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
-                // Cache DISK (LP-E): unduh sekali → simpan MediaDiskCache →
-                // frame berikut instan & persist lintas sesi (bukan
-                // Image.network RAW yang hanya RAM + fetch ulang).
-                child: LinkPreviewImage(url: d.image, height: 140),
+              // Cache DISK (LP-E): unduh sekali → simpan MediaDiskCache →
+              // frame berikut instan & persist lintas sesi.
+              LayoutBuilder(
+                builder: (_, c) => LinkPreviewImage(
+                  url: d.image,
+                  height: c.maxWidth.isFinite
+                      ? (c.maxWidth * 0.75).clamp(140.0, 260.0)
+                      : 180,
+                ),
               ),
             Padding(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(d.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.chatBodyStrong),
+                  Text(
+                    d.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.chatBodyStrong,
+                  ),
                   if (d.description.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(d.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.chatCaption.copyWith(color: AppTheme.textSecondary)),
+                    const SizedBox(height: 4),
+                    Text(
+                      d.description,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.chatCaption.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
                   ],
-                  const SizedBox(height: 4),
-                  Text(d.siteName.isNotEmpty ? d.siteName : Uri.tryParse(d.url)?.host ?? d.url, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.chatTime.copyWith(color: AppTheme.primary)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.link_rounded,
+                        size: 14,
+                        color: AppTheme.textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          Uri.tryParse(d.url)?.host ?? d.siteName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.chatTime.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

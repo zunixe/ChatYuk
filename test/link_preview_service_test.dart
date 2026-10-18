@@ -110,13 +110,17 @@ void main() {
         () => LinkPreviewService.instance.fetch(url),
         client,
       );
+      // Halaman tanpa og:image/description → dicoba UA preview LALU UA
+      // browser (maks 2 request) pada fetch PERTAMA.
+      final afterFirst = calls;
+      expect(afterFirst, lessThanOrEqualTo(2));
       final b = await withClient(
         () => LinkPreviewService.instance.fetch(url),
         client,
       );
       expect(a!.title, 'Cache Me');
       expect(b!.title, 'Cache Me');
-      expect(calls, 1);
+      expect(calls, afterFirst, reason: 'request kedua dari cache, nol jaringan');
     });
 
     test('URL tanpa scheme → fallback, tidak crash', () async {

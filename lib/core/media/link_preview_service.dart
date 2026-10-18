@@ -179,7 +179,21 @@ class LinkPreviewService {
     return true;
   }
 
-  String _diskKey(String url) => 'linkpreview:$url';
+  // v2 (2026-10-18): fetch kini memakai UA pengambil-preview (lihat
+  // [_fetchNetwork]) + dekode entitas HTML. Preview lama di disk (mis. link
+  // pendek Shopee yang tersimpan sebagai BERANDA Shopee) diabaikan → diambil
+  // ulang sekali dengan benar.
+  String _diskKey(String url) => 'linkpreview2:$url';
+
+  /// UA pengambil preview ala WhatsApp. Terukur 2026-10-18 (curl, IP rumah):
+  /// link pendek Shopee hanya memberi metadata PRODUK ke UA ini (UA browser
+  /// = halaman pengalih JS ber-metadata BERANDA); TikTok & Instagram kosong
+  /// untuk UA browser tapi lengkap untuk UA ini; YouTube/Kompas/GitHub/
+  /// Tokopedia sama baiknya.
+  static const String previewUserAgent = 'WhatsApp/2.23.20.0 A';
+  static const String browserUserAgent =
+      'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/120 Mobile Safari/537.36';
 
   /// Ambil preview: RAM → disk → network. Dedupe in-flight (banyak bubble
   /// dengan URL sama tak fetch berkali-kali).
@@ -239,22 +253,24 @@ class LinkPreviewService {
     // challenge** (datacenter IP dibatasi). Jadi device = jalur utama.
     networkFetchCount++;
     LinkPreviewData? device;
-    try {
-      final res = await http
-          .get(Uri.parse(url), headers: {
-            'User-Agent':
-                'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
-                '(KHTML, like Gecko) Chrome/120 Mobile Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
-          })
-          .timeout(const Duration(seconds: 6));
-      if (res.statusCode == 200) {
-        final d = parseHtml(url, res.body);
-        // Ada metadata nyata (bukan cuma host)? → pakai.
-        if (d.image.isNotEmpty || d.description.isNotEmpty) return d;
-        device = d;
-      }
-    } catch (_) {}
+    // UA pengambil-preview DULU (metadata halaman tujuan, mis. produk), lalu
+    // UA browser sebagai cadangan bila situs menolak bot.
+    for (final ua in const [previewUserAgent, browserUserAgent]) {
+      try {
+        final res = await http
+            .get(Uri.parse(url), headers: {
+              'User-Agent': ua,
+              'Accept-Language': 'id,en-US;q=0.9,en;q=0.8',
+            })
+            .timeout(const Duration(seconds: 6));
+        if (res.statusCode == 200) {
+          final d = parseHtml(url, res.body);
+          // Ada metadata nyata (bukan cuma host)? → pakai.
+          if (d.image.isNotEmpty || d.description.isNotEmpty) return d;
+          device ??= d;
+        }
+      } catch (_) {}
+    }
     // FALLBACK (LP-F): Edge Function — untuk kasus device gagal/DNS-block.
     final srv = serverFetch;
     if (srv != null) {
@@ -313,10 +329,50 @@ class LinkPreviewService {
     final site = getMeta('og:site_name');
     return LinkPreviewData(
       url: url,
-      title: title,
-      description: desc,
-      image: img,
-      siteName: site.isNotEmpty ? site : host,
+      title: decodeHtmlEntities(title),
+      description: decodeHtmlEntities(desc),
+      // URL gambar juga bisa ber-`&amp;` (query string) → wajib didekode.
+      image: decodeHtmlEntities(img),
+      siteName: decodeHtmlEntities(site.isNotEmpty ? site : host),
     );
+  }
+
+  static const Map<String, String> _namedEntities = {
+    'amp': '&',
+    'lt': '<',
+    'gt': '>',
+    'quot': '"',
+    'apos': "'",
+    'nbsp': ' ',
+    'ndash': '–',
+    'mdash': '—',
+    'hellip': '…',
+    'bull': '•',
+    'middot': '·',
+    'laquo': '«',
+    'raquo': '»',
+    'copy': '©',
+    'reg': '®',
+    'trade': '™',
+  };
+  static final _entityRe = RegExp(r'&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);');
+
+  /// Dekode entitas HTML (`&amp;`, `&#064;`, `&#x2022;`, …) di metadata.
+  /// Dulu judul tampil mentah "Terlengkap &amp; Terpercaya". Murni & testable.
+  static String decodeHtmlEntities(String s) {
+    if (!s.contains('&')) return s;
+    return s.replaceAllMapped(_entityRe, (m) {
+      final e = m.group(1)!;
+      int? code;
+      if (e.startsWith('#x') || e.startsWith('#X')) {
+        code = int.tryParse(e.substring(2), radix: 16);
+      } else if (e.startsWith('#')) {
+        code = int.tryParse(e.substring(1));
+      } else {
+        return _namedEntities[e] ?? m.group(0)!;
+      }
+      if (code == null || code <= 0 || code > 0x10FFFF) return m.group(0)!;
+      return String.fromCharCode(code);
+    });
   }
 }
