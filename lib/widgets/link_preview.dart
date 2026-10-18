@@ -175,6 +175,9 @@ class _LinkPreviewState extends ConsumerState<LinkPreview> {
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
+          // min: kartu tak "mengembang" penuh bila parent memberi tight height
+          // (mis. body Scaffold / kolom composer) — tinggi ikut isi.
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (d.image.isNotEmpty)

@@ -46,8 +46,12 @@ class _ComposerLinkPreviewState extends State<ComposerLinkPreview> {
     // banyak → "ngelag beberapa huruf terakhir saat hapus". Sekarang regex
     // (dan setState) hanya jalan setelah user berhenti mengetik 400ms.
     // Cek cepat & murah: apakah ada 'http' sama sekali (indexOf O(n) tapi
-    // tanpa alokasi regex; cukup sbg gerbang).
-    final probablyUrl = text.contains('http') || _url != null;
+    // tanpa alokasi regex; cukup sbg gerbang). Copy-paste juga sering TANPA
+    // skema ("youtube.com/shorts/…") → gerbang kedua: teks tanpa spasi tapi
+    // memuat titik (domain). Validasi sungguhan tetap di `extractUrl`.
+    final noSpace = !text.trim().contains(' ');
+    final probablyUrl =
+        _url != null || text.contains('http') || (noSpace && text.contains('.'));
     if (!probablyUrl) return;
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;

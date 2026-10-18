@@ -13,9 +13,11 @@ void main() {
       expect(svc.extractUrl('http://x.io'), 'http://x.io');
     });
 
-    test('case-insensitive (HTTP uppercase)', () {
+    test('skema HURUF BESAR dinormalisasi ke huruf kecil', () {
+      // Normalisasi skema (2026-10-18) supaya cache key & fetch konsisten
+      // (Https://… dan https://… = satu entri, bukan dua).
       expect(svc.extractUrl('Lihat HTTPS://Contoh.com/X'),
-          'HTTPS://Contoh.com/X');
+          'https://Contoh.com/X');
     });
 
     test('berhenti di spasi', () {

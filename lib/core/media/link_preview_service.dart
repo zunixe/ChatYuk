@@ -128,6 +128,10 @@ class LinkPreviewService {
   @visibleForTesting
   int get cacheLength => _cache.length;
 
+  /// Test-only: isi cache RAM tanpa IO (untuk uji layout kartu).
+  @visibleForTesting
+  void seedForTest(String url, LinkPreviewData data) => _put(url, data);
+
   @visibleForTesting
   void resetForTest() {
     _cache.clear();
@@ -150,6 +154,9 @@ class LinkPreviewService {
   /// "file.txt" / "v1.2.3" TIDAK dianggap link.
   static final _schemeLessRe = RegExp(
     r'(?<![-@\w.])'
+    // Bukan bagian dari skema lain (ftp://, magnet://, …) — jangan jadikan
+    // domain di dalamnya sebagai link web tanpa skema.
+    r'(?<!:\/\/)'
     r'(?:www\.)?'
     r'(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+'
     r'(?:com|net|org|id|io|co|me|app|dev|xyz|site|shop|store|link|ly|be|tv|'
