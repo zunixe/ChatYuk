@@ -85,7 +85,14 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
             MessageCache.instance.peekMessages(cacheKeyFor(widget.chatId)) ??
                 const <MessageModel>[];
         final target = latest.isNotEmpty ? latest : msgs;
-        unawaited(VoicePrefetch.warmChat(widget.chatId, target));
+        // TUNDA melewati animasi slide (2026-10-18): warm voice = baca file +
+        // DEKRIPSI (CPU di isolate utama). Dulu mulai tepat setelah frame
+        // pertama → berebut CPU dengan animasi buka chat (terasa berat di
+        // chat banyak pesan/media). Geser 280ms (di atas slide 250ms).
+        Future<void>.delayed(const Duration(milliseconds: 280), () {
+          if (!mounted) return;
+          unawaited(VoicePrefetch.warmChat(widget.chatId, target));
+        });
       });
     }
   }

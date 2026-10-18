@@ -97,7 +97,13 @@ class ChatStreamSession {
   /// Jumlah foto terbaru yang di-decrypt upfront saat chat dibuka (lazy
   /// penuh). Cukup untuk mengisi viewport awal + margin scroll; foto lama
   /// di-load saat bubble-nya di-build.
-  static const int _lazyPhotoHeadCount = 12;
+  ///
+  /// 12 → 6 (2026-10-18): di chat yang punya BANYAK foto (mis. ChatYuk Admin
+  /// = 28 foto + 21 stiker + 18 video dalam 153 pesan), memproses 12 foto
+  /// sekaligus saat buka membuat slide terasa berat. Viewport awal umumnya
+  /// memuat 3-5 foto, jadi 6 sudah menutupi tanpa kerja berlebih. Foto lain
+  /// tetap muncul saat di-scroll (on-demand, tidak berubah).
+  static const int _lazyPhotoHeadCount = 6;
 
   final SupabaseClient _sb;
   final String cacheKey;
@@ -356,6 +362,8 @@ class ChatStreamSession {
     // di-decrypt & di-queue 3× → I/O + emit berlebih. Kunci = id batch head
     // yang sudah pernah diproses; konten yang sama → skip.
     String? _lastPhotoHeadKey;
+    // Batch foto pertama per sesi ditunda sedikit (lihat _lazyPhotoHeadCount).
+    bool _firstPhotoBatchDone = false;
 
     void loadPhotosAsync(List<MessageModel> models) {
       if (models.isEmpty) return;
@@ -400,7 +408,18 @@ class ChatStreamSession {
       final headKey = head.map((m) => m.id).join(',');
       if (headKey == _lastPhotoHeadKey) return;
       _lastPhotoHeadKey = headKey;
+      // TUNDA batch foto PERTAMA (2026-10-18): decrypt + generate thumbnail
+      // berjalan di ROOT ISOLATE (ui.instantiateImageCodec) sehingga berebut
+      // CPU dengan frame animasi slide. Defer ~280ms (di atas durasi slide
+      // 250ms) supaya buka chat mulus; foto tetap muncul (placeholder sudah
+      // tampil lebih dulu dari header gambar). Batch berikutnya tidak ditunda.
+      final defer = !_firstPhotoBatchDone;
+      _firstPhotoBatchDone = true;
       _photoLoadGate.run(() async {
+        if (defer) {
+          await Future<void>.delayed(const Duration(milliseconds: 280));
+          if (controller.isClosed) return;
+        }
         if (controller.isClosed) return;
         final chunk = head.map((m) => m.id).toList();
         final map = await PhotoCache.instance.loadMany(cacheKey, chunk);
