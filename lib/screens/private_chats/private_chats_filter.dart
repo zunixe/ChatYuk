@@ -156,6 +156,8 @@ mixin _PcFilterMx on _PcBase {
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
+    // Sematan grup (lokal per perangkat) — baca sinkron dari RAM/disk.
+    GroupPinStore.load();
   }
 
   @override

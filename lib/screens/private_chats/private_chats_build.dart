@@ -258,10 +258,12 @@ mixin _PcBuildMx on _PcBase {
                               )
                               .toList()
                             ..sort(
-                              (a, b) => (b.lastAt ??
-                                      DateTime.fromMillisecondsSinceEpoch(0))
-                                  .compareTo(a.lastAt ??
-                                      DateTime.fromMillisecondsSinceEpoch(0)),
+                              (a, b) => GroupPinStore.compareGroups(
+                                a.id,
+                                a.lastAt,
+                                b.id,
+                                b.lastAt,
+                              ),
                             );
                       final List<Object> entries =
                           _chatFilter == ChatFilter.groups
@@ -1037,97 +1039,214 @@ mixin _PcBuildMx on _PcBase {
   }
 
   /// Baris GRUP di daftar Pesan (ikon, nama, preview, waktu, badge unread).
+  /// Baris GRUP di daftar Pesan. Geser KANAN = sematkan/lepas sematan,
+  /// geser KIRI = hapus (pemilik) atau keluar (anggota) — pola sama seperti
+  /// baris chat private.
   Widget _groupRow(RoomModel g, S s) {
     final unread = g.unread;
+    final isPinned = GroupPinStore.isPinned(g.id);
     final preview = g.lastText.isNotEmpty
         ? (g.lastSenderName.isNotEmpty
             ? '${g.lastSenderName}: ${g.lastText}'
             : g.lastText)
         : s.tabGroups;
     final timeStr = g.lastAt == null ? '' : formatBubbleTime(g.lastAt!);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
+    return Dismissible(
+      key: ValueKey('group_${g.id}'),
+      direction: DismissDirection.horizontal,
+      background: _groupSwipeBg(
+        alignLeft: true,
+        icon: isPinned ? Icons.push_pin_outlined : Icons.push_pin,
+        label: isPinned ? s.btnUnpin : s.btnPin,
+        color: AppTheme.primary,
+      ),
+      secondaryBackground: _groupSwipeBg(
+        alignLeft: false,
+        icon: Icons.delete_outline,
+        label: s.btnDelete,
+        color: AppTheme.danger,
+      ),
+      confirmDismiss: (direction) async => _onGroupSwipe(g, s, direction),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Material(
+          color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(14),
-          onTap: () => _openGroup(g),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppTheme.bgInput,
-                    borderRadius: BorderRadius.circular(22),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => _openGroup(g),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgInput,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: Text(
+                      g.icon.isEmpty ? '\u{1F465}' : g.icon,
+                      style: TextStyle(fontSize: AppGlyph.md),
+                    ),
                   ),
-                  child: Text(
-                    g.icon.isEmpty ? '\u{1F465}' : g.icon,
-                    style: TextStyle(fontSize: AppGlyph.md),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        g.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.bodyStrong,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        preview,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.bodySmall.copyWith(
-                          color: AppTheme.textSecondary,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          g.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.bodyStrong,
                         ),
-                      ),
+                        const SizedBox(height: 2),
+                        Text(
+                          preview,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (timeStr.isNotEmpty)
+                        Text(
+                          timeStr,
+                          style: AppText.micro.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      if (isPinned)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Icon(
+                            Icons.push_pin,
+                            size: 14,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      if (unread > 0)
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$unread',
+                            style: AppText.micro.copyWith(color: Colors.white),
+                          ),
+                        ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (timeStr.isNotEmpty)
-                      Text(
-                        timeStr,
-                        style: AppText.micro.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    if (unread > 0)
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '$unread',
-                          style: AppText.micro.copyWith(color: Colors.white),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  /// Latar aksi geser baris grup (sama tampilan dengan baris chat private).
+  Widget _groupSwipeBg({
+    required bool alignLeft,
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      alignment: alignLeft ? Alignment.centerLeft : Alignment.centerRight,
+      padding: EdgeInsets.only(left: alignLeft ? 20 : 0, right: alignLeft ? 0 : 20),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.white, size: 24),
+          const SizedBox(height: 4),
+          Text(label, style: AppText.caption.copyWith(color: Colors.white)),
+        ],
+      ),
+    );
+  }
+
+  /// Aksi geser baris grup. Kembalian `true` = biarkan baris ter-dismiss
+  /// (dipakai saat hapus/keluar sudah sukses → daftar di-reload).
+  Future<bool> _onGroupSwipe(
+    RoomModel g,
+    S s,
+    DismissDirection direction,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    // Geser KANAN → sematkan / lepas sematan (lokal, tanpa network).
+    if (direction == DismissDirection.startToEnd) {
+      final nowPinned = GroupPinStore.toggle(g.id);
+      if (mounted) setState(() {});
+      messenger.showSnackBar(
+        SnackBar(content: Text(nowPinned ? s.msgPinned : s.msgUnpinned)),
+      );
+      return false;
+    }
+    // Geser KIRI → hapus grup (pemilik) atau keluar (anggota).
+    final myUid = ref.read(authProvider).uid ?? '';
+    final isOwner = g.ownerId.isNotEmpty && g.ownerId == myUid;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isOwner ? s.btnDeleteGroup : s.btnLeaveGroup),
+        content: Text(isOwner ? s.deleteGroupConfirm : s.leaveGroupConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              isOwner ? s.btnDeleteGroup : s.btnLeaveGroup,
+              style: const TextStyle(color: AppTheme.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return false;
+    try {
+      final rooms = ref.read(roomProvider.notifier);
+      if (isOwner) {
+        await rooms.deleteRoom(g.id);
+      } else {
+        await rooms.leavePrivate(g.id);
+        await rooms.loadMyGroups(refresh: true);
+      }
+      GroupPinStore.remove(g.id);
+      if (mounted) setState(() {});
+      messenger.showSnackBar(
+        SnackBar(content: Text(isOwner ? s.groupDeleted : s.groupLeft)),
+      );
+      return false;
+    } catch (_) {
+      messenger.showSnackBar(SnackBar(content: Text(s.errGroupAction)));
+      return false;
+    }
   }
 
   void _openGroup(RoomModel g) {

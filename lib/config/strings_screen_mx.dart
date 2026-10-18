@@ -167,6 +167,21 @@ mixin SScreenMx {
       ? 'Hapus room ini? Semua pesan ikut terhapus.'
       : 'Delete this room? All messages will be deleted.';
   String get roomDeleted => isId ? 'Room dihapus' : 'Room deleted';
+
+  // ── Sematan & hapus/keluar GRUP di daftar Pesan (geser kanan = semat,
+  //    geser kiri = hapus/keluar) ──
+  String get btnDeleteGroup => isId ? 'Hapus Grup' : 'Delete Group';
+  String get deleteGroupConfirm => isId
+      ? 'Hapus grup ini untuk SEMUA anggota? Semua pesan ikut terhapus.'
+      : 'Delete this group for ALL members? All messages will be deleted.';
+  String get groupDeleted => isId ? 'Grup dihapus' : 'Group deleted';
+  String get btnLeaveGroup => isId ? 'Keluar Grup' : 'Leave Group';
+  String get leaveGroupConfirm => isId
+      ? 'Keluar dari grup ini? Kamu tidak akan menerima pesannya lagi.'
+      : 'Leave this group? You will no longer receive its messages.';
+  String get groupLeft => isId ? 'Kamu keluar dari grup' : 'You left the group';
+  String get errGroupAction =>
+      isId ? 'Aksi grup gagal. Coba lagi.' : 'Group action failed. Try again.';
   String get roomExtended =>
       isId ? 'Room diperpanjang 7 hari' : 'Room extended by 7 days';
   String roomExpiresIn(int days) => isId ? '$days hari lagi' : '${days}d left';
