@@ -638,6 +638,10 @@ mixin _PcBuildMx on _PrivateChatBase {
                     setState(() => _showAttachRow = false);
                     _openPollComposer();
                   },
+                  onCreateContact: () {
+                    setState(() => _showAttachRow = false);
+                    _openContactPicker();
+                  },
                   onSendFile: () {
                     setState(() => _showAttachRow = false);
                     pickAndSendFile();

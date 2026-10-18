@@ -17,6 +17,7 @@ import '../../../widgets/message/message_image.dart';
 import '../../../widgets/message/view_once_image.dart';
 import '../../../widgets/message/message_text_with_time.dart';
 import '../../../widgets/person_avatar.dart';
+import '../../../widgets/contact_bubble.dart';
 import '../../../widgets/poll/poll_bubble.dart';
 import '../../../widgets/reply_quote.dart';
 import '../../../widgets/verified_badge.dart';
@@ -250,6 +251,11 @@ class RoomMessageBubble extends StatelessWidget {
         isPending: isPending,
         isQueued: isQueued,
       );
+    }
+
+    // Bubble KONTAK (grup & global room) — kartu sama dengan private.
+    if (msg.type == 'contact' && msg.contact != null) {
+      return ContactBubble(msg: msg, timeStr: timeStr);
     }
 
     // Bubble gift: emoji besar + nama gift (mirip room streaming).

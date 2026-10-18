@@ -69,6 +69,9 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   final VoidCallback? onSendCoin;
   /// Kirim lokasi (private & room). null = chip tidak tampil.
   final VoidCallback? onSendLocation;
+
+  /// Kirim KONTAK (pengguna ChatYuk / buku kontak HP). null = chip tak tampil.
+  final VoidCallback? onCreateContact;
   /// Lokasi yang sedang di-preview (di atas kolom ketik). null = tidak ada.
   final ChatLocation? pendingLocation;
   /// Batalkan preview lokasi.
@@ -118,6 +121,7 @@ class ChatComposerInput extends ConsumerStatefulWidget {
     this.onTyping,
     this.onSendCoin,
     this.onSendLocation,
+    this.onCreateContact,
     this.pendingLocation,
     this.onCancelLocation,
     this.mentionCandidates = const [],
@@ -975,6 +979,13 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                       color: Colors.green,
                       label: s.menuSendLocation,
                       onTap: widget.onSendLocation!,
+                    ),
+                  if (widget.onCreateContact != null)
+                    ChatAttachChip(
+                      icon: Icons.contact_page_rounded,
+                      color: AppTheme.primary,
+                      label: s.menuSendContact,
+                      onTap: widget.onCreateContact!,
                     ),
                   if (widget.onSendCoin != null)
                     ChatAttachChip(

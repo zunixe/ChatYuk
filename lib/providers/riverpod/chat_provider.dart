@@ -74,6 +74,7 @@ class ChatNotifier extends Notifier<ChatState> {
     String videoPoster = '',
     String? albumId,
     Map<String, dynamic>? poll,
+    Map<String, dynamic>? contact,
   }) => _service.sendRoomMessage(
     roomId: roomId,
     senderId: senderId,
@@ -91,6 +92,7 @@ class ChatNotifier extends Notifier<ChatState> {
     videoPoster: videoPoster,
     albumId: albumId,
     poll: poll,
+    contact: contact,
   );
 
   /// Perbarui payload lokasi live di room.
@@ -212,6 +214,7 @@ class ChatNotifier extends Notifier<ChatState> {
     String videoPoster = '',
     String? albumId,
     Map<String, dynamic>? poll,
+    Map<String, dynamic>? contact,
   }) => _service.sendPrivateMessage(
     chatId: chatId,
     senderId: senderId,
@@ -229,6 +232,7 @@ class ChatNotifier extends Notifier<ChatState> {
     videoPoster: videoPoster,
     albumId: albumId,
     poll: poll,
+    contact: contact,
   );
 
   Future<void> markAsRead(String chatId, String uid) async {

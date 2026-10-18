@@ -490,6 +490,41 @@ mixin SScreenMx {
   String get fileUploading => isId ? 'Mengirim...' : 'Sending...';
   String get fileDownloading => isId ? 'Mengunduh...' : 'Downloading...';
   // ── Polling (ala WhatsApp) ──
+  // ── Kirim KONTAK (ala WhatsApp): kontak ChatYuk (uid) & kontak HP ──
+  String get menuSendContact => isId ? 'Kontak' : 'Contact';
+  String get contactPickerTitle => isId ? 'Kirim kontak' : 'Send contact';
+  String get contactTabChatYuk => 'ChatYuk';
+  String get contactTabPhone => isId ? 'Kontak HP' : 'Phone contacts';
+  String get contactPickerSearch => isId ? 'Cari nama…' : 'Search name…';
+  String get contactPickerEmpty =>
+      isId ? 'Belum ada yang bisa dikirim' : 'Nothing to send yet';
+  String get contactPickerEmptyHint => isId
+      ? 'Hanya teman atau yang pernah chat yang bisa dikirim kontaknya.'
+      : 'Only friends or people you have chatted with can be shared.';
+  String get contactPhoneEmpty =>
+      isId ? 'Buku kontak kosong' : 'No contacts found';
+  String get contactPermissionTitle =>
+      isId ? 'Izin akses kontak' : 'Contacts permission';
+  String get contactPermissionBody => isId
+      ? 'ChatYuk butuh akses buku kontak untuk mengirim kontak HP ke chat.'
+      : 'ChatYuk needs access to your contacts to send a phone contact.';
+  String get contactPermissionDenied => isId
+      ? 'Izin kontak ditolak. Aktifkan di Setelan.'
+      : 'Contacts permission denied. Enable it in Settings.';
+  String get btnAllow => isId ? 'Izinkan' : 'Allow';
+  String get btnOpenSettings => isId ? 'Buka Setelan' : 'Open Settings';
+  String get contactPickNumber =>
+      isId ? 'Pilih nomor' : 'Pick a number';
+  String get btnChatContact => isId ? 'Chat' : 'Chat';
+  String get btnViewProfile => isId ? 'Lihat profil' : 'View profile';
+  String get btnCopyNumber => isId ? 'Salin nomor' : 'Copy number';
+  String get btnCallContact => isId ? 'Telepon' : 'Call';
+  String get contactUnavailable =>
+      isId ? 'Pengguna tidak tersedia' : 'User unavailable';
+  String get contactNumberCopied => isId ? 'Nomor disalin' : 'Number copied';
+  String get errSendContact =>
+      isId ? 'Gagal kirim kontak' : 'Failed to send contact';
+  String get contactCardLabel => isId ? 'Kontak' : 'Contact';
   String get menuPoll => isId ? 'Polling' : 'Poll';
   String get pollCreateTitle => isId ? 'Buat polling' : 'Create poll';
   String get pollQuestion => isId ? 'Pertanyaan' : 'Question';

@@ -27,6 +27,8 @@ mixin ChatServiceRoomMx on ChatBase {
     String? albumId,
     /// Definisi poll (type 'poll'): {"q":..., "o":[...], "m":bool}.
     Map<String, dynamic>? poll,
+    /// Kontak dibagikan (type 'contact') — payload sama dengan private.
+    Map<String, dynamic>? contact,
   }) async {
     // Validasi tipe pesan
     if (![
@@ -45,6 +47,8 @@ mixin ChatServiceRoomMx on ChatBase {
       'file',
       // Poll (grup & global room; paritas private chat).
       'poll',
+      // Kontak (grup & global room; paritas private chat).
+      'contact',
     ].contains(type)) {
       throw Exception('Invalid message type');
     }
@@ -101,6 +105,7 @@ mixin ChatServiceRoomMx on ChatBase {
       if (isForwarded) 'is_forwarded': true,
       if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
       if (poll != null) 'poll': poll,
+      if (contact != null) 'contact': contact,
     }).select('id').maybeSingle();
     return (inserted as Map?)?['id']?.toString();
   }

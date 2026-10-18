@@ -27,6 +27,7 @@ import 'message/message_text_with_time.dart';
 import 'message/message_image.dart';
 import 'message/view_once_image.dart';
 import 'voice_bubble.dart';
+import 'contact_bubble.dart';
 import 'link_preview.dart';
 import '../core/media/link_preview_service.dart';
 import '../config/theme.dart';
@@ -168,6 +169,14 @@ class MessageBubble extends StatelessWidget {
     final hasLinkCard = msg.type == 'text' &&
         !msg.isDeleted &&
         LinkPreviewService.instance.extractUrl(msg.text) != null;
+    // Link yang dikirim SENDIRIAN (teks = URL saja) → JANGAN tulis ulang
+    // URL-nya di bawah card (minta user). Teks tetap utuh di `msg.text`
+    // sehingga aksi COPY tetap menyalin link-nya.
+    final linkUrl = hasLinkCard
+        ? LinkPreviewService.instance.extractUrl(msg.text)
+        : null;
+    final linkTextOnly =
+        linkUrl != null && msg.text.replaceAll(linkUrl, '').trim().isEmpty;
     // Pesan TEKS yang membalas → kutipan selebar bubble (lihat _replyWidth).
     final stretchReply = msg.type == 'text' &&
         !msg.isDeleted &&
@@ -237,11 +246,16 @@ class MessageBubble extends StatelessWidget {
                   // Stiker melayang: tanpa padding card.
                   padding: isSticker
                       ? EdgeInsets.zero
-                      : (isMediaCard
-                            ? const EdgeInsets.all(4)
-                            : hasLinkCard
-                            ? const EdgeInsets.fromLTRB(4, 4, 4, 6)
-                            : const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
+                      : isMediaCard
+                      ? const EdgeInsets.all(4)
+                      : hasLinkCard
+                      ? const EdgeInsets.fromLTRB(4, 4, 4, 6)
+                      // Text reply (ada kutipan): padding KIRI-KANAN disamakan
+                      // dengan card foto (4) supaya kutipan + teks tidak lebih
+                      // menjorok ke dalam daripada bubble foto (minta user).
+                      : stretchReply
+                      ? const EdgeInsets.symmetric(horizontal: 4, vertical: 6)
+                      : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
                     // Bubble lawan (other) pakai bgCard (putih di light mode) + shadow
@@ -548,6 +562,8 @@ class MessageBubble extends StatelessWidget {
                           isQueued: isQueued,
                           isRead: isRead,
                         )
+                      else if (msg.type == 'contact' && msg.contact != null)
+                        ContactBubble(msg: msg, timeStr: timeStr)
                       else if (msg.type == 'file')
                         FileBubble(
                           msg: msg,
@@ -790,14 +806,11 @@ class MessageBubble extends StatelessWidget {
                         )
                       else
                         Column(
-                          // Ada KARTU LINK → bubble menjadi lebih lebar dari
-                          // blok teks+jam, sehingga jam menggantung di tengah.
-                          // Ratakan ke KANAN agar jam nempel tepi kanan seperti
-                          // bubble lain (kartu link yang terlebar tetap penuh,
-                          // hanya baris teks+jam yang ikut ke kanan).
-                          crossAxisAlignment: hasLinkCard
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
+                          // Teks/link tetap rata KIRI. Jam pada pesan ber-kartu
+                          // link ditaruh TERPISAH di bawah, rata kanan (lihat
+                          // blok `if (hasLinkCard)` setelah teks) — supaya
+                          // "waktu rata kanan, link rata kiri".
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // LINK PREVIEW utk PESAN TEKS (bukan foto) — dulu
                             // preview HANYA di _PhotoBubble (foto+caption),
@@ -813,6 +826,7 @@ class MessageBubble extends StatelessWidget {
                                   enabled: autoLinkPreview,
                                 ),
                               ),
+                            if (!linkTextOnly)
                             Padding(
                               // Bingkai tipis 4px + 6px = jarak teks normal (10px).
                               padding: hasLinkCard
@@ -820,9 +834,13 @@ class MessageBubble extends StatelessWidget {
                                   : EdgeInsets.zero,
                               child: MessageTextWithTime(
                               text: msg.text,
-                              timeStr: msg.edited
-                                  ? '$timeStr ${s.msgEdited}'
-                                  : timeStr,
+                              // Kartu link: jam ditangani blok terpisah di
+                              // bawah (rata kanan) → jangan dobel di sini.
+                              timeStr: hasLinkCard
+                                  ? ''
+                                  : (msg.edited
+                                        ? '$timeStr ${s.msgEdited}'
+                                        : timeStr),
                               textStyle: AppText.chatBody,
                               timeStyle: AppText.chatTime.copyWith(
                                 color: AppTheme.textSecondary,
@@ -833,7 +851,9 @@ class MessageBubble extends StatelessWidget {
                               highlightMentionAll: highlightMentionAll,
                               searchQuery: searchQuery,
                               codeMaxLines: codeMaxLines,
-                              trailing: isMe
+                              // Centang ikut di baris jam terpisah bila ada
+                              // kartu link (biar tidak dobel).
+                              trailing: (isMe && !hasLinkCard)
                                   ? Tooltip(
                                       message: isQueued
                                           ? s.msgWaitingConnection
@@ -853,6 +873,47 @@ class MessageBubble extends StatelessWidget {
                                   : null,
                             ),
                             ),
+                            // JAM (pesan ber-kartu link) — rata KANAN, teks/link
+                            // tetap di kiri. Sejajar dengan tepi kanan kartu.
+                            if (hasLinkCard)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 2,
+                                  right: 6,
+                                ),
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        msg.edited
+                                            ? '$timeStr ${s.msgEdited}'
+                                            : timeStr,
+                                        style: AppText.chatTime.copyWith(
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      if (isMe) ...[
+                                        const SizedBox(width: 3),
+                                        Icon(
+                                          (isPending || isQueued)
+                                              ? Icons.done
+                                              : Icons.done_all,
+                                          size: 12,
+                                          color: (!isQueued &&
+                                                  !isPending &&
+                                                  isRead)
+                                              ? AppTheme.primary
+                                              : AppTheme.textSecondary,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                     ],

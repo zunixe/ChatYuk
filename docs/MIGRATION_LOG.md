@@ -16,6 +16,27 @@
 - **Catatan:** stiker yang DIHAPUS sebagai pesan terakhir tetap membuat
   last_message kosong (perilaku alur hapus, di luar cakupan).
 
+## 2026-10-18 — KIRIM KONTAK: private, grup & global room (SUDAH APPLY via Management API)
+
+- **Migrasi** `20261018170000_contact_message.sql` — ADITIF: `'contact'` di
+  `private_messages_type_check` **dan** `messages_type_check` (basis = daftar
+  LIVE 15 tipe, jadi tipe lama utuh) + kolom `contact jsonb` di kedua tabel.
+  Dua payload: `{"t":"user","u":uid}` (ChatYuk — **hanya id**, penerima
+  resolve nama sendiri; privasi terjaga) dan
+  `{"t":"phone","n":nama,"p":[nomor…]}` (buku kontak HP). `text` = '📇 <nama>'
+  → notif/last_message lewat cabang teks (fungsi FROZEN tak disentuh).
+- **Verifikasi:** pgTAP `contact_message_test.sql` 4/4 (private: payload user
+  uid-saja & phone nama+2 nomor tersimpan, tipe tak dikenal ditolak; room:
+  payload tersimpan). Versi tercatat di `supabase_migrations.schema_migrations`.
+  Snapshot fungsi FROZEN tidak berubah (diff = baris Timestamp saja).
+- **Klien:** model `ChatContact` + `MessageModel.contact` (ikut cache lokal →
+  frame-1), `sendPrivateMessage/sendRoomMessage(contact:)`, pemilih 2 tab
+  (**ChatYuk**: teman ∪ pernah chat; **Kontak HP**: `fast_contacts` +
+  `READ_CONTACTS`), kartu `ContactBubble` (ChatYuk: Chat/Lihat profil; HP:
+  Salin/WhatsApp/Telepon), chip panel lampiran **di samping Lokasi**.
+- **Rilis:** `READ_CONTACTS` masuk AndroidManifest + plugin `fast_contacts`
+  (butuh deklarasi izin Contacts di Play Console sebelum submit AAB).
+
 ## 2026-10-18 — HARDENING fungsi poll: cabut EXECUTE dari PUBLIC/anon (SUDAH APPLY via Management API)
 
 - **Migrasi** `20261018160000_poll_fn_hardening.sql`. Temuan saat cek ulang

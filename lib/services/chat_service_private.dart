@@ -181,6 +181,9 @@ mixin ChatServicePrivateMx on ChatBase {
     String? albumId,
     /// Definisi poll (type 'poll'): {"q","o","m"}.
     Map<String, dynamic>? poll,
+    /// Kontak dibagikan (type 'contact'): {"t":"user","u":uid} atau
+    /// {"t":"phone","n":nama,"p":[nomor…]}.
+    Map<String, dynamic>? contact,
   }) async {
     // Validasi tipe pesan
     if (![
@@ -202,6 +205,8 @@ mixin ChatServicePrivateMx on ChatBase {
       'file',
       // Poll: definisi di kolom `poll`, text = '📊 <pertanyaan>'.
       'poll',
+      // Kontak: payload di kolom `contact`, text = '📇 <nama>'.
+      'contact',
     ].contains(type)) {
       throw Exception('Invalid message type');
     }
@@ -248,6 +253,7 @@ mixin ChatServicePrivateMx on ChatBase {
       if (type == 'file' && imageData.isNotEmpty) 'image_path': imageData,
       if (type == 'file' && durationMs != null) 'duration_ms': durationMs,
       if (type == 'poll' && poll != null) 'poll': poll,
+      if (type == 'contact' && contact != null) 'contact': contact,
       // VIDEO: duration_ms = PANJANG video (bukan timer), image_path =
       // path storage .mp4. Ketiga type video diperlakukan sama.
       if ((type == 'video' ||
@@ -297,6 +303,7 @@ mixin ChatServicePrivateMx on ChatBase {
         'duration_ms': durationMs ?? 0,
         if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
         if (type == 'poll' && poll != null) 'poll': poll,
+        if (type == 'contact' && contact != null) 'contact': contact,
       });
     } catch (_) {}
     return insertedId?.toString();

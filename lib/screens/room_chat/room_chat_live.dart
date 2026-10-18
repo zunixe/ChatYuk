@@ -12,6 +12,66 @@ mixin _RcLiveMx on _RoomChatBase {
     await _sendRoomPoll(poll);
   }
 
+  /// KIRIM KONTAK di room/grup: pemilih kontak → bubble pending instan →
+  /// pesan type 'contact' (payload kolom `contact`).
+  Future<void> _openRoomContactPicker() async {
+    if (!mounted) return;
+    final picked = await showContactPickerSheet(context: context);
+    if (picked == null || !mounted) return;
+    await _sendRoomContact(picked);
+  }
+
+  Future<void> _sendRoomContact(ChatContact contact) async {
+    final uid = _auth.uid;
+    final profile = _auth.profile;
+    if (uid == null || profile == null) return;
+    final s = ref.read(localeProvider).s;
+    if (!outboxIsOnline) {
+      showChatSnack(context, s.errSendContact);
+      return;
+    }
+    final text = contact.previewText();
+    final reply = replyingTo;
+    final pending = MessageModel(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
+      isRegistered: profile.isRegistered,
+      text: text,
+      type: 'contact',
+      imageData: '',
+      timestamp: DateTime.now(),
+      repliedToId: reply?.id,
+      repliedToText: reply?.text,
+      repliedToSenderName: reply?.senderName,
+      contact: contact,
+    );
+    setState(() {
+      _pending.add(pending);
+      replyingTo = null;
+    });
+    _scrollToBottom();
+    try {
+      await _chat.sendRoomMessage(
+        roomId: widget.room.id,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: text,
+        type: 'contact',
+        contact: contact.toJson(),
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _pending.removeWhere((m) => m.id == pending.id));
+      showChatSnack(context, s.errSendContact);
+    }
+  }
+
   Future<void> _sendRoomPoll(ChatPoll poll) async {
     final uid = _auth.uid;
     final profile = _auth.profile;
@@ -551,6 +611,10 @@ mixin _RcLiveMx on _RoomChatBase {
         onCreatePoll: () {
           setState(() => _showAttachRow = false);
           _openRoomPollComposer();
+        },
+        onCreateContact: () {
+          setState(() => _showAttachRow = false);
+          _openRoomContactPicker();
         },
         onSendVoice: _sendVoiceMessage,
         onSendSticker: sendStickerBytes,
