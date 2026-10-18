@@ -106,7 +106,6 @@ mixin _ProfileUiMx on _ProfileBase {
             color: AppTheme.textPrimary,
           ),
         ),
-        shape: Border(bottom: BorderSide(color: _Pc.divider)),
         actions: [
           IconButton(
             tooltip: s.btnShareApp,

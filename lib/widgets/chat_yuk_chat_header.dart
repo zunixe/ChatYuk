@@ -12,7 +12,6 @@ enum ChatSection { messages, rooms }
 // mode terang & gelap konsisten antar halaman.
 Color get kChatHeaderBg => AppTheme.bgScreen;
 Color get kChatHeaderText => AppTheme.textPrimary;
-Color get kChatHeaderLine => AppTheme.divider;
 Color get kChatMenuBg =>
     AppTheme.isDark ? const Color(0xFF1A1E26) : Colors.white;
 Color get kChatMenuBorder =>
@@ -100,10 +99,7 @@ class ChatYukChatHeader extends StatelessWidget
   Widget build(BuildContext context) {
     final searching = isSearching;
     return Container(
-      decoration: BoxDecoration(
-        color: kChatHeaderBg,
-        border: Border(bottom: BorderSide(color: kChatHeaderLine)),
-      ),
+      decoration: BoxDecoration(color: kChatHeaderBg),
       child: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

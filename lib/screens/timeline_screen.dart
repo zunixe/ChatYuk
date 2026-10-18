@@ -237,10 +237,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
                   ),
                 ),
               ],
-        // Garis bawah header — SAMA dengan Chat & Profil (mode terang &
-        // gelap). PostCard PERTAMA tidak menggambar divider atas (lihat
-        // showTopDivider) supaya tidak dobel.
-        shape: Border(bottom: BorderSide(color: AppTheme.divider)),
       ),
       // SWIPE kiri/kanan untuk pindah scope (Semua ⇄ Mengikuti ⇄
       // Postinganku). GestureDetector horizontal TIDAK mengganggu scroll
