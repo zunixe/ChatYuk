@@ -26,6 +26,7 @@ import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/image_cache_hygiene.dart';
 import 'core/media/native_image.dart';
+import 'widgets/gpu_warmup.dart';
 import 'widgets/message/photo_prefetch.dart';
 import 'widgets/video_prefetch.dart';
 import 'providers/riverpod/connectivity_provider.dart';
@@ -132,6 +133,9 @@ class _ChatYukAppState extends ConsumerState<ChatYukApp> {
                               maxScaleFactor: 1.3,
                               child: child ?? const SizedBox.shrink(),
                             ),
+                            // Pemanasan pipeline GPU sekali per proses
+                            // (anti tersendat buka chat pertama kali).
+                            const GpuWarmup(),
                             const Positioned(
                               top: 0,
                               left: 0,

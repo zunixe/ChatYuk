@@ -161,7 +161,11 @@ class MessageBubble extends StatelessWidget {
     // Stiker ala Telegram: melayang TANPA card bubble & TANPA jam/centang.
     final isSticker = msg.type == 'sticker';
     // Media (foto/video/lokasi): border card tipis 4px seperti album & room.
+    // Termasuk foto sekali-lihat: dulu padding teks 10×6 → card terkunci
+    // terbungkus bingkai bubble tebal ("card belakangnya overlap").
     final isMediaCard = msg.type == 'image' ||
+        msg.type == 'view_once' ||
+        msg.type == 'view_once_expired' ||
         msg.type == 'video' ||
         msg.type == 'video_once' ||
         msg.type == 'video_once_expired' ||
@@ -363,7 +367,9 @@ class MessageBubble extends StatelessWidget {
                         // (ViewOnce), bukan di bawah. Tidak ada badge durasi
                         // di card terkunci jadi tidak bertumpuk.
                         SizedBox(
-                          width: ChatVideoBubble.widthOf(context),
+                          // Lebar = card terkunci (bukan lebar video) → bubble
+                          // pas mengikuti card, tanpa sisa area kosong.
+                          width: ViewOnceLockedCard.cardWidth,
                           child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
