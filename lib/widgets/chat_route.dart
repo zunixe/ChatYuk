@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/perf/perf_probe.dart';
 import '../screens/private_chat_screen.dart';
 
 /// Sumber TUNGGAL transisi & route halaman private chat.
@@ -78,6 +79,8 @@ PageRoute<void> chatRoute({
   /// Seed avatar header (base64 dari list) — anti-kedip inisial→foto.
   String otherAvatarB64 = '',
 }) {
+  // Ukur frame berat selama transisi (no-op bila PERF_PROBE off).
+  PerfProbe.traceFrames(kChatRouteDuration + const Duration(milliseconds: 120));
   return PageRouteBuilder<void>(
     transitionDuration: kChatRouteDuration,
     reverseTransitionDuration: kChatRouteReverseDuration,

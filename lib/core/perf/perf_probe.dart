@@ -179,13 +179,34 @@ class PerfProbe {
     try {
       SchedulerBinding.instance.addTimingsCallback((timings) {
         for (final t in timings) {
+          final bMs = t.buildDuration.inMicroseconds / 1000.0;
+          final rMs = t.rasterDuration.inMicroseconds / 1000.0;
           _frameBuildUs.add(t.buildDuration.inMicroseconds);
           _frameRasterUs.add(t.rasterDuration.inMicroseconds);
           if (_frameBuildUs.length > 4000) _frameBuildUs.removeAt(0);
           if (_frameRasterUs.length > 4000) _frameRasterUs.removeAt(0);
+          // TRACE per-frame: hanya saat jendela transisi aktif & frame berat.
+          // Berguna menjawab "terasa berat" dengan angka, bukan dugaan.
+          if (_traceUntil != null && DateTime.now().isBefore(_traceUntil!)) {
+            if (bMs > 12 || rMs > 12) {
+              _log('[PERF] SLOWFRAME build=${bMs.toStringAsFixed(1)}ms '
+                  'raster=${rMs.toStringAsFixed(1)}ms');
+            }
+          }
         }
       });
     } catch (_) {}
+  }
+
+  static DateTime? _traceUntil;
+
+  /// Aktifkan pencatatan frame BERAT (>12ms) selama [d].
+  ///
+  /// Dipanggil tepat sebelum navigasi yang ingin diperiksa (mis. buka chat):
+  /// 300ms cukup mencakup animasi 250ms + frame pertama.
+  static void traceFrames(Duration d) {
+    if (!measuring) return;
+    _traceUntil = DateTime.now().add(d);
   }
 
   /// Ringkasan jank frame sejak reset terakhir.
