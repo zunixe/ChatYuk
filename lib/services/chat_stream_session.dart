@@ -57,13 +57,36 @@ class ChatMessageStream {
   /// A1: revisi isi (naik tiap isi pesan berubah) — kunci cache stabil untuk
   /// `_deriveItems` (hindari recompute O(N) tiap emit stream).
   final ValueListenable<int> revision;
+
+  /// Tandai pesan terhapus / batal hapus SEKETIKA di sesi + cache lokal
+  /// (tanpa menunggu gema realtime). Dulu: hapus lalu langsung tutup chat →
+  /// gema realtime tak sempat → cache tetap berisi pesan → buka lagi,
+  /// pesan terhapus SEMPAT MUNCUL lalu hilang (kedip).
+  final void Function(String messageId, bool deleted) markDeleted;
   const ChatMessageStream({
     required this.stream,
     required this.loadOlder,
     required this.fetchImage,
     required this.reload,
     required this.revision,
+    required this.markDeleted,
   });
+}
+
+/// Tanda tangan ISI list pesan untuk memutuskan perlu tulis cache atau tidak.
+///
+/// Dulu `'jumlah:idTerakhir'` — hapus/edit pesan TIDAK mengubahnya, sehingga
+/// status terhapus/teks editan TIDAK PERNAH disimpan ke cache → buka chat
+/// lagi menampilkan isi lama dulu (pesan terhapus "sempat muncul"). Sekarang
+/// mencakup id + status hapus + edit + teks tiap pesan (O(n), n ≈ ratusan,
+/// dipanggil ter-debounce 2s). Murni & testable.
+String messageCacheSignature(List<MessageModel> msgs) {
+  if (msgs.isEmpty) return '';
+  var h = 17;
+  for (final m in msgs) {
+    h = Object.hash(h, m.id, m.isDeleted, m.edited, m.text, m.imageData.length);
+  }
+  return '${msgs.length}:${msgs.last.id}:$h';
 }
 
 /// Sesi stream pesan satu chat (room / private). Isi lengkap closure
@@ -208,9 +231,7 @@ class ChatStreamSession {
       saveDebounce?.cancel();
       saveDebounce = Timer(const Duration(seconds: 2), () async {
         if (controller.isClosed) return;
-        final sig = _current.isEmpty
-            ? ''
-            : '${_current.length}:${_current.last.id}';
+        final sig = messageCacheSignature(_current);
         if (sig == lastSavedSig) return;
         lastSavedSig = sig;
         try {
@@ -966,9 +987,7 @@ class ChatStreamSession {
       // transisi pop (tutup chat). Dulu keduanya sinkron di sini → "tutup
       // private chat ngelag".
       final snapshot = _current;
-      final sig = snapshot.isEmpty
-          ? ''
-          : '${snapshot.length}:${snapshot.last.id}';
+      final sig = messageCacheSignature(snapshot);
       final needSave = snapshot.isNotEmpty && sig != lastSavedSig;
       final ch = channel;
       scheduleMicrotask(() {
@@ -988,12 +1007,36 @@ class ChatStreamSession {
       });
     };
 
+    void markDeleted(String messageId, bool deleted) {
+      final i = _current.indexWhere((m) => m.id == messageId);
+      if (i < 0 || _current[i].isDeleted == deleted) return;
+      if (deleted) {
+        // Salinan BARU: `_current` bisa berbagi referensi dgn mem-cache /
+        // tak dapat diubah — jangan mutasi di tempat.
+        _current = List<MessageModel>.of(_current)
+          ..[i] = _current[i].copyWith(isDeleted: true);
+      } else {
+        // Batal hapus: isi asli dipulihkan oleh refetch server (copyWith
+        // terhapus sudah mengosongkan isi demi privasi).
+        unawaited(reload());
+        return;
+      }
+      _emit();
+      // Tulis cache SEGERA (bukan debounce 2s) — user bisa langsung keluar.
+      saveDebounce?.cancel();
+      lastSavedSig = messageCacheSignature(_current);
+      unawaited(MessageCache.instance
+          .saveMessages(cacheKey, _current)
+          .catchError((_) {}));
+    }
+
     return ChatMessageStream(
       stream: controller.stream,
       loadOlder: loadOlder,
       fetchImage: fetchImage,
       reload: reload,
       revision: revision,
+      markDeleted: markDeleted,
     );
   }
 }

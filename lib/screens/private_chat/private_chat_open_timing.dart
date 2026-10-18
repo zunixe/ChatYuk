@@ -29,6 +29,8 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
   Future<void> Function() _loadOlder = () async {};
   Future<void> Function(String messageId) _msgsHandleFetchImage = (_) async {};
   Future<void> Function() _msgsHandleReload = () async {};
+  void Function(String messageId, bool deleted) _msgsHandleMarkDeleted =
+      (_, _) {};
   // Warm voice/video sekali per buka chat (guard).
   bool _warmScheduled = false;
 
@@ -46,6 +48,7 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
     _loadOlder = handle.loadOlder;
     _msgsHandleFetchImage = handle.fetchImage;
     _msgsHandleReload = handle.reload;
+    _msgsHandleMarkDeleted = handle.markDeleted;
     _msgsRevision = handle.revision.value;
     // Simpan subscription ASLI → bisa di-cancel saat dispose (lihat _msgsRealSub).
     // A1: update revisi SETIAP emit (revisi naik tiap isi berubah) SEBELUM

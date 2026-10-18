@@ -15,6 +15,9 @@ mixin _PcBuildMx on _PrivateChatBase {
     if (ok && mounted) {
       setState(() => _localDeletedIds.add(id));
     }
+    // Sesi + cache lokal ditandai SEKARANG → buka ulang chat tidak lagi
+    // menampilkan pesan terhapus sekilas (gema realtime bisa terlewat).
+    if (ok) _msgsHandleMarkDeleted(id, true);
     return ok;
   }
 
@@ -27,6 +30,7 @@ mixin _PcBuildMx on _PrivateChatBase {
     if (ok && mounted) {
       setState(() => _localDeletedIds.remove(id));
     }
+    if (ok) _msgsHandleMarkDeleted(id, false);
     return ok;
   }
 
