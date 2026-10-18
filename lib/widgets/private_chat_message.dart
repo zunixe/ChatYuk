@@ -9,6 +9,7 @@ import 'media_caption_time.dart';
 import 'package:flutter/material.dart';
 import '../core/media/chat_photo_helper.dart';
 import 'message/file_bubble.dart';
+import 'message/stretch_to_widest_column.dart';
 import 'poll/poll_bubble.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/strings_admin.dart';
@@ -161,6 +162,10 @@ class MessageBubble extends StatelessWidget {
     // Stiker ala Telegram: melayang TANPA card bubble & TANPA jam/centang.
     final isSticker = msg.type == 'sticker';
     // Media (foto/video/lokasi): border card tipis 4px seperti album & room.
+    // Pesan TEKS yang membalas → kutipan selebar bubble (lihat _replyWidth).
+    final stretchReply = msg.type == 'text' &&
+        !msg.isDeleted &&
+        (msg.repliedToText?.isNotEmpty ?? false);
     // Termasuk foto sekali-lihat: dulu padding teks 10×6 → card terkunci
     // terbungkus bingkai bubble tebal ("card belakangnya overlap").
     final isMediaCard = msg.type == 'image' ||
@@ -260,14 +265,18 @@ class MessageBubble extends StatelessWidget {
                       bottomRight: Radius.circular(isMe ? 4 : 10),
                     ),
                   ),
-                  child: Column(
+                  child: _replyWidth(
+                    stretchReply,
+                    Column(
                     // Konten (teks + jam) center vertikal dalam bubble saat
                     // bubble lebih tinggi dari konten (mis. caption pendek di
-                    // bawah foto). Horizontal tetap kiri/kanan seperti semula.
+                    // bawah foto).
+                    // RATA KIRI ala WhatsApp (2026-10-18) — dulu bubble sendiri
+                    // rata kanan (kutipan & teks menggantung di kanan). Teks
+                    // ber-balasan: kutipan SELEBAR bubble (StretchTo
+                    // Widest hanya di kasus ini → biaya layout tetap kecil).
                     mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: isMe
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (msg.isForwarded)
                         Padding(
@@ -773,9 +782,7 @@ class MessageBubble extends StatelessWidget {
                         )
                       else
                         Column(
-                          crossAxisAlignment: isMe
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // LINK PREVIEW utk PESAN TEKS (bukan foto) — dulu
                             // preview HANYA di _PhotoBubble (foto+caption),
@@ -828,6 +835,7 @@ class MessageBubble extends StatelessWidget {
                           ],
                         ),
                     ],
+                  ),
                   ),
                     ),
                       if (reactions != null && reactions!.isNotEmpty)
@@ -1050,3 +1058,10 @@ class _PhotoBubbleState extends State<_PhotoBubble> {
     );
   }
 }
+
+/// Pesan teks yang membalas: isi bubble ditata [StretchToWidestColumn]
+/// (lebar = konten terlebar, kutipan dibentang selebar bubble ala WhatsApp).
+/// Selain itu Column biasa (tanpa biaya layout ekstra).
+Widget _replyWidth(bool stretch, Column col) => stretch
+    ? StretchToWidestColumn(children: col.children)
+    : col;
