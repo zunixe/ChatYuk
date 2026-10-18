@@ -62,5 +62,5 @@ select supabase_tests.check(
      and p.id in ('ee000000-0000-0000-0000-000000000001'::uuid,
                   'ee000000-0000-0000-0000-000000000002'::uuid)) = 1);
 
-select supabase_tests.finish_tests();
+select supabase_tests.report() as result;
 rollback;
