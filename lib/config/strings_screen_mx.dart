@@ -170,6 +170,9 @@ mixin SScreenMx {
 
   // ── Sematan & hapus/keluar GRUP di daftar Pesan (geser kanan = semat,
   //    geser kiri = hapus/keluar) ──
+  /// Label pembeda GRUP vs chat personal di daftar Pesan (`Grup · 12`).
+  String groupMemberCountLabel(int n) =>
+      isId ? 'Grup · $n' : 'Group · $n';
   String get btnDeleteGroup => isId ? 'Hapus Grup' : 'Delete Group';
   String get deleteGroupConfirm => isId
       ? 'Hapus grup ini untuk SEMUA anggota? Semua pesan ikut terhapus.'

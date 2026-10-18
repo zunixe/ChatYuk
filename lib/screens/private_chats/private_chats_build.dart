@@ -1079,13 +1079,14 @@ mixin _PcBuildMx on _PcBase {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
+                  // PEMBEDA: grup = kotak membulat (chat personal = lingkaran).
                   Container(
                     width: 44,
                     height: 44,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: AppTheme.bgInput,
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: Text(
                       g.icon.isEmpty ? '\u{1F465}' : g.icon,
@@ -1097,11 +1098,19 @@ mixin _PcBuildMx on _PcBase {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          g.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppText.bodyStrong,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                g.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppText.bodyStrong,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            _groupBadge(g, s),
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -1158,6 +1167,27 @@ mixin _PcBuildMx on _PcBase {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Pill kecil penanda GRUP (`Grup` / `Grup · 12`) — pembeda eksplisit dari
+  /// chat personal.
+  Widget _groupBadge(RoomModel g, S s) {
+    final label = g.memberCount > 0
+        ? s.groupMemberCountLabel(g.memberCount)
+        : s.tabGroups;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(
+          alpha: AppTheme.isDark ? 0.20 : 0.10,
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: AppText.label.copyWith(color: AppTheme.primary),
       ),
     );
   }
