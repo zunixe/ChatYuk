@@ -51,6 +51,73 @@ class PollService {
     }
   }
 
+  /// Hasil banyak poll ROOM sekaligus (batch, lazy load bubble).
+  Future<Map<String, PollResult>> resultsRoom(List<String> messageIds) async {
+    final ids = messageIds
+        .map(int.tryParse)
+        .whereType<int>()
+        .toList(growable: false);
+    if (ids.isEmpty) return const {};
+    try {
+      final res = await _sb.rpc('get_room_poll_results', params: {
+        'p_message_ids': ids,
+      });
+      final out = <String, PollResult>{};
+      if (res is List) {
+        for (final r in res) {
+          final pr = PollResult.tryParse(r);
+          if (pr != null && r is Map) out['${r['id']}'] = pr;
+        }
+      }
+      return out;
+    } catch (e) {
+      dlog('[Poll] resultsRoom error: $e');
+      return const {};
+    }
+  }
+
+  /// Ganti pilihan saya pada poll ROOM (kosong = tarik suara). null bila gagal.
+  Future<PollResult?> voteRoom(String messageId, List<int> options) async {
+    final id = int.tryParse(messageId);
+    if (id == null) return null;
+    try {
+      final res = await _sb.rpc('vote_room_poll', params: {
+        'p_message_id': id,
+        'p_options': options,
+      });
+      return PollResult.tryParse(res);
+    } catch (e) {
+      dlog('[Poll] voteRoom error: $e');
+      return null;
+    }
+  }
+
+  /// Realtime suara poll ROOM (filter room_id) → [onChange] (id pesan poll).
+  RealtimeChannel subscribeRoom(
+    String roomId,
+    void Function(String) onChange,
+  ) {
+    final ch = _sb.channel('room_poll_votes_$roomId');
+    ch
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'room_poll_votes',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (p) {
+            final rec = p.newRecord.isNotEmpty ? p.newRecord : p.oldRecord;
+            final mid = '${rec['message_id'] ?? ''}';
+            if (mid.isNotEmpty) onChange(mid);
+          },
+        )
+        .subscribe();
+    return ch;
+  }
+
   /// Realtime perubahan suara di satu chat → [onChange] (id pesan poll).
   RealtimeChannel subscribe(String chatId, void Function(String) onChange) {
     final ch = _sb.channel('poll_votes_$chatId');

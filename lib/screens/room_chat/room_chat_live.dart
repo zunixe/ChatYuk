@@ -3,6 +3,65 @@ part of '../room_chat_screen.dart';
 // ignore_for_file: unused_element, unused_element_parameter
 
 mixin _RcLiveMx on _RoomChatBase {
+  /// POLL grup/global room (ala WhatsApp): buka sheet → bubble pending instan →
+  /// kirim pesan type 'poll' (definisi di kolom `poll`, teks '📊 <tanya>').
+  Future<void> _openRoomPollComposer() async {
+    final s = ref.read(localeProvider).s;
+    final poll = await PollComposerSheet.show(context, s: s);
+    if (poll == null || !mounted) return;
+    await _sendRoomPoll(poll);
+  }
+
+  Future<void> _sendRoomPoll(ChatPoll poll) async {
+    final uid = _auth.uid;
+    final profile = _auth.profile;
+    if (uid == null || profile == null) return;
+    final s = ref.read(localeProvider).s;
+    if (!outboxIsOnline) {
+      showChatSnack(context, s.errSendPoll);
+      return;
+    }
+    final reply = replyingTo;
+    final pending = MessageModel(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
+      isRegistered: profile.isRegistered,
+      text: poll.previewText,
+      type: 'poll',
+      imageData: '',
+      timestamp: DateTime.now(),
+      repliedToId: reply?.id,
+      repliedToText: reply?.text,
+      repliedToSenderName: reply?.senderName,
+      poll: poll,
+    );
+    setState(() {
+      _pending.add(pending);
+      replyingTo = null;
+    });
+    _scrollToBottom();
+    try {
+      await _chat.sendRoomMessage(
+        roomId: widget.room.id,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: poll.previewText,
+        type: 'poll',
+        poll: poll.toJson(),
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _pending.removeWhere((m) => m.id == pending.id));
+      showChatSnack(context, s.errSendPoll);
+    }
+  }
+
   void _scrollToBottom() {
     // Instan (acuan private): dulu room animateTo 250ms — scroll panjang
     // saat buka chat terasa "meluncur". Sama seperti private = jumpTo(0).
@@ -488,6 +547,10 @@ mixin _RcLiveMx on _RoomChatBase {
         onSendViewOnce: () {
           setState(() => _showAttachRow = false);
           sendViewOnceFromPicker();
+        },
+        onCreatePoll: () {
+          setState(() => _showAttachRow = false);
+          _openRoomPollComposer();
         },
         onSendVoice: _sendVoiceMessage,
         onSendSticker: sendStickerBytes,

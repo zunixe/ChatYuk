@@ -73,6 +73,7 @@ class ChatNotifier extends Notifier<ChatState> {
     List<Mention> mentions = const [],
     String videoPoster = '',
     String? albumId,
+    Map<String, dynamic>? poll,
   }) => _service.sendRoomMessage(
     roomId: roomId,
     senderId: senderId,
@@ -89,6 +90,7 @@ class ChatNotifier extends Notifier<ChatState> {
     mentions: mentions,
     videoPoster: videoPoster,
     albumId: albumId,
+    poll: poll,
   );
 
   /// Perbarui payload lokasi live di room.

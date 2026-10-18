@@ -12,7 +12,9 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
+import '../models/chat_poll.dart';
 import '../models/message_model.dart';
+import '../widgets/poll/poll_composer_sheet.dart';
 import '../models/user_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
@@ -22,6 +24,7 @@ import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/location_provider.dart';
 import '../providers/riverpod/points_provider.dart';
+import '../providers/riverpod/poll_provider.dart';
 import '../core/cache/message_cache.dart';
 import '../core/nav_journal.dart';
 import '../core/cache/offline_outbox.dart';
@@ -180,6 +183,9 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   /// ikon "angkat tangan" TIDAK tampil sekilas lalu langsung berganti ke
   /// "Mulai Broadcast" (kedip) saat baru masuk grup/private room.
   bool _broadcastReady = false;
+  /// Controller poll ROOM (grup & global room) — ditangkap saat init karena
+  /// `ref` tak boleh dipakai di dispose.
+  PollController? _roomPollCtl;
   bool _broadcastStarting = false;
   bool _stageMinimized = false;
   Offset? _pipPos;
@@ -245,6 +251,8 @@ class _RoomChatScreenState extends _RoomChatBase
     // masih tampil tanpa lewat clearSelection, overlay YATIM menutupi layar
     // di bawahnya → tap tertelan. Cabut di sini (private chat sudah).
     hideActionBar();
+    // Realtime suara poll room hanya hidup selama layar ini terbuka.
+    _roomPollCtl?.detachChat();
     super.dispose();
   }
 }

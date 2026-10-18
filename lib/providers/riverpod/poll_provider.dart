@@ -18,8 +18,15 @@ import '../../services/poll_service.dart';
 ///   masuk private chat tidak tersendat.
 class PollController {
   final PollService service;
-  PollController([PollService? service])
+
+  /// true = poll ROOM (tabel/RPC terpisah: room_poll_votes). WAJIB instance
+  /// terpisah dari poll private: id pesan beda tabel bisa bertabrakan.
+  final bool room;
+  PollController([PollService? service, this.room = false])
       : service = service ?? PollService.instance;
+
+  /// Instance untuk poll ROOM (grup & global room).
+  PollController.room([PollService? service]) : this(service, true);
 
   static const int _cap = 200;
   final Map<String, _PollNode> _nodes = {};
@@ -61,7 +68,9 @@ class PollController {
     if (_pending.isEmpty) return;
     final ids = _pending.toList();
     _pending.clear();
-    final res = await service.results(ids);
+    final res = room
+        ? await service.resultsRoom(ids)
+        : await service.results(ids);
     res.forEach((id, r) => _node(id).value = r);
   }
 
@@ -83,7 +92,9 @@ class PollController {
         (picked.isNotEmpty && !hadVote ? 1 : 0) -
         (picked.isEmpty && hadVote ? 1 : 0);
     node.value = PollResult(counts: counts, mine: picked, voters: voters);
-    final r = await service.vote(messageId, picked.toList()..sort());
+    final r = room
+        ? await service.voteRoom(messageId, picked.toList()..sort())
+        : await service.vote(messageId, picked.toList()..sort());
     if (r == null) {
       node.value = before; // rollback
       return false;
@@ -93,13 +104,24 @@ class PollController {
   }
 
   /// Nyalakan realtime suara untuk chat yang dibuka (tertunda [delay]).
-  void attachChat(String chatId, {Duration delay = const Duration(milliseconds: 900)}) {
-    if (_channelChat == chatId) return;
+  void attachChat(String chatId, {Duration delay = const Duration(milliseconds: 900)}) =>
+      _attach(chatId, service.subscribe, delay);
+
+  /// Nyalakan realtime suara untuk ROOM yang dibuka (pola sama attachChat).
+  void attachRoom(String roomId, {Duration delay = const Duration(milliseconds: 900)}) =>
+      _attach(roomId, service.subscribeRoom, delay);
+
+  void _attach(
+    String scopeId,
+    RealtimeChannel Function(String, void Function(String)) subscribe,
+    Duration delay,
+  ) {
+    if (_channelChat == scopeId) return;
     detachChat();
-    _channelChat = chatId;
+    _channelChat = scopeId;
     _subscribeTimer = Timer(delay, () {
-      if (_channelChat != chatId) return;
-      _channel = service.subscribe(chatId, (id) => request(id, force: true));
+      if (_channelChat != scopeId) return;
+      _channel = subscribe(scopeId, (id) => request(id, force: true));
     });
   }
 
@@ -122,3 +144,7 @@ class _PollNode extends ValueNotifier<PollResult?> {
 }
 
 final pollProvider = Provider<PollController>((_) => PollController());
+
+/// Poll untuk GRUP & GLOBAL ROOM (RPC/tabel room_poll_votes).
+final roomPollProvider =
+    Provider<PollController>((_) => PollController.room());

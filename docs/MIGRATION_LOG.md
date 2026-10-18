@@ -16,6 +16,28 @@
 - **Catatan:** stiker yang DIHAPUS sebagai pesan terakhir tetap membuat
   last_message kosong (perilaku alur hapus, di luar cakupan).
 
+## 2026-10-18 — POLLING grup & global room (SUDAH APPLY via Management API)
+
+- **Migrasi** `20261018150000_room_poll.sql` — paritas dengan poll private
+  (`20261018130000_chat_poll.sql`). ADITIF: `messages_type_check` + `'poll'`
+  (basis = constraint LIVE, jadi 14 tipe lama TIDAK hilang), kolom
+  `messages.poll jsonb` (definisi poll ikut baris pesan → bubble lengkap dari
+  cache lokal di frame pertama), tabel BARU `room_poll_votes` (RLS baca =
+  aturan `messages_select`: room publik bebas, room privat hanya anggota,
+  admin selalu; tulis HANYA via RPC), realtime publication, RPC
+  `get_room_poll_results(bigint[])` + `vote_room_poll(bigint, int[])`.
+- **Verifikasi:** pgTAP `room_poll_test.sql` 9/9 (vote, ganti pilihan,
+  pilih-satu menolak >1 opsi, opsi di luar rentang ditolak, tarik suara,
+  non-anggota room privat tak bisa vote/hasil, authenticated tak punya INSERT
+  langsung). Versi tercatat di `supabase_migrations.schema_migrations`.
+- **Snapshot:** `scripts/snapshot_functions.sh` → 30 fungsi FROZEN, diff hanya
+  baris Timestamp (fungsi BARU bukan FROZEN → tidak masuk snapshot).
+- **Klien:** `PollService.resultsRoom/voteRoom/subscribeRoom`,
+  `PollController.room()` + `roomPollProvider` (controller TERPISAH dari poll
+  private karena id pesan antar tabel bisa sama), `PollBubble(roomId:)`,
+  bubble poll di `RoomMessageBubble`, tombol poll di composer grup/global room,
+  `sendRoomMessage(poll:)`.
+
 ## 2026-10-18 — POLLING private chat (SUDAH APPLY via Management API)
 
 - **Migrasi** `20261018130000_chat_poll.sql`: type `'poll'` di

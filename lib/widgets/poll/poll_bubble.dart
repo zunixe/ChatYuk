@@ -19,7 +19,10 @@ import '../chat_info_snack.dart';
 ///   didengar per-bubble (ValueListenable) → list chat tak ikut rebuild.
 class PollBubble extends ConsumerStatefulWidget {
   final MessageModel msg;
+  /// chatId (private) — diabaikan bila [roomId] diisi.
   final String chatId;
+  /// roomId (grup / global room): poll memakai RPC + tabel room_poll_votes.
+  final String roomId;
   final String timeStr;
   final bool showChecks;
   final bool isPending;
@@ -28,7 +31,8 @@ class PollBubble extends ConsumerStatefulWidget {
   const PollBubble({
     super.key,
     required this.msg,
-    required this.chatId,
+    this.chatId = '',
+    this.roomId = '',
     required this.timeStr,
     this.showChecks = false,
     this.isPending = false,
@@ -41,14 +45,22 @@ class PollBubble extends ConsumerStatefulWidget {
 }
 
 class _PollBubbleState extends ConsumerState<PollBubble> {
-  late final PollController _ctl = ref.read(pollProvider);
+  // Poll private & poll room punya tabel/RPC sendiri → controller TERPISAH
+  // (id pesan antar tabel bisa sama; satu controller akan saling menimpa).
+  late final PollController _ctl = widget.roomId.isNotEmpty
+      ? ref.read(roomPollProvider)
+      : ref.read(pollProvider);
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _ctl.request(widget.msg.id);
-    if (widget.chatId.isNotEmpty) _ctl.attachChat(widget.chatId);
+    if (widget.roomId.isNotEmpty) {
+      _ctl.attachRoom(widget.roomId);
+    } else if (widget.chatId.isNotEmpty) {
+      _ctl.attachChat(widget.chatId);
+    }
   }
 
   @override

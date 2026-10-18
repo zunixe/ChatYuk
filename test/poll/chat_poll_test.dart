@@ -39,6 +39,20 @@ class FakePollService implements PollService {
   RealtimeChannel subscribe(String chatId, void Function(String) onChange) =>
       throw UnimplementedError();
 
+  // Varian ROOM (dipakai roomPollProvider) — fake ini hanya untuk private.
+  @override
+  Future<Map<String, PollResult>> resultsRoom(List<String> ids) async =>
+      const {};
+
+  @override
+  Future<PollResult?> voteRoom(String id, List<int> options) async => null;
+
+  @override
+  RealtimeChannel subscribeRoom(
+    String roomId,
+    void Function(String) onChange,
+  ) => throw UnimplementedError();
+
   @override
   Future<void> unsubscribe(RealtimeChannel ch) async {}
 }

@@ -554,6 +554,12 @@ mixin _RcCoreMx on _RoomChatBase {
         listen: false,
       ).read(roomProvider.notifier).markRoomRead(widget.room.id),
     );
+    // Poll room: realtime suara per room (tertunda di controller).
+    _roomPollCtl = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(roomPollProvider);
+    _roomPollCtl?.attachRoom(widget.room.id);
     final msgsHandle = _chat.getRoomMessages(widget.room.id);
     _msgsHandle = msgsHandle;
     _msgsStream = msgsHandle.stream;

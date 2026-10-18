@@ -25,6 +25,8 @@ mixin ChatServiceRoomMx on ChatBase {
     String videoPoster = '',
     /// Bundle multi-foto: semua pesan batch berbagi id yang sama.
     String? albumId,
+    /// Definisi poll (type 'poll'): {"q":..., "o":[...], "m":bool}.
+    Map<String, dynamic>? poll,
   }) async {
     // Validasi tipe pesan
     if (![
@@ -41,6 +43,8 @@ mixin ChatServiceRoomMx on ChatBase {
       'sticker',
       // File/dokumen: text = nama file, image_path = path, duration_ms = ukuran.
       'file',
+      // Poll (grup & global room; paritas private chat).
+      'poll',
     ].contains(type)) {
       throw Exception('Invalid message type');
     }
@@ -96,6 +100,7 @@ mixin ChatServiceRoomMx on ChatBase {
       if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,
       if (isForwarded) 'is_forwarded': true,
       if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
+      if (poll != null) 'poll': poll,
     }).select('id').maybeSingle();
     return (inserted as Map?)?['id']?.toString();
   }

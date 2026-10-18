@@ -17,6 +17,7 @@ import '../../../widgets/message/message_image.dart';
 import '../../../widgets/message/view_once_image.dart';
 import '../../../widgets/message/message_text_with_time.dart';
 import '../../../widgets/person_avatar.dart';
+import '../../../widgets/poll/poll_bubble.dart';
 import '../../../widgets/reply_quote.dart';
 import '../../../widgets/verified_badge.dart';
 import '../../../widgets/voice_bubble.dart';
@@ -236,6 +237,21 @@ class RoomMessageBubble extends StatelessWidget {
         ],
       );
     }
+    // Bubble POLL (grup & global room): definisi dari `msg.poll` (ikut cache
+    // pesan → frame pertama lengkap); hasil & vote lewat RPC room
+    // (get_room_poll_results / vote_room_poll, controller poll TERPISAH).
+    if (msg.type == 'poll' && msg.poll != null) {
+      return PollBubble(
+        msg: msg,
+        roomId: roomId,
+        timeStr: timeStr,
+        // Room tak punya centang-baca per-user → tanpa centang.
+        showChecks: false,
+        isPending: isPending,
+        isQueued: isQueued,
+      );
+    }
+
     // Bubble gift: emoji besar + nama gift (mirip room streaming).
     if (msg.type == 'gift') {
       final gift = giftById(msg.text);
