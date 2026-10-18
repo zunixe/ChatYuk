@@ -112,6 +112,7 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
   Color _statusColor(String status);
   // ignore: unused_element
   String _statusLabel(String status, S s);
+  // ignore: unused_element
   Future<String> _appVersion();
   // Seksi UI baru (stub di base — pola sama `_buildBodySliver`).
   Widget _anonBanner(BuildContext context, S s);

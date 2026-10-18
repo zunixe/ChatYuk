@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/riverpod/locale_provider.dart';
 

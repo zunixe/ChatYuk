@@ -51,7 +51,6 @@ import 'core/cache/video_file_cache.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/chat_poster_cache.dart';
 import 'core/cache/photo_aspect_cache.dart';
-import 'core/media/image_cache_hygiene.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/chat_background.dart';
 import 'core/media/link_preview_service.dart';

@@ -12,7 +12,6 @@ import '../providers/riverpod/nav_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
 import '../core/bounded_task.dart';
-import '../core/media/native_image.dart';
 import '../core/media/post_photo_prepare.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
@@ -44,8 +43,6 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
   // BlurHash sejajar _images (placeholder instan di feed). '' = tak tersedia.
   final List<String> _imageBlurhashes = [];
   // Progress upload (per-foto selesai / total).
-  int _uploadDone = 0;
-  int _uploadTotal = 0;
   String _visibility = 'public';
   bool _posting = false;
   bool _picking = false;
@@ -265,12 +262,6 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
         final storage =
             ProviderScope.containerOf(context, listen: false).read(storageProvider);
         final total = _images.length;
-        if (mounted) {
-          setState(() {
-            _uploadTotal = total;
-            _uploadDone = 0;
-          });
-        }
         // Hasil per-indeks → urutan paths sejajar _images/_imageDims/_imageBlurhashes.
         final results = List<String?>.filled(total, null);
         // Konkurensi DIBATASI (3) — dulu semua foto serentak → lonjakan
@@ -287,7 +278,6 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
             } catch (_) {
               results[i] = null;
             }
-            if (mounted) setState(() => _uploadDone = i + 1);
           },
         );
         // Seed cache lokal tiap foto yang sukses diupload (fire-and-forget)
@@ -343,7 +333,6 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
       messenger.showSnackBar(SnackBar(content: Text(label)));
       setState(() => _posting = false);
     } finally {
-      if (mounted) setState(() => _uploadTotal = 0);
     }
   }
 

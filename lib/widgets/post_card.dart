@@ -13,7 +13,6 @@ import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
-import '../core/media/native_image.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 import '../utils.dart';

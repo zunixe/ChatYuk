@@ -36,7 +36,6 @@ part 'admin_chat_view/admin_chat_view_data.dart';
 part 'admin_chat_view/admin_chat_view_build.dart';
 
 const int _maxPhotoLoads = 3;
-const int _photoAutoLoadMax = 12;
 
 /// Sisi kiri (lawan bicara) monitor chat — fungsi MURNI agar prioritas
 /// terkunci test (`test/admin_chat_leftuid_test.dart`). Harus STABIL
@@ -116,7 +115,6 @@ abstract class _AdminBase extends ConsumerState<AdminChatViewScreen>
   // semua spinner foto muter lama.
   final List<String> _photoQueue = [];
   final Set<String> _photoQueued = {};
-  final Map<String, DateTime> _photoLastAttempt = {};
   int _photoActive = 0;
 
   /// Batas jumlah foto yang dipra-muat otomatis (dari pesan TERBARU). Sisa
