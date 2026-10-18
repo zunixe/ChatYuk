@@ -319,14 +319,20 @@ mixin _RcBuildMx on _RoomChatBase {
       actions: [
         if (isPrivateRoom) ...[
           // Hand-raise utk member biasa; Start broadcast utk yang live_uid == saya (di-grant)
-          if (_liveUid == null && !canModerate && !isGrantedBroadcast)
+          if (_broadcastReady &&
+              _liveUid == null &&
+              !canModerate &&
+              !isGrantedBroadcast)
             IconButton(
               tooltip: s.roomActionHandRaise,
               icon: const Icon(Icons.pan_tool_rounded),
               onPressed: _raiseHand,
             ),
-          if (((_liveUid == _auth.uid && !iAmBroadcasting) ||
-                  (_liveUid == null &&
+          if (((_broadcastReady &&
+                      _liveUid == _auth.uid &&
+                      !iAmBroadcasting) ||
+                  (_broadcastReady &&
+                      _liveUid == null &&
                       isGrantedBroadcast &&
                       !iAmBroadcasting)) ||
               _broadcastStarting)

@@ -704,6 +704,9 @@ mixin _RcCoreMx on _RoomChatBase {
       dlog('[BDBG] initPrivate ERROR: $e');
     }
     _roleChecked = true;
+    // live_uid + grant sudah terisi di atas → kontrol AppBar boleh tampil
+    // (sebelum ini: ikon tangan sempat berkedip lalu diganti pill broadcast).
+    _broadcastReady = true;
     if (!mounted) return;
     setState(() {});
   }

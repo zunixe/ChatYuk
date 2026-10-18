@@ -176,6 +176,10 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   List<Map<String, dynamic>> _roomMembers = const [];
   // ── Private room v2 ──
   bool _roleChecked = false;
+  /// State broadcast (live_uid + grant) sudah diketahui? Dipakai AppBar agar
+  /// ikon "angkat tangan" TIDAK tampil sekilas lalu langsung berganti ke
+  /// "Mulai Broadcast" (kedip) saat baru masuk grup/private room.
+  bool _broadcastReady = false;
   bool _broadcastStarting = false;
   bool _stageMinimized = false;
   Offset? _pipPos;
