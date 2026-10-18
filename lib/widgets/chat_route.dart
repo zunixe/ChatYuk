@@ -16,6 +16,42 @@ import '../screens/private_chat_screen.dart';
 const Duration kChatRouteDuration = Duration(milliseconds: 120);
 const Duration kChatRouteReverseDuration = Duration(milliseconds: 100);
 
+/// Transisi slide+fade [kChatRouteDuration] untuk layar BERAT selain chat
+/// user (mis. monitor chat admin). Dipakai supaya semua jalur buka layar
+/// sejenis punya durasi SAMA — `MaterialPageRoute` bawaan terukur lebih
+/// lambat (183 ms vs 116 ms untuk layar yang sama isinya).
+PageRoute<T> appSlideRoute<T>({
+  required WidgetBuilder builder,
+  String? name,
+  Duration duration = kChatRouteDuration,
+  bool fullscreenDialog = false,
+}) {
+  return PageRouteBuilder<T>(
+    transitionDuration: duration,
+    reverseTransitionDuration: kChatRouteReverseDuration,
+    settings: RouteSettings(name: name),
+    fullscreenDialog: fullscreenDialog,
+    pageBuilder: (context, _, __) => builder(context),
+    transitionsBuilder: (_, animation, __, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
 /// Bangun route ke [PrivateChatScreen] dengan transisi Slide+Fade seragam.
 PageRoute<void> chatRoute({
   required String chatId,

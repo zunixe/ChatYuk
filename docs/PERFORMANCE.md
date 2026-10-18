@@ -4675,3 +4675,67 @@ Commit `39303b17`.
 - Jangan hapus `GpuWarmup` tanpa mengukur ulang buka chat PERTAMA setelah
   pasang ulang APK (bukan setelah beberapa kali percobaan — cache pipeline
   menyembunyikan masalahnya).
+
+## §56. Diagnosa "buka chat kok ngelag / ga stabil" (2026-10-18)
+
+Keluhan: "dari list chat pas diklik ngebukanya aga lambat", "slide admin ngelag",
+"mau sebanyak apapun chatnya atau ada video/foto". Semua diukur DI HP
+(Xiaomi 24129PN74G, layar **60 Hz** / `mActiveModeId=3`,
+`peak_refresh_rate=min_refresh_rate=60` → budget frame 16,7 ms).
+
+### Alat ukur yang BENAR (gfxinfo TIDAK bisa)
+
+- `dumpsys gfxinfo` **tidak berguna** untuk app Flutter: Impeller/Vulkan
+  render ke surface sendiri → keluarannya `Total frames rendered: 0`,
+  percentile palsu 4950 ms. **Jangan pakai** untuk menyimpulkan jank.
+- Yang terbukti akurat:
+  - `PerfProbe.routeOpen('private-chat')` → `[PERF] ── buka private-chat`
+    (build vs raster, jank per fase) — butuh `--dart-define=PERF_PROBE=true`.
+  - **Latensi tap→frame**: log sementara di `_openChat` (`[OPEN] tap`),
+    `initState` (`[OPEN] initState`), post-frame pertama (`[OPEN] frame1`),
+    dan saat list pertama punya isi (`[OPEN] list n=`). Dihapus setelah selesai.
+  - **Durasi animasi buka**: `adb shell screenrecord` → `ffmpeg -vf fps=60` →
+    deteksi frame pertama/terakhir yang berbeda (ambang = 4× rata-rata diff
+    frame diam). Ini yang mengukur "slide" apa adanya.
+  - Memori: `dumpsys meminfo <pkg>` (PSS/RSS/**SWAP PSS**, EGL mtrack).
+
+### Hasil: buka chat TIDAK lambat di kode
+
+| Ukur | Chat 3 pesan | Chat 100 pesan (banyak foto) |
+|---|---|---|
+| tap → `initState` | 2–6 ms | 2–6 ms |
+| data dari cache (`peekMessages`) | ≤3 ms | ≤3 ms |
+| `initState` → frame pertama | 8–21 ms | ≤21 ms |
+
+- 24× buka-tutup berturut: **9–28 ms, tidak melemah** (bukan "makin lama makin
+  lambat"). RPC (`mark_chat_read` 140–360 ms) async → tidak menahan transisi.
+- Fase buka: `build p50 0,2 ms max 14,8 ms`, `raster p50 2,9 max 15,3 ms`,
+  **0 jank**. Fase fling kencang: raster max 25 ms, 4 dari 810 frame >16,7 ms
+  (di GPU thread) — sekunder, bukan penyebab keluhan buka.
+- `EGL mtrack` = **57,5 MB KONSTAN** di list/chat teks/chat foto → biaya GPU
+  bukan dari konten (bukan "karena banyak foto/video").
+
+### Akar "kadang mulus, kadang ngadat" = tekanan memori (swap)
+
+- `MemFree` HP ±188 MB; app **PSS 346–370 MB**, RSS 415–520 MB,
+  **SWAP PSS** naik sampai **74–90 MB**. Saat halaman app di-swap, sentuhan
+  berikutnya memicu page-fault → freeze sesaat (tidak deterministik).
+- Komposisi PSS (idle): Graphics 76 MB (EGL 57,5 + Gfx dev 17,7), Private
+  Other 65,6, System 112,9, Native 46, Code 33,8 → baseline engine+SDK.
+  Lemak konten (foto/poster) sudah dibatasi (§54/§55).
+
+### Perbaikan (terukur)
+
+| Perubahan | Sebelum | Sesudah |
+|---|---|---|
+| Transisi chat **admin**: `MaterialPageRoute` → `appSlideRoute` (120 ms, sama seperti chat user) | 183 ms | **83 ms** |
+| Keluar chat: buang byte foto FULL-RES (`PhotoCache.trimHeavyCache()`, thumb tetap) | SWAP 24× buka = 41,7 MB | **25,8 MB**, latensi tetap 12–17 ms |
+
+### JANGAN dibalik
+
+- Jangan kembali ke `MaterialPageRoute` untuk layar chat (monitor admin) —
+  terukur 100 ms lebih lambat; pakai `appSlideRoute`/`chatRoute`.
+- Jangan hapus `PhotoCache.instance.trimHeavyCache()` di `dispose()` private
+  chat (menahan PSS → HP men-swap → "kadang ngadat").
+- Jangan simpulkan jank dari `dumpsys gfxinfo` (nol frame untuk Impeller).
+- Durasi transisi chat TETAP 120 ms (dikonfirmasi user 2026-10-18).

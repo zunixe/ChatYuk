@@ -268,6 +268,13 @@ mixin _PcMediaMx on _PrivateChatBase {
     // (ref.listen otomatis berhenti saat widget dispose).
     // Keluar chat TIDAK memutus panggilan — call lanjut berjalan dan notifikasi
     // ongoing "sedang call" tetap tampil. Tap notifikasi → kembali ke chat ini.
+    // Hemat memori saat KELUAR chat: buang byte foto FULL-RES (thumb tetap
+    // dipertahankan) + bitmap poster video lepas-referensi. Tujuan: working-set
+    // app kecil → tidak ter-swap oleh MIUI → buka chat berikutnya tetap instan
+    // (keluhan "kadang ngadat / ga stabil" = page-fault setelah swap).
+    try {
+      PhotoCache.instance.trimHeavyCache();
+    } catch (_) {}
     _chatInfoSub?.cancel();
     _msgsSub?.cancel();
     _statusSub?.cancel();

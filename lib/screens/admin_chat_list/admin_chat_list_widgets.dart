@@ -10,6 +10,7 @@ import '../../config/strings_admin.dart';
 import '../../core/nav_guard.dart';
 import '../../models/active_call_model.dart';
 import '../../widgets/app_gesture.dart';
+import '../../widgets/chat_route.dart';
 import '../../widgets/gender_avatar.dart';
 import '../user_info_screen.dart';
 import '../admin_chat_view_screen.dart';
@@ -209,7 +210,10 @@ class AdminChatCard extends StatelessWidget {
           if (!context.mounted) return;
           Navigator.push(
             context,
-            MaterialPageRoute(
+            // Transisi 120ms seragam dgn chat user (MaterialPageRoute lebih
+            // lambat: terukur 183ms vs 116ms) — keluhan "slide admin ngelag".
+            appSlideRoute(
+              name: 'admin-chat:$id',
               builder: (_) => AdminChatViewScreen(
                 chatId: id,
                 chatLabel: label,
