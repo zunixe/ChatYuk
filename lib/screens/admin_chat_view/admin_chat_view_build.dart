@@ -93,10 +93,10 @@ mixin _AcBuildMx on _AdminBase {
                           // tidak memuat puluhan gambar sekaligus).
                           scrollCacheExtent: ScrollCacheExtent.pixels(200),
                           padding: EdgeInsets.fromLTRB(
+                            10,
                             12,
-                            12,
-                            12,
-                            MediaQuery.of(context).padding.bottom + 16,
+                            10,
+                            MediaQuery.of(context).padding.bottom + 12,
                           ),
                           itemCount: _items.length + (_loadingMore ? 1 : 0),
                           itemBuilder: (_, i) {
@@ -150,6 +150,7 @@ mixin _AcBuildMx on _AdminBase {
                                 key: ValueKey(msg.id),
                                 link: _linkFor(msg.id),
                                 msg: msg,
+                                s: s,
                                 chatKey: _chatKey,
                                 autoVideoPoster: i < 50,
                                 // Link preview sama polanya: hanya 25 terbaru

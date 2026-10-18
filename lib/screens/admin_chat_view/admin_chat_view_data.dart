@@ -332,27 +332,11 @@ mixin _AcDataMx on _AdminBase {
       }
     }
     if (!mounted) return;
-    // _msgs datang DESC (terbaru dulu) → pra-muat HANYA [_photoAutoLoadMax]
-    // foto terbaru. Sisa foto dimuat saat bubble-nya tampil (via _retryImage
-    // saat deferred) — buka chat banyak foto jadi mulus.
-    var scheduled = 0;
-    final now = DateTime.now();
-    for (final m in _msgs) {
-      if (scheduled >= _photoAutoLoadMax) break;
-      if (!isPhoto(m) || m.imageData.isNotEmpty || m.isDeleted) continue;
-      if (_photoLoading.contains(m.id) || _photoQueued.contains(m.id)) {
-        continue;
-      }
-      final last = _photoLastAttempt[m.id];
-      if (last != null && now.difference(last) < const Duration(seconds: 10)) {
-        continue;
-      }
-      _photoLastAttempt[m.id] = now;
-      _photoQueue.add(m.id);
-      _photoQueued.add(m.id);
-      scheduled++;
-    }
-    _drainPhotoQueue();
+    // PIPELINE SAMA DENGAN CHAT USER (2026-10-18): JANGAN injeksi base64
+    // per-foto lewat antrean admin. Foto dirender oleh `MessageImage` dari
+    // PATH (PhotoCache/prefetch/poster) — perilaku & kecepatan identik dengan
+    // chat user (anti-kedip + poster). Batch thumb di atas hanya menghangatkan
+    // cache. Tap "muat" (deferred) tetap memakai `_retryImage`.
   }
 
   /// Jalankan antrean foto maksimal [_maxPhotoLoads] bersamaan.
