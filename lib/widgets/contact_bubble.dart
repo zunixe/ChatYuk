@@ -272,10 +272,13 @@ class _ContactBubbleState extends ConsumerState<ContactBubble> {
           ),
         ),
         // Baris jam: inset SAMA dengan FileBubble (docs/UI_CONSISTENCY.md).
+        // `MainAxisSize.max` WAJIB: dengan `.min` Row hanya selebar isi dan
+        // menempel di KIRI (crossAxis start), jadi `mainAxisAlignment.end`
+        // tak berefek → jam+centang tidak rata kanan.
         Padding(
           padding: const EdgeInsets.fromLTRB(0, 3, 4, 1),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Text(

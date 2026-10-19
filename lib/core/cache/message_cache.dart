@@ -260,12 +260,30 @@ class MessageCache {
   final Map<String, Map<String, dynamic>> _memRawObj = {};
   static const _memRawObjMax = 60;
 
+  /// Bucket TERPISAH untuk meta per-chat (`starred:`/`reactions:`) yang harus
+  /// SELALU siap dibaca sinkron saat chat dibuka (bintang muncul instan).
+  ///
+  /// Dulu ikut `_memRawObj` (cap 60, FIFO) yang juga diisi preload `profile:`.
+  /// Karena keduanya preload BERSAMAAN saat bootstrap, entri `starred:` bisa
+  /// ter-evict oleh `profile:` → `peekCachedStarred` kosong → **bintang muncul
+  /// telat** (menunggu stream realtime). Bucket sendiri = tidak saling usik.
+  final Map<String, Map<String, dynamic>> _memChatMeta = {};
+  static const _memChatMetaMax = 240;
+
+  static bool _isChatMetaKey(String key) =>
+      key.startsWith('starred:') || key.startsWith('reactions:');
+
+  Map<String, Map<String, dynamic>> _bucket(String key) =>
+      _isChatMetaKey(key) ? _memChatMeta : _memRawObj;
+
   void _putMemRawObj(String key, Map<String, dynamic> obj) {
     if (obj.isEmpty) return;
-    if (!_memRawObj.containsKey(key) && _memRawObj.length >= _memRawObjMax) {
-      _memRawObj.remove(_memRawObj.keys.first);
+    final m = _bucket(key);
+    final cap = identical(m, _memChatMeta) ? _memChatMetaMax : _memRawObjMax;
+    if (!m.containsKey(key) && m.length >= cap) {
+      m.remove(m.keys.first);
     }
-    _memRawObj[key] = obj;
+    m[key] = obj;
   }
 
   Future<void> saveRawObj(String key, Map<String, dynamic> obj) async {
@@ -280,7 +298,7 @@ class MessageCache {
 
   Future<Map<String, dynamic>> loadRawObj(String key) async {
     try {
-      final mem = _memRawObj[key];
+      final mem = _bucket(key)[key];
       if (mem != null && mem.isNotEmpty) return mem;
       final json = await _loadKvSafe(key);
       if (json == null || json.isEmpty) return {};
@@ -298,13 +316,13 @@ class MessageCache {
   /// Versi SINKRON: langsung dari memori, tanpa await. Kosong bila snapshot
   /// belum pernah dimuat di sesi ini (pemanggil fallback ke jalur async).
   Map<String, dynamic> peekRawObj(String key) =>
-      _memRawObj[key] ?? const {};
+      _bucket(key)[key] ?? const {};
 
   /// Muat objek dari SQLite ke memori (dipanggil saat prewarm/bootstrap)
   /// supaya `peekRawObj` sudah terisi begitu user membuka chat pertama.
   Future<void> preloadRawObj(String key) async {
     try {
-      if ((_memRawObj[key]?.isNotEmpty ?? false)) return;
+      if ((_bucket(key)[key]?.isNotEmpty ?? false)) return;
       await loadRawObj(key);
     } catch (_) {}
   }
@@ -317,7 +335,7 @@ class MessageCache {
       await _ensureDb();
       final rows = await MessageStore.instance.loadKvPrefix(prefix);
       for (final e in rows.entries) {
-        if (_memRawObj.containsKey(e.key)) continue;
+        if (_bucket(e.key).containsKey(e.key)) continue;
         try {
           final obj = jsonDecode(e.value);
           if (obj is Map<String, dynamic>) _putMemRawObj(e.key, obj);
@@ -475,6 +493,7 @@ class MessageCache {
     _memCache.clear();
     _memRawList.clear();
     _memRawObj.clear();
+    _memChatMeta.clear();
   }
 
   /// Hapus SEMUA cache (dipakai saat logout / reset).
@@ -482,6 +501,7 @@ class MessageCache {
     _memCache.clear();
     _memRawList.clear();
     _memRawObj.clear();
+    _memChatMeta.clear();
     try {
       await MessageStore.instance.clearAll();
     } catch (_) {}

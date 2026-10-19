@@ -148,4 +148,31 @@ void main() {
     final screenW = tester.view.physicalSize.width / tester.view.devicePixelRatio;
     expect(size.width, lessThanOrEqualTo(chatMediaWidth(screenW)));
   });
+
+  /// Regresi: jam + centang harus RATA KANAN seperti bubble lain. Dulu Row
+  /// memakai `MainAxisSize.min` sehingga menempel di KIRI (mainAxisAlignment
+  /// .end tak berefek karena tak ada ruang bebas).
+  testWidgets('jam + centang RATA KANAN (nempel tepi kanan kartu)', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      ContactBubble(
+        msg: contactMsg(ChatContact.phone('Budi HP', ['+6281'])),
+        timeStr: '21:05',
+        showChecks: true,
+        isRead: true,
+      ),
+    );
+    final bubble = tester.getRect(find.byType(ContactBubble));
+    final check = tester.getRect(find.byIcon(Icons.done_all));
+    // Inset kanan baris jam = 4 (sama dgn FileBubble) + toleransi.
+    expect(bubble.right - check.right, lessThanOrEqualTo(8),
+        reason: 'centang harus menempel tepi kanan kartu');
+    // Jam berada di kiri centang, bukan di tepi kiri kartu.
+    final time = tester.getRect(find.text('21:05'));
+    expect(time.right, lessThanOrEqualTo(check.left + 0.5));
+    expect(time.left, greaterThan(bubble.left + bubble.width * 0.3),
+        reason: 'jam tidak boleh menempel kiri');
+  });
 }

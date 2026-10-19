@@ -277,17 +277,24 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
     // terisi sejak frame pertama (SQLite lokal = cepat); kalau lambat,
     // timeout → konten tetap tampil (skeleton tidak menahan lama).
     final warmUid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
+    // Bintang: WAJIB selesai dalam window warm — dipakai sinkron saat chat
+    // pertama dibuka (`peekCachedStarred`), jadi kalau telat bintang "muncul
+    // belakangan". Preload `profile:` TIDAK ditaruh di sini (tidak dibutuhkan
+    // frame pertama, dan bisa menghabiskan window 400ms) → dijalankan di
+    // belakang setelah shell tampil.
     _warmFuture ??= Future.wait([
       ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).warmFuture,
       ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).warmup(),
       if (warmUid != null) MessageCache.instance.preloadRawList(warmUid),
-      // Preload cache PROFIL lawan-chat teratas → info teman/pengikut tampil
-      // INSTAN (peekProfileCache sinkron) saat buka profil, tanpa "keload dulu".
-      if (warmUid != null) MessageCache.instance.preloadObjPrefix('profile:'),
       // Preload semua cache bintang ke memori → bias tampil instan di cold
       // start tanpa menunggu disk per-chat (anti-glich).
       ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).preloadAllStarred(),
     ]).timeout(_warmTimeout, onTimeout: () async => const <void>[]);
+    if (warmUid != null) {
+      // Profil: tetap dipreload, tapi TIDAK menahan splash & tidak berebut
+      // window dengan bintang (bucket memori bintang juga terpisah).
+      unawaited(MessageCache.instance.preloadObjPrefix('profile:'));
+    }
     return FutureBuilder<void>(
       future: _warmFuture,
       builder: (context, snap) {
