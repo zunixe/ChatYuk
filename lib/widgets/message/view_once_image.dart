@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../config/theme.dart';
+import '../../utils.dart';
 import '../../core/cache/photo_cache.dart';
 import '../../core/media/native_image.dart';
 import '../../core/screen_secure_service.dart';
@@ -184,13 +186,41 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   /// Satu percobaan decode. Return true bila `_decoded` berhasil diisi.
   Future<bool> _decodeAttempt() async {
     var data = widget.imageData;
+    dlog('[VO-DBG] decode id=${widget.messageId} '
+        'srcLen=${data.length} isPath=${isStoragePathValue(data)}');
     // Thumb belum tersedia → coba PhotoCache (messageId) dulu.
     if (data.isEmpty) {
       final id = widget.messageId;
       if (id != null && !id.startsWith('pending-')) {
         try {
           data = await PhotoCache.instance.load(widget.chatKey, id) ?? '';
+          dlog('[VO-DBG] cache fallback len=${data.length}');
         } catch (_) {}
+      }
+    }
+    // MASIH kosong → ambil path langsung dari DB (view-once TIDAK di-auto-
+    // prefetch oleh loadPhotosAsync, dan cols list tak memuat image_data →
+    // widget.imageData = ''). Tanpa ini foto sekali-lihat tak pernah termuat
+    // (spinner/gagal walau file ada di storage).
+    if (data.isEmpty) {
+      final id = widget.messageId;
+      if (id != null && !id.startsWith('pending-') && mounted) {
+        try {
+          final sb = Supabase.instance.client;
+          final table = widget.isRoom ? 'messages' : 'private_messages';
+          final row = await sb
+              .from(table)
+              .select('image_data,image_path')
+              .eq('id', id)
+              .maybeSingle();
+          final raw = (row?['image_data'] as String? ?? '');
+          data = raw.isNotEmpty
+              ? raw
+              : (row?['image_path'] as String? ?? '');
+          dlog('[VO-DBG] db fetch len=${data.length}');
+        } catch (e) {
+          dlog('[VO-DBG] db fetch error: $e');
+        }
       }
     }
     // Data bisa berupa PATH storage → download dulu sebelum decode.
@@ -198,18 +228,24 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       if (!mounted) return false;
       final path = data;
       data = await safeStorage(context).download(path) ?? '';
+      dlog('[VO-DBG] download path=$path -> len=${data.length}');
       // Download gagal → coba cache disk/memori lokal untuk path ini.
       if (data.isEmpty) {
         try {
           data = await PhotoCache.instance.load(widget.chatKey,
                   widget.messageId ?? '') ??
               '';
+          dlog('[VO-DBG] download-fail cache fallback len=${data.length}');
         } catch (_) {}
       }
     }
     // Masih kosong → gagal (pemanggil menentukan retry/kartu gagal).
-    if (data.isEmpty) return false;
+    if (data.isEmpty) {
+      dlog('[VO-DBG] FAIL: data kosong');
+      return false;
+    }
     final res = await NativeImage.decodeWithDims(data);
+    dlog('[VO-DBG] decode res=${res == null ? "null" : "${res.width}x${res.height}"}');
     if (res == null || res.width <= 0 || res.height <= 0) return false;
     if (!mounted) return false;
     final decoded = DecodedImage(res.bytes, res.width, res.height);
@@ -270,24 +306,18 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     _clearFromServer();
   }
 
-  /// Loader HD (bytes/base64 penuh) untuk sheet galeri. null = tak tersedia
-  /// (mis. pesan pending belum punya id server).
-  Future<String?> Function()? _hdLoader() {
-    final id = widget.messageId;
-    if (id == null || id.startsWith('pending-')) return null;
-    return () => PhotoCache.instance.load(widget.chatKey, id);
-  }
+  /// Loader HD dibuang: kualitas ditentukan saat KIRIM (toggle HD di
+  /// preview composer), bukan lagi di viewer.
 
   void _openViewer() {
     if (_decoded == null || _tick.state != ViewOnceState.viewing || !mounted) {
       return;
     }
     _tick.viewerOpen = true;
-    // Gaya GALERI: slide dari bawah + tombol HD di kanan (private & room).
+    // Gaya GALERI: slide dari bawah (private & room). Tanpa tombol HD.
     showViewOnceSheet(
       context: context,
       bytes: _decoded!.bytes,
-      fullLoader: _hdLoader(),
       countdown: _tick.totalSecs > 0 ? _tick.countdown : null,
     ).whenComplete(() {
       _tick.viewerOpen = false;
@@ -384,7 +414,6 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
         showViewOnceSheet(
           context: context,
           bytes: zoomBytes,
-          fullLoader: _hdLoader(),
         ).whenComplete(() {
           // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
           if (zoomBytes.isNotEmpty) {
