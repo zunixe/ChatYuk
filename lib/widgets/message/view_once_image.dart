@@ -51,6 +51,14 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   late ViewOnceTick _tick;
   DecodedImage? _decoded;
 
+  /// Sedang decode (cegah pemanggilan ganda dari initState+didUpdateWidget).
+  bool _decoding = false;
+  /// Decode/download GAGAL → tampilkan kartu "coba lagi" (dulu spinner abadi).
+  bool _failed = false;
+  /// Percobaan decode otomatis (retry terbatas untuk path storage yang belum
+  /// siap / jaringan lambat).
+  int _attempts = 0;
+
   @override
   void initState() {
     super.initState();
@@ -93,7 +101,13 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     if (widget.imageData != oldWidget.imageData &&
         widget.imageData.isNotEmpty) {
       _decoded = _tick.decoded;
-      if (_decoded == null) _decode();
+      if (_decoded == null) {
+        // Data baru masuk (mis. hasil download latar) → reset status gagal
+        // dan decode ulang.
+        _attempts = 0;
+        _failed = false;
+        _decode();
+      }
     }
   }
 
@@ -136,6 +150,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   }
 
   Future<void> _decode() async {
+    if (_decoding) return;
     // View-once SUDAH expired (server tandai type='view_once_expired') —
     // WAJIB terkunci permanen, apapun isi imageData. Jangan decode/tampil.
     if (widget.isExpired) {
@@ -144,9 +159,32 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       if (mounted) setState(() {});
       return;
     }
-    // Sender/load: kalau imageData thumbnail kosong, ambil dari PhotoCache
-    // (messageId) dulu — view-once yang pernah dilihat pengirim harus tetap tampil.
+    _decoding = true;
+    if (mounted && _failed) setState(() => _failed = false);
+    var ok = false;
+    try {
+      ok = await _decodeAttempt();
+    } finally {
+      _decoding = false;
+    }
+    if (!mounted) return;
+    if (ok) return;
+    // Gagal: coba lagi otomatis terbatas (path storage kadang belum siap /
+    // jaringan lambat). Setelah habis → tampilkan kartu "coba lagi", BUKAN
+    // spinner berputar selamanya.
+    _attempts++;
+    if (_attempts < 3) {
+      await Future<void>.delayed(Duration(seconds: 2 * _attempts));
+      if (!mounted) return;
+      return _decode();
+    }
+    if (mounted) setState(() => _failed = true);
+  }
+
+  /// Satu percobaan decode. Return true bila `_decoded` berhasil diisi.
+  Future<bool> _decodeAttempt() async {
     var data = widget.imageData;
+    // Thumb belum tersedia → coba PhotoCache (messageId) dulu.
     if (data.isEmpty) {
       final id = widget.messageId;
       if (id != null && !id.startsWith('pending-')) {
@@ -155,37 +193,41 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
         } catch (_) {}
       }
     }
-    // Data tidak tersedia (server sudah hapus image view-once & cache kosong)
-    // → tampilkan kartu terkunci, jangan spinner muter terus.
-    if (data.isEmpty) {
-      // Kalau BUKAN expired (pesan baru view_once), jangan langsung kunci.
-      // Realtime bisa truncate base64 besar → image_data broadcast kosong.
-      // Photo download async akan mengisi imageData via didUpdateWidget.
-      if (!widget.isExpired) return;
-      _tick.state = ViewOnceState.expired;
-      ScreenSecureService.exitViewOnce();
-      if (!mounted) return;
-      setState(() {});
-      return;
-    }
     // Data bisa berupa PATH storage → download dulu sebelum decode.
     if (data.isNotEmpty && isStoragePathValue(data)) {
-      data = await safeStorage(context).download(data) ?? '';
-      if (data.isEmpty) return;
+      if (!mounted) return false;
+      final path = data;
+      data = await safeStorage(context).download(path) ?? '';
+      // Download gagal → coba cache disk/memori lokal untuk path ini.
+      if (data.isEmpty) {
+        try {
+          data = await PhotoCache.instance.load(widget.chatKey,
+                  widget.messageId ?? '') ??
+              '';
+        } catch (_) {}
+      }
     }
+    // Masih kosong → gagal (pemanggil menentukan retry/kartu gagal).
+    if (data.isEmpty) return false;
     final res = await NativeImage.decodeWithDims(data);
-    if (res == null || res.width <= 0 || res.height <= 0) {
-      // Decode gagal — jangan set _tick.decoded ke null/rusak.
-      return;
-    }
+    if (res == null || res.width <= 0 || res.height <= 0) return false;
+    if (!mounted) return false;
     final decoded = DecodedImage(res.bytes, res.width, res.height);
     _tick.decoded = decoded;
-    if (!mounted) return;
     setState(() => _decoded = decoded);
     // Kalau user sudah tap "Lihat" sebelum gambar siap → mulai timer sekarang
     if (_tick.state == ViewOnceState.viewing && _tick.timer == null) {
       _beginCountdown();
     }
+    return true;
+  }
+
+  /// Tap kartu gagal → reset & coba decode lagi.
+  void _retry() {
+    _attempts = 0;
+    _failed = false;
+    setState(() {});
+    _decode();
   }
 
   void _startViewing() {
@@ -533,6 +575,17 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
 
         // Viewing — tampilkan foto proporsional + countdown; tap untuk memperbesar
         final decoded = _decoded;
+        // Decode/download gagal → kartu "coba lagi" (dulu spinner abadi).
+        if (decoded == null && _failed) {
+          return GestureDetector(
+            onTap: _retry,
+            child: ViewOnceLockedCard(
+              title: s.errPhotoRead,
+              hint: s.btnRetry,
+              icon: Icons.refresh_rounded,
+            ),
+          );
+        }
         final vw = decoded != null ? _viewWidth(decoded) : 200.0;
         final vh = decoded != null ? _viewHeight(decoded) : 200.0;
         return GestureDetector(
