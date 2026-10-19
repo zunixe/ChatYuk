@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'dart:async';
 
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../core/chat/chat_location.dart';
 import '../core/media/chat_photo_helper.dart';
 import '../providers/riverpod/locale_provider.dart';
+import '../core/map_tile_provider.dart';
 import 'media_caption_time.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -67,6 +69,11 @@ class LocationBubble extends ConsumerStatefulWidget {
 }
 
 class _LocationBubbleState extends ConsumerState<LocationBubble> {
+  /// Badge lokasi live menampilkan "berakhir N menit" — tanpa ticker nilainya
+  /// membeku sampai ada hal lain yang memicu rebuild. Timer 1 menit cukup
+  /// (resolusi teks = menit) dan hanya hidup untuk pesan LIVE.
+  Timer? _liveTick;
+
   ChatLocation get location => widget.location;
   bool get interactive => widget.interactive;
   double get width =>
@@ -77,6 +84,49 @@ class _LocationBubbleState extends ConsumerState<LocationBubble> {
   bool get isPending => widget.isPending;
   bool get isQueued => widget.isQueued;
   bool get isRead => widget.isRead;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncLiveTick();
+  }
+
+  @override
+  void didUpdateWidget(covariant LocationBubble old) {
+    super.didUpdateWidget(old);
+    // Pesan yang sama bisa berubah status live-nya (update koordinat dari
+    // pengirim) — pastikan ticker ikut menyesuaikan.
+    if (old.location.live != widget.location.live) _syncLiveTick();
+  }
+
+  /// Nyalakan ticker HANYA untuk lokasi live yang belum kedaluwarsa.
+  /// Timer berhenti sendiri saat waktu habis (tidak ada rebuild sia-sia).
+  void _syncLiveTick() {
+    _liveTick?.cancel();
+    _liveTick = null;
+    final loc = widget.location;
+    if (!loc.live) return;
+    final exp = loc.expiresAt;
+    if (exp == null || !exp.isAfter(DateTime.now().toUtc())) return;
+    _liveTick = Timer.periodic(const Duration(minutes: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      final e = widget.location.expiresAt;
+      if (e == null || !e.isAfter(DateTime.now().toUtc())) {
+        t.cancel();
+        _liveTick = null;
+      }
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _liveTick?.cancel();
+    super.dispose();
+  }
 
   /// Baris jam (+ centang) untuk kasus tanpa caption.
   Widget _timeRow() {
@@ -196,9 +246,11 @@ class _LocationBubbleState extends ConsumerState<LocationBubble> {
                             ),
                             children: [
                               TileLayer(
-                                urlTemplate:
-                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                urlTemplate: osmTileUrl,
                                 userAgentPackageName: 'com.chatyuk.chatyuk',
+                                // Provider BERSAMA + cache disk: scroll ulang
+                                // histori chat tidak mengunduh tile lagi.
+                                tileProvider: basicMapTiles,
                                 // Offline/gagal → latar netral, jangan kotak merah.
                                 errorTileCallback: (_, _, _) {},
                               ),

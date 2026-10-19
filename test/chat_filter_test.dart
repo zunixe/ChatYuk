@@ -183,4 +183,91 @@ void main() {
       expect(c.unread, lessThanOrEqualTo(c.all));
     });
   });
+
+  // ── REGRESI: chip vs list harus konsisten ──────────────────────────────
+  // Bug 2026-10-19 (Xiaomi): chip "Teman (1)" tampil tapi list kosong /
+  // polos. Penyebab: angka chip dihitung ulang di post-frame memakai
+  // `friends` yang SUDAH berubah, sedangkan list memakai snapshot lama.
+  // Kontrak yang harus dijaga: untuk SATU snapshot data, angka chip tiap
+  // filter HARUS sama dengan jumlah item yang lolos `matches()`.
+  group('ChatFilterLogic konsistensi chip vs list', () {
+    // Data uji: (uid, unread, registered, friend)
+    const rows = <({String uid, int unread, bool registered, bool friend})>[
+      (uid: 'a', unread: 0, registered: true, friend: true),
+      (uid: 'b', unread: 2, registered: true, friend: false),
+      (uid: 'c', unread: 0, registered: false, friend: false),
+      (uid: 'd', unread: 1, registered: false, friend: true),
+      (uid: 'e', unread: 0, registered: true, friend: true),
+    ];
+
+    int matchesCount(ChatFilter f) => rows
+        .where(
+          (r) => ChatFilterLogic.matches(
+            f,
+            unread: r.unread,
+            otherRegistered: r.registered,
+            otherFriend: r.friend,
+          ),
+        )
+        .length;
+
+    test('jumlah chip = jumlah item matches() untuk tiap filter', () {
+      final c = ChatFilterLogic.countsWithFriends(
+        rows.map(
+          (r) => (unread: r.unread, registered: r.registered, friend: r.friend),
+        ),
+      );
+      expect(matchesCount(ChatFilter.all), c.all);
+      expect(matchesCount(ChatFilter.unread), c.unread);
+      expect(matchesCount(ChatFilter.friends), c.friends);
+      expect(matchesCount(ChatFilter.anon), c.anon);
+      expect(matchesCount(ChatFilter.registered), c.registered);
+      // Jumlah semua filter eksklusif anon+registered = all.
+      expect(c.anon + c.registered, c.all);
+    });
+
+    test('chip friends > 0 TIDAK PERNAH menghasilkan list kosong', () {
+      final c = ChatFilterLogic.countsWithFriends(
+        rows.map(
+          (r) => (unread: r.unread, registered: r.registered, friend: r.friend),
+        ),
+      );
+      expect(c.friends, greaterThan(0));
+      expect(
+        matchesCount(ChatFilter.friends),
+        c.friends,
+        reason: 'chip "Teman (n)" wajib menampilkan tepat n item',
+      );
+    });
+
+    test('snapshot friends konsisten: set sama → hasil sama', () {
+      // Mensimulasikan dua pemanggilan dengan set teman BERBEDA (yang dulu
+      // menyebabkan chip/list desync). Dengan satu snapshot dipakai untuk
+      // keduanya, hasilnya harus identik.
+      const snapshot = {'a', 'd', 'e'};
+      final friendFlags = rows.map((r) => snapshot.contains(r.uid)).toList();
+      final countFromSameSnapshot = ChatFilterLogic.countsWithFriends([
+        for (var i = 0; i < rows.length; i++)
+          (
+            unread: rows[i].unread,
+            registered: rows[i].registered,
+            friend: friendFlags[i],
+          ),
+      ]);
+      final listFromSameSnapshot = rows
+          .asMap()
+          .entries
+          .where(
+            (e) => ChatFilterLogic.matches(
+              ChatFilter.friends,
+              unread: e.value.unread,
+              otherRegistered: e.value.registered,
+              otherFriend: friendFlags[e.key],
+            ),
+          )
+          .length;
+      expect(listFromSameSnapshot, countFromSameSnapshot.friends);
+      expect(listFromSameSnapshot, 3);
+    });
+  });
 }

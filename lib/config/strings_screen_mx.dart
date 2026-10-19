@@ -583,6 +583,15 @@ mixin SScreenMx {
   String get locNearbyTitle => isId ? 'Tempat sekitar' : 'Nearby places';
   String locAccuracyTo(int m) =>
       isId ? 'Akurasi ±$m meter' : 'Accurate to $m meters';
+  // ── Status pencarian lokasi di sheet (reaktif, bukan blocking) ──
+  String get locRefining => isId ? 'Memperbarui posisi...' : 'Updating position...';
+  String get locApproximate =>
+      isId ? 'Perkiraan posisi — menunggu GPS' : 'Approximate — waiting for GPS';
+  String get locNoPlaces =>
+      isId ? 'Tidak ada tempat terdekat' : 'No nearby places found';
+  String get locTapToPick =>
+      isId ? 'Geser / ketuk peta untuk pindah titik' : 'Drag or tap the map to move the pin';
+
   String locLiveMin(int m) => isId ? '$m menit' : '$m min';
   String locLiveHour(int h) => isId ? '$h jam' : '$h hr';
   String get locLiveEnded =>
@@ -679,6 +688,32 @@ mixin SScreenMx {
   String filterRegisteredCount(int n) => '$filterRegistered ($n)';
   String get filterGroups => isId ? 'Grup' : 'Groups';
   String filterGroupsCount(int n) => '$filterGroups ($n)';
+  // Empty-state per filter: daftar kosong BUKAN berarti tak ada chat sama
+  // sekali — hanya tak ada yang cocok dengan filter aktif. Tanpa teks ini
+  // layar tampak "blank" (insiden chip Teman (1) vs list kosong).
+  String get noFriendChats =>
+      isId ? 'Belum ada chat dengan teman' : 'No chats with friends yet';
+  String get noFriendChatsHint => isId
+      ? 'Chat yang lawan bicaranya sudah berteman akan muncul di sini'
+      : 'Chats with befriended users will show up here';
+  String get noAnonChats =>
+      isId ? 'Belum ada chat anonim' : 'No anonymous chats yet';
+  String get noAnonChatsHint => isId
+      ? 'Chat dengan pengguna yang belum terdaftar akan muncul di sini'
+      : 'Chats with unregistered users will show up here';
+  String get noRegisteredChats =>
+      isId ? 'Belum ada chat terdaftar' : 'No registered chats yet';
+  String get noRegisteredChatsHint => isId
+      ? 'Chat dengan pengguna terdaftar akan muncul di sini'
+      : 'Chats with registered users will show up here';
+  String get noUnreadChats =>
+      isId ? 'Tidak ada pesan belum dibaca' : 'No unread messages';
+  String get noUnreadChatsHint =>
+      isId ? 'Semua chat sudah kamu baca' : 'You have read all chats';
+  String get noGroupChats => isId ? 'Belum ada grup' : 'No groups yet';
+  String get noGroupChatsHint => isId
+      ? 'Grup yang kamu ikuti akan muncul di sini'
+      : 'Groups you joined will show up here';
   // ── Antrean offline (pesan menunggu koneksi) ──
   String get msgQueuedOffline => isId
       ? 'Disimpan — terkirim otomatis saat online'

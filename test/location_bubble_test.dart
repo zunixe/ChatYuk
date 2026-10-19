@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/core/chat/chat_location.dart';
+import 'package:chatyuk/core/map_tile_provider.dart';
 import 'package:chatyuk/widgets/location_bubble.dart';
 
 /// Regresi: bubble chat memakai LocationBubble non-interaktif
@@ -87,4 +88,49 @@ void main() {
       expect(taps, 1, reason: 'tap harus sampai ke pembungkus');
     },
   );
+
+  testWidgets(
+    'TileLayer memakai provider BERSAMA (cache) & errorTileCallback diam',
+    (tester) async {
+      // Regresi 2026-10-14: dua widget memakai URL template sendiri-sendiri
+      // tanpa cache → scroll ulang histori chat mengunduh tile berulang.
+      await tester.pumpWidget(
+        host(
+          const LocationBubble(
+            location: ChatLocation(lat: -6.9, lng: 107.6),
+          ),
+        ),
+      );
+      await tester.pump();
+      final tile = tester.widget<TileLayer>(find.byType(TileLayer));
+      expect(tile.urlTemplate, osmTileUrl);
+      expect(
+        identical(tile.tileProvider, basicMapTiles),
+        isTrue,
+        reason: 'harus instance yang sama supaya cache-nya dipakai bersama',
+      );
+      expect(tile.errorTileCallback, isNotNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('badge lokasi live hidup (ticker 1 menit)', (tester) async {
+    await tester.pumpWidget(
+      host(
+        LocationBubble(
+          location: ChatLocation(
+            lat: -6.9,
+            lng: 107.6,
+            live: true,
+            expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 30)),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(LocationBubble), findsOneWidget);
+    // Majukan 1 menit: ticker rebuild tanpa error, label ikut berubah.
+    await tester.pump(const Duration(minutes: 1));
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -143,8 +143,9 @@ mixin _PcMediaMx on _PrivateChatBase {
     );
   }
 
-  /// Izinkan → ambil posisi → sheet pilihan (lokasi saat ini / live / tempat
-  /// sekitar) → LANGSUNG terkirim ke chat (tanpa preview/caption).
+  /// Sheet lokasi tampil INSTAN (izin dicek murah dulu, GPS menyusul di
+  /// dalam sheet) → user memilih opsi → LANGSUNG terkirim ke chat (tanpa
+  /// preview/caption).
   Future<void> _sendLocation() async {
     setState(() => _showAttachRow = false);
     final picked = await pickChatLocation(

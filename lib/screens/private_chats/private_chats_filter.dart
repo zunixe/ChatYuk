@@ -230,6 +230,20 @@ mixin _PcFilterMx on _PcBase {
   /// ulang 50 chat. Sekarang hanya dijalankan saat DATA berubah.
   /// liveNameMap disuplai pemanggil (saat build) supaya nama live tetap
   /// dipakai; recompute internal (perubahan data) memakai nama tersimpan.
+  /// Snapshot himpunan teman (uid) yang dipakai SATU recompute penuh.
+  /// KENAPA: dulu `friendOf()` membaca `socialProvider` secara LIVE tiap
+  /// pemanggilan — list (`matches`) dihitung sinkron, sedangkan angka chip
+  /// (`countsWithFriends`) dihitung lagi di `apply()` post-frame. Bila
+  /// `socialProvider._friends` berubah di antara dua momen itu (memang
+  /// terjadi: `_loadDisk` lalu `_refreshSelfSetsNow` sama-sama `_emit()`),
+  /// chip dapat angka baru tapi list masih snapshot lama → chip "Teman (1)"
+  /// sementara list kosong (bug layar abu-abu). Sekarang keduanya WAJIB
+  /// memakai set yang sama.
+  Set<String> _friendSnapshot() => ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(socialProvider.notifier).friends;
+
   void _recomputeFiltered({
     required String myUid,
     required String query,
@@ -295,62 +309,61 @@ mixin _PcFilterMx on _PcBase {
     // Hitung jumlah per filter dari daftar yang SUDAH lolos arsip+query —
     // supaya angka chip konsisten dengan isi yang benar-benar tampil.
     int unreadOf(PrivateChatInfo c) => c.unreadCounts[myUid] ?? 0;
-    bool friendOf(PrivateChatInfo c) {
-      final other = c.participants.firstWhere(
-        (p) => p != myUid,
-        orElse: () => '',
-      );
-      return ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(socialProvider.notifier).isFriend(other);
-    }
+
+    // ── SUMBER TUNGGAL untuk status teman ────────────────────────────────
+    // Snapshot SEKALI per recompute. Dipakai `friendOf()` di bawah untuk
+    // list MAUPUN untuk angka chip — jadi chip & list tak mungkin beda.
+    final friendSet = _friendSnapshot();
+    String otherOf(PrivateChatInfo c) =>
+        c.participants.firstWhere((p) => p != myUid, orElse: () => '');
+    bool friendOf(PrivateChatInfo c) => friendSet.contains(otherOf(c));
 
     bool registeredOf(PrivateChatInfo c) {
-      final other = c.participants.firstWhere(
-        (p) => p != myUid,
-        orElse: () => '',
-      );
+      final other = otherOf(c);
       return c.participantRegistered[other] == true;
     }
 
+    // ── Precompute (unread, registered, friend) SATU KALI per item ───────
+    // Dipakai untuk `matches()` DAN `countsWithFriends()`. Dengan begitu
+    // predikat yang memutuskan tampilnya item identik dengan yang
+    // menambah angka chip.
+    final meta = <PrivateChatInfo, ({int unread, bool registered, bool friend})>{
+      for (final c in visible)
+        c: (
+          unread: unreadOf(c),
+          registered: registeredOf(c),
+          friend: friendOf(c),
+        ),
+    };
+
     _lastFiltered = visible
-        .where(
-          (c) => ChatFilterLogic.matches(
+        .where((c) {
+          final m = meta[c]!;
+          return ChatFilterLogic.matches(
             _chatFilter,
-            unread: unreadOf(c),
-            otherRegistered: registeredOf(c),
-            otherFriend: friendOf(c),
-          ),
-        )
+            unread: m.unread,
+            otherRegistered: m.registered,
+            otherFriend: m.friend,
+          );
+        })
         .toList();
     if (notify) {
-      // set ValueNotifier saat fase BUILD → "setState called during build".
-      // Defer ke post-frame bila sedang build (dipanggil dari build()).
-      final inBuild =
-          SchedulerBinding.instance.schedulerPhase ==
-          SchedulerPhase.persistentCallbacks;
-      void apply() {
-        _listNotifier.value = _lastFiltered;
-        _archivedNotifier.value = _archivedCount;
-        _countsNotifier.value = ChatFilterLogic.countsWithFriends(
-          visible.map(
-            (c) => (
-              unread: unreadOf(c),
-              registered: registeredOf(c),
-              friend: friendOf(c),
-            ),
+      // TULIS SINKRON (bukan post-frame). Dulu `apply()` di-defer saat
+      // dipanggil dari build → `_countsNotifier` bisa dihitung ulang di
+      // frame berikut dengan `friends` yang sudah berbeda dari yang dipakai
+      // `_lastFiltered`. Sekarang keduanya memakai `meta` (snapshot yang
+      // sama) dan ditulis di giliran yang sama → chip & list konsisten.
+      _listNotifier.value = _lastFiltered;
+      _archivedNotifier.value = _archivedCount;
+      _countsNotifier.value = ChatFilterLogic.countsWithFriends(
+        visible.map(
+          (c) => (
+            unread: meta[c]!.unread,
+            registered: meta[c]!.registered,
+            friend: meta[c]!.friend,
           ),
-        );
-      }
-
-      if (inBuild) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) apply();
-        });
-      } else {
-        apply();
-      }
+        ),
+      );
     }
   }
 }
