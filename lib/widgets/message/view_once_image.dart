@@ -364,8 +364,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   Widget _buildAdminView(BuildContext context) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final decoded = _decoded;
-    final w = decoded != null ? _viewWidth(decoded) : _cardWidth;
-    final h = decoded != null ? _viewHeight(decoded) : _cardWidth;
+    final w = _viewWidth();
+    final h = _viewHeight();
     final child = ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: SizedBox(
@@ -467,8 +467,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
             );
           }
           final decoded = _decoded;
-          final w = decoded != null ? _viewWidth(decoded) : _cardWidth;
-          final h = decoded != null ? _viewHeight(decoded) : _cardWidth;
+          final w = _viewWidth();
+          final h = _viewHeight();
           return ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: SizedBox(
@@ -635,8 +635,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
             ),
           );
         }
-        final vw = decoded != null ? _viewWidth(decoded) : _cardWidth;
-        final vh = decoded != null ? _viewHeight(decoded) : _cardWidth;
+        final vw = _viewWidth();
+        final vh = _viewHeight();
         return GestureDetector(
           onTap: _openViewer,
           child: ClipRRect(
@@ -712,28 +712,13 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     );
   }
 
-  // Lebar/tinggi tampilan proporsional (maks 200×280) sesuai rasio asli.
-  static const double _cardWidth = 200;
+  // Ukuran kartu FOTO SEKALI-LIHAT = SAMA PERSIS dengan kartu kedaluwarsa
+  // (ViewOnceLockedCard 200×140) supaya tinggi bubble tidak berubah saat foto
+  // mengunci/kedaluwarsa. Foto tetap utuh karena `BoxFit.contain`.
+  static const double _cardWidth = ViewOnceLockedCard.cardWidth;
+  static const double _cardHeight = ViewOnceLockedCard.cardHeight;
 
-  static double _viewWidth(DecodedImage d) {
-    final aspect = d.width / d.height;
-    var width = _cardWidth;
-    var height = width / aspect;
-    if (height > 280) {
-      height = 280;
-      width = height * aspect;
-    }
-    return width;
-  }
+  static double _viewWidth() => _cardWidth;
 
-  static double _viewHeight(DecodedImage d) {
-    final aspect = d.width / d.height;
-    var width = _cardWidth;
-    var height = width / aspect;
-    if (height > 280) {
-      height = 280;
-      width = height * aspect;
-    }
-    return height;
-  }
+  static double _viewHeight() => _cardHeight;
 }

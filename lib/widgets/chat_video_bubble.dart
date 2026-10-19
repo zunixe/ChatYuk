@@ -883,8 +883,13 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
 
 // Kartu "foto sudah kadaluarsa" — dipakai pengirim & penerima (design sama).
 class ViewOnceLockedCard extends StatelessWidget {
-  /// Lebar kartu terkunci — SAMA dengan lebar video supaya bubble rapat.
+  /// Ukuran kartu terkunci (foto/video kedaluwarsa) — SATU sumber kebenaran.
+  /// Kartu FOTO SEKALI-LIHAT yang masih bisa dilihat WAJIB memakai ukuran yang
+  /// sama supaya tinggi bubble tidak melompat saat foto kedaluwarsa
+  /// (minta user 2026-10-19: "card foto sekali lihat ukurannya sama ama foto
+  /// sudah kadaluarsa").
   static const double cardWidth = 200;
+  static const double cardHeight = 140;
   final String title;
   final String hint;
   /// Ikon dalam lingkaran (default kunci-jam). Video memakai ikon video.
@@ -902,7 +907,7 @@ class ViewOnceLockedCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: cardWidth,
-        height: 140,
+        height: cardHeight,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
