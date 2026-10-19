@@ -48,6 +48,22 @@ void main() {
     expect(src.contains('Wrap('), isFalse);
   });
 
+  test('GUARD: jam bubble BALASAN rata kanan (Align.centerRight)', () {
+    // Regresi: Column balasan dibentangkan selebar kutipan (StretchToWidest)
+    // + crossAxisAlignment.start → blok teks+jam nempel KIRI, jam tidak rata
+    // kanan. Wajib dibungkus Align centerRight.
+    final src = File(
+      'lib/widgets/private_chat_message.dart',
+    ).readAsStringSync();
+    expect(
+      RegExp(
+        r'child:\s*Align\([\s\S]{0,400}?alignment:\s*Alignment\.centerRight[\s\S]{0,120}?MessageTextWithTime',
+      ).hasMatch(src),
+      isTrue,
+      reason: 'blok teks+jam balasan harus dibungkus Align centerRight',
+    );
+  });
+
   testWidgets(
     'kutipan balasan TIDAK menempel tepi bubble (min 6 logical dari tepi)',
     (tester) async {

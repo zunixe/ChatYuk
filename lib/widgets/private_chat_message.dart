@@ -879,7 +879,18 @@ class MessageBubble extends StatelessWidget {
                                   : stretchReply
                                   ? const EdgeInsets.fromLTRB(8, 0, 8, 0)
                                   : EdgeInsets.zero,
-                              child: MessageTextWithTime(
+                              // Balasan: Column dibentangkan selebar kutipan
+                              // (StretchToWidest) + crossAxisAlignment.start →
+                              // blok teks+jam hanya selebar teksnya sehingga jam
+                              // TIDAK rata kanan. `Align.centerRight` membuat
+                              // blok itu menempel tepi kanan seperti bubble teks
+                              // biasa (keluhan user 2026-10-19).
+                              child: Align(
+                                // Selalu rata-kanan blok teks+jam: pada balasan
+                                // Column dibentangkan selebar kutipan, tanpa ini
+                                // jam nempel kiri (keluhan user 2026-10-19).
+                                alignment: Alignment.centerRight,
+                                child: MessageTextWithTime(
                               text: msg.text,
                               // Kartu link: jam ditangani blok terpisah di
                               // bawah (rata kanan) → jangan dobel di sini.
@@ -918,7 +929,7 @@ class MessageBubble extends StatelessWidget {
                                       ),
                                     )
                                   : null,
-                            ),
+                            )),
                             ),
                             // JAM pesan ber-kartu link kini dirender DI DALAM
                             // kartu (lihat `trailing:` LinkPreview) agar kartu
