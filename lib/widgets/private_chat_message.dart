@@ -251,11 +251,11 @@ class MessageBubble extends StatelessWidget {
                       ? const EdgeInsets.all(4)
                       : hasLinkCard
                       ? const EdgeInsets.fromLTRB(4, 4, 4, 6)
-                      // Text reply (ada kutipan): padding KIRI-KANAN disamakan
-                      // dengan card foto (4) supaya kutipan + teks tidak lebih
-                      // menjorok ke dalam daripada bubble foto (minta user).
+                      // Text reply (ada kutipan): beri sedikit padding kiri
+                      // supaya teks isi tidak menempel tepi bubble (dulu 4 →
+                      // terlihat terlalu mepet dibanding blok kutipan).
                       : stretchReply
-                      ? const EdgeInsets.symmetric(horizontal: 4, vertical: 6)
+                      ? const EdgeInsets.symmetric(horizontal: 8, vertical: 6)
                       : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
