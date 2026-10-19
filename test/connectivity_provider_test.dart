@@ -61,12 +61,20 @@ void main() {
     expect(c.read(connectivityProvider), isTrue);
   });
 
-  test('checkConnectivity = none + probe gagal → offline', () async {
+  test('OS none + probe gagal SEKALI → masih ONLINE (anti banner kedip)',
+      () async {
+    // Keluhan user: banner "tidak ada koneksi" tampil padahal online. Satu
+    // probe gagal (timeout sesaat / cold start) TIDAK boleh memunculkan banner.
     ConnectivityNotifier.reachableOverrideForTest = () async => false;
     fake.initial = [ConnectivityResult.none];
     final c = ProviderContainer();
     addTearDown(c.dispose);
     c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(c.read(connectivityProvider), isTrue);
+
+    // Gagal kedua (berurutan) → baru offline.
+    c.read(connectivityProvider.notifier).revalidate();
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isFalse);
   });
@@ -92,11 +100,35 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isTrue);
 
-    fake.emit([ConnectivityResult.none]);
+    fake.emit([ConnectivityResult.none]); // gagal #1 → masih online
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(c.read(connectivityProvider), isTrue);
+    // Probe berikutnya (revalidate) juga gagal → offline.
+    fake.initial = [ConnectivityResult.none];
+    c.read(connectivityProvider.notifier).revalidate();
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isFalse);
 
     fake.emit([ConnectivityResult.mobile]);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(c.read(connectivityProvider), isTrue);
+  });
+
+  test('offline lalu probe BERHASIL → langsung online (banner hilang)', () async {
+    var ok = false;
+    ConnectivityNotifier.reachableOverrideForTest = () async => ok;
+    fake.initial = [ConnectivityResult.none];
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    c.read(connectivityProvider.notifier).revalidate();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(c.read(connectivityProvider), isFalse);
+
+    // Internet pulih: probe berikutnya sukses → ONLINE walau OS masih `none`.
+    ok = true;
+    c.read(connectivityProvider.notifier).revalidate();
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isTrue);
   });
@@ -134,6 +166,8 @@ void main() {
     final c = ProviderContainer();
     addTearDown(c.dispose);
     c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    c.read(connectivityProvider.notifier).revalidate(); // gagal #2 → offline
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isFalse);
 

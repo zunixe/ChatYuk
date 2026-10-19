@@ -25,6 +25,19 @@ class ConnectivityNotifier extends Notifier<bool> {
   Timer? _revalidateTimer;
   bool _probing = false;
 
+  /// Probe diminta saat probe lain sedang jalan → jalankan sekali lagi setelah
+  /// selesai (dulu dibuang total, sehingga sinyal "online" bisa hilang).
+  bool _probeAgain = false;
+
+  /// Berapa kali probe BERURUTAN gagal. Offline baru diumumkan setelah 2×
+  /// gagal → timeout sesaat (jaringan lambat / cold start) tidak memunculkan
+  /// banner "tidak ada koneksi" padahal device online.
+  int _failStreak = 0;
+
+  /// Timer probe cepat saat status OFFLINE (banner nyangkut = keluhan user):
+  /// selama offline kita probe tiap 5 dtk, bukan menunggu 20 dtk.
+  Timer? _offlineTimer;
+
   @override
   bool build() {
     // Nilai awal online=true — jangan tampil banner salah saat cold start.
@@ -46,6 +59,8 @@ class ConnectivityNotifier extends Notifier<bool> {
     );
     ref.onDispose(() {
       _revalidateTimer?.cancel();
+      _offlineTimer?.cancel();
+      _offlineTimer = null;
       _sub?.cancel();
     });
     return true;
@@ -65,13 +80,29 @@ class ConnectivityNotifier extends Notifier<bool> {
   }
 
   Future<void> _verifyThenSetOffline() async {
-    if (_probing) return;
+    if (_probing) {
+      // Sudah ada probe jalan → minta satu probe lagi setelahnya.
+      _probeAgain = true;
+      return;
+    }
     _probing = true;
     try {
       final reachable = await _reachable();
-      _set(reachable);
+      if (reachable) {
+        _failStreak = 0;
+        _set(true);
+      } else {
+        _failStreak++;
+        dlog('[Connectivity] probe gagal ke-$_failStreak');
+        // Butuh 2 kegagalan berurutan sebelum menyatakan offline.
+        if (_failStreak >= 2) _set(false);
+      }
     } finally {
       _probing = false;
+      if (_probeAgain) {
+        _probeAgain = false;
+        unawaited(_verifyThenSetOffline());
+      }
     }
   }
 
@@ -113,6 +144,16 @@ class ConnectivityNotifier extends Notifier<bool> {
   }
 
   void _set(bool online) {
+    if (online) _failStreak = 0;
+    // Timer cepat hanya hidup selama OFFLINE (banner butuh penyembuhan cepat).
+    if (!online) {
+      _offlineTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
+        if (AppForeground.now) unawaited(_verifyThenSetOffline());
+      });
+    } else {
+      _offlineTimer?.cancel();
+      _offlineTimer = null;
+    }
     if (online == state) return;
     state = online;
   }
