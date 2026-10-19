@@ -530,7 +530,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           return GestureDetector(
             onTap: _startViewing,
             child: Container(
-              width: _cardWidth,
+              width: 220,
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
@@ -702,9 +702,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     );
   }
 
-  // Lebar/tinggi tampilan proporsional (maks 220×280) sesuai rasio asli.
-  // Lebar 220 = SAMA dengan kartu idle & kartu terkunci (konsisten).
-  static const double _cardWidth = 220;
+  // Lebar/tinggi tampilan proporsional (maks 200×280) sesuai rasio asli.
+  static const double _cardWidth = 200;
 
   static double _viewWidth(DecodedImage d) {
     final aspect = d.width / d.height;
