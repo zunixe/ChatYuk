@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/user_model.dart';
-import '../models/room_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
@@ -31,13 +30,11 @@ import 'online_users/widgets/chat_nav.dart';
 import 'online_users/widgets/avatar_zoom.dart';
 import 'online_users/widgets/avatar_upload.dart';
 import '../core/cache/media_disk_cache.dart';
-import '../core/nav_guard.dart';
 import '../widgets/quick_side_menu.dart';
 import '../models/story_model.dart';
 import '../providers/riverpod/social_provider.dart';
 import 'nearby_screen.dart';
 import '../widgets/user_avatar.dart' as ua;
-import 'room_chat_screen.dart';
 import 'group_screen.dart';
 import 'story_composer_screen.dart';
 import 'story_camera_capture_screen.dart';
@@ -881,34 +878,21 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     );
   }
 
-  /// ID room General Indonesia (global room resmi). Pintasan "Global Room"
-  /// di halaman Online SELALU membuka room ini — TIDAK memakai `rooms.first`
-  /// yang urutannya berubah mengikuti jumlah online (dulu kadang masuk
-  /// "room faisol" user-made, kadang "General" — tidak konsisten).
-  static const String _kGlobalRoomId = 'Indonesia_general';
-
-  /// Buka Global Room kategori General NEGARA INDONESIA (selalu room yang sama).
+  /// Buka MENU UTAMA Global Room (tab Chat → section Rooms, kategori General).
+  ///
+  /// Minta user 2026-10-19: pintasan di halaman Online cukup membuka MENU
+  /// Global Room — JANGAN langsung masuk ke room spesifik ("General").
+  /// Sebelumnya fungsi ini mem-push `RoomChatScreen(General)` sehingga user
+  /// terlempar ke dalam room, bukan melihat daftar room.
   Future<void> _openGeneralRoom(BuildContext context) async {
-    final rp = ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier);
+    final rp = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(roomProvider.notifier);
 
-    // 1) Prioritas: room resmi dari daftar explore yang sudah termuat.
-    var room = rp.exploreRoomById(_kGlobalRoomId);
-    // 2) Belum termuat (mis. negara user bukan Indonesia) → ambil langsung.
-    if (room == null) {
-      final raw = await rp.fetchRoomById(_kGlobalRoomId);
-      if (raw != null) {
-        room = RoomModel.fromMap('${raw['id']}', raw);
-      }
-    }
-    if (!context.mounted) return;
-
-    // ALIHKAN ke halaman Global Room TUNGGAL: tab Chat → section Rooms
-    // (yang punya lonceng notifikasi + tombol cari di header, dan bisa pindah
-    // ke "Pesan" lewat swipe/tab). Dulu pintasan ini membuka `LobbyScreen`
-    // STANDALONE yang jadi halaman Global Room KEDUA (header sendiri) —
-    // keluhan user: "sekarang jadi kaya ada dua halaman".
-    // Dengan mengalihkan tab, back dari chat room mendarat di tab Chat
-    // section Rooms, bukan halaman terpisah.
+    // Pindah ke halaman Global Room TUNGGAL: tab Chat → section Rooms
+    // (punya lonceng notifikasi + tombol cari di header, bisa pindah ke
+    // "Pesan" lewat swipe/tab). Tidak ada push room → user melihat DAFTAR.
     final nav = ProviderScope.containerOf(
       context,
       listen: false,
@@ -916,19 +900,6 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     nav.goTo(1); // 0=Online, 1=Chat, 2=Timeline, 3=Profil
     requestedChatSection.value = ChatSection.rooms;
     rp.setExploreCategory('general');
-
-    if (room != null) {
-      final target = room;
-      unawaited(rp.markRoomRead(target.id));
-      final navKey = navKeyRoom(target.id);
-      if (!tryClaimNav(navKey)) return;
-      // Back dari room → tab Chat section Rooms (halaman Global Room tunggal).
-      await Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => RoomChatScreen(room: target)))
-          .then((_) => releaseNav(navKey));
-    }
-    // Room belum ada (seeding belum jalan): sudah cukup pindah ke section
-    // Rooms — daftar akan termuat sendiri di sana. Tidak push halaman lain.
   }
 
   /// Terapkan filter gender (dari SearchDropdown). Filter gender berbayar
