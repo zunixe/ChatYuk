@@ -244,27 +244,33 @@ mixin _PcBuildMx on _PcBase {
                       final showGroups = _chatFilter == ChatFilter.groups ||
                           _chatFilter == ChatFilter.all ||
                           _chatFilter == ChatFilter.unread;
+                      // PENTING: hasil ekspresi ini WAJIB list baru yang
+                      // MUTABLE sebelum `..sort()`. Sebelumnya cabang
+                      // `!showGroups` memakai `const <RoomModel>[]`
+                      // (immutable) lalu di-sort → crash
+                      // "Unsupported operation: Cannot modify an unmodifiable
+                      // list" (terbukti di device: private_chats_build.dart:260).
                       final List<RoomModel> groupItems = !showGroups
-                          ? const <RoomModel>[]
+                          ? <RoomModel>[]
                           : (_chatFilter == ChatFilter.unread
-                                  ? myGroups.where((g) => g.unread > 0)
-                                  : myGroups)
-                              .where(
-                                (g) =>
-                                    effectiveQuery.isEmpty ||
-                                    g.name
-                                        .toLowerCase()
-                                        .contains(effectiveQuery),
-                              )
-                              .toList()
-                            ..sort(
-                              (a, b) => GroupPinStore.compareGroups(
-                                a.id,
-                                a.lastAt,
-                                b.id,
-                                b.lastAt,
-                              ),
-                            );
+                                    ? myGroups.where((g) => g.unread > 0)
+                                    : myGroups)
+                                .where(
+                                  (g) =>
+                                      effectiveQuery.isEmpty ||
+                                      g.name
+                                          .toLowerCase()
+                                          .contains(effectiveQuery),
+                                )
+                                .toList()
+                              ..sort(
+                                (a, b) => GroupPinStore.compareGroups(
+                                  a.id,
+                                  a.lastAt,
+                                  b.id,
+                                  b.lastAt,
+                                ),
+                              );
                       // TERSEMAT (chat private + GRUP) selalu paling atas,
                       // urut waktu disematkan — lihat mergePinnedFirstChats.
                       final List<Object> entries = mergePinnedFirstChats(
@@ -275,14 +281,51 @@ mixin _PcBuildMx on _PcBase {
                       );
                       if (entries.isEmpty) {
                         final searching = effectiveQuery.isNotEmpty;
+                        // Prioritas: hasil cari kosong → pesan "tak ditemukan".
+                        // Selain itu, JELASKAN filter aktifnya — dulu semua
+                        // filter jatuh ke "Belum ada private chat" (menyesatkan
+                        // saat chip Teman bilang "(1)" tapi list kosong).
+                        final (IconData emptyIcon, String emptyTitle,
+                          String emptyHint) = switch (_chatFilter) {
+                          ChatFilter.friends => (
+                            Icons.people_outline_rounded,
+                            s.noFriendChats,
+                            s.noFriendChatsHint,
+                          ),
+                          ChatFilter.anon => (
+                            Icons.person_search_rounded,
+                            s.noAnonChats,
+                            s.noAnonChatsHint,
+                          ),
+                          ChatFilter.registered => (
+                            Icons.verified_user_outlined,
+                            s.noRegisteredChats,
+                            s.noRegisteredChatsHint,
+                          ),
+                          ChatFilter.unread => (
+                            Icons.mark_chat_read_outlined,
+                            s.noUnreadChats,
+                            s.noUnreadChatsHint,
+                          ),
+                          ChatFilter.groups => (
+                            Icons.groups_outlined,
+                            s.noGroupChats,
+                            s.noGroupChatsHint,
+                          ),
+                          ChatFilter.all => (
+                            searching
+                                ? Icons.search_off_rounded
+                                : Icons.chat_bubble_outline_rounded,
+                            searching ? s.searchNoResult : s.noPrivateChats,
+                            searching ? '' : s.noPrivateChatsHint,
+                          ),
+                        };
                         return EmptyStateView(
-                          icon: searching
+                          icon: searching && _chatFilter == ChatFilter.all
                               ? Icons.search_off_rounded
-                              : Icons.chat_bubble_outline_rounded,
-                          title: searching
-                              ? s.searchNoResult
-                              : s.noPrivateChats,
-                          hint: searching ? '' : s.noPrivateChatsHint,
+                              : emptyIcon,
+                          title: searching ? s.searchNoResult : emptyTitle,
+                          hint: searching ? '' : emptyHint,
                         );
                       }
                       // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus.
