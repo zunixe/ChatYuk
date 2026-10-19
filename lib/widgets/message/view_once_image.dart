@@ -16,7 +16,7 @@ import '../../core/storage_paths.dart';
 import '../../providers/riverpod/service_locator.dart';
 import '../chat_video_bubble.dart';
 import 'image_decode_core.dart';
-import 'view_once_sheet.dart';
+import 'photo_viewer_screen.dart';
 import 'view_once_state.dart';
 
 class ViewOnceImage extends StatefulWidget {
@@ -314,18 +314,24 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       return;
     }
     _tick.viewerOpen = true;
-    // Gaya GALERI: slide dari bawah (private & room). Tanpa tombol HD.
-    showViewOnceSheet(
-      context: context,
-      bytes: _decoded!.bytes,
-      countdown: _tick.totalSecs > 0 ? _tick.countdown : null,
-    ).whenComplete(() {
-      _tick.viewerOpen = false;
-      // Mode 1x: viewer ditutup = sudah dilihat → kunci permanen.
-      if (_tick.totalSecs <= 0 && _tick.state == ViewOnceState.viewing) {
-        _expireNow();
-      }
-    });
+    // SAMA seperti lihat foto biasa: fullscreen PhotoViewerScreen (bukan
+    // bottom-sheet slide dari bawah). Countdown view-once tetap diteruskan.
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => PhotoViewerScreen(
+              bytes: _decoded!.bytes,
+              countdown: _tick.totalSecs > 0 ? _tick.countdown : null,
+            ),
+          ),
+        )
+        .whenComplete(() {
+          _tick.viewerOpen = false;
+          // Mode 1x: viewer ditutup = sudah dilihat → kunci permanen.
+          if (_tick.totalSecs <= 0 && _tick.state == ViewOnceState.viewing) {
+            _expireNow();
+          }
+        });
   }
 
   Future<void> _clearFromServer() async {
@@ -342,8 +348,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   Widget _buildAdminView(BuildContext context) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final decoded = _decoded;
-    final w = decoded != null ? _viewWidth(decoded) : 200.0;
-    final h = decoded != null ? _viewHeight(decoded) : 200.0;
+    final w = decoded != null ? _viewWidth(decoded) : _cardWidth;
+    final h = decoded != null ? _viewHeight(decoded) : _cardWidth;
     final child = ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: SizedBox(
@@ -411,19 +417,23 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     final zoomBytes = decoded.bytes;
     return GestureDetector(
       onTap: () {
-        showViewOnceSheet(
-          context: context,
-          bytes: zoomBytes,
-        ).whenComplete(() {
-          // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
-          if (zoomBytes.isNotEmpty) {
-            try {
-              PaintingBinding.instance.imageCache.evict(
-                MemoryImage(zoomBytes),
-              );
-            } catch (_) {}
-          }
-        });
+        // Fullscreen seperti foto biasa (admin monitor tidak pakai timer).
+        Navigator.of(context)
+            .push(
+              MaterialPageRoute(
+                builder: (_) => PhotoViewerScreen(bytes: zoomBytes),
+              ),
+            )
+            .whenComplete(() {
+              // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
+              if (zoomBytes.isNotEmpty) {
+                try {
+                  PaintingBinding.instance.imageCache.evict(
+                    MemoryImage(zoomBytes),
+                  );
+                } catch (_) {}
+              }
+            });
       },
       child: child,
     );
@@ -447,8 +457,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
             );
           }
           final decoded = _decoded;
-          final w = decoded != null ? _viewWidth(decoded) : 200.0;
-          final h = decoded != null ? _viewHeight(decoded) : 200.0;
+          final w = decoded != null ? _viewWidth(decoded) : _cardWidth;
+          final h = decoded != null ? _viewHeight(decoded) : _cardWidth;
           return ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: SizedBox(
@@ -520,7 +530,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           return GestureDetector(
             onTap: _startViewing,
             child: Container(
-              width: 220,
+              width: _cardWidth,
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
@@ -615,8 +625,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
             ),
           );
         }
-        final vw = decoded != null ? _viewWidth(decoded) : 200.0;
-        final vh = decoded != null ? _viewHeight(decoded) : 200.0;
+        final vw = decoded != null ? _viewWidth(decoded) : _cardWidth;
+        final vh = decoded != null ? _viewHeight(decoded) : _cardWidth;
         return GestureDetector(
           onTap: _openViewer,
           child: ClipRRect(
@@ -692,10 +702,13 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     );
   }
 
-  // Lebar/tinggi tampilan proporsional (maks 200×280) sesuai rasio asli.
+  // Lebar/tinggi tampilan proporsional (maks 220×280) sesuai rasio asli.
+  // Lebar 220 = SAMA dengan kartu idle & kartu terkunci (konsisten).
+  static const double _cardWidth = 220;
+
   static double _viewWidth(DecodedImage d) {
     final aspect = d.width / d.height;
-    var width = 200.0;
+    var width = _cardWidth;
     var height = width / aspect;
     if (height > 280) {
       height = 280;
@@ -706,7 +719,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
 
   static double _viewHeight(DecodedImage d) {
     final aspect = d.width / d.height;
-    var width = 200.0;
+    var width = _cardWidth;
     var height = width / aspect;
     if (height > 280) {
       height = 280;
