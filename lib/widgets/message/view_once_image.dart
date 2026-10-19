@@ -540,8 +540,13 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           return GestureDetector(
             onTap: _startViewing,
             child: Container(
-              width: 220,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              // Ukuran SAMA dengan kartu kedaluwarsa (ViewOnceLockedCard):
+              // 200×140. Dulu `width: 220` + padding 18/14 → tinggi ikut isi,
+              // jadi kartu "tekan untuk melihat" beda ukuran dari kartu
+              // kedaluwarsa (minta user 2026-10-19).
+              width: ViewOnceLockedCard.cardWidth,
+              height: ViewOnceLockedCard.cardHeight,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
                 gradient: const LinearGradient(
@@ -557,12 +562,15 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                   ),
                 ],
               ),
+              // Isi RINGKAS supaya pas di 176×120 (dalam kartu 200×140 —
+              // ukuran sama dengan kartu kedaluwarsa).
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.max,
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.white.withValues(alpha: 0.22),
@@ -570,42 +578,27 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                     child: const Icon(
                       Icons.remove_red_eye_outlined,
                       color: Colors.white,
-                      size: 22,
+                      size: 18,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   Text(
                     s.viewOnceTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppText.chatBodySmall.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     s.viewOnceTap,
                     textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: AppText.chatCaption.copyWith(
                       color: Colors.white.withValues(alpha: 0.85),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.bgCard,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      s.btnView,
-                      style: AppText.chatName.copyWith(
-                        color: const Color(0xFF1E88E5),
-                        letterSpacing: 0,
-                        fontWeight: FontWeight.w700,
-                      ),
                     ),
                   ),
                 ],
