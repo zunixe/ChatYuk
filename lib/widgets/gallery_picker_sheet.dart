@@ -161,6 +161,9 @@ class _GalleryPickerSheetState extends State<GalleryPickerSheet> {
         );
       }
     });
+    // Mode pilih-tunggal (foto sekali lihat): begitu 1 foto diketuk langsung
+    // ditutup & dikembalikan — tanpa perlu menekan tombol kirim.
+    if (widget.maxSelect == 1 && _picked.length == 1) _send();
   }
 
   void _send() => Navigator.of(context).pop(

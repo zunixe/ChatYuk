@@ -20,6 +20,7 @@ import '../core/cache/offline_outbox.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/storage_paths.dart';
 import '../widgets/chat_info_snack.dart';
+import '../widgets/gallery_picker_sheet.dart';
 import '../widgets/message/image_decode_core.dart' show warmPhotoCacheForPath;
 import '../widgets/message/view_once_state.dart' show migrateViewOnceState;
 import '../widgets/video_prefetch.dart';
@@ -235,9 +236,51 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     return base64;
   }
 
-  /// Ambil bytes gambar untuk view-once (default: galeri). Di-override di
-  /// test supaya alur caption bisa diuji tanpa plugin image_picker.
+  /// Status toggle HD yang dipilih di panel galeri saat memilih foto
+  /// sekali-lihat (default false). Dibaca `processViewOnceBytes` supaya
+  /// foto terkirim HD saat togglenya aktif — minta user 2026-10-19: "ada HD
+  /// nya disamping kanan" seperti pada pemilih foto biasa.
+  bool viewOncePickHd = false;
+
+  /// Ambil bytes gambar untuk view-once.
+  ///
+  /// Minta user (2026-10-19): pemilihnya harus panel galeri yang SLIDE DARI
+  /// BAWAH dengan judul "Terbaru" + toggle HD di kanan — SAMA seperti saat
+  /// kirim foto biasa (`GalleryPickerSheet`), bukan membuka aplikasi galeri
+  /// HP lewat `image_picker`. `maxSelect: 1` karena sekali-lihat = 1 foto.
+  ///
+  /// Fallback: bila plugin galeri tidak tersedia/gagal (mis. di test),
+  /// kembali ke `image_picker` supaya alur kirim tidak mati.
   Future<Uint8List?> pickViewOnceImage() async {
+    if (mounted) {
+      final s = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(localeProvider).s;
+      try {
+        final res = await GalleryPickerSheet.show(
+          context,
+          s: s,
+          maxSelect: 1,
+        );
+        if (res == null) return null;
+        if (res.useSystemPicker) {
+          // Tombol folder → pemilih sistem (perilaku lama).
+          final picked = await _photoPicker.pickImage(
+            source: ImageSource.gallery,
+          );
+          if (picked == null) return null;
+          return await picked.readAsBytes();
+        }
+        // HD dipilih di sheet → diteruskan ke pemrosesan (lihat
+        // `sendViewOnceFromPicker` → `processViewOnceBytes`).
+        viewOncePickHd = res.hd;
+        final bytes = await res.readBytes();
+        return bytes.isEmpty ? null : bytes.first;
+      } catch (_) {
+        // Plugin galeri tak tersedia → jatuh ke image_picker di bawah.
+      }
+    }
     final picked = await _photoPicker.pickImage(source: ImageSource.gallery);
     if (picked == null) return null;
     return picked.readAsBytes();
@@ -246,8 +289,16 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// Proses bytes → base64 (watermark view-once bila aktif). Di-override di
   /// test supaya alur caption diuji tanpa `compute()` (isolate di test-fake
   /// bisa menggantung).
+  ///
+  /// HD: bila toggle HD di panel galeri aktif (`viewOncePickHd`), resolusi
+  /// dinaikkan (1920px / q90) — sama seperti jalur foto biasa.
   Future<String?> processViewOnceBytes(Uint8List bytes) async {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    if (viewOncePickHd) {
+      return auth.watermarkEnabled
+          ? NativeImage.processViewOnce(bytes, photoSeed)
+          : NativeImage.processJpeg(bytes, maxPx: 1920, quality: 90);
+    }
     return auth.watermarkEnabled
         ? NativeImage.processViewOnce(bytes, photoSeed)
         : NativeImage.processJpeg(bytes, maxPx: 1200, quality: 82);
