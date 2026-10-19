@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../config/theme.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../core/media/chat_photo_helper.dart';
+import '../core/media/link_preview_service.dart';
 
 /// Foto thumbnail LINK PREVIEW dengan cache DISK (bukan `Image.network` RAW).
 ///
@@ -28,16 +29,16 @@ class LinkPreviewImage extends StatefulWidget {
 
   static const String kPrefix = 'linkimg:';
 
-  /// Rasio ASLI gambar bila bytes-nya sudah ada di cache disk (SINKRON, tanpa
-  /// jaringan) → parent menghitung lebar kartu tanpa lompatan layout.
-  /// null bila belum ter-cache.
-  static double? peekAspect(String url) {
-    final b = MediaDiskCache.instance.readSync('$kPrefix$url');
-    if (b == null || b.isEmpty) return null;
-    final d = parseImageDimensions(b);
-    if (d == null || d.width <= 0 || d.height <= 0) return null;
-    return d.width / d.height;
-  }
+  /// Rasio ASLI gambar dari cache RAM (NOL I/O) → parent menghitung lebar
+  /// kartu tanpa lompatan layout.
+  ///
+  /// PERF: dulu membaca bytes dari DISK (`readSync`) — I/O sinkron seukuran
+  /// file gambar di UI thread, tiap bubble link di-mount. Itu yang membuat
+  /// scroll chat lama tersendat. Sekarang rasio dihitung sekali setelah decode
+  /// (lihat `_emitAspect`) dan disimpan di [LinkPreviewService]; pembaca
+  /// berikutnya murni RAM.
+  static double? peekAspect(String url) =>
+      LinkPreviewService.instance.peekAspect(url);
 
   @override
   State<LinkPreviewImage> createState() => _LinkPreviewImageState();
@@ -49,11 +50,15 @@ class _LinkPreviewImageState extends State<LinkPreviewImage> {
 
   String get _key => '${LinkPreviewImage.kPrefix}${widget.url}';
 
-  /// Kabari parent rasio gambar (untuk lebar kartu adaptif).
+  /// Hitung rasio SEKALI setelah bytes didapat → simpan ke service (agar
+  /// pembaca berikutnya tak perlu sentuh disk) + kabari parent untuk lebar
+  /// kartu adaptif.
   void _emitAspect(Uint8List bytes) {
     final d = parseImageDimensions(bytes);
     if (d == null || d.width <= 0 || d.height <= 0) return;
-    widget.onAspect?.call(d.width / d.height);
+    final double aspect = d.width / d.height;
+    LinkPreviewService.instance.putAspect(widget.url, aspect);
+    widget.onAspect?.call(aspect);
   }
 
   @override

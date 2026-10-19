@@ -128,6 +128,34 @@ class LinkPreviewService {
   @visibleForTesting
   int get cacheLength => _cache.length;
 
+  /// Cache RAM rasio ASLI foto preview (`w/h`) per URL gambar.
+  ///
+  /// PERF: kartu link butuh rasio untuk menghitung lebarnya. Dulu diambil dari
+  /// bytes di disk via `MediaDiskCache.readSync` — itu **I/O disk sinkron di
+  /// UI thread seukuran file gambar**, dieksekusi tiap bubble link di-mount
+  /// (scroll chat lama jadi tersendat). Sekarang: rasio dihitung SEKALI saat
+  /// bytes didapat (di `LinkPreviewImage`, off build) lalu disimpan di sini →
+  /// pembaca berikutnya murni RAM, nol disk.
+  final _aspectCache = <String, double>{};
+
+  /// Rasio tersimpan untuk [imageUrl] (RAM saja, tanpa I/O). null = belum tahu.
+  double? peekAspect(String imageUrl) =>
+      imageUrl.isEmpty ? null : _aspectCache[imageUrl];
+
+  /// Simpan rasio hasil decode. Bounded FIFO sederhana (pola sama `_cache`).
+  void putAspect(String imageUrl, double aspect) {
+    if (imageUrl.isEmpty || !aspect.isFinite || aspect <= 0) return;
+    if (_aspectCache.length >= _maxEntries &&
+        !_aspectCache.containsKey(imageUrl)) {
+      _aspectCache.remove(_aspectCache.keys.first);
+    }
+    _aspectCache[imageUrl] = aspect;
+  }
+
+  @visibleForTesting
+  void seedAspectForTest(String imageUrl, double aspect) =>
+      putAspect(imageUrl, aspect);
+
   /// Test-only: isi cache RAM tanpa IO (untuk uji layout kartu).
   @visibleForTesting
   void seedForTest(String url, LinkPreviewData data) => _put(url, data);
@@ -136,6 +164,7 @@ class LinkPreviewService {
   void resetForTest() {
     _cache.clear();
     _inflight.clear();
+    _aspectCache.clear();
     networkFetchCount = 0;
     urlSkipCount = 0;
   }

@@ -1279,6 +1279,64 @@ timer latar TETAP hidup saat app background/layar mati → event seluruh jaringa
 bersama + 1 channel `profiles`. `rt_resilient` retry tanpa batas (sudah
 di-gate bg). ForegroundService call pakai `dataSync` (idealnya `phoneCall`).
 
+### 2.23 Review perf private chat — 3 regresi kartu link dibuang (2026-10-19)
+
+Audit `private_chat_*` + `private_chat_message.dart` terhadap dokumen ini.
+**Jalur inti sehat** (tidak diubah): `_deriveItems` cache-by-revisi
+(`_msgsRevision`), `_scheduleRebuild` koalesensi 80ms, `RepaintBoundary` +
+`ValueKey` + `findChildIndexCallback` per bubble, `cacheExtent: 120`, typing &
+read-receipt lewat `ValueNotifier` (bukan setState root), gate
+`autoLinkPreview: di < 25`, dan `viewInsets` sengaja tidak dibaca di level list.
+
+Tiga regresi ditemukan — semuanya berasal dari perubahan kartu link sendiri
+(gaya WhatsApp di commit `f912f3a9`), kini diperbaiki:
+
+1. **`peekAspect` baca DISK sinkron per bubble** (`link_preview_image.dart`).
+   `MediaDiskCache.readSync` → `File.readAsBytesSync` = I/O disk **sinkron di
+   UI thread, seukuran file og:image**, dieksekusi tiap bubble link di-mount
+   (termasuk pesan lama `enabled: false`, karena jalur `peek()` cache RAM tetap
+   memanggilnya). Scroll chat lama berisi banyak link jadi tersendat.
+   → Rasio kini dihitung **sekali** setelah decode (`_emitAspect`) dan disimpan
+   di `LinkPreviewService._aspectCache` (RAM, bounded 200). `peekAspect` jadi
+   **nol I/O**.
+2. **`MediaQuery.sizeOf` di dalam `LayoutBuilder`** (`link_preview.dart:211`).
+   `size` menyusut saat keyboard muncul → element kartu ikut rebuild tiap buka/
+   tutup keyboard, padahal list chat sengaja menghindari itu.
+   → `capH` dihitung dari `View.of(context)` (ukuran FISIK layar) **di luar**
+   builder; tidak berubah saat keyboard.
+3. **`extractUrl` 2–3× per bubble** (`private_chat_message.dart`). Regex atas
+   `msg.text` dijalankan ulang di tiap cabang (kerangka bubble + gate kartu)
+   pada setiap rebuild (termasuk scroll).
+   → Dihitung **sekali** (`cardLinkUrl`) lalu dipakai ulang; `isUrlOnly` hanya
+   dipanggil bila memang ada link.
+
+**Test regresi:** `test/link_preview_aspect_cache_test.dart` (peek nol I/O,
+nilai tak valid ditolak, cache bounded FIFO).
+
+**HASIL UKUR (benchmark terdokumentasi, 2026-10-19).**
+`test/link_preview_aspect_bench_test.dart` — mengukur jalur nyata
+(`File.readAsBytesSync` + `parseImageDimensions` vs lookup `Map`) dengan file
+og:image 300 KB. Reproducible: `flutter test test/link_preview_aspect_bench_test.dart`.
+
+| Kondisi | SEBELUM (disk + parse) | SESUDAH (RAM) |
+|---|---|---|
+| 1 operasi, p50 | **73 µs** | **0 µs** |
+| 1 operasi, max (COLD, page cache kosong) | **915 µs (0,9 ms)** | 24 µs |
+| 8 bubble link, 1 frame | 0,6 ms | ~0 ms |
+| 20 bubble link, 1 frame | 2,0 ms | ~0 ms |
+| 30 bubble link, 1 frame | **7,5 ms** | **0,01 ms** |
+
+Interpretasi: budget 1 frame @60fps = **16,7 ms**. Sebelum perbaikan, membuka
+daftar pesan lama berisi ~30 kartu link menghabiskan **~45% budget frame**
+hanya untuk I/O disk sinkron + parse dimensi — cukup untuk menjatuhkan frame
+di HP kelas menengah. Sesudah: ~0,01 ms (praktis nol).
+
+**Batas kejujuran angka ini:** diukur di **desktop (host test)**, page cache OS
+gesit — jadi ini **batas bawah**. Di HP, `readAsBytesSync` pada storage eMMC/UFS
+lebih lambat (cold read bisa 3–10× lebih besar), sehingga dampak nyata **lebih
+besar**, bukan lebih kecil. Angka HP belum diambil (butuh build `PERF_PROBE` di
+perangkat uji terpisah, bukan HP kerja — §3); dicatat sebagai utang pengukuran.
+
 ### 8. Target tersisa
 
 **Tidak ada.** Semua item bagian 6 sudah tertutup:

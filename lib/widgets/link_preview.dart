@@ -206,14 +206,22 @@ class _LinkPreviewState extends ConsumerState<LinkPreview> {
     // Lebar kartu ADAPTIF ala WhatsApp: tinggi gambar dibatasi ~30% tinggi
     // layar, lalu lebar mengikuti rasio ASLI gambar → foto potret jadi kartu
     // lebih sempit ("menyesuaikan konten"), bukan melebar ~80% seperti teks.
+    //
+    // PERF: `capH` dihitung di LUAR builder dari tinggi layar STABIL
+    // (`MediaQuery.paddingOf` = layar penuh, tidak berubah saat keyboard
+    // buka/tutup). Dulu `MediaQuery.sizeOf(context).height` di dalam builder →
+    // element ikut rebuild tiap keyboard muncul, padahal list chat sengaja
+    // menghindari itu (lihat `private_chat_core.dart` catatan viewInsets).
+    // `View.of` = ukuran FISIK layar (dalam dp) yang TIDAK berubah saat
+    // keyboard muncul — beda dengan `MediaQuery.sizeOf` yang ikut menyusut.
+    final double capH = (View.of(context).physicalSize.height /
+            View.of(context).devicePixelRatio) *
+        0.30;
+    final double capHClamped = capH.clamp(180.0, 320.0);
     return LayoutBuilder(
       builder: (_, c) {
-        final double capH = (MediaQuery.sizeOf(context).height * 0.30).clamp(
-          180.0,
-          320.0,
-        );
         final double cardW = widget.fitContent
-            ? linkPreviewCardWidth(c.maxWidth, _aspect, capH)
+            ? linkPreviewCardWidth(c.maxWidth, _aspect, capHClamped)
             : c.maxWidth;
         // `SizedBox(width: cardW)` = pola ContactBubble: lebar bubble mengikuti
         // kartu → jam di BAWAH kartu tetap rata kanan TANPA celah di kanan.

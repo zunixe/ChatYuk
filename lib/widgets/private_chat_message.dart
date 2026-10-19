@@ -166,9 +166,12 @@ class MessageBubble extends StatelessWidget {
     // Pesan TEKS ber-link (kartu preview): bingkai bubble TIPIS 4px di kiri/
     // kanan/atas seperti media (ala WhatsApp); teks di bawah kartu diberi
     // jarak teks normal sendiri (lihat Padding di sekitar MessageTextWithTime).
-    final hasLinkCard = msg.type == 'text' &&
-        !msg.isDeleted &&
-        LinkPreviewService.instance.extractUrl(msg.text) != null;
+    // PERF: `extractUrl` (regex) dihitung SEKALI per build lalu dipakai ulang
+    // di semua cabang (kerangka bubble + kartu link). Dulu dipanggil 2-3×
+    // dengan hasil sama → kerja regex sia-sia tiap bubble di-rebuild (scroll).
+    final String? cardLinkUrl =
+        (msg.type == 'text' && !msg.isDeleted) ? LinkPreviewService.instance.extractUrl(msg.text) : null;
+    final hasLinkCard = cardLinkUrl != null;
     // Link yang dikirim SENDIRIAN (teks = URL saja) → JANGAN tulis ulang
     // URL-nya di bawah card (minta user). Teks tetap utuh di `msg.text`
     // sehingga aksi COPY tetap menyalin link-nya.
@@ -823,9 +826,7 @@ class MessageBubble extends StatelessWidget {
                             // preview HANYA di _PhotoBubble (foto+caption),
                             // sehingga kirim link YouTube di pesan teks TIDAK
                             // tampil kartunya. Sekarang paritas (mirip Telegram).
-                            if (LinkPreviewService.instance
-                                    .extractUrl(msg.text) !=
-                                null)
+                            if (cardLinkUrl != null)
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
                                 child: LinkPreview(
