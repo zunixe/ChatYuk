@@ -4,23 +4,26 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/widgets/chat_video_bubble.dart';
 
-/// Kartu terkunci (video/kedaluwarsa umum) tetap punya default 200×140,
-/// sedangkan kartu FOTO sekali-lihat harus mengikuti ukuran foto biasa.
+/// Aturan ukuran kartu view-once:
+///  - kunci/pembuka/kedaluwarsa → TETAP KECIL 200×140
+///  - foto yang sedang ditampilkan → ukuran foto biasa (72% layar + rasio foto)
 void main() {
-  test('default kartu terkunci tetap 200×140 (untuk video)', () {
+  test('default kartu terkunci 200×140', () {
     expect(ViewOnceLockedCard.cardWidth, 200);
     expect(ViewOnceLockedCard.cardHeight, 140);
   });
 
-  test('GUARD: kartu foto sekali-lihat memakai chatMediaWidth (foto biasa)', () {
+  test('GUARD: kartu kecil memakai konstanta; foto memakai chatMediaWidth', () {
     final src = File(
       'lib/widgets/message/view_once_image.dart',
     ).readAsStringSync();
-    // Satu sumber ukuran: lebar foto biasa (72% layar) + tinggi rasio foto.
+    // Kartu pembuka & terkunci kembali kecil (bukan ikut ukuran foto).
+    expect(src.contains('ViewOnceLockedCard.cardWidth'), isTrue);
+    expect(src.contains('ViewOnceLockedCard.cardHeight'), isTrue);
+    // Kartu yang menampilkan foto memakai lebar foto biasa + rasio foto.
     expect(src.contains('chatMediaWidth('), isTrue);
     expect(src.contains('chatPhotoSize('), isTrue);
-    // Tidak boleh lagi mengunci 200×140 atau 220.
-    expect(src.contains('ViewOnceLockedCard.cardWidth'), isFalse);
+    // Tidak ada lagi ukuran hardcode 220 lama.
     expect(src.contains('width: 220'), isFalse);
   });
 }

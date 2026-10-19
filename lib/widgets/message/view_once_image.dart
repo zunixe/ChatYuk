@@ -469,12 +469,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
         if (widget.isMe) {
           // View-once terkunci (data sudah tidak tersedia) → kartu terkunci, bukan spinner
           if (_tick.state == ViewOnceState.expired) {
-            final sz = _sizeFor(context, null, widget.imageData);
+            // Kartu kedaluwarsa = UKURAN TETAP kecil (200×140), TIDAK ikut
+            // ukuran foto (minta user 2026-10-19: "masih gede, ga kembali
+            // kecil kaya sebelumnya").
             return ViewOnceLockedCard(
               title: s.viewOnceExpired,
               hint: s.viewOnceExpiredHint,
-              width: sz.width,
-              height: sz.height,
             );
           }
           final decoded = _decoded;
@@ -552,11 +552,10 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           return GestureDetector(
             onTap: _startViewing,
             child: Container(
-              // Ukuran SAMA dengan kartu FOTO BIASA (72% layar, rasio 4/3):
-              // setelah foto dibuka, kartu foto memakai ukuran yang sama
-              // persis → tidak ada lompatan ukuran (minta user 2026-10-19).
-              width: _sizeFor(context, null, widget.imageData).width,
-              height: _sizeFor(context, null, widget.imageData).height,
+              // Kartu PEMBUKA = ukuran TETAP kecil (200×140) seperti semula;
+              // HANYA setelah foto dibuka ukurannya mengikuti rasio foto.
+              width: ViewOnceLockedCard.cardWidth,
+              height: ViewOnceLockedCard.cardHeight,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
@@ -620,12 +619,10 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
 
         // Expired — kartu terkunci (tanpa image — hemat memori & tidak load foto)
         if (_tick.state == ViewOnceState.expired) {
-          final sz = _sizeFor(context, null, widget.imageData);
+          // Kartu kedaluwarsa tetap kecil (200×140), tidak ikut rasio foto.
           return ViewOnceLockedCard(
             title: s.viewOnceExpired,
             hint: s.viewOnceExpiredHint,
-            width: sz.width,
-            height: sz.height,
           );
         }
 
@@ -639,8 +636,6 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               title: s.errPhotoRead,
               hint: s.btnRetry,
               icon: Icons.refresh_rounded,
-              width: _sizeFor(context, null, widget.imageData).width,
-              height: _sizeFor(context, null, widget.imageData).height,
             ),
           );
         }
