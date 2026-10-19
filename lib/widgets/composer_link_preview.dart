@@ -13,6 +13,7 @@ class ComposerLinkPreview extends StatefulWidget {
 
 class _ComposerLinkPreviewState extends State<ComposerLinkPreview> {
   String? _url;
+  String? _dismissedUrl;
   Timer? _debounce;
 
   @override
@@ -51,7 +52,9 @@ class _ComposerLinkPreviewState extends State<ComposerLinkPreview> {
     // memuat titik (domain). Validasi sungguhan tetap di `extractUrl`.
     final noSpace = !text.trim().contains(' ');
     final probablyUrl =
-        _url != null || text.contains('http') || (noSpace && text.contains('.'));
+        _url != null ||
+        text.contains('http') ||
+        (noSpace && text.contains('.'));
     if (!probablyUrl) return;
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
@@ -67,10 +70,18 @@ class _ComposerLinkPreviewState extends State<ComposerLinkPreview> {
   @override
   Widget build(BuildContext context) {
     final url = _url;
-    if (url == null) return const SizedBox.shrink();
+    // User menekan X pada preview link ini → jangan tampilkan lagi (teks di
+    // kolom ketik tetap utuh). Preview muncul lagi bila URL-nya berubah.
+    if (url == null || url == _dismissedUrl) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      child: LinkPreview(text: url),
+      // Kartu RINGKAS ala WhatsApp saat mengetik: foto kecil di kiri + judul
+      // di kanan + X utk sembunyikan.
+      child: LinkPreview(
+        text: url,
+        compact: true,
+        onDismiss: () => setState(() => _dismissedUrl = url),
+      ),
     );
   }
 }

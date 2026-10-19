@@ -213,6 +213,20 @@ class LinkPreviewService {
     return url;
   }
 
+  /// true bila [text] hanya berisi URL (boleh huruf besar/kecil, boleh tanpa
+  /// skema) + spasi di sekitarnya — dipakai untuk menyembunyikan teks URL di
+  /// bawah kartu preview. TIDAK boleh pakai `text.replaceAll(url, '')` karena
+  /// [extractUrl] menormalkan skema ke huruf kecil ("Https://" → "https://")
+  /// sehingga replaceAll gagal → URL muncul lagi di bubble.
+  bool isUrlOnly(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return false;
+    final m = _urlRegex.firstMatch(t) ?? _schemeLessRe.firstMatch(t);
+    if (m == null) return false;
+    return t.substring(0, m.start).trim().isEmpty &&
+        t.substring(m.end).trim().isEmpty;
+  }
+
   /// Pola URL yang BUKAN kandidat kartu preview: tautan gambar/aset langsung
   /// (bukan halaman web ber-metadata). Chat yang dipenuhi balasan AI sering
   /// menyisipkan URL gambar (pollinations/mermaid.ink/ekstensi media) — fetch

@@ -318,24 +318,45 @@ class RoomMessageBubble extends StatelessWidget {
         ],
       );
     }
+    // Paritas dengan private/group: pesan yang isinya HANYA link → kartu
+    // menyempit mengikuti rasio foto (ala WhatsApp) + jam DI BAWAH kartu
+    // (rata kanan, pola ContactBubble) supaya bubble ikut sempit & rapi.
+    final linkUrl = LinkPreviewService.instance.extractUrl(msg.text);
+    final hasLink = linkUrl != null;
+    final linkTextOnly =
+        hasLink && LinkPreviewService.instance.isUrlOnly(msg.text);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _replyQuote(context),
-                            if (LinkPreviewService.instance.extractUrl(msg.text) != null) LinkPreview(text: msg.text, enabled: autoLinkPreview),
-        MessageTextWithTime(
-          text: msg.text,
-          timeStr: timeStr,
-          textStyle: AppText.chatBody.copyWith(color: _textColor),
-          timeStyle: AppText.chatTime.copyWith(
-            color: _textColor.withValues(alpha: 0.45),
-            fontWeight: FontWeight.w400,
+        if (hasLink)
+          LinkPreview(
+            text: msg.text,
+            enabled: autoLinkPreview,
+            fitContent: linkTextOnly,
+            // Room tak punya centang-baca per-user → hanya jam.
+            trailing: Text(
+              msg.edited
+                  ? '$timeStr ${ProviderScope.containerOf(context, listen: false).read(localeProvider).s.msgEdited}'
+                  : timeStr,
+              style: AppText.chatTime.copyWith(color: AppTheme.textSecondary),
+            ),
           ),
-          alignRight: alignRight,
-          mentions: msg.mentions,
-          highlightMentionAll: highlightMentionAll,
-          codeMaxLines: codeMaxLines,
-        ),
+        if (!linkTextOnly)
+          MessageTextWithTime(
+            text: msg.text,
+            // Jam sudah dirender di bawah kartu link → jangan dobel.
+            timeStr: hasLink ? '' : timeStr,
+            textStyle: AppText.chatBody.copyWith(color: _textColor),
+            timeStyle: AppText.chatTime.copyWith(
+              color: _textColor.withValues(alpha: 0.45),
+              fontWeight: FontWeight.w400,
+            ),
+            alignRight: alignRight,
+            mentions: msg.mentions,
+            highlightMentionAll: highlightMentionAll,
+            codeMaxLines: codeMaxLines,
+          ),
       ],
     );
   }

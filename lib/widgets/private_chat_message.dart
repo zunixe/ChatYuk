@@ -172,11 +172,8 @@ class MessageBubble extends StatelessWidget {
     // Link yang dikirim SENDIRIAN (teks = URL saja) → JANGAN tulis ulang
     // URL-nya di bawah card (minta user). Teks tetap utuh di `msg.text`
     // sehingga aksi COPY tetap menyalin link-nya.
-    final linkUrl = hasLinkCard
-        ? LinkPreviewService.instance.extractUrl(msg.text)
-        : null;
     final linkTextOnly =
-        linkUrl != null && msg.text.replaceAll(linkUrl, '').trim().isEmpty;
+        hasLinkCard && LinkPreviewService.instance.isUrlOnly(msg.text);
     // Pesan TEKS yang membalas → kutipan selebar bubble (lihat _replyWidth).
     final stretchReply = msg.type == 'text' &&
         !msg.isDeleted &&
@@ -567,7 +564,14 @@ class MessageBubble extends StatelessWidget {
                           isRead: isRead,
                         )
                       else if (msg.type == 'contact' && msg.contact != null)
-                        ContactBubble(msg: msg, timeStr: timeStr)
+                        ContactBubble(
+                          msg: msg,
+                          timeStr: timeStr,
+                          showChecks: isMe || showChecksBothSides,
+                          isPending: isPending,
+                          isQueued: isQueued,
+                          isRead: isRead,
+                        )
                       else if (msg.type == 'file')
                         FileBubble(
                           msg: msg,
@@ -828,6 +832,43 @@ class MessageBubble extends StatelessWidget {
                                 child: LinkPreview(
                                   text: msg.text,
                                   enabled: autoLinkPreview,
+                                  // Link SENDIRIAN → kartu menyempit mengikuti
+                                  // konten (ala WhatsApp) + jam DI DALAM kartu
+                                  // (kanan bawah) supaya kartu jadi satu-satunya
+                                  // penentu lebar bubble → rata kanan, tanpa
+                                  // celah aneh di sisi kanan.
+                                  fitContent: linkTextOnly,
+                                  trailing: hasLinkCard
+                                      ? Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              msg.edited
+                                                  ? '$timeStr ${s.msgEdited}'
+                                                  : timeStr,
+                                              style: AppText.chatTime.copyWith(
+                                                color: AppTheme.textSecondary,
+                                              ),
+                                            ),
+                                            if (isMe) ...[
+                                              const SizedBox(width: 3),
+                                              Icon(
+                                                (isPending || isQueued)
+                                                    ? Icons.done
+                                                    : Icons.done_all,
+                                                size: 12,
+                                                color: (!isQueued &&
+                                                        !isPending &&
+                                                        isRead)
+                                                    ? AppTheme.primary
+                                                    : AppTheme.textSecondary,
+                                              ),
+                                            ],
+                                          ],
+                                        )
+                                      : null,
                                 ),
                               ),
                             if (!linkTextOnly)
@@ -877,47 +918,9 @@ class MessageBubble extends StatelessWidget {
                                   : null,
                             ),
                             ),
-                            // JAM (pesan ber-kartu link) — rata KANAN, teks/link
-                            // tetap di kiri. Sejajar dengan tepi kanan kartu.
-                            if (hasLinkCard)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: 2,
-                                  right: 6,
-                                ),
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        msg.edited
-                                            ? '$timeStr ${s.msgEdited}'
-                                            : timeStr,
-                                        style: AppText.chatTime.copyWith(
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                      if (isMe) ...[
-                                        const SizedBox(width: 3),
-                                        Icon(
-                                          (isPending || isQueued)
-                                              ? Icons.done
-                                              : Icons.done_all,
-                                          size: 12,
-                                          color: (!isQueued &&
-                                                  !isPending &&
-                                                  isRead)
-                                              ? AppTheme.primary
-                                              : AppTheme.textSecondary,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
+                            // JAM pesan ber-kartu link kini dirender DI DALAM
+                            // kartu (lihat `trailing:` LinkPreview) agar kartu
+                            // jadi satu-satunya penentu lebar bubble.
                           ],
                         ),
                     ],

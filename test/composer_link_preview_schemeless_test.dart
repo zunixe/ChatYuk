@@ -64,4 +64,32 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     c.dispose();
   });
+
+  testWidgets('kartu composer RINGKAS (ala WhatsApp): ada tombol X', (
+    tester,
+  ) async {
+    final c = TextEditingController(text: 'youtube.com/shorts/abc');
+    await pumpComposer(tester, c);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(LinkPreview), findsOneWidget);
+    expect(tester.widget<LinkPreview>(find.byType(LinkPreview)).compact, isTrue);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
+  testWidgets('tekan X → preview hilang, teks di kolom ketik tetap utuh', (
+    tester,
+  ) async {
+    final c = TextEditingController(text: 'youtube.com/shorts/abc');
+    await pumpComposer(tester, c);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(LinkPreview), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pump();
+    expect(find.byType(LinkPreview), findsNothing);
+    expect(c.text, 'youtube.com/shorts/abc');
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
 }
