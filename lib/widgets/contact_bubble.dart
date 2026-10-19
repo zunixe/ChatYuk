@@ -41,7 +41,22 @@ String contactNameFromText(String text) {
 class ContactBubble extends ConsumerStatefulWidget {
   final MessageModel msg;
   final String timeStr;
-  const ContactBubble({super.key, required this.msg, required this.timeStr});
+
+  /// Centang status kirim/baca (private chat). Room = false (tanpa centang
+  /// per-user). Sama seperti `PollBubble`.
+  final bool showChecks;
+  final bool isPending;
+  final bool isQueued;
+  final bool isRead;
+  const ContactBubble({
+    super.key,
+    required this.msg,
+    required this.timeStr,
+    this.showChecks = false,
+    this.isPending = false,
+    this.isQueued = false,
+    this.isRead = false,
+  });
 
   @override
   ConsumerState<ContactBubble> createState() => _ContactBubbleState();
@@ -259,12 +274,31 @@ class _ContactBubbleState extends ConsumerState<ContactBubble> {
         // Baris jam: inset SAMA dengan FileBubble (docs/UI_CONSISTENCY.md).
         Padding(
           padding: const EdgeInsets.fromLTRB(0, 3, 4, 1),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              widget.timeStr,
-              style: AppText.chatTime.copyWith(color: AppTheme.textSecondary),
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                widget.timeStr,
+                style: AppText.chatTime.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              if (widget.showChecks) ...[
+                const SizedBox(width: 3),
+                Icon(
+                  (widget.isPending || widget.isQueued)
+                      ? Icons.done
+                      : Icons.done_all,
+                  size: 14,
+                  color: (widget.isRead &&
+                          !widget.isPending &&
+                          !widget.isQueued)
+                      ? AppTheme.primary
+                      : AppTheme.textSecondary,
+                ),
+              ],
+            ],
           ),
         ),
       ],

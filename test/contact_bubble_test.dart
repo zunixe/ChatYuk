@@ -87,6 +87,36 @@ void main() {
     expect(size.width, lessThanOrEqualTo(chatMediaWidth(screenW)));
   });
 
+  testWidgets('centang: private tampilkan done_all (terbaca) / done (pending)', (
+    tester,
+  ) async {
+    final msg = contactMsg(ChatContact.phone('Budi HP', ['+6281']));
+    await pump(
+      tester,
+      ContactBubble(msg: msg, timeStr: '21:03', showChecks: true, isRead: true),
+    );
+    expect(find.byIcon(Icons.done_all), findsOneWidget);
+
+    await pump(
+      tester,
+      ContactBubble(msg: msg, timeStr: '21:03', showChecks: true, isPending: true),
+    );
+    expect(find.byIcon(Icons.done), findsOneWidget);
+  });
+
+  testWidgets('centang: room/grup TIDAK menampilkan centang', (tester) async {
+    await pump(
+      tester,
+      ContactBubble(
+        msg: contactMsg(ChatContact.phone('Budi HP', ['+6281'])),
+        timeStr: '21:04',
+      ),
+    );
+    expect(find.byIcon(Icons.done_all), findsNothing);
+    expect(find.byIcon(Icons.done), findsNothing);
+    expect(find.text('21:04'), findsOneWidget); // jam tetap ada
+  });
+
   testWidgets('kontak HP: nama & 3 nomor panjang → aksi Wrap, tanpa overflow', (
     tester,
   ) async {
