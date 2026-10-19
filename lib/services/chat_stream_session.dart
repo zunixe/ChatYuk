@@ -747,14 +747,24 @@ class ChatStreamSession {
       },
     );
     // UPDATE: parse payload untuk update partial (jangan refetch full)
+    // Filter WAJIB sama dengan INSERT/DELETE: tanpa filter, realtime UPDATE
+    // bisa tidak terkirim untuk baris ini (gejala: view-once tidak berubah
+    // jadi "kadaluarsa" di pengirim sampai chat dibuka ulang).
     ch.onPostgresChanges(
       event: PostgresChangeEvent.update,
       schema: 'public',
       table: table,
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: filterKey,
+        value: filterVal,
+      ),
       callback: (payload) {
         _hiddenCutoffCache.remove(filterVal);
         lastRealtime = DateTime.now();
         try {
+          dlog('[RT-UPDATE] $filterVal id=${payload.newRecord['id']} '
+              'type=${payload.newRecord['type']}');
           final next = ChatStreamSession.applyUpdateRecord(
             _current,
             payload.newRecord,

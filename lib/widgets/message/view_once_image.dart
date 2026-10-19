@@ -75,10 +75,15 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     if (widget.viewSecs != null) {
       _tick.totalSecs = resolveViewOnceSecs(widget.viewSecs);
     }
-    if (widget.isExpired && _tick.state != ViewOnceState.viewing) {
+    if (widget.isExpired) {
+      // SERVER sudah menandai kadaluarsa → kunci permanen SEBELUM decode.
+      // (Dulu bersyarat `!= viewing` → pada frame pertama state masih idle,
+      // foto sempat tampil sekejap lalu berubah jadi kartu = "blink isi".)
       _tick.state = ViewOnceState.expired;
+      _tick.decoded = null;
+      _decoded = null;
+      return;
     }
-    if (_tick.state == ViewOnceState.expired) return;
     _decoded = _tick.decoded;
     if (_decoded == null) _decode();
   }
@@ -93,8 +98,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       }
       return;
     }
-    if (widget.isExpired && _tick.state != ViewOnceState.viewing) {
+    if (widget.isExpired) {
+      // Kadaluarsa: kunci permanen + BUANG byte foto yang mungkin sudah
+      // ter-decode, supaya isinya tidak pernah ter-render lagi.
       _tick.state = ViewOnceState.expired;
+      _tick.decoded = null;
+      _decoded = null;
       ScreenSecureService.exitViewOnce();
       setState(() {});
       return;
@@ -188,39 +197,41 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     var data = widget.imageData;
     dlog('[VO-DBG] decode id=${widget.messageId} '
         'srcLen=${data.length} isPath=${isStoragePathValue(data)}');
-    // Thumb belum tersedia → coba PhotoCache (messageId) dulu.
-    if (data.isEmpty) {
-      final id = widget.messageId;
-      if (id != null && !id.startsWith('pending-')) {
-        try {
-          data = await PhotoCache.instance.load(widget.chatKey, id) ?? '';
-          dlog('[VO-DBG] cache fallback len=${data.length}');
-        } catch (_) {}
-      }
+    // CACHE LOKAL DULU (instan, tanpa jaringan): pengirim baru saja mengirim
+    // foto ini → PhotoCache sudah berisi bytes-nya. Dulu path storage
+    // di-download dulu → bubble sempat menampilkan spinner ("blink") sebelum
+    // foto muncul. Kini cache dipakai lebih dulu.
+    final id = widget.messageId;
+    final canUseCache = id != null && !id.startsWith('pending-');
+    if (canUseCache) {
+      try {
+        final cached = await PhotoCache.instance.load(widget.chatKey, id);
+        if (cached != null && cached.isNotEmpty) {
+          data = cached;
+          dlog('[VO-DBG] cache hit len=${data.length}');
+        }
+      } catch (_) {}
     }
     // MASIH kosong → ambil path langsung dari DB (view-once TIDAK di-auto-
     // prefetch oleh loadPhotosAsync, dan cols list tak memuat image_data →
     // widget.imageData = ''). Tanpa ini foto sekali-lihat tak pernah termuat
     // (spinner/gagal walau file ada di storage).
-    if (data.isEmpty) {
-      final id = widget.messageId;
-      if (id != null && !id.startsWith('pending-') && mounted) {
-        try {
-          final sb = Supabase.instance.client;
-          final table = widget.isRoom ? 'messages' : 'private_messages';
-          final row = await sb
-              .from(table)
-              .select('image_data,image_path')
-              .eq('id', id)
-              .maybeSingle();
-          final raw = (row?['image_data'] as String? ?? '');
-          data = raw.isNotEmpty
-              ? raw
-              : (row?['image_path'] as String? ?? '');
-          dlog('[VO-DBG] db fetch len=${data.length}');
-        } catch (e) {
-          dlog('[VO-DBG] db fetch error: $e');
-        }
+    if (data.isEmpty && canUseCache && mounted) {
+      try {
+        final sb = Supabase.instance.client;
+        final table = widget.isRoom ? 'messages' : 'private_messages';
+        final row = await sb
+            .from(table)
+            .select('image_data,image_path')
+            .eq('id', id)
+            .maybeSingle();
+        final raw = (row?['image_data'] as String? ?? '');
+        data = raw.isNotEmpty
+            ? raw
+            : (row?['image_path'] as String? ?? '');
+        dlog('[VO-DBG] db fetch len=${data.length}');
+      } catch (e) {
+        dlog('[VO-DBG] db fetch error: $e');
       }
     }
     // Data bisa berupa PATH storage → download dulu sebelum decode.
@@ -248,6 +259,11 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     dlog('[VO-DBG] decode res=${res == null ? "null" : "${res.width}x${res.height}"}');
     if (res == null || res.width <= 0 || res.height <= 0) return false;
     if (!mounted) return false;
+    // Kadaluarsa bisa terjadi SAAT decode berjalan (mis. realtime masuk) →
+    // jangan pernah simpan/tampilkan foto setelah expired.
+    if (widget.isExpired || _tick.state == ViewOnceState.expired) {
+      return false;
+    }
     final decoded = DecodedImage(res.bytes, res.width, res.height);
     _tick.decoded = decoded;
     setState(() => _decoded = decoded);
@@ -368,18 +384,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                     cacheWidth: 720,
                     filterQuality: FilterQuality.medium,
                   )
-                : Container(
-                    color: AppTheme.bgInput,
-                    alignment: Alignment.center,
-                    child: const SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ),
+                      : Container(
+                          // Placeholder NETRAL (tanpa card/spinner) — foto
+                          // muncul dari cache lokal dalam sepersekian detik;
+                          // dulu spinner terlihat sebagai "blink card".
+                          color: AppTheme.bgInput,
+                        ),
             Positioned(
               top: 6,
               right: 6,

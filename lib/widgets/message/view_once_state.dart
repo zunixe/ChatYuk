@@ -65,3 +65,25 @@ ViewOnceTick putViewOnceState(String id, ViewOnceTick tick) {
   return tick;
 }
 
+/// Pindahkan state dari id pesan PENDING (`pending-...`) ke id pesan SERVER.
+///
+/// Kenapa: bubble optimistik memakai id pending; setelah server membalas id
+/// asli, bubble dibangun ulang dengan id baru → state (termasuk `decoded`)
+/// hilang → foto sempat kosong/spinner ("blink") sebelum decode ulang.
+/// Dengan memindahkan tick, foto langsung tampil tanpa kedip.
+void migrateViewOnceState(String fromId, String toId) {
+  if (fromId.isEmpty || toId.isEmpty || fromId == toId) return;
+  final tick = viewOnceStates.remove(fromId);
+  if (tick == null) return;
+  final existing = viewOnceStates[toId];
+  if (existing != null) {
+    // Sudah ada (mis. realtime lebih dulu) → pakai yang punya foto ter-decode.
+    if (existing.decoded == null && tick.decoded != null) {
+      existing.decoded = tick.decoded;
+    }
+    return;
+  }
+  viewOnceStates[toId] = tick;
+}
+
+

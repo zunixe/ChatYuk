@@ -21,6 +21,7 @@ import '../core/cache/photo_cache.dart';
 import '../core/storage_paths.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/message/image_decode_core.dart' show warmPhotoCacheForPath;
+import '../widgets/message/view_once_state.dart' show migrateViewOnceState;
 import '../widgets/video_prefetch.dart';
 import 'chat_outbox_mixin.dart';
 
@@ -857,6 +858,12 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       if (msgId != null && msgId.isNotEmpty) {
         unawaited(PhotoCache.instance
             .save(photoCacheChatKey, msgId, base64));
+        // View-once: pindahkan state dari id PENDING ke id SERVER supaya
+        // foto yang sudah ter-decode di bubble optimistik langsung dipakai
+        // (tanpa spinner/blink saat bubble berganti ke pesan server).
+        if (effType == 'view_once' || effType == 'video_once') {
+          migrateViewOnceState(pendingPhoto.id, msgId);
+        }
       }
       if (kind == 'image') photoFirstBonus(pp);
       photoOnSent(kind);
