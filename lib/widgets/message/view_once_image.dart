@@ -469,9 +469,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
         if (widget.isMe) {
           // View-once terkunci (data sudah tidak tersedia) → kartu terkunci, bukan spinner
           if (_tick.state == ViewOnceState.expired) {
-            // Kartu kedaluwarsa = UKURAN TETAP kecil (200×140), TIDAK ikut
-            // ukuran foto (minta user 2026-10-19: "masih gede, ga kembali
-            // kecil kaya sebelumnya").
+            // Kartu kedaluwarsa = KECIL 200×140 (default ViewOnceLockedCard).
             return ViewOnceLockedCard(
               title: s.viewOnceExpired,
               hint: s.viewOnceExpiredHint,
@@ -552,13 +550,11 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           return GestureDetector(
             onTap: _startViewing,
             child: Container(
-              // Kartu PEMBUKA = ukuran TETAP kecil (200×140) seperti semula;
-              // HANYA setelah foto dibuka ukurannya mengikuti rasio foto.
+              // Kartu PEMBUKA (tulisan "Foto Sekali Lihat") = KECIL 200×140
+              // seperti semula. Hanya kartu yang MENAMPILKAN foto yang
+              // mengikuti ukuran foto biasa.
               width: ViewOnceLockedCard.cardWidth,
               height: ViewOnceLockedCard.cardHeight,
-              // Padding dalam DISAMAKAN dengan kartu lain (bubble sudah
-              // padding 4) → margin kiri-kanan konsisten. Dulu 12/10 →
-              // terlihat lebih menjorok dari kartu foto biasa.
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
@@ -622,7 +618,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
 
         // Expired — kartu terkunci (tanpa image — hemat memori & tidak load foto)
         if (_tick.state == ViewOnceState.expired) {
-          // Kartu kedaluwarsa tetap kecil (200×140), tidak ikut rasio foto.
+          // Kartu kedaluwarsa = KECIL 200×140.
           return ViewOnceLockedCard(
             title: s.viewOnceExpired,
             hint: s.viewOnceExpiredHint,

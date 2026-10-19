@@ -6,12 +6,12 @@ import 'package:chatyuk/core/media/chat_photo_helper.dart';
 import 'package:chatyuk/widgets/chat_video_bubble.dart';
 import 'package:chatyuk/widgets/message/view_once_image.dart';
 
-/// Aturan ukuran kartu foto sekali-lihat (minta user 2026-10-19):
-///  - Kartu PEMBUKA ("tekan untuk melihat") & kartu KEDALUWARSA =
-///    ukuran tetap KECIL 200×140 (seperti semula).
-///  - Setelah foto dibuka: ukuran = FOTO BIASA (lebar chatMediaWidth).
+/// Aturan final (minta user):
+///  - Kartu bertulisan "Foto Sekali Lihat" (pembuka) & "Foto sudah
+///    kadaluarsa" = KECIL 200×140 seperti semula.
+///  - Kartu yang MENAMPILKAN foto = lebar foto biasa (chatMediaWidth).
 void main() {
-  Future<void> pump(WidgetTester tester, Widget child) async {
+  Future<Size> pump(WidgetTester tester, Widget child) async {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
@@ -21,44 +21,56 @@ void main() {
         ),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 60));
+    return tester.getSize(find.byType(ViewOnceImage));
   }
 
-  testWidgets('kartu pembuka & kedaluwarsa = KECIL 200×140', (tester) async {
-    await pump(
+  testWidgets('pembuka & kedaluwarsa = KECIL 200×140', (tester) async {
+    const small = Size(
+      ViewOnceLockedCard.cardWidth,
+      ViewOnceLockedCard.cardHeight,
+    );
+
+    final idle = await pump(
       tester,
       ViewOnceImage(
         imageData: '',
         chatKey: 'k1',
         isMe: false,
-        messageId: 'vo-active',
+        messageId: 'vo-idle',
         viewSecs: 10,
       ),
     );
-    expect(
-      tester.getSize(find.byType(ViewOnceImage)),
-      const Size(ViewOnceLockedCard.cardWidth, ViewOnceLockedCard.cardHeight),
-    );
+    expect(idle, small, reason: 'kartu "Foto Sekali Lihat" harus kecil');
 
-    await pump(
+    final expired = await pump(
       tester,
       ViewOnceImage(
         imageData: '',
         chatKey: 'k2',
         isMe: false,
-        messageId: 'vo-expired',
+        messageId: 'vo-exp',
         isExpired: true,
       ),
     );
-    expect(
-      tester.getSize(find.byType(ViewOnceImage)),
-      const Size(ViewOnceLockedCard.cardWidth, ViewOnceLockedCard.cardHeight),
-    );
+    expect(expired, small, reason: 'kartu "sudah kadaluarsa" harus kecil');
   });
 
-  test('lebar foto saat dibuka = lebar foto biasa (chatMediaWidth)', () {
-    // Konstanta bersama memastikan kartu yang menampilkan foto memakai
-    // lebar 72% layar seperti bubble foto biasa.
-    expect(chatMediaWidth(360), (360 * 0.72).clamp(200.0, 440.0));
+  testWidgets('kartu pengirim (menampilkan foto) = lebar foto biasa', (
+    tester,
+  ) async {
+    final screenW =
+        tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final size = await pump(
+      tester,
+      ViewOnceImage(
+        imageData: '',
+        chatKey: 'k3',
+        isMe: true,
+        messageId: 'vo-me',
+        viewSecs: 10,
+      ),
+    );
+    expect(size.width, chatMediaWidth(screenW));
   });
 }
