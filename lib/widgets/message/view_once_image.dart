@@ -14,7 +14,7 @@ import '../../core/storage_paths.dart';
 import '../../providers/riverpod/service_locator.dart';
 import '../chat_video_bubble.dart';
 import 'image_decode_core.dart';
-import 'photo_viewer_screen.dart';
+import 'view_once_sheet.dart';
 import 'view_once_state.dart';
 
 class ViewOnceImage extends StatefulWidget {
@@ -228,51 +228,32 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     _clearFromServer();
   }
 
+  /// Loader HD (bytes/base64 penuh) untuk sheet galeri. null = tak tersedia
+  /// (mis. pesan pending belum punya id server).
+  Future<String?> Function()? _hdLoader() {
+    final id = widget.messageId;
+    if (id == null || id.startsWith('pending-')) return null;
+    return () => PhotoCache.instance.load(widget.chatKey, id);
+  }
+
   void _openViewer() {
-    if (_decoded == null || _tick.state != ViewOnceState.viewing || !mounted)
+    if (_decoded == null || _tick.state != ViewOnceState.viewing || !mounted) {
       return;
+    }
     _tick.viewerOpen = true;
-    Navigator.of(context)
-        .push(
-          // Route viewer sama dengan foto biasa (fade+scale halus), bukan slide.
-          PageRouteBuilder<void>(
-            opaque: true,
-            transitionDuration: const Duration(milliseconds: 200),
-            reverseTransitionDuration: const Duration(milliseconds: 160),
-            pageBuilder: (_, __, ___) => PhotoViewerScreen(
-              bytes: _decoded!.bytes,
-              fullLoader: () {
-                final id = widget.messageId;
-                if (id == null || id.startsWith('pending-'))
-                  return Future.value(null);
-                return PhotoCache.instance.load(widget.chatKey, id);
-              },
-              countdown: _tick.totalSecs > 0 ? _tick.countdown : null,
-            ),
-            transitionsBuilder: (_, anim, __, child) {
-              final curved = CurvedAnimation(
-                parent: anim,
-                curve: Curves.easeOutCubic,
-                reverseCurve: Curves.easeInCubic,
-              );
-              return FadeTransition(
-                opacity: curved,
-                child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.94, end: 1.0).animate(curved),
-                  child: child,
-                ),
-              );
-            },
-          ),
-        )
-        .whenComplete(() {
-          _tick.viewerOpen = false;
-          // Mode 1x: viewer ditutup = sudah dilihat → kunci permanen.
-          if (_tick.totalSecs <= 0 &&
-              _tick.state == ViewOnceState.viewing) {
-            _expireNow();
-          }
-        });
+    // Gaya GALERI: slide dari bawah + tombol HD di kanan (private & room).
+    showViewOnceSheet(
+      context: context,
+      bytes: _decoded!.bytes,
+      fullLoader: _hdLoader(),
+      countdown: _tick.totalSecs > 0 ? _tick.countdown : null,
+    ).whenComplete(() {
+      _tick.viewerOpen = false;
+      // Mode 1x: viewer ditutup = sudah dilihat → kunci permanen.
+      if (_tick.totalSecs <= 0 && _tick.state == ViewOnceState.viewing) {
+        _expireNow();
+      }
+    });
   }
 
   Future<void> _clearFromServer() async {
@@ -358,43 +339,11 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     final zoomBytes = decoded.bytes;
     return GestureDetector(
       onTap: () {
-        Navigator.of(context)
-            .push(
-          MaterialPageRoute(
-            builder: (_) => Scaffold(
-              backgroundColor: Colors.black,
-              body: SafeArea(
-                child: Stack(
-                  children: [
-                    Center(
-                      child: InteractiveViewer(
-                        maxScale: 5,
-                        child: Image.memory(
-                          zoomBytes,
-                          fit: BoxFit.contain,
-                          // Cap 1080px: layar HP tidak butuh full-res 12MP.
-                          cacheWidth: 1080,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ).then((_) {
+        showViewOnceSheet(
+          context: context,
+          bytes: zoomBytes,
+          fullLoader: _hdLoader(),
+        ).whenComplete(() {
           // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
           if (zoomBytes.isNotEmpty) {
             try {

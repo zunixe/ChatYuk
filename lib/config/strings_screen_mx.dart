@@ -590,6 +590,10 @@ mixin SScreenMx {
   String get locLiveActive => isId ? 'Lokasi live' : 'Live location';
   String locLiveRemaining(int m) => isId ? 'berakhir $m menit' : '$m min left';
   String get msgViewOnce => isId ? '[Foto Sekali Lihat]' : '[View Once Photo]';
+  String get viewOnceHdUnavailable => isId
+      ? 'Versi HD belum siap — coba lagi sebentar'
+      : 'HD version not ready — try again in a moment';
+  String get viewOnceViewed => isId ? 'Sudah dilihat' : 'Viewed';
   String get viewOnceTap =>
       isId ? 'Tekan untuk melihat (10 detik)' : 'Tap to view (10 seconds)';
   String get viewOnceTitle => isId ? 'Foto Sekali Lihat' : 'View Once Photo';
