@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/theme.dart';
 import '../../utils.dart';
 import '../../core/cache/photo_cache.dart';
+import '../../core/media/chat_photo_helper.dart';
 import '../../core/media/native_image.dart';
 import '../../core/screen_secure_service.dart';
 import '../../providers/riverpod/chat_provider.dart';
@@ -76,11 +77,15 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       _tick.totalSecs = resolveViewOnceSecs(widget.viewSecs);
     }
     if (widget.isExpired) {
-      // SERVER sudah menandai kadaluarsa → kunci permanen SEBELUM decode.
-      // (Dulu bersyarat `!= viewing` → pada frame pertama state masih idle,
-      // foto sempat tampil sekejap lalu berubah jadi kartu = "blink isi".)
-      _tick.state = ViewOnceState.expired;
-      _tick.decoded = null;
+      // SERVER sudah menandai kadaluarsa → kunci permanen SEBELUM frame
+      // pertama. WAJIB juga menimpa state CACHE (dulu `putViewOnceState`
+      // mengembalikan tick lama yang mungkin masih `idle`/`viewing` → isi
+      // foto sempat tergambar sekejap lalu berubah jadi kartu = BLINK saat
+      // masuk chat). `setSyncronous` supaya frame pertama sudah terkunci.
+      _tick
+        ..state = ViewOnceState.expired
+        ..decoded = null
+        ..timer?.cancel();
       _decoded = null;
       return;
     }
@@ -364,8 +369,9 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   Widget _buildAdminView(BuildContext context) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final decoded = _decoded;
-    final w = _viewWidth();
-    final h = _viewHeight();
+    final size = _sizeFor(context, decoded);
+    final w = size.width;
+    final h = size.height;
     final child = ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: SizedBox(
@@ -461,14 +467,18 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
         if (widget.isMe) {
           // View-once terkunci (data sudah tidak tersedia) → kartu terkunci, bukan spinner
           if (_tick.state == ViewOnceState.expired) {
+            final sz = _sizeFor(context, null);
             return ViewOnceLockedCard(
               title: s.viewOnceExpired,
               hint: s.viewOnceExpiredHint,
+              width: sz.width,
+              height: sz.height,
             );
           }
           final decoded = _decoded;
-          final w = _viewWidth();
-          final h = _viewHeight();
+          final size = _sizeFor(context, decoded);
+          final w = size.width;
+          final h = size.height;
           return ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: SizedBox(
@@ -540,12 +550,11 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           return GestureDetector(
             onTap: _startViewing,
             child: Container(
-              // Ukuran SAMA dengan kartu kedaluwarsa (ViewOnceLockedCard):
-              // 200×140. Dulu `width: 220` + padding 18/14 → tinggi ikut isi,
-              // jadi kartu "tekan untuk melihat" beda ukuran dari kartu
-              // kedaluwarsa (minta user 2026-10-19).
-              width: ViewOnceLockedCard.cardWidth,
-              height: ViewOnceLockedCard.cardHeight,
+              // Ukuran SAMA dengan kartu FOTO BIASA (72% layar, rasio 4/3):
+              // setelah foto dibuka, kartu foto memakai ukuran yang sama
+              // persis → tidak ada lompatan ukuran (minta user 2026-10-19).
+              width: _sizeFor(context, null).width,
+              height: _sizeFor(context, null).height,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
@@ -593,7 +602,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    s.viewOnceTap,
+                    s.viewOnceTap(_tick.totalSecs),
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -609,9 +618,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
 
         // Expired — kartu terkunci (tanpa image — hemat memori & tidak load foto)
         if (_tick.state == ViewOnceState.expired) {
+          final sz = _sizeFor(context, null);
           return ViewOnceLockedCard(
             title: s.viewOnceExpired,
             hint: s.viewOnceExpiredHint,
+            width: sz.width,
+            height: sz.height,
           );
         }
 
@@ -625,11 +637,14 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               title: s.errPhotoRead,
               hint: s.btnRetry,
               icon: Icons.refresh_rounded,
+              width: _sizeFor(context, null).width,
+              height: _sizeFor(context, null).height,
             ),
           );
         }
-        final vw = _viewWidth();
-        final vh = _viewHeight();
+        final size = _sizeFor(context, decoded);
+        final vw = size.width;
+        final vh = size.height;
         return GestureDetector(
           onTap: _openViewer,
           child: ClipRRect(
@@ -705,13 +720,24 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     );
   }
 
-  // Ukuran kartu FOTO SEKALI-LIHAT = SAMA PERSIS dengan kartu kedaluwarsa
-  // (ViewOnceLockedCard 200×140) supaya tinggi bubble tidak berubah saat foto
-  // mengunci/kedaluwarsa. Foto tetap utuh karena `BoxFit.contain`.
-  static const double _cardWidth = ViewOnceLockedCard.cardWidth;
-  static const double _cardHeight = ViewOnceLockedCard.cardHeight;
+  // Ukuran kartu FOTO SEKALI-LIHAT = SAMA dengan kartu FOTO BIASA:
+  // lebar `chatMediaWidth` (72% layar) dan tinggi mengikuti aspek foto
+  // (`chatPhotoSize`). Saat foto belum ada (kartu "tekan untuk melihat" /
+  // kedaluwarsa) dipakai kotak placeholder yang sama supaya ukurannya tidak
+  // berubah-ubah. (Minta user: jangan mengikuti kartu bertulisan
+  // "Foto Sekali Lihat" yang kecil.)
+  static double _mediaWidth(BuildContext context) =>
+      chatMediaWidth(MediaQuery.sizeOf(context).width);
 
-  static double _viewWidth() => _cardWidth;
-
-  static double _viewHeight() => _cardHeight;
+  static ({double width, double height}) _sizeFor(
+    BuildContext context,
+    DecodedImage? d,
+  ) {
+    final w = _mediaWidth(context);
+    if (d == null) {
+      // Placeholder: rasio 4/3 (batas bawah chatPhotoSize) — tidak gepeng.
+      return (width: w, height: w * 4 / 3);
+    }
+    return chatPhotoSize(d.width, d.height, w);
+  }
 }

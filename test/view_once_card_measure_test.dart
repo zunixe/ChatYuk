@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chatyuk/widgets/chat_video_bubble.dart';
+import 'package:chatyuk/core/media/chat_photo_helper.dart';
 import 'package:chatyuk/widgets/message/view_once_image.dart';
 
-/// Ukur NYATA: kartu foto sekali-lihat (masih bisa dilihat) harus SAMA
-/// ukurannya dengan kartu foto kedaluwarsa.
+/// Kartu foto sekali-lihat WAJIB berukuran SAMA dengan kartu FOTO BIASA
+/// (lebar `chatMediaWidth` = 72% layar), bukan kartu kecil "Foto Sekali Lihat".
 void main() {
   Future<void> pump(WidgetTester tester, Widget child) async {
     await tester.pumpWidget(
@@ -21,10 +21,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  testWidgets('kartu foto sekali-lihat = kartu kedaluwarsa (200×140)', (
+  testWidgets('kartu aktif & kedaluwarsa = lebar kartu foto biasa', (
     tester,
   ) async {
-    // Aktif (belum decode → pakai ukuran kartu).
+    final screenW =
+        tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final expectedW = chatMediaWidth(screenW);
+
     await pump(
       tester,
       ViewOnceImage(
@@ -36,10 +39,8 @@ void main() {
       ),
     );
     final active = tester.getSize(find.byType(ViewOnceImage));
-    expect(active.width, ViewOnceLockedCard.cardWidth);
-    expect(active.height, ViewOnceLockedCard.cardHeight);
+    expect(active.width, expectedW, reason: 'lebar = lebar foto biasa');
 
-    // Kedaluwarsa.
     await pump(
       tester,
       ViewOnceImage(
@@ -51,10 +52,10 @@ void main() {
       ),
     );
     final expired = tester.getSize(find.byType(ViewOnceImage));
-    expect(expired.width, ViewOnceLockedCard.cardWidth);
-    expect(expired.height, ViewOnceLockedCard.cardHeight);
+    expect(expired.width, expectedW);
+    expect(expired.height, expectedW * 4 / 3);
 
-    // Bukti inti keluhan: kedua kartu SAMA.
+    // Inti keluhan: kartu pembuka & kartu kedaluwarsa sama ukuran.
     expect(active, expired);
   });
 }

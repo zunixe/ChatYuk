@@ -603,8 +603,12 @@ mixin SScreenMx {
       ? 'Versi HD belum siap — coba lagi sebentar'
       : 'HD version not ready — try again in a moment';
   String get viewOnceViewed => isId ? 'Sudah dilihat' : 'Viewed';
-  String get viewOnceTap =>
-      isId ? 'Tekan untuk melihat (10 detik)' : 'Tap to view (10 seconds)';
+  /// Label aksi kartu foto sekali-lihat. Durasi HANYA ditulis bila memang
+  /// bertimer; mode "1× lihat" (tanpa timer) tidak menyebut detik.
+  /// [secs] = total detik nyata dari pesan (0 = sampai ditutup).
+  String viewOnceTap(int secs) => secs <= 0
+      ? (isId ? 'Tekan untuk melihat' : 'Tap to view')
+      : (isId ? 'Tekan untuk melihat ($secs detik)' : 'Tap to view ($secs seconds)');
   String get viewOnceTitle => isId ? 'Foto Sekali Lihat' : 'View Once Photo';
   String get btnView => isId ? 'Lihat' : 'View';
   String get viewOnceExpired =>

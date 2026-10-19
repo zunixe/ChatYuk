@@ -894,11 +894,19 @@ class ViewOnceLockedCard extends StatelessWidget {
   final String hint;
   /// Ikon dalam lingkaran (default kunci-jam). Video memakai ikon video.
   final IconData icon;
+
+  /// Override ukuran kartu. null = pakai [cardWidth]/[cardHeight] (default
+  /// untuk video & kartu terkunci umum). Foto sekali-lihat mengirim ukuran
+  /// foto biasa (72% layar) agar sama dengan bubble foto (minta user).
+  final double? width;
+  final double? height;
   const ViewOnceLockedCard({
     super.key,
     required this.title,
     required this.hint,
     this.icon = Icons.lock_clock_outlined,
+    this.width,
+    this.height,
   });
 
   @override
@@ -906,8 +914,8 @@ class ViewOnceLockedCard extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        width: cardWidth,
-        height: cardHeight,
+        width: width ?? cardWidth,
+        height: height ?? cardHeight,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,

@@ -4,21 +4,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/widgets/chat_video_bubble.dart';
 
-/// Minta user: kartu FOTO SEKALI-LIHAT ukurannya harus SAMA dengan kartu foto
-/// yang sudah KEDALUWARSA (tidak melompat saat foto mengunci).
+/// Kartu terkunci (video/kedaluwarsa umum) tetap punya default 200×140,
+/// sedangkan kartu FOTO sekali-lihat harus mengikuti ukuran foto biasa.
 void main() {
-  test('kartu terkunci punya satu sumber ukuran', () {
+  test('default kartu terkunci tetap 200×140 (untuk video)', () {
     expect(ViewOnceLockedCard.cardWidth, 200);
     expect(ViewOnceLockedCard.cardHeight, 140);
   });
 
-  test('GUARD: kartu foto sekali-lihat memakai ukuran ViewOnceLockedCard', () {
+  test('GUARD: kartu foto sekali-lihat memakai chatMediaWidth (foto biasa)', () {
     final src = File(
       'lib/widgets/message/view_once_image.dart',
     ).readAsStringSync();
-    expect(src.contains('ViewOnceLockedCard.cardWidth'), isTrue);
-    expect(src.contains('ViewOnceLockedCard.cardHeight'), isTrue);
-    // Tidak boleh ada ukuran proporsional lama (maks 280) yang tertinggal.
-    expect(src.contains('> 280'), isFalse);
+    // Satu sumber ukuran: lebar foto biasa (72% layar) + tinggi rasio foto.
+    expect(src.contains('chatMediaWidth('), isTrue);
+    expect(src.contains('chatPhotoSize('), isTrue);
+    // Tidak boleh lagi mengunci 200×140 atau 220.
+    expect(src.contains('ViewOnceLockedCard.cardWidth'), isFalse);
+    expect(src.contains('width: 220'), isFalse);
   });
 }
