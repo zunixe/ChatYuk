@@ -76,6 +76,13 @@ class MessageTextWithTime extends StatelessWidget {
   /// (jauh dari viewport) agar blok kode panjang (khas balasan AI) tidak
   /// membebani layout. `null`/<=0 = tampil penuh (perilaku lama).
   final int? codeMaxLines;
+
+  /// Blok teks+jam MENGISI lebar yang diberikan (bukan selebar teksnya) dan
+  /// mendorong jam ke tepi KANAN. Dipakai bubble BALASAN: Column-nya
+  /// dibentangkan selebar kutipan (`StretchToWidest`), jadi tanpa ini baris
+  /// teks+jam menempel kiri dan jam tidak rata kanan (keluhan user
+  /// 2026-10-19). Default `false` → perilaku lama tidak berubah.
+  final bool fillWidth;
   const MessageTextWithTime({
     super.key,
     required this.text,
@@ -88,6 +95,7 @@ class MessageTextWithTime extends StatelessWidget {
     this.highlightMentionAll = false,
     this.searchQuery = '',
     this.codeMaxLines,
+    this.fillWidth = false,
   });
 
   // Poin "1." / "(a)" / "a." di awal baris → baris lanjutan menjorok
@@ -367,15 +375,28 @@ class MessageTextWithTime extends StatelessWidget {
           // maupun penerima, hemat seperti WA. Tanpa Flexible supaya
           // teks pendek tidak Terperas rusak.
           return Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: fillWidth ? MainAxisSize.max : MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              RichText(
-                text: TextSpan(
-                  style: textStyle,
-                  children: _linkifySpans(t, textStyle),
+              // fillWidth (BALASAN): teks mengambil SISA lebar → jam otomatis
+              // menempel tepi kanan. Tanpa fillWidth: teks selebar isinya
+              // (perilaku lama, teks pendek tidak direnggangkan).
+              if (fillWidth)
+                Expanded(
+                  child: RichText(
+                    text: TextSpan(
+                      style: textStyle,
+                      children: _linkifySpans(t, textStyle),
+                    ),
+                  ),
+                )
+              else
+                RichText(
+                  text: TextSpan(
+                    style: textStyle,
+                    children: _linkifySpans(t, textStyle),
+                  ),
                 ),
-              ),
               const SizedBox(width: 6),
               Transform.translate(
                 offset: const Offset(0, 3),

@@ -898,6 +898,9 @@ class MessageBubble extends StatelessWidget {
                               highlightMentionAll: highlightMentionAll,
                               searchQuery: searchQuery,
                               codeMaxLines: codeMaxLines,
+                              // BALASAN: teks+jam mengisi lebar bubble →
+                              // jam rata kanan (teksnya tetap kiri).
+                              fillWidth: stretchReply,
                               // Centang ikut di baris jam terpisah bila ada
                               // kartu link (biar tidak dobel).
                               trailing: (isMe && !hasLinkCard)
