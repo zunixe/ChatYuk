@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chatyuk/config/theme.dart';
 import 'package:chatyuk/widgets/message/message_text_with_time.dart';
 
 /// Jam bubble BALASAN harus rata kanan bubble (teks tetap kiri).
@@ -51,5 +50,23 @@ void main() {
     final timeRight = tester.getTopRight(find.text('10:11')).dx;
     // Tidak menempel tepi kanan 300 → tetap dekat teks.
     expect(timeRight, lessThan(150));
+  });
+  testWidgets('fillWidth + alignRight: teks tetap KIRI, jam KANAN', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        const MessageTextWithTime(
+          text: 'halo dunia panjang sekali ya',
+          timeStr: '10:11',
+          textStyle: TextStyle(fontSize: 16),
+          timeStyle: TextStyle(fontSize: 11),
+          alignRight: true,
+          fillWidth: true,
+        ),
+      ),
+    );
+    final jam = tester.getTopLeft(find.text('10:11')).dx;
+    expect(jam, greaterThan(200), reason: 'jam harus di kanan');
   });
 }
