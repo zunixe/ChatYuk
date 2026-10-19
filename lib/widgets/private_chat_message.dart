@@ -251,11 +251,10 @@ class MessageBubble extends StatelessWidget {
                       ? const EdgeInsets.all(4)
                       : hasLinkCard
                       ? const EdgeInsets.fromLTRB(4, 4, 4, 6)
-                      // Text reply (ada kutipan): beri sedikit padding kiri
-                      // supaya teks isi tidak menempel tepi bubble (dulu 4 →
-                      // terlihat terlalu mepet dibanding blok kutipan).
+                      // Reply: padding bubble tetap 4 (sejajar kartu media);
+                      // tab untuk teks isi diberikan di dalam.
                       : stretchReply
-                      ? const EdgeInsets.symmetric(horizontal: 8, vertical: 6)
+                      ? const EdgeInsets.symmetric(horizontal: 4, vertical: 6)
                       : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
@@ -874,8 +873,11 @@ class MessageBubble extends StatelessWidget {
                             if (!linkTextOnly)
                             Padding(
                               // Bingkai tipis 4px + 6px = jarak teks normal (10px).
+                              // Reply: tab 8px agar teks isi tak menempel tepi.
                               padding: hasLinkCard
                                   ? const EdgeInsets.symmetric(horizontal: 6)
+                                  : stretchReply
+                                  ? const EdgeInsets.fromLTRB(8, 0, 8, 0)
                                   : EdgeInsets.zero,
                               child: MessageTextWithTime(
                               text: msg.text,

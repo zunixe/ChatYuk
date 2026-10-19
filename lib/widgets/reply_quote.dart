@@ -63,10 +63,14 @@ class ReplyQuote extends StatelessWidget {
     final displayText = targetDeleted
         ? s.messageDeleted
         : (isLocationPayload(text) ? '📍 ${s.msgLocation}' : text);
-    return Container(
-      // Margin KIRI kecil: garis aksen kutipan jangan menempel tepi bubble
-      // (terukur ~6 px logical dari tepi → terlalu rapat; minta user).
-      margin: const EdgeInsets.only(left: 2, bottom: 6),
+    return Padding(
+      // Jarak dari tepi bubble dipasang sebagai Padding (BUKAN `margin` pada
+      // Container ber-border: margin + border di Container membuat dekorasi
+      // diletakkan di tepi luar margin, sehingga jaraknya tidak terlihat).
+      // Terukur di HP (density 3) sebelum fix: garis aksen mulai x≈19px
+      // sementara tepi bubble x≈18px → ~0.3-1dp = MENEMPEL (minta user).
+      padding: const EdgeInsets.only(left: 4, bottom: 6),
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isMe
@@ -88,6 +92,7 @@ class ReplyQuote extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
