@@ -340,28 +340,32 @@ class _GalleryPickerSheetState extends State<GalleryPickerSheet> {
               );
             },
           ),
-          if (sel)
+          // Mode pilih-tunggal (maxSelect == 1, mis. foto sekali-lihat): TIDAK
+          // tampilkan bulatan angka pemilih — foto langsung dikirim begitu
+          // diketuk (lihat `_toggle`). Bulatan hanya relevan untuk multi-pilih.
+          if (widget.maxSelect > 1 && sel)
             ColoredBox(color: Colors.black.withValues(alpha: 0.35)),
-          Positioned(
-            top: 6,
-            right: 6,
-            child: Container(
-              width: 22,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: sel ? AppTheme.primary : Colors.black26,
-                border: Border.all(color: Colors.white, width: 1.6),
+          if (widget.maxSelect > 1)
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: sel ? AppTheme.primary : Colors.black26,
+                  border: Border.all(color: Colors.white, width: 1.6),
+                ),
+                child: sel
+                    ? Text(
+                        '${idx + 1}',
+                        style: AppText.micro.copyWith(color: Colors.white),
+                      )
+                    : null,
               ),
-              child: sel
-                  ? Text(
-                      '${idx + 1}',
-                      style: AppText.micro.copyWith(color: Colors.white),
-                    )
-                  : null,
             ),
-          ),
         ],
       ),
     );
