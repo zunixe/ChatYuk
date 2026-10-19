@@ -265,10 +265,14 @@ mixin _PcBuildMx on _PcBase {
                                 b.lastAt,
                               ),
                             );
-                      final List<Object> entries =
-                          _chatFilter == ChatFilter.groups
-                              ? List<Object>.of(groupItems)
-                              : <Object>[...filtered, ...groupItems];
+                      // TERSEMAT (chat private + GRUP) selalu paling atas,
+                      // urut waktu disematkan — lihat mergePinnedFirstChats.
+                      final List<Object> entries = mergePinnedFirstChats(
+                        chats: filtered,
+                        groups: groupItems,
+                        myUid: auth.uid ?? '',
+                        groupsOnly: _chatFilter == ChatFilter.groups,
+                      );
                       if (entries.isEmpty) {
                         final searching = effectiveQuery.isNotEmpty;
                         return EmptyStateView(

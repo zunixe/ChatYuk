@@ -21,6 +21,7 @@ import '../widgets/empty_state_view.dart';
 import '../widgets/app_gesture.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/cache/group_pin_store.dart';
+import '../core/chat/chat_list_merge.dart';
 import '../core/nav_guard.dart';
 import '../core/nav_journal.dart';
 import '../../providers/riverpod/nav_provider.dart';
