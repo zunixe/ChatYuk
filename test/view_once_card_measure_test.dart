@@ -53,6 +53,7 @@ void main() {
     );
     final expired = tester.getSize(find.byType(ViewOnceImage));
     expect(expired.width, expectedW);
+    // Tanpa dimensi foto → kotak placeholder 4/3 (bukan poster kecil).
     expect(expired.height, expectedW * 4 / 3);
 
     // Inti keluhan: kartu pembuka & kartu kedaluwarsa sama ukuran.

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -369,7 +371,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   Widget _buildAdminView(BuildContext context) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final decoded = _decoded;
-    final size = _sizeFor(context, decoded);
+    final size = _sizeFor(context, decoded, widget.imageData);
     final w = size.width;
     final h = size.height;
     final child = ClipRRect(
@@ -467,7 +469,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
         if (widget.isMe) {
           // View-once terkunci (data sudah tidak tersedia) → kartu terkunci, bukan spinner
           if (_tick.state == ViewOnceState.expired) {
-            final sz = _sizeFor(context, null);
+            final sz = _sizeFor(context, null, widget.imageData);
             return ViewOnceLockedCard(
               title: s.viewOnceExpired,
               hint: s.viewOnceExpiredHint,
@@ -476,7 +478,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
             );
           }
           final decoded = _decoded;
-          final size = _sizeFor(context, decoded);
+          final size = _sizeFor(context, decoded, widget.imageData);
           final w = size.width;
           final h = size.height;
           return ClipRRect(
@@ -553,8 +555,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               // Ukuran SAMA dengan kartu FOTO BIASA (72% layar, rasio 4/3):
               // setelah foto dibuka, kartu foto memakai ukuran yang sama
               // persis → tidak ada lompatan ukuran (minta user 2026-10-19).
-              width: _sizeFor(context, null).width,
-              height: _sizeFor(context, null).height,
+              width: _sizeFor(context, null, widget.imageData).width,
+              height: _sizeFor(context, null, widget.imageData).height,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
@@ -618,7 +620,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
 
         // Expired — kartu terkunci (tanpa image — hemat memori & tidak load foto)
         if (_tick.state == ViewOnceState.expired) {
-          final sz = _sizeFor(context, null);
+          final sz = _sizeFor(context, null, widget.imageData);
           return ViewOnceLockedCard(
             title: s.viewOnceExpired,
             hint: s.viewOnceExpiredHint,
@@ -637,12 +639,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               title: s.errPhotoRead,
               hint: s.btnRetry,
               icon: Icons.refresh_rounded,
-              width: _sizeFor(context, null).width,
-              height: _sizeFor(context, null).height,
+              width: _sizeFor(context, null, widget.imageData).width,
+              height: _sizeFor(context, null, widget.imageData).height,
             ),
           );
         }
-        final size = _sizeFor(context, decoded);
+        final size = _sizeFor(context, decoded, widget.imageData);
         final vw = size.width;
         final vh = size.height;
         return GestureDetector(
@@ -729,15 +731,56 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   static double _mediaWidth(BuildContext context) =>
       chatMediaWidth(MediaQuery.sizeOf(context).width);
 
+  /// Ukuran kartu = UKURAN FOTO (lebar 72% layar, tinggi mengikuti RASIO
+  /// FOTO asli) — bukan kotak poster/placeholder. Bila dimensi foto sudah
+  /// diketahui (header imageData) dipakai meski bitmap belum ter-decode,
+  /// supaya kartu "tekan untuk melihat" & kartu terkunci PUNYA tinggi yang
+  /// sama dengan foto aslinya (tidak gepeng/poster).
+  /// Dimensi foto dari `imageData` (base64 atau path file) — baca HEADER saja
+  /// (JPEG SOF / PNG IHDR), tanpa decode penuh.
+  static ({int width, int height})? _dimsOf(String imageData) {
+    if (imageData.isEmpty) return null;
+    try {
+      Uint8List? bytes;
+      if (imageData.startsWith('/')) {
+        final f = File(imageData);
+        if (!f.existsSync()) return null;
+        // 64 KB pertama cukup untuk header JPEG/PNG.
+        final raf = f.openSync();
+        try {
+          bytes = raf.readSync(f.lengthSync().clamp(0, 64 * 1024));
+        } finally {
+          raf.closeSync();
+        }
+      } else {
+        final b64 = imageData.length > 262144
+            ? imageData.substring(0, 262144)
+            : imageData;
+        final pad = b64.length % 4 == 0 ? '' : '=' * (4 - b64.length % 4);
+        bytes = base64Decode(b64 + pad);
+      }
+      return parseImageDimensions(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static ({double width, double height}) _sizeFor(
     BuildContext context,
     DecodedImage? d,
+    String imageData,
   ) {
     final w = _mediaWidth(context);
-    if (d == null) {
-      // Placeholder: rasio 4/3 (batas bawah chatPhotoSize) — tidak gepeng.
-      return (width: w, height: w * 4 / 3);
+    var fw = d?.width ?? 0;
+    var fh = d?.height ?? 0;
+    if (fw <= 0 || fh <= 0) {
+      final hdr = _dimsOf(imageData);
+      if (hdr != null) {
+        fw = hdr.width;
+        fh = hdr.height;
+      }
     }
-    return chatPhotoSize(d.width, d.height, w);
+    if (fw <= 0 || fh <= 0) return (width: w, height: w * 4 / 3);
+    return chatPhotoSize(fw, fh, w);
   }
 }
