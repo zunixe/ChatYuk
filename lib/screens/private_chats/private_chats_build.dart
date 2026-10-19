@@ -245,32 +245,38 @@ mixin _PcBuildMx on _PcBase {
                           _chatFilter == ChatFilter.all ||
                           _chatFilter == ChatFilter.unread;
                       // PENTING: hasil ekspresi ini WAJIB list baru yang
-                      // MUTABLE sebelum `..sort()`. Sebelumnya cabang
-                      // `!showGroups` memakai `const <RoomModel>[]`
-                      // (immutable) lalu di-sort → crash
-                      // "Unsupported operation: Cannot modify an unmodifiable
-                      // list" (terbukti di device: private_chats_build.dart:260).
-                      final List<RoomModel> groupItems = !showGroups
-                          ? <RoomModel>[]
-                          : (_chatFilter == ChatFilter.unread
-                                    ? myGroups.where((g) => g.unread > 0)
-                                    : myGroups)
-                                .where(
-                                  (g) =>
-                                      effectiveQuery.isEmpty ||
-                                      g.name
-                                          .toLowerCase()
-                                          .contains(effectiveQuery),
-                                )
-                                .toList()
-                              ..sort(
-                                (a, b) => GroupPinStore.compareGroups(
-                                  a.id,
-                                  a.lastAt,
-                                  b.id,
-                                  b.lastAt,
-                                ),
-                              );
+                      // MUTABLE sebelum `..sort()`. `roomProvider.myGroups`
+                      // adalah List.unmodifiable → menyortir langsung
+                      // melempar "Unsupported operation: Cannot modify an
+                      // unmodifiable list" dan membuat seluruh layar Pesan
+                      // jadi error/blanks. Selalu `toList()` dulu, lalu sort
+                      // dengan PERNYATAAN TERPISAH (bukan `..sort()` yang
+                      // menempel ke conditional — precedence-nya rawan).
+                      final List<RoomModel> groupItems;
+                      if (!showGroups) {
+                        groupItems = <RoomModel>[];
+                      } else {
+                        final base = _chatFilter == ChatFilter.unread
+                            ? myGroups.where((g) => g.unread > 0)
+                            : myGroups;
+                        groupItems = base
+                            .where(
+                              (g) =>
+                                  effectiveQuery.isEmpty ||
+                                  g.name
+                                      .toLowerCase()
+                                      .contains(effectiveQuery),
+                            )
+                            .toList();
+                        groupItems.sort(
+                          (a, b) => GroupPinStore.compareGroups(
+                            a.id,
+                            a.lastAt,
+                            b.id,
+                            b.lastAt,
+                          ),
+                        );
+                      }
                       // TERSEMAT (chat private + GRUP) selalu paling atas,
                       // urut waktu disematkan — lihat mergePinnedFirstChats.
                       final List<Object> entries = mergePinnedFirstChats(
