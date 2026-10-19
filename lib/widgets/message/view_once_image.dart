@@ -556,7 +556,10 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               // HANYA setelah foto dibuka ukurannya mengikuti rasio foto.
               width: ViewOnceLockedCard.cardWidth,
               height: ViewOnceLockedCard.cardHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              // Padding dalam DISAMAKAN dengan kartu lain (bubble sudah
+              // padding 4) → margin kiri-kanan konsisten. Dulu 12/10 →
+              // terlihat lebih menjorok dari kartu foto biasa.
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
                 gradient: const LinearGradient(

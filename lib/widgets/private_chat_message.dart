@@ -244,8 +244,13 @@ class MessageBubble extends StatelessWidget {
                   clipBehavior: Clip.none,
                   children: [
                     Container(
+                  // Kartu media memakai lebar `chatMediaWidth` (72%) + padding
+                  // 4 kiri-kanan → batas 80% membuat bubble lebih SEMPIT dari
+                  // kartunya sehingga margin kiri-kanan terlihat lebar.
+                  // Beri ruang pas untuk kartu media; teks tetap 80%.
                   constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width * 0.8,
+                    maxWidth: MediaQuery.sizeOf(context).width *
+                        (isMediaCard ? 0.9 : 0.8),
                   ),
                   // Stiker melayang: tanpa padding card.
                   padding: isSticker

@@ -388,7 +388,11 @@ class RoomMessageBubble extends StatelessWidget {
             Flexible(
               child: Container(
                 constraints: BoxConstraints(
-                  maxWidth: MediaQuery.sizeOf(context).width * 0.8,
+                  // Kartu media butuh ruang pas untuk `chatMediaWidth` (72%)
+                  // + padding 4 → 80% membuat bubble lebih sempit (margin
+                  // kiri-kanan terlihat lebar). Samakan dengan private chat.
+                  maxWidth: MediaQuery.sizeOf(context).width *
+                      (_isMedia ? 0.9 : 0.8),
                 ),
                 padding: _isSticker
                     ? EdgeInsets.zero
