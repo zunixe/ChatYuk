@@ -199,6 +199,28 @@ void main() {
     expect(find.byIcon(Icons.people_alt_rounded), findsNothing);
   });
 
+  // Badge "+" (belum mengikuti) → tap membuka menu 2 aksi berikon:
+  // "Lihat profil" dan "Ikuti". Bukan langsung follow seperti dulu.
+  testWidgets('badge "+" tap → menu Lihat profil & Ikuti (berikon)',
+      (tester) async {
+    await pump(tester, _post());
+    final plus = find.byIcon(Icons.add);
+    expect(plus, findsOneWidget, reason: 'badge + tampil saat belum mengikuti');
+    await tester.tap(plus);
+    await tester.pumpAndSettle();
+    expect(find.byType(PopupMenuItem<String>), findsNWidgets(2));
+    expect(
+      find.byIcon(Icons.person_outline_rounded),
+      findsOneWidget,
+      reason: 'ikon menu "Lihat profil"',
+    );
+    expect(
+      find.byIcon(Icons.person_add_alt_1_rounded),
+      findsOneWidget,
+      reason: 'ikon menu "Ikuti"',
+    );
+  });
+
   testWidgets('foto single 1:1 → lebar penuh kolom konten ala Threads', (
     tester,
   ) async {

@@ -556,6 +556,7 @@ class _PostCardState extends ConsumerState<PostCard> {
 
   /// Kolom avatar (lebar 40) + badge "+ ikuti" di kanan-bawah (ala Threads).
   /// Badge hanya tampil bila belum mengikuti & bukan post sendiri.
+  /// Tap badge → menu singkat: "Lihat profil" / "Ikuti" (masing-masing ikon).
   Widget _avatarColumn(bool showFollowBadge, S s) {
     return SizedBox(
       width: _kAvatarCol,
@@ -576,27 +577,77 @@ class _PostCardState extends ConsumerState<PostCard> {
                 Positioned(
                   right: -4,
                   bottom: -4,
-                  child: Tooltip(
-                    message: s.btnFollow,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _followBusy ? null : _toggleFollow,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF5F5F5),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppTheme.bgScreen,
-                            width: 2.5,
-                          ),
+                  child: PopupMenuButton<String>(
+                    tooltip: s.btnFollow,
+                    padding: EdgeInsets.zero,
+                    color: AppTheme.bgCard,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    onSelected: (v) {
+                      if (v == 'profile') {
+                        _openProfile();
+                      } else if (v == 'follow') {
+                        _toggleFollow();
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem<String>(
+                        value: 'profile',
+                        height: 40,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.person_outline_rounded,
+                              size: 18,
+                              color: AppTheme.textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              s.btnViewProfile,
+                              style: AppText.body.copyWith(
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          ],
                         ),
-                        child: const Icon(
-                          Icons.add,
-                          size: 10,
-                          color: Colors.black,
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'follow',
+                        height: 40,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.person_add_alt_1_rounded,
+                              size: 18,
+                              color: AppTheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              s.btnFollow,
+                              style: AppText.body.copyWith(
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                    ],
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F5F5),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppTheme.bgScreen,
+                          width: 2.5,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.add,
+                        size: 10,
+                        color: Colors.black,
                       ),
                     ),
                   ),
