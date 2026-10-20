@@ -95,19 +95,73 @@ SupabaseClient fakeSupabaseClientNoTicker({FakeSupabaseHandler? handler}) {
   );
 }
 
+bool _isRpc(http.Request r, String fn) =>
+    r.method == 'POST' && r.url.path.endsWith('/rest/v1/rpc/$fn');
+
+http.Request? _rpcRequest(FakeSupabaseHandler handler, String fn) {
+  for (final r in handler.captured) {
+    if (_isRpc(r, fn)) return r;
+  }
+  return null;
+}
+
+int _rpcCount(FakeSupabaseHandler handler, String fn) =>
+    handler.captured.where((r) => _isRpc(r, fn)).length;
+
+/// Tunggu sampai RPC [fn] benar-benar terkirim (maks [timeout]).
+///
+/// Dipakai jalur fire-and-forget seperti `markAsRead`: RPC sengaja TIDAK
+/// di-await pemanggil (supaya buka chat tidak menunggu jaringan), jadi test
+/// tidak boleh langsung membaca [FakeSupabaseHandler.captured] setelah
+/// `await markAsRead(...)`.
+Future<http.Request> waitRpc(
+  FakeSupabaseHandler handler,
+  String fn, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (true) {
+    final req = _rpcRequest(handler, fn);
+    if (req != null) return req;
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError(
+        'RPC "$fn" tidak terkirim sampai ${timeout.inMilliseconds}ms. '
+        'Request tercatat: '
+        '${handler.captured.map((r) => '${r.method} ${r.url.path}').toList()}',
+      );
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
+/// Tunggu sampai jumlah request RPC [fn] mencapai [count].
+Future<void> waitRpcCount(
+  FakeSupabaseHandler handler,
+  String fn,
+  int count, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (_rpcCount(handler, fn) < count) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError(
+        'RPC "$fn" baru ${_rpcCount(handler, fn)}× dari $count× dalam '
+        '${timeout.inMilliseconds}ms. Request tercatat: '
+        '${handler.captured.map((r) => '${r.method} ${r.url.path}').toList()}',
+      );
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
 /// Ambil request POST ke `/rest/v1/rpc/<fn>` — untuk test semi-integrasi yang
 /// memverifikasi nama RPC + params yang benar-benar dikirim ke PostgREST.
-http.Request rpcRequestOf(FakeSupabaseHandler handler, String fn) {
-  return handler.captured.firstWhere(
-    (r) =>
-        r.method == 'POST' &&
-        r.url.path.endsWith('/rest/v1/rpc/$fn'),
-    orElse: () => throw StateError(
+http.Request rpcRequestOf(FakeSupabaseHandler handler, String fn) =>
+    _rpcRequest(handler, fn) ??
+    (throw StateError(
       'RPC "$fn" tidak terkirim. Request tercatat: '
       '${handler.captured.map((r) => '${r.method} ${r.url.path}').toList()}',
-    ),
-  );
-}
+    ));
 
 /// Params body dari RPC [fn] (sudah di-decode). RPC tanpa params mengirim
 /// body kosong/`null` → kembalikan map kosong, bukan error.

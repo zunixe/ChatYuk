@@ -20,6 +20,8 @@ void main() {
     final b = ChatService(fakeSupabaseClient(handler: h2));
 
     await a.markAsRead('chat-x', 'u1');
+    // RPC dikirim di latar (fire-and-forget) → tunggu tercatat dulu.
+    await waitRpc(h1, 'mark_chat_read');
     expect(ChatService.markReadThrottled('chat-x'), isTrue);
     // Instance B: chatId SAMA dalam window → HARUS di-throttle (tidak RPC).
     await b.markAsRead('chat-x', 'u1');
@@ -33,6 +35,7 @@ void main() {
     final a = ChatService(fakeSupabaseClient(handler: h));
     await a.markAsRead('c-1', 'u1');
     await a.markAsRead('c-2', 'u1');
+    await waitRpcCount(h, 'mark_chat_read', 2);
     expect(_count(h, 'mark_chat_read'), 2);
   });
 }

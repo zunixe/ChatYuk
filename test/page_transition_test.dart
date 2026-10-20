@@ -7,7 +7,7 @@ import 'package:chatyuk/config/theme.dart';
 
 import 'test_helper.dart';
 
-/// Kontrak transisi halaman global: slide-cepat 120/100ms untuk halaman biasa,
+/// Kontrak transisi halaman global: slide 250/220ms untuk halaman biasa,
 /// dan fullscreen dialog (panggilan) TIDAK ikut slide (pakai fallback).
 void main() {
   const builder = AppSlidePageTransitionsBuilder();
@@ -19,9 +19,9 @@ void main() {
 
   tearDownAll(resetFontForTest);
 
-  test('durasi masuk 120ms, keluar 100ms (hasil ukur, samakan private chat)', () {
-    expect(builder.transitionDuration, const Duration(milliseconds: 120));
-    expect(builder.reverseTransitionDuration, const Duration(milliseconds: 100));
+  test('durasi masuk 250ms, keluar 220ms (samakan private chat / WhatsApp)', () {
+    expect(builder.transitionDuration, const Duration(milliseconds: 250));
+    expect(builder.reverseTransitionDuration, const Duration(milliseconds: 220));
   });
 
   test('kedua tema mendaftarkan builder slide untuk Android', () {
@@ -79,9 +79,9 @@ void main() {
 }
 
 /// Mengukur durasi route AKTUAL — membuktikan MaterialPageRoute benar-benar
-/// memakai 120/100ms dari theme global (bukan default 300ms).
+/// memakai 250/220ms dari theme global (bukan default 300ms).
 void _routeDurationTests() {
-  testWidgets('MaterialPageRoute ambil durasi dari theme (120/100ms)',
+  testWidgets('MaterialPageRoute ambil durasi dari theme (250/220ms)',
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -96,8 +96,8 @@ void _routeDurationTests() {
     nav.push(route);
     await tester.pump();
     // Durasi dibaca route dari PageTransitionsBuilder theme.
-    expect(route.transitionDuration, const Duration(milliseconds: 120));
-    expect(route.reverseTransitionDuration, const Duration(milliseconds: 100));
+    expect(route.transitionDuration, const Duration(milliseconds: 250));
+    expect(route.reverseTransitionDuration, const Duration(milliseconds: 220));
     await tester.pumpAndSettle();
   });
 }

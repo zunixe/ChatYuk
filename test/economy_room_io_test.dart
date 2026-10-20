@@ -57,6 +57,8 @@ void main() {
       final svc = ChatService(fakeSupabaseClient(handler: handler));
 
       await svc.markAsRead('chat-9', 'u-1');
+      // RPC dikirim di latar (fire-and-forget) → tunggu benar-benar terkirim.
+      await waitRpc(handler, 'mark_chat_read');
 
       final p = rpcParamsOf(handler, 'mark_chat_read');
       expect(p['p_chat_id'], 'chat-9');

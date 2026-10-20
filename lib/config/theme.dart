@@ -795,7 +795,7 @@ class AppTheme {
         ),
         trackOutlineColor: WidgetStatePropertyAll(Colors.transparent),
       ),
-      // Transisi halaman GLOBAL: slide dari kanan 150ms masuk / 120ms keluar
+      // Transisi halaman GLOBAL: slide dari kanan 250ms masuk / 220ms keluar
       // (sama seperti private chat) untuk SEMUA MaterialPageRoute — room,
       // profil, setelan, admin, dst. Satu sumber kebenaran di sini; jangan
       // lagi bikin PageRouteBuilder manual per layar. Dialog fullscreen
@@ -813,7 +813,7 @@ class AppTheme {
   }
 }
 
-/// Transisi halaman slide-dari-kanan yang cepat (150ms masuk / 120ms keluar)
+/// Transisi halaman slide-dari-kanan (250ms masuk / 220ms keluar)
 /// dipakai GLOBAL lewat [PageTransitionsTheme] — menyeragamkan back/masuk di
 /// seluruh app agar tak ada layar yang terasa lebih lambat (dulu private chat
 /// 120ms sedangkan room & halaman lain default ~300ms).
