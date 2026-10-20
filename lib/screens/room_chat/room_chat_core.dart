@@ -50,8 +50,6 @@ mixin _RcCoreMx on _RoomChatBase {
     String? repliedToSenderName,
     Map<String, dynamic>? repliedToMeta,
     int? viewOnceSecs,
-    // Video belum aktif di room (videoSendEnabled=false) — parameter
-    // tetap diterima demi kontrak mixin bersama.
     int? videoDurationMs,
     String videoPoster = '',
     String? albumId,
@@ -89,7 +87,6 @@ mixin _RcCoreMx on _RoomChatBase {
 
   @override
   void photoOnSent(String kind) {}
-
   @override
   void photoFirstBonus(PointsNotifier pp) {}
 
@@ -99,6 +96,63 @@ mixin _RcCoreMx on _RoomChatBase {
     setState(() {
       _pendingPhotoBase64 = base64;
       _pendingLocation = null;
+    });
+  }
+
+  // ── Video: paritas private chat (grup & global room) ──
+  @override
+  bool get videoSendEnabled => true;
+
+  @override
+  String? get pendingVideoPath => _pendingVideoPath;
+
+  /// Kontrak ChatSendMixin: video pending (router tombol kirim).
+  @override
+  String? get sendPendingVideoPath => _pendingVideoPath;
+
+  @override
+  int get pendingVideoMs => _pendingVideoMs;
+
+  @override
+  String? get pendingVideoPosterB64 => _pendingVideoPoster;
+
+  @override
+  bool get videoOnceSelected => _pendingVideoOnce;
+
+  @override
+  void videoSetOnce(bool value) {
+    if (!mounted) return;
+    setState(() => _pendingVideoOnce = value);
+  }
+
+  @override
+  void videoSetPreview({
+    required String path,
+    required String posterBase64,
+    required int durationMs,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _pendingVideoPath = path;
+      _pendingVideoPoster = posterBase64;
+      _pendingVideoMs = durationMs;
+      _pendingVideoOnce = false; // default: video biasa
+      // Video bukan foto: buang preview foto & lokasi (satu preview saja).
+      _pendingPhotoBase64 = null;
+      _pendingLocation = null;
+    });
+    _scrollToBottom();
+  }
+
+  /// Buang preview video (batal/kirim).
+  @override
+  void videoClearPreview() {
+    if (!mounted) return;
+    setState(() {
+      _pendingVideoPath = null;
+      _pendingVideoPoster = null;
+      _pendingVideoMs = 0;
+      _pendingVideoOnce = false;
     });
   }
 

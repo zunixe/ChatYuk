@@ -48,9 +48,6 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   final double? videoCompressing;
   /// Chip "Kirim Video" — null bila fitur tidak aktif (room).
   final VoidCallback? onSendVideo;
-  /// Status toggle HD preview (ala WhatsApp).
-  final bool photoHd;
-  final ValueChanged<bool>? onHdChanged;
   /// Timer view-once preview (detik; null = foto normal).
   final int? viewTimerSecs;
   /// null = sembunyikan pemilih timer (room). Non-null = private.
@@ -109,8 +106,6 @@ class ChatComposerInput extends ConsumerStatefulWidget {
     this.onCancelVideo,
     this.videoCompressing,
     this.onSendVideo,
-    this.photoHd = false,
-    this.onHdChanged,
     this.viewTimerSecs,
     this.onViewTimerChanged,
     this.onOpenGiftPanel,
@@ -372,38 +367,8 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                           ),
                         ),
                       ),
-                      // Toggle HD ala WhatsApp (kiri atas; timer di kiri
-                      // bawah). Aktif = bg primary, mati = hitam transparan.
-                      if (widget.onHdChanged != null)
-                        Positioned(
-                          top: 6,
-                          left: 6,
-                          child: GestureDetector(
-                            onTap: () =>
-                                widget.onHdChanged!(!widget.photoHd),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: widget.photoHd
-                                    ? AppTheme.primary
-                                    : Colors.black54,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Text(
-                                ProviderScope.containerOf(context, listen: false).read(localeProvider)
-                                    .s
-                                    .photoHdLabel,
-                                style: AppText.label.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                      // Toggle HD TIDAK ada di sini — sudah dipilih di panel
+                      // galeri (`GalleryPickerSheet`), dulu muncul 2× (2026-10-20).
                       // Pemilih timer view-once (private saja).
                       if (widget.onViewTimerChanged != null)
                         Positioned(

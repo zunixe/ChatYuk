@@ -686,10 +686,6 @@ mixin _PcBuildMx on _PrivateChatBase {
                           photoClearPreviewState();
                         })
                       : null,
-                  photoHd: photoHd,
-                  onHdChanged: _pendingPhotoBase64 != null
-                      ? (v) => setState(() => photoHd = v)
-                      : null,
                   viewTimerSecs: _viewTimerSecs,
                   onViewTimerChanged: _pendingPhotoBase64 != null
                       ? (v) => setState(() => _viewTimerSecs = v)

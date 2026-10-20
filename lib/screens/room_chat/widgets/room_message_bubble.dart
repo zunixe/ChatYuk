@@ -12,6 +12,7 @@ import '../../../core/chat/chat_location.dart';
 import '../../../widgets/location_bubble.dart';
 import '../../../widgets/link_preview.dart';
 import '../../../widgets/mention_spans.dart';
+import '../../../widgets/chat_video_bubble.dart';
 import '../../../widgets/message/file_bubble.dart';
 import '../../../widgets/message/message_image.dart';
 import '../../../widgets/message/view_once_image.dart';
@@ -48,6 +49,9 @@ class RoomMessageBubble extends StatelessWidget {
   /// Batas baris blok kode ``` untuk pesan ini (non-null = pesan jauh dari
   /// viewport → render ringkas).
   final int? codeMaxLines;
+  /// Poster video auto-load saat mount (pola sama private chat: pesan jauh
+  /// dari viewport → poster hanya bila sudah cache / saat diketuk).
+  final bool autoVideoPoster;
   const RoomMessageBubble({
     super.key,
     required this.msg,
@@ -62,6 +66,7 @@ class RoomMessageBubble extends StatelessWidget {
     this.highlightMentionAll = false,
     this.autoLinkPreview = true,
     this.codeMaxLines,
+    this.autoVideoPoster = true,
   });
 
   // Warna teks bubble mengikuti tema (gelap di light mode, terang di dark mode)
@@ -72,6 +77,10 @@ class RoomMessageBubble extends StatelessWidget {
       msg.type == 'image' ||
       msg.type == 'view_once' ||
       msg.type == 'view_once_expired' ||
+      // Video (biasa & sekali-lihat) — kartu media, sama seperti private.
+      msg.type == 'video' ||
+      msg.type == 'video_once' ||
+      msg.type == 'video_once_expired' ||
       msg.type == 'location' ||
       msg.type == 'file' ||
       // Kartu kontak — sama seperti private (docs/UI_CONSISTENCY.md).
@@ -222,8 +231,49 @@ class RoomMessageBubble extends StatelessWidget {
         ],
       );
     }
-    // Bubble POLL (grup & global room): definisi dari `msg.poll` (ikut cache
-    // pesan → frame pertama lengkap); hasil & vote lewat RPC room
+    // VIDEO (biasa & sekali-lihat) — paritas private chat. Dulu room hanya
+    // punya `view_once`/`view_once_expired`, sehingga video room jatuh ke
+    // bubble teks kosong.
+    if (msg.type == 'video' ||
+        msg.type == 'video_once' ||
+        msg.type == 'video_once_expired') {
+      final expiredVideo = msg.type == 'video_once_expired';
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ChatVideoBubble(
+            videoData: msg.imageData,
+            durationMs: msg.durationMs ?? 0,
+            // Penerima: video sekali-lihat terkunci setelah ditonton.
+            // Pengirim tetap boleh melihat miliknya sendiri (pola private).
+            locked: expiredVideo && !isMe,
+            isOnce: msg.type == 'video_once' || expiredVideo,
+            messageId: msg.id,
+            isMe: isMe,
+            posterPath: msg.videoPoster,
+            autoPoster: autoVideoPoster,
+            isRoom: true,
+            chatId: roomId,
+            // Room tak punya centang-baca per-user → jam saja (di overlay).
+            timeStr: timeStr,
+            showChecks: false,
+            isPending: isPending,
+            isQueued: isQueued,
+          ),
+          if (msg.text.isNotEmpty && !expiredVideo)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: MentionAwareText(
+                msg.text,
+                style: AppText.chatBody.copyWith(color: _textColor),
+                mentions: msg.mentions,
+                highlightAll: highlightMentionAll,
+              ),
+            ),
+        ],
+      );
+    }
+    // Bubble POLL (grup & global room): definisi dari `msg.poll` (ikut cache    // pesan → frame pertama lengkap); hasil & vote lewat RPC room
     // (get_room_poll_results / vote_room_poll, controller poll TERPISAH).
     if (msg.type == 'poll' && msg.poll != null) {
       return PollBubble(

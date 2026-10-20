@@ -103,10 +103,32 @@ mixin _RcRoomMx on _RoomChatBase {
             }
           }
         }
+        // Video (biasa & sekali-lihat): bubble optimistik lokal vs baris
+        // server — tanpa loop ini video tampil DOBEL (pending + server).
         for (final m in msgs) {
           if (m.senderId == myId &&
-              m.type == 'voice' &&
+              (m.type == 'video' ||
+                  m.type == 'video_once' ||
+                  m.type == 'video_once_expired') &&
               m.timestamp.isAfter(_openedAt) &&
+              _confirmedVideoIds.add(m.id)) {
+            _trimConfirmed(_confirmedVideoIds);
+            final idx = _pending.indexWhere(
+              (p) =>
+                  p.type == 'video' ||
+                  p.type == 'video_once' ||
+                  p.type == 'video_once_expired',
+            );
+            if (idx != -1) {
+              _queuedIds.remove(_pending[idx].id);
+              _pending.removeAt(idx);
+              changed = true;
+            }
+          }
+        }
+        for (final m in msgs) {
+          if (m.senderId == myId &&
+              m.type == 'voice' &&              m.timestamp.isAfter(_openedAt) &&
               _confirmedVoiceIds.add(m.id)) {
             _trimConfirmed(_confirmedVoiceIds);
             final idx = _pending.indexWhere((p) => p.type == 'voice');

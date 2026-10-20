@@ -117,6 +117,15 @@ class ChatVideoBubble extends StatefulWidget {
   /// tanpa unduh video penuh. Kosong = video lama / tanpa poster.
   final String posterPath;
 
+  /// Pesan berasal dari ROOM (grup/global), bukan private chat. Dipakai saat
+  /// menandai `video_once_expired`: tabelnya `messages` (bukan
+  /// `private_messages`) dan broadcast `view_once_seen` memakai topik room.
+  final bool isRoom;
+
+  /// ID room (hanya dipakai bila [isRoom]) — untuk broadcast realtime ke
+  /// pengirim supaya kartu videonya langsung terkunci.
+  final String chatId;
+
   const ChatVideoBubble({
     super.key,
     required this.videoData,
@@ -134,6 +143,8 @@ class ChatVideoBubble extends StatefulWidget {
     this.isRead = false,
     this.autoPoster = true,
     this.posterPath = '',
+    this.isRoom = false,
+    this.chatId = '',
   });
 
   @override
@@ -616,7 +627,12 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     if (id == null || id.isEmpty || id.startsWith('pending-')) return;
     if (!mounted) return;
     try {
-      await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).clearViewOnceImage(id, video: true);
+      await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).clearViewOnceImage(
+        id,
+        video: true,
+        isRoom: widget.isRoom,
+        chatId: widget.chatId.isEmpty ? null : widget.chatId,
+      );
     } catch (e) {
       dlog('[VideoBubble] expire gagal: $e');
     }

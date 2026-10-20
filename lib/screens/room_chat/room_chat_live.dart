@@ -615,6 +615,21 @@ mixin _RcLiveMx on _RoomChatBase {
           setState(() => _showAttachRow = false);
           sendViewOnceFromPicker();
         },
+        // ── Video (room: grup & global) — paritas private chat ──
+        onSendVideo: () {
+          if (mounted) setState(() => _showAttachRow = false);
+          unawaited(videoPickToPreview());
+        },
+        pendingVideoPoster: _pendingVideoPoster,
+        pendingVideoPath: _pendingVideoPath,
+        pendingVideoMs: _pendingVideoMs,
+        videoOnce: _pendingVideoOnce,
+        onVideoOnceChanged: (v) => setState(() => _pendingVideoOnce = v),
+        videoCompressing: videoCompressProgress,
+        onCancelVideo: () {
+          if (mounted) setState(() => _showAttachRow = false);
+          videoClearPreview();
+        },
         onCreatePoll: () {
           setState(() => _showAttachRow = false);
           _openRoomPollComposer();
@@ -642,10 +657,6 @@ mixin _RcLiveMx on _RoomChatBase {
                 _pendingPhotoBase64 = null;
                 photoClearPreviewState();
               })
-            : null,
-        photoHd: photoHd,
-        onHdChanged: _pendingPhotoBase64 != null
-            ? (v) => setState(() => photoHd = v)
             : null,
         mentionCandidates: _mentionCandidates,
         mentionAllowAll: isPrivateRoom && canModerate,

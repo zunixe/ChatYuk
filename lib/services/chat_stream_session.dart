@@ -276,7 +276,11 @@ class ChatStreamSession {
     // baris lama mengembalikan null (aman).
     const replyCols =
         'replied_to_id,replied_to_text,replied_to_sender_name,replied_to_meta';
-    final cols = isPrivate ? '$privateCols,$replyCols' : roomCols;
+    // Room: roomCols sudah memuat 3 kolom reply teks (tanpa meta) → cukup
+    // tambah `replied_to_meta`. Dulu room TIDAK mengambilnya, akibatnya
+    // thumbnail kutipan media hilang setiap keluar-masuk room (paritas
+    // private: `privateCols` + `replyCols`).
+    final cols = isPrivate ? '$privateCols,$replyCols' : '$roomCols,replied_to_meta';
 
     // Sync foto otomatis: server → file lokal terenkripsi. Download lazy
     // (paralel) hanya untuk pesan yang fotonya belum ada di lokal.

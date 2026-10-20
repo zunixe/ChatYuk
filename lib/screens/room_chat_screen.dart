@@ -110,6 +110,11 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   PointsNotifier? _pointsProv;
   Timer? _presenceTimer;
   String? _pendingPhotoBase64;
+  // ── Video (room: grup & global) — paritas private chat ──
+  String? _pendingVideoPath;
+  String? _pendingVideoPoster;
+  int _pendingVideoMs = 0;
+  bool _pendingVideoOnce = false;
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<UserModel>> _usersStream;
   // ── Optimistic + antrean offline (centang-1 → centang-2 saat online) ──
@@ -117,6 +122,8 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   final Set<String> _queuedIds = {};
   final Set<String> _confirmedPhotoIds = {};
   final Set<String> _confirmedVoiceIds = {};
+  // Video (biasa & sekali-lihat) — dedupe pending vs baris server.
+  final Set<String> _confirmedVideoIds = {};
   // Gema teks yang sudah memakai satu pending (lihat consumeConfirmedText).
   final Set<String> _confirmedTextIds = {};
   late final DateTime _openedAt;
