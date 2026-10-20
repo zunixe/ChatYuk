@@ -75,6 +75,10 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   /// siap / jaringan lambat).
   int _attempts = 0;
 
+  /// Penerima: foto TIDAK BOLEH tampil di bubble (bisa dilihat berulang tanpa
+  /// membuka viewer). Tap kartu → tunggu decode → langsung fullscreen.
+  bool _viewerPending = false;
+
   @override
   void initState() {
     super.initState();
@@ -119,6 +123,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     if (widget.isExpired) {
       // Kadaluarsa: kunci permanen + BUANG byte foto yang mungkin sudah
       // ter-decode, supaya isinya tidak pernah ter-render lagi.
+      _viewerPending = false;
       _tick.state = ViewOnceState.expired;
       _tick.decoded = null;
       _decoded = null;
@@ -289,6 +294,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     if (_tick.state == ViewOnceState.viewing && _tick.timer == null) {
       _beginCountdown();
     }
+    // Tap sudah dilakukan saat decode berjalan → buka viewer sekarang.
+    _tryOpenViewer();
     return true;
   }
 
@@ -309,6 +316,24 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     if (_decoded != null) {
       _beginCountdown();
     }
+  }
+
+  /// Penerima tap kartu: mulai viewing + LANGSUNG buka viewer fullscreen.
+  /// Foto tidak pernah dirender di bubble (kalau tampil sebagai kartu, isinya
+  /// bisa dilihat berulang kali tanpa membuka viewer).
+  void _startViewingAndOpen() {
+    if (_tick.state != ViewOnceState.idle) return;
+    _startViewing();
+    _viewerPending = true;
+    _tryOpenViewer();
+  }
+
+  void _tryOpenViewer() {
+    if (!mounted || !_viewerPending) return;
+    if (_tick.state != ViewOnceState.viewing || _tick.viewerOpen) return;
+    if (_decoded == null) return; // decode belum siap → dibuka dari _decodeAttempt
+    _viewerPending = false;
+    _openViewer();
   }
 
   void _beginCountdown() {
@@ -334,6 +359,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   /// Kunci permanen + bersihkan server (dipakai timer habis & viewer 1x ditutup).
   void _expireNow() {
     if (!mounted) return;
+    _viewerPending = false;
     _tick.state = ViewOnceState.expired;
     ScreenSecureService.exitViewOnce();
     setState(() {});
@@ -344,7 +370,10 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   /// preview composer), bukan lagi di viewer.
 
   void _openViewer() {
-    if (_decoded == null || _tick.state != ViewOnceState.viewing || !mounted) {
+    if (_decoded == null ||
+        _tick.state != ViewOnceState.viewing ||
+        _tick.viewerOpen ||
+        !mounted) {
       return;
     }
     _tick.viewerOpen = true;
@@ -374,9 +403,13 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     try {
       // chatId dikirim supaya server juga menyiarkan broadcast
       // `view_once_seen` → PENGIRIM langsung mengunci kartu (realtime).
+      // Private DAN room didukung (topik = `viewOnceSeenTopic`).
       final chatId = widget.chatKey.startsWith('private_')
           ? widget.chatKey.substring('private_'.length)
+          : widget.chatKey.startsWith('room_')
+          ? widget.chatKey.substring('room_'.length)
           : '';
+      dlog('[VO-SEEN] clear id=$id chatKey=${widget.chatKey} chatId=$chatId isRoom=${widget.isRoom}');
       await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).clearViewOnceImage(
         id,
         isRoom: widget.isRoom,
@@ -407,7 +440,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
             decoded != null
                 ? Image.memory(
                     decoded.bytes,
-                    fit: BoxFit.contain,
+                    fit: BoxFit.cover,
                     gaplessPlayback: true,
                     // Thumb bubble: decode max 720px + filter sedang.
                     // Full-res 12MP = ~48MB bitmap; 720px = ~2MB.
@@ -522,7 +555,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                   decoded != null
                       ? Image.memory(
                           decoded.bytes,
-                          fit: BoxFit.contain,
+                          fit: BoxFit.cover,
                           gaplessPlayback: true,
                           cacheWidth: 720,
                           filterQuality: FilterQuality.medium,
@@ -572,72 +605,19 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           );
         }
 
-        // Penerima — idle: kartu modern "tekan untuk melihat"
+        // Penerima — kartu pembuka. FOTO TIDAK PERNAH dirender di bubble:
+        // tap = langsung fullscreen (foto sekali-lihat tidak boleh bisa
+        // dilihat berulang tanpa membuka viewer).
         if (_tick.state == ViewOnceState.idle) {
-          return GestureDetector(
-            onTap: _startViewing,
-            child: Container(
-              // Kartu PEMBUKA (tulisan "Foto Sekali Lihat") = KECIL 200×140
-              // seperti semula. Hanya kartu yang MENAMPILKAN foto yang
-              // mengikuti ukuran foto biasa.
-              width: ViewOnceLockedCard.cardWidth,
-              height: ViewOnceLockedCard.cardHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppTheme.primaryDark, AppTheme.accent],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.accent.withValues(alpha: 0.18),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              // Isi RINGKAS supaya pas di 176×120 (dalam kartu 200×140 —
-              // ukuran sama dengan kartu kedaluwarsa).
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.max,
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.22),
-                    ),
-                    child: const Icon(
-                      Icons.remove_red_eye_outlined,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    s.viewOnceTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.chatBodySmall.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    s.viewOnceTap(_tick.totalSecs),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.chatCaption.copyWith(
-                      color: Colors.white.withValues(alpha: 0.85),
-                    ),
-                  ),
-                ],
+          return _gateCard(
+            onTap: _startViewingAndOpen,
+            subtitle: Text(
+              s.viewOnceTap(_tick.totalSecs),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.chatCaption.copyWith(
+                color: Colors.white.withValues(alpha: 0.85),
               ),
             ),
           );
@@ -652,7 +632,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           );
         }
 
-        // Viewing — tampilkan foto proporsional + countdown; tap untuk memperbesar
+        // Viewing — foto HANYA tampil di viewer fullscreen; kartu bubble tetap
+        // kartu pembuka (tanpa isi foto) + hitungan sisa waktu. Tap = buka lagi.
         final decoded = _decoded;
         // Decode/download gagal → kartu "coba lagi" (dulu spinner abadi).
         if (decoded == null && _failed) {
@@ -665,81 +646,19 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
             ),
           );
         }
-        final size = _sizeFor(
-      context,
-      decoded,
-      widget.imageData,
-      maxWidth: _limitW,
-    );
-        final vw = size.width;
-        final vh = size.height;
-        return GestureDetector(
+        return _gateCard(
           onTap: _openViewer,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              width: vw,
-              height: vh,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  decoded != null
-                      ? Image.memory(
-                          decoded.bytes,
-                          fit: BoxFit.contain,
-                          gaplessPlayback: true,
-                          cacheWidth: 720,
-                          filterQuality: FilterQuality.medium,
-                        )
-                      : Container(
-                          color: AppTheme.bgInput,
-                          alignment: Alignment.center,
-                          child: const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ),
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.timer,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                          const SizedBox(width: 3),
-                          ValueListenableBuilder<int>(
-                            valueListenable: _tick.countdown,
-                            builder: (_, v, _) => Text(
-                              _tick.totalSecs <= 0 ? '1×' : '${v}s',
-                              style: AppText.chatName.copyWith(
-                                color: Colors.white,
-                                letterSpacing: 0,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+          subtitle: ValueListenableBuilder<int>(
+            valueListenable: _tick.countdown,
+            builder: (_, v, _) => Text(
+              _tick.totalSecs <= 0
+                  ? s.viewOnceTap(0)
+                  : s.viewOnceClosingIn(v),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.chatCaption.copyWith(
+                color: Colors.white.withValues(alpha: 0.85),
               ),
             ),
           ),
@@ -747,6 +666,69 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       },
         );
       },
+    );
+  }
+
+  /// Kartu pembuka/penanda (TANPA foto) — kecil 200×140, sama dengan kartu
+  /// kedaluwarsa. Dipakai state idle & viewing pada sisi penerima.
+  Widget _gateCard({required VoidCallback onTap, required Widget subtitle}) {
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: ViewOnceLockedCard.cardWidth,
+        height: ViewOnceLockedCard.cardHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppTheme.primaryDark, AppTheme.accent],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.accent.withValues(alpha: 0.18),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.22),
+              ),
+              child: const Icon(
+                Icons.remove_red_eye_outlined,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              s.viewOnceTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.chatBodySmall.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            subtitle,
+          ],
+        ),
+      ),
     );
   }
 
@@ -846,7 +828,10 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       }
     }
     if (fw <= 0 || fh <= 0) return (width: w, height: w * 4 / 3);
-    return chatPhotoSize(fw, fh, w);
+    // Ukuran terpusat di `viewOncePhotoSize` (murni & testable): foto potret
+    // panjang kini boleh tinggi sampai 1.5×lebar (dulu dipaksa `chatPhotoSize`
+    // → kotak gepeng + `contain` → bilah kosong lebar kiri-kanan).
+    return viewOncePhotoSize(fw, fh, w);
   }
 }
 
@@ -863,7 +848,7 @@ class _InstantBytes extends StatelessWidget {
     if (bytes == null) return ColoredBox(color: AppTheme.bgInput);
     return Image.memory(
       bytes,
-      fit: BoxFit.contain,
+      fit: BoxFit.cover,
       gaplessPlayback: true,
       cacheWidth: 720,
       filterQuality: FilterQuality.medium,

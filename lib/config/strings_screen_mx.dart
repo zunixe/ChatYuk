@@ -627,6 +627,8 @@ mixin SScreenMx {
   String get viewOnceExpiredHint =>
       isId ? 'Hanya bisa dilihat sekali' : 'Viewable only once';
   String get viewOnceViewing => isId ? 'Menutup dalam' : 'Closing in';
+  String viewOnceClosingIn(int secs) =>
+      isId ? 'Menutup dalam $secs dtk' : 'Closing in ${secs}s';
   String get msgBlocked => isId
       ? 'User ini diblokir, tidak bisa kirim pesan'
       : 'This user is blocked, cannot send message';

@@ -57,6 +57,17 @@ padding dalam 0, jadi padding bubble-nya mengikuti teks). Kalau Poll disentuh
 suatu saat: beri latar kartu + padding dalam 10, daftarkan sebagai kartu
 (padding bubble 4), lalu hapus baris ini dari daftar pengecualian.
 
+**View-once di sisi PENERIMA (2026-10-20, minta user):** kartu di bubble
+TIDAK boleh merender isi foto. Sekali ketuk → `_startViewingAndOpen`
+(`lib/widgets/message/view_once_image.dart`) → tunggu decode → langsung
+`_openViewer` (fullscreen). Kalau foto tampil sebagai kartu, isinya bisa
+dilihat berulang tanpa membuka viewer. Kartu pembuka/penanda = 200×140
+(`ViewOnceLockedCard.cardWidth/cardHeight`); state `viewing` hanya menampilkan
+hitungan sisa waktu (mode 1× → kartu terkunci saat viewer ditutup). Sisi
+PENGIRIM tetap menampilkan fotonya (ukuran foto biasa + `viewOncePhotoSize`).
+Guard: `test/view_once_card_size_test.dart` (jumlah `Image.memory(` = 3:
+pengirim, `_InstantBytes`, admin).
+
 ## Verifikasi
 
 - `test/ui_consistency_test.dart` — guard sumber: `contact` terdaftar sebagai

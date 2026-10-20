@@ -165,6 +165,20 @@ double chatStickerSize(double screenW) => (screenW * 0.45).clamp(140.0, 200.0);
   return (width: width, height: height);
 }
 
+/// Ukuran kartu foto SEKALI-LIHAT: lebar TETAP [width] (72% layar), tinggi
+/// mengikuti aspek foto dengan batas:
+///  - potret (aspek < 1) → maksimal 1.5×lebar (lebih tinggi dari foto biasa
+///    supaya foto potret panjang tidak perlu banyak di-crop),
+///  - lanskap → 4/3 lebar (sama dengan [chatPhotoSize]).
+/// Gambar dirender `BoxFit.cover` → sisa aspek di-crop, TIDAK ada bilah kosong
+/// kiri-kanan (penyebab keluhan 2026-10-20: foto potret tampak "padding besar").
+({double width, double height}) viewOncePhotoSize(int w, int h, double width) {
+  if (w <= 0 || h <= 0) return (width: width, height: width * 4 / 3);
+  final aspect = w / h;
+  final maxH = width * (aspect < 1 ? 1.5 : 4 / 3);
+  return (width: width, height: (width * h / w).clamp(width * 0.5, maxH));
+}
+
 ({double width, double height}) photoViewSize(
   int w,
   int h, {
