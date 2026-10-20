@@ -537,7 +537,9 @@ mixin _RcLiveMx on _RoomChatBase {
         }
       },
       child: Scaffold(
-        backgroundColor: AppTheme.bgCard,
+        // Sama seperti private chat: bgScreen OPAQUE sebagai dasar di bawah
+        // background foto (bukan bgCard putih) → transisi & fase warm sama.
+        backgroundColor: AppTheme.bgScreen,
         appBar: inSelection
             ? buildSelectionAppBar()
             : _buildRoomAppBar(context, s),
@@ -661,10 +663,8 @@ mixin _RcLiveMx on _RoomChatBase {
         mentionCandidates: _mentionCandidates,
         mentionAllowAll: isPrivateRoom && canModerate,
         mentionAllExpansion: _mentionAllExpansion(),
-        // Room/grup: scaffold = bgCard (putih) → pill wajib bgInput agar
-        // kontras. Private chat tidak mengirim ini (tetap bgCard di atas
-        // background foto).
-        inputFillColor: AppTheme.bgInput,
+        // Background sekarang sama dengan private chat → pill composer
+        // memakai default (bgCard) persis private, tanpa override.
       );
       bottomBar = input;
     }
@@ -933,9 +933,28 @@ mixin _RcLiveMx on _RoomChatBase {
     // Overlay gift fly + kombo — di atas semua konten (IgnorePointer,
     // tidak mengganggu gesture chat/stage).
     final giftOverlay = GiftFlyOverlay(controller: _giftFly);
+    // Background chat — SAMA dengan private chat: gambar utuh di-decode
+    // sekali di startup (warmChatBackground) lalu raw via RawImage + overlay
+    // bgScreen 45% (bukan widget Opacity — 2 draw sederhana, anti-jank).
+    // Positioned.fill agar TIDAK ikut bergeser saat keyboard muncul.
+    final chatBg = Positioned.fill(
+      child: RepaintBoundary(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (chatBackgroundImage != null)
+              RawImage(image: chatBackgroundImage, fit: BoxFit.cover)
+            else
+              const SizedBox.shrink(),
+            Container(color: AppTheme.bgScreen.withValues(alpha: 0.45)),
+          ],
+        ),
+      ),
+    );
     if (!showPip) {
       return Stack(
         children: [
+          chatBg,
           column,
           Positioned.fill(child: giftOverlay),
         ],
@@ -943,6 +962,7 @@ mixin _RcLiveMx on _RoomChatBase {
     }
     return Stack(
       children: [
+        chatBg,
         column,
         Positioned.fill(child: giftOverlay),
         Builder(
