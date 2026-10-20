@@ -4921,3 +4921,37 @@ lain). Jangan dipakai ulang di jalur list tanpa mengukur dampaknya.
 - Buka chat menghasilkan **3 emit berturut** (memori → disk → server); tiap
   emit me-rebuild list. Menggabungnya jadi satu bisa memangkas kerja 3×.
 - `presence_for` (152 ms) masih ditunggu di buka chat (header online).
+
+
+## §58. View-once realtime: topik broadcast, resume hook, dan LOOP reconnect (2026-10-20)
+
+Skenario uji nyata (2 app di SATU HP: `com.chatyuk.chatyuk` = pengirim,
+`.admin` = penerima): penerima membuka foto sekali-lihat → kartu pengirim
+harus langsung "Foto sudah kadaluarsa".
+
+### Akar masalah (terukur dari logcat, bukan dugaan)
+1. **Topik broadcast beda** — penerima mengirim `view_once_seen` ke
+   `private_<chatId>`, stream pengirim subscribe `msg-<cacheKey>-<attempt>` →
+   tidak pernah bertemu. `new_message` (chat_service_private) kena bug sama.
+   Perbaikan: satu sumber topik (`chatStreamTopic` / `viewOnceSeenTopic` di
+   `chat_stream_session.dart`), dipakai subscriber & semua pengirim.
+2. **Kanal mati saat app di-background** — tes 2 app di 1 HP membuat app
+   pengirim selalu di-background; MIUI memutus socket, reconnect ditahan
+   (gate `AppForeground.now`). Saat user kembali, kanal tetap mati & tidak ada
+   reload → event terlewat, kartu baru berubah lewat poll 20 dtk.
+   Perbaikan: hook `AppForeground.isForeground.addListener` di sesi stream →
+   resume = `reload()` + `reconnectNow()` (kanal baru seketika).
+3. **REGRESI yang sempat muncul**: `removeChannel()` memicu status `closed`
+   di callback kanal LAMA → dianggap error → reconnect terjadwal → loop
+   buat-buang kanal **tiap ~2 dtk** + `reload()` (fetch 100 baris) tiap loop.
+   Log terukur: `[ChatStream] reconnect dalam ~2s` + `[CACHE-TIME]` bergantian
+   terus 14:01:04–14:02:14. Perbaikan: guard `identical(ch, channel)` di
+   callback subscribe (abaikan kanal yang sudah diganti). Guard test:
+   `test/view_once_seen_topic_test.dart`.
+
+### JANGAN dibalik
+- Jangan hapus sufiks-topik-stabil (`chatStreamTopic`) / mengembalikan nama
+  kanal per-attempt — memecah cocokan dengan pengirim broadcast.
+- Jangan hapus guard `identical(ch, channel)` — loop 2 dtk kembali.
+- Jangan hapus hook resume — realtime kembali "hilang" setelah background.
+- Jangan menaruh `removeChannel` tanpa guard di jalur teardown mana pun.

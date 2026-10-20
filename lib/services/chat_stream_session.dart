@@ -45,6 +45,18 @@ class _Semaphore {
   }
 }
 
+// Topik kanal realtime stream pesan (satu chat/room). SATU sumber untuk
+// SUBSCRIBER (`ChatStreamSession`) dan PENGIRIM broadcast (mis.
+// `view_once_seen` di ChatService) — topik harus PERSIS sama; dulu pengirim
+// memakai `private_<chatId>` sementara subscriber di `msg-<cacheKey>-<n>`
+// (sufiks percobaan reconnect) → broadcast tidak pernah bertemu (bug
+// "foto sekali-lihat tidak kadaluarsa realtime di pengirim", 2026-10-20).
+String chatStreamTopic(String cacheKey) => 'msg-$cacheKey';
+
+/// Topik broadcast `view_once_seen` untuk satu chat/room.
+String viewOnceSeenTopic({required bool isRoom, required String id}) =>
+    chatStreamTopic('${isRoom ? 'room' : 'private'}_$id');
+
 // Handle stream chat — expose stream + aksi loadOlder untuk pagination.
 class ChatMessageStream {
   final Stream<List<MessageModel>> stream;
@@ -662,14 +674,19 @@ class ChatStreamSession {
 
     // Nama deterministik + filter server-side (dulu hashCode tak stabil +
     // semua client terima semua insert lalu buang di client).
-    final channelName = 'msg-$cacheKey';
-    var channelAttempt = 0;
+    // PENTING: topik STABIL tanpa sufiks percobaan — broadcast `view_once_seen`
+    // dari lawan bicara ditujukan ke topik ini (`viewOnceSeenTopic`), jadi
+    // sufiks `-<n>` membuatnya tidak pernah cocok. Reconnect tetap aman:
+    // channel lama di-`removeChannel` SEBELUM channel baru dibuat.
+    final channelName = chatStreamTopic(cacheKey);
     late RealtimeChannel channel;
     // Forward-declare: attach() memicu reconnect lewat ini, tapi definisi
     // `_scheduleChannelReconnect` ada SETELAH attach (butuh `openChannel`
     // yang butuh `attach` — sirkular, tak bisa urut linear).
     late void Function() requestReconnect;
     var _reconnectAttempt = 0;
+    // Status langganan kanal saat ini — dipakai hook RESUME (lihat di bawah).
+    var _subscribedNow = false;
 
     /// Pasang SELURUH handler realtime ke [ch]. Dipanggil untuk channel awal &
     /// tiap channel BARU saat reconnect (Supabase melarang `subscribe` 2x pada
@@ -837,13 +854,15 @@ class ChatStreamSession {
     });
 
     // PENANDA "SUDAH DILIHAT" (realtime): penerima mengirim broadcast
-    // `view_once_seen` setelah membuka foto sekali-lihat → pengirim langsung
-    // mengunci kartunya (tanpa menunggu refetch/event UPDATE postgres yang
-    // bisa telat di MIUI/Doze).
+    // `view_once_seen` (topik dari `viewOnceSeenTopic` — SAMA dengan kanal
+    // ini) setelah membuka foto sekali-lihat → pengirim langsung mengunci
+    // kartunya (tanpa menunggu refetch/event UPDATE postgres yang bisa telat
+    // di MIUI/Doze).
     ch.onBroadcast(event: 'view_once_seen', callback: (payload, [ref]) {
       try {
         final mid = payload['message_id']?.toString() ?? '';
         final newType = payload['type']?.toString() ?? 'view_once_expired';
+        dlog('[VO-SEEN] recv id=$mid type=$newType filter=$filterVal');
         if (mid.isEmpty) return;
         final idx = _current.indexWhere((m) => m.id == mid);
         if (idx < 0) return;
@@ -856,22 +875,31 @@ class ChatStreamSession {
     });
 
     ch.subscribe((status, err) {
+      // ABAIKAN callback dari kanal yang SUDAH DIGANTI (di-teardown sengaja
+      // oleh reconnect/resume). removeChannel memicu status `closed` di
+      // instance lama — tanpa guard ini tiap reconnect menjadwalkan
+      // reconnect berikutnya → loop buat-buang kanal tiap ~2 dtk.
+      if (!identical(ch, channel)) return;
       if (err != null) dlog('[ChatStream] realtime error: $err');
       // REALTIME RESILIENT: channel mati (mis. 1002 saat network blip) →
       // reconnect via channel BARU (bukan subscribe ulang instance).
       if (status == RealtimeSubscribeStatus.channelError ||
           status == RealtimeSubscribeStatus.timedOut ||
           status == RealtimeSubscribeStatus.closed) {
+        _subscribedNow = false;
         requestReconnect();
       } else if (status == RealtimeSubscribeStatus.subscribed) {
         _reconnectAttempt = 0; // sukses → reset backoff
+        _subscribedNow = true;
         lastRealtime = DateTime.now();
+        dlog('[ChatStream] subscribed topic=$channelName');
       }
     });
     } // attach: handler + subscribe terpasang ke ch.
 
     void openChannel() {
-      channel = _sb.channel('$channelName-${channelAttempt++}');
+      _subscribedNow = false;
+      channel = _sb.channel(channelName);
       attach(channel);
     }
     openChannel();
@@ -918,6 +946,49 @@ class ChatStreamSession {
     }
 
     requestReconnect = _scheduleChannelReconnect;
+
+    // RESUME (2026-10-20): saat app ke background, socket realtime dibekukan/
+    // diputus sistem & reconnect sengaja ditahan (hemat baterai). Tanpa hook
+    // ini kanal tetap MATI setelah user kembali → event yang terjadi saat
+    // background (mis. broadcast `view_once_seen`) hilang, kartu baru berubah
+    // lewat poll 20 dtk ("masih ga realtime"). Di resume: reload untuk ambil
+    // yang terlewat + hidupkan kanal SEKETIKA bila belum subscribed.
+    void reconnectNow() {
+      _reconnectTimer?.cancel();
+      _reconnecting = true;
+      Timer(Duration.zero, () async {
+        _reconnecting = false;
+        if (controller.isClosed || _subscribedNow) return;
+        final old = channel;
+        try {
+          await _sb.removeChannel(old);
+        } catch (_) {}
+        if (controller.isClosed) return;
+        try {
+          openChannel();
+        } catch (e) {
+          dlog('[ChatStream] resume reconnect gagal: $e');
+          _scheduleChannelReconnect();
+        }
+      });
+    }
+
+    var _fgWas = AppForeground.now;
+    void _onFgChanged() {
+      final now = AppForeground.now;
+      if (now == _fgWas) return;
+      _fgWas = now;
+      if (!now || controller.isClosed) return;
+      dlog('[ChatStream] resume filter=$filterVal '
+          'subscribed=$_subscribedNow');
+      unawaited(reload());
+      // SELALU kanal baru: socket bisa "zombie" (status masih subscribed tapi
+      // mati diam-diam karena freeze MIUI) — tanpa join ulang, event
+      // berikutnya juga tidak akan sampai.
+      reconnectNow();
+    }
+
+    AppForeground.isForeground.addListener(_onFgChanged);
 
     reload();
 
@@ -1054,6 +1125,7 @@ class ChatStreamSession {
       pollTimer.cancel();
       saveDebounce?.cancel();
       reloadDebounce?.cancel();
+      AppForeground.isForeground.removeListener(_onFgChanged);
       // Snapshot list saat ini (referensi ringan) — kerja disk & teardown
       // channel DITUNDA ke microtask berikutnya agar TIDAK jatuh di frame
       // transisi pop (tutup chat). Dulu keduanya sinkron di sini → "tutup

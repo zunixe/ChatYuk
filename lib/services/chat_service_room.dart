@@ -209,18 +209,26 @@ mixin ChatServiceRoomMx on ChatBase {
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
-  /// Broadcast ringan `view_once_seen` ke channel chat private — dipakai
-  /// sebagai penanda realtime ke PENGIRIM tanpa menunggu event UPDATE
+  /// Broadcast ringan `view_once_seen` ke kanal STREAM penerima chat/room —
+  /// dipakai sebagai penanda realtime ke PENGIRIM tanpa menunggu event UPDATE
   /// postgres (yang bisa telat/terlewat di MIUI/Doze).
+  ///
+  /// Topik diambil dari `viewOnceSeenTopic` — SATU sumber dengan subscriber
+  /// `ChatStreamSession.viewOnceSeenTopic` (dulu memakai `private_<chatId>`
+  /// sehingga tidak pernah sampai ke subscriber di `msg-<cacheKey>`, 2026-10-20).
   Future<void> _sendViewOnceSeen(
     String chatId,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    required bool isRoom,
+  }) async {
     RealtimeChannel? ch;
     try {
-      ch = _sb.channel('private_$chatId');
+      final topic = viewOnceSeenTopic(isRoom: isRoom, id: chatId);
+      dlog('[VO-SEEN] send topic=$topic id=${payload['message_id']}');
+      ch = _sb.channel(topic);
       var ok = false;
       ch.subscribe((st, err) {
+        dlog('[VO-SEEN] subscribe st=$st err=$err topic=$topic');
         if (st == RealtimeSubscribeStatus.subscribed) ok = true;
       });
       // Tunggu subscribe singkat (maks 2 dtk) sebelum kirim.
@@ -232,6 +240,9 @@ mixin ChatServiceRoomMx on ChatBase {
           event: 'view_once_seen',
           payload: payload,
         );
+        dlog('[VO-SEEN] terkirim topic=$topic id=${payload['message_id']}');
+      } else {
+        dlog('[VO-SEEN] GAGAL subscribe (timeout 2s) topic=$topic');
       }
     } catch (e) {
       dlog('[ChatService] viewOnceSeen broadcast error: $e');
@@ -281,7 +292,7 @@ mixin ChatServiceRoomMx on ChatBase {
           'message_id': messageId,
           'type': newType,
           'is_room': isRoom,
-        });
+        }, isRoom: isRoom);
       } catch (_) {}
     }
   }

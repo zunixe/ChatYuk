@@ -383,7 +383,10 @@ mixin ChatServicePrivateMx on ChatBase {
 
   RealtimeChannel _privateBroadcastChannel(String chatId) {
     final ch = _privateBroadcastChannels.putIfAbsent(chatId, () {
-      final c = _sb.channel('private_$chatId');
+      // Topik SAMA dengan subscriber stream chat (`ChatStreamSession`) —
+      // dulu `private_<chatId>` tanpa prefiks `msg-` sehingga broadcast
+      // `new_message` tidak pernah sampai (2026-10-20).
+      final c = _sb.channel(chatStreamTopic('private_$chatId'));
       c.subscribe((status, err) {
         if (err != null) dlog('[Chat] private realtime error: $err');
       });
