@@ -36,6 +36,13 @@ class ViewOnceImage extends StatefulWidget {
   final bool isAdminView;
   // Room chat pakai tabel 'messages', private pakai 'private_messages'.
   final bool isRoom;
+
+  /// Batas lebar (px) dari induk. Dipakai kartu foto SEKALI-LIHAT yang
+  /// merespons balasan (media di kiri, panel teks di kanan) — tanpa ini
+  /// kartu selebar 72% layar tetap dipaksa ke dalam Row yang sempit →
+  /// overflow vertikal (kartu di-clip lebar tapi tinggi dari rasio asli).
+  final double? mediaMaxWidth;
+
   const ViewOnceImage({
     super.key,
     required this.imageData,
@@ -46,6 +53,7 @@ class ViewOnceImage extends StatefulWidget {
     this.isExpired = false,
     this.isAdminView = false,
     this.isRoom = false,
+    this.mediaMaxWidth,
   });
 
   @override
@@ -53,6 +61,9 @@ class ViewOnceImage extends StatefulWidget {
 }
 
 class _ViewOnceImageState extends State<ViewOnceImage> {
+  /// Lebar nyata yang diberikan induk (diisi LayoutBuilder di [build]).
+  /// Dipakai agar kartu tidak pernah lebih lebar dari bubble.
+  double? _availW;
   late ViewOnceTick _tick;
   DecodedImage? _decoded;
 
@@ -361,9 +372,15 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     final id = widget.messageId;
     if (id == null || id.startsWith('pending-')) return;
     try {
+      // chatId dikirim supaya server juga menyiarkan broadcast
+      // `view_once_seen` → PENGIRIM langsung mengunci kartu (realtime).
+      final chatId = widget.chatKey.startsWith('private_')
+          ? widget.chatKey.substring('private_'.length)
+          : '';
       await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).clearViewOnceImage(
         id,
         isRoom: widget.isRoom,
+        chatId: chatId.isEmpty ? null : chatId,
       );
     } catch (_) {}
   }
@@ -371,7 +388,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   Widget _buildAdminView(BuildContext context) {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final decoded = _decoded;
-    final size = _sizeFor(context, decoded, widget.imageData);
+    final size = _sizeFor(
+      context,
+      decoded,
+      widget.imageData,
+      maxWidth: _limitW,
+    );
     final w = size.width;
     final h = size.height;
     final child = ClipRRect(
@@ -460,7 +482,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   @override
   Widget build(BuildContext context) {
     if (widget.isAdminView) return _buildAdminView(context);
-    return ValueListenableBuilder<ViewOnceState>(
+    // Batas lebar NYATA dari induk (bubble bisa lebih sempit dari 72% layar)
+    // → kartu tidak pernah lebih lebar dari ruang yang tersedia.
+    return LayoutBuilder(
+      builder: (context, box) {
+        _availW = box.maxWidth;
+        return ValueListenableBuilder<ViewOnceState>(
       valueListenable: _tick.stateNotifier,
       builder: (_, st, _) {
         final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
@@ -476,7 +503,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
             );
           }
           final decoded = _decoded;
-          final size = _sizeFor(context, decoded, widget.imageData);
+          final size = _sizeFor(
+      context,
+      decoded,
+      widget.imageData,
+      maxWidth: _limitW,
+    );
           final w = size.width;
           final h = size.height;
           return ClipRRect(
@@ -495,17 +527,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                           cacheWidth: 720,
                           filterQuality: FilterQuality.medium,
                         )
-                      : Container(
-                          color: AppTheme.bgInput,
-                          alignment: Alignment.center,
-                          child: const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white70,
-                            ),
-                          ),
+                      : _InstantBytes(
+                          // PENGIRIM: byte foto sudah ada lokal → tampilkan
+                          // LANGSUNG (tanpa kartu besar + spinner). Dulu
+                          // muncul kotak abu besar dulu baru foto =
+                          // "ada card besar dulu" (minta user 2026-10-20).
+                          data: widget.imageData,
                         ),
                   Positioned(
                     top: 6,
@@ -638,7 +665,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
             ),
           );
         }
-        final size = _sizeFor(context, decoded, widget.imageData);
+        final size = _sizeFor(
+      context,
+      decoded,
+      widget.imageData,
+      maxWidth: _limitW,
+    );
         final vw = size.width;
         final vh = size.height;
         return GestureDetector(
@@ -713,6 +745,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           ),
         );
       },
+        );
+      },
     );
   }
 
@@ -724,6 +758,18 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   // "Foto Sekali Lihat" yang kecil.)
   static double _mediaWidth(BuildContext context) =>
       chatMediaWidth(MediaQuery.sizeOf(context).width);
+
+  /// Batas lebar efektif: yang TERKECIL antara `mediaMaxWidth` dari pemanggil
+  /// (mis. lebar panel saat media berbalasan) dan lebar nyata LayoutBuilder.
+  double? get _limitW {
+    final a = widget.mediaMaxWidth;
+    final b = _availW;
+    if (a == null) return b;
+    if (b == null) return a;
+    return a < b ? a : b;
+  }
+
+
 
   /// Ukuran kartu = UKURAN FOTO (lebar 72% layar, tinggi mengikuti RASIO
   /// FOTO asli) — bukan kotak poster/placeholder. Bila dimensi foto sudah
@@ -759,12 +805,37 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     }
   }
 
+  /// Ukuran kartu foto sekali-lihat.
+  ///
+  /// [maxWidth] = batas lebar dari induk (dipakai saat bubble sedang membalas
+  /// media: kartu harus menyempit agar panel teks kanan muat). Tanpa batas →
+  /// 72% lebar layar (perilaku lama).
+  ///
+  /// PENTING: lebar dikurangi 1dp dari batas agar pembulatan piksel (density
+  /// 3) tidak membuat BulletChild/Row kelebihan lebar → "overflowed by N px".
   static ({double width, double height}) _sizeFor(
     BuildContext context,
     DecodedImage? d,
-    String imageData,
-  ) {
-    final w = _mediaWidth(context);
+    String imageData, {
+    double? maxWidth,
+  }) {
+    final maxW = (maxWidth != null && maxWidth > 0) ? maxWidth : null;
+    // `_mediaWidth` = 72% layar, tapi bubble bisa LEBIH SEMPIT (batas 80%,
+    // monitor admin, atau mode seleksi). Pakai batas nyata dari induk bila
+    // tersedia via MediaQuery? Tidak — MediaQuery tetap lebar layar. Karena
+    // itu `maxWidth` WAJIB diisi pemanggil saat ruang sempit. Fallback:
+    // 72% layar (perilaku lama).
+    // SELALU dibatasi lebar layar (72%) DAN maxWidth pemanggil — pilih yang
+    // paling kecil. Tanpa clamp ini, bila `maxWidth` = batas bubble (712)
+    // yang lebih LEBAR dari 72% layar, kartu memakai 712 dan meluber.
+    // 72% layar adalah LEBAR BUBBLE MAKSIMUM, bukan lebar yang dijamin.
+    // Kartu dikunci 72% layar dulu tampil lebih lebar dari bubble (mis. 440
+    // vs 352 di layar 800) → RenderFlex overflow. Karena itu batas NYATA
+    // dari induk (LayoutBuilder) dipakai bila lebih kecil.
+    final mediaW = _mediaWidth(context);
+    // Pilih yang TERKECIL antara 72% layar dan batas nyata dari induk.
+    var w = mediaW;
+    if (maxW != null && maxW > 0 && maxW - 1 < w) w = maxW - 1;
     var fw = d?.width ?? 0;
     var fh = d?.height ?? 0;
     if (fw <= 0 || fh <= 0) {
@@ -776,5 +847,41 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     }
     if (fw <= 0 || fh <= 0) return (width: w, height: w * 4 / 3);
     return chatPhotoSize(fw, fh, w);
+  }
+}
+
+/// Menampilkan byte gambar LOKAL seketika (base64/path) tanpa menunggu
+/// decode async — dipakai pengirim foto sekali-lihat supaya foto langsung
+/// tampil, bukan kotak abu + spinner.
+class _InstantBytes extends StatelessWidget {
+  final String data;
+  const _InstantBytes({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _resolve();
+    if (bytes == null) return ColoredBox(color: AppTheme.bgInput);
+    return Image.memory(
+      bytes,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
+      cacheWidth: 720,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (_, __, ___) => ColoredBox(color: AppTheme.bgInput),
+    );
+  }
+
+  Uint8List? _resolve() {
+    if (data.isEmpty) return null;
+    try {
+      if (data.startsWith('/')) {
+        final f = File(data);
+        if (!f.existsSync()) return null;
+        return f.readAsBytesSync();
+      }
+      return base64Decode(data);
+    } catch (_) {
+      return null;
+    }
   }
 }

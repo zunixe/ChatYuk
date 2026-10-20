@@ -45,6 +45,7 @@ mixin _RcLiveMx on _RoomChatBase {
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      repliedToMeta: sendReplyMeta(reply),
       contact: contact,
     );
     setState(() {
@@ -64,6 +65,7 @@ mixin _RcLiveMx on _RoomChatBase {
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        repliedToMeta: sendReplyMeta(reply),
       );
     } catch (_) {
       if (!mounted) return;
@@ -95,6 +97,7 @@ mixin _RcLiveMx on _RoomChatBase {
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      repliedToMeta: sendReplyMeta(reply),
       poll: poll,
     );
     setState(() {
@@ -114,6 +117,7 @@ mixin _RcLiveMx on _RoomChatBase {
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        repliedToMeta: sendReplyMeta(reply),
       );
     } catch (_) {
       if (!mounted) return;
@@ -179,6 +183,7 @@ mixin _RcLiveMx on _RoomChatBase {
       repliedToId: e.repliedToId,
       repliedToText: e.repliedToText,
       repliedToSenderName: e.repliedToSenderName,
+      repliedToMeta: e.repliedToMeta,
       isForwarded: e.isForwarded,
       mentions: e.mentions,
     );
@@ -271,6 +276,7 @@ mixin _RcLiveMx on _RoomChatBase {
             repliedToId: reply?.id,
             repliedToText: reply?.text,
             repliedToSenderName: reply?.senderName,
+            repliedToMeta: sendReplyMeta(reply),
           );
     } catch (_) {
       if (!mounted) return;
@@ -881,6 +887,7 @@ mixin _RcLiveMx on _RoomChatBase {
                 : replyingTo!.senderName,
             s: s,
             onCancel: cancelReply,
+            cacheChatKey: 'room_${widget.room.id}',
           ),
         if (editingMessage != null)
           Container(

@@ -17,6 +17,10 @@ class MessageModel {
   final String? repliedToId;
   final String? repliedToText;
   final String? repliedToSenderName;
+  /// Metadata kutipan balasan (JSON `replied_to_meta`): jenis media, dimensi,
+  /// path video, id & chat key untuk thumbnail. Null = baris lama (kutipan
+  /// hanya teks). Lihat `core/chat/reply_meta.dart`.
+  final Map<String, dynamic>? repliedToMeta;
   final int? durationMs;
   final bool isForwarded;
   final List<Mention> mentions;
@@ -53,6 +57,7 @@ class MessageModel {
     this.repliedToId,
     this.repliedToText,
     this.repliedToSenderName,
+    this.repliedToMeta,
     this.durationMs,
     this.isForwarded = false,
     this.mentions = const [],
@@ -87,6 +92,11 @@ class MessageModel {
       repliedToId: map['repliedToId'] is String ? map['repliedToId'] : null,
       repliedToText: map['repliedToText'],
       repliedToSenderName: map['repliedToSenderName'],
+      repliedToMeta: (map['repliedToMeta'] ?? map['replied_to_meta']) is Map
+          ? Map<String, dynamic>.from(
+              (map['repliedToMeta'] ?? map['replied_to_meta']) as Map,
+            )
+          : null,
       durationMs: (map['durationMs'] ?? map['duration_ms'] ?? map['duration']) is num ? (map['durationMs'] ?? map['duration_ms'] ?? map['duration'] as num).toInt() : null,
       isForwarded: map['isForwarded'] == true || map['is_forwarded'] == true,
       mentions: deleted ? const [] : Mention.listFrom(map['mentions']),
@@ -127,6 +137,9 @@ class MessageModel {
       'repliedToId': repliedToId,
       'repliedToText': repliedToText,
       'repliedToSenderName': repliedToSenderName,
+      if (repliedToMeta != null && repliedToMeta!.isNotEmpty)
+        'repliedToMeta': repliedToMeta,
+      'replied_to_meta': repliedToMeta,
       'durationMs': durationMs,
       'isForwarded': isForwarded,
       'mentions': isDeleted ? const [] : Mention.listTo(mentions),
@@ -146,6 +159,7 @@ class MessageModel {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    Map<String, dynamic>? repliedToMeta,
     int? durationMs,
     bool? isForwarded,
     List<Mention>? mentions,
@@ -172,6 +186,7 @@ class MessageModel {
       repliedToId: repliedToId ?? this.repliedToId,
       repliedToText: repliedToText ?? this.repliedToText,
       repliedToSenderName: repliedToSenderName ?? this.repliedToSenderName,
+      repliedToMeta: repliedToMeta ?? this.repliedToMeta,
       durationMs: durationMs ?? this.durationMs,
       isForwarded: isForwarded ?? this.isForwarded,
       mentions: newDeleted ? const [] : (mentions ?? this.mentions),

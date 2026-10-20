@@ -259,7 +259,11 @@ class ChatStreamSession {
         'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,is_forwarded,mentions,video_poster,album_id,poll,contact';
     const roomCols =
         'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,replied_to_id,replied_to_text,replied_to_sender_name,is_forwarded,mentions,video_poster,album_id,poll,contact';
-    const replyCols = 'replied_to_id,replied_to_text,replied_to_sender_name';
+    // `replied_to_meta` = metadata kutipan balasan (jenis media + dimensi +
+    // path video) → thumbnail di kutipan ala WhatsApp. Kolom nullable;
+    // baris lama mengembalikan null (aman).
+    const replyCols =
+        'replied_to_id,replied_to_text,replied_to_sender_name,replied_to_meta';
     final cols = isPrivate ? '$privateCols,$replyCols' : roomCols;
 
     // Sync foto otomatis: server → file lokal terenkripsi. Download lazy
@@ -829,6 +833,25 @@ class ChatStreamSession {
         } else if (msg.type == 'voice' && msg.imageData.isNotEmpty) {
           unawaited(_downloadVoiceToCache(cacheKey, msg));
         }
+      } catch (_) {}
+    });
+
+    // PENANDA "SUDAH DILIHAT" (realtime): penerima mengirim broadcast
+    // `view_once_seen` setelah membuka foto sekali-lihat → pengirim langsung
+    // mengunci kartunya (tanpa menunggu refetch/event UPDATE postgres yang
+    // bisa telat di MIUI/Doze).
+    ch.onBroadcast(event: 'view_once_seen', callback: (payload, [ref]) {
+      try {
+        final mid = payload['message_id']?.toString() ?? '';
+        final newType = payload['type']?.toString() ?? 'view_once_expired';
+        if (mid.isEmpty) return;
+        final idx = _current.indexWhere((m) => m.id == mid);
+        if (idx < 0) return;
+        if (_current[idx].type == newType) return;
+        _current = List<MessageModel>.of(_current)
+          ..[idx] = _current[idx].copyWith(type: newType);
+        _emit();
+        scheduleCacheSave();
       } catch (_) {}
     });
 

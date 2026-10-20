@@ -91,6 +91,9 @@ mixin _PcMediaMx on _PrivateChatBase {
     widget.otherUid: widget.otherName,
   };
   // ── Kontrak ChatPhotoSendMixin ──
+  /// Chat key cache lokal untuk thumbnail kutipan balasan (foto).
+  @override
+  String get sendReplyCacheKey => cacheKeyFor(widget.chatId);
   @override
   Future<String?> photoDispatch({
     required String imageData,
@@ -102,6 +105,7 @@ mixin _PcMediaMx on _PrivateChatBase {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    Map<String, dynamic>? repliedToMeta,
     int? viewOnceSecs,
     int? videoDurationMs,
     String videoPoster = '',
@@ -122,6 +126,7 @@ mixin _PcMediaMx on _PrivateChatBase {
           repliedToId: repliedToId,
           repliedToText: repliedToText,
           repliedToSenderName: repliedToSenderName,
+          repliedToMeta: repliedToMeta,
           videoPoster: videoPoster,
           albumId: albumId,
         );
@@ -211,6 +216,7 @@ mixin _PcMediaMx on _PrivateChatBase {
           repliedToId: reply?.id,
           repliedToText: reply?.text,
           repliedToSenderName: reply?.senderName,
+          repliedToMeta: sendReplyMeta(reply),
           mentions: mentions,
         );
   }

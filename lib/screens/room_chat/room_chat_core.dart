@@ -48,6 +48,7 @@ mixin _RcCoreMx on _RoomChatBase {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    Map<String, dynamic>? repliedToMeta,
     int? viewOnceSecs,
     // Video belum aktif di room (videoSendEnabled=false) — parameter
     // tetap diterima demi kontrak mixin bersama.
@@ -67,10 +68,15 @@ mixin _RcCoreMx on _RoomChatBase {
       repliedToId: repliedToId,
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
+      repliedToMeta: repliedToMeta,
       videoPoster: videoPoster,
       albumId: albumId,
     );
   }
+
+  /// Chat key cache lokal untuk thumbnail kutipan balasan (foto) di room.
+  @override
+  String get sendReplyCacheKey => 'room_${widget.room.id}';
 
   @override
   String get photoUploadChatId => 'room_${widget.room.id}';
@@ -189,6 +195,7 @@ mixin _RcCoreMx on _RoomChatBase {
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      repliedToMeta: sendReplyMeta(reply),
       mentions: mentions,
     );
   }

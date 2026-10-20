@@ -39,6 +39,7 @@ mixin _PcContactMx on _PrivateChatBase {
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      repliedToMeta: sendReplyMeta(reply),
       contact: contact,
     );
     setState(() {
@@ -60,6 +61,7 @@ mixin _PcContactMx on _PrivateChatBase {
             repliedToId: reply?.id,
             repliedToText: reply?.text,
             repliedToSenderName: reply?.senderName,
+      repliedToMeta: sendReplyMeta(reply),
           );
       photoOnSent('contact');
     } catch (_) {

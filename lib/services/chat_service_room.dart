@@ -20,6 +20,8 @@ mixin ChatServiceRoomMx on ChatBase {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    /// Metadata kutipan (jenis media, dimensi, path video) — JSON.
+    Map<String, dynamic>? repliedToMeta,
     bool isForwarded = false,
     List<Mention> mentions = const [],
     String videoPoster = '',
@@ -102,6 +104,8 @@ mixin ChatServiceRoomMx on ChatBase {
       if (repliedToId != null) 'replied_to_id': repliedToId,
       if (repliedToText != null) 'replied_to_text': repliedToText,
       if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,
+      if (repliedToMeta != null && repliedToMeta.isNotEmpty)
+        'replied_to_meta': repliedToMeta,
       if (isForwarded) 'is_forwarded': true,
       if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
       if (poll != null) 'poll': poll,
@@ -205,6 +209,41 @@ mixin ChatServiceRoomMx on ChatBase {
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
+  /// Broadcast ringan `view_once_seen` ke channel chat private — dipakai
+  /// sebagai penanda realtime ke PENGIRIM tanpa menunggu event UPDATE
+  /// postgres (yang bisa telat/terlewat di MIUI/Doze).
+  Future<void> _sendViewOnceSeen(
+    String chatId,
+    Map<String, dynamic> payload,
+  ) async {
+    RealtimeChannel? ch;
+    try {
+      ch = _sb.channel('private_$chatId');
+      var ok = false;
+      ch.subscribe((st, err) {
+        if (st == RealtimeSubscribeStatus.subscribed) ok = true;
+      });
+      // Tunggu subscribe singkat (maks 2 dtk) sebelum kirim.
+      for (var i = 0; i < 20 && !ok; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      if (ok) {
+        await ch.sendBroadcastMessage(
+          event: 'view_once_seen',
+          payload: payload,
+        );
+      }
+    } catch (e) {
+      dlog('[ChatService] viewOnceSeen broadcast error: $e');
+    } finally {
+      if (ch != null) {
+        try {
+          await _sb.removeChannel(ch);
+        } catch (_) {}
+      }
+    }
+  }
+
   /// Tandai view_once message sebagai expired setelah dilihat.
   /// image_data DIKEEP di DB (admin masih bisa melihat) — hanya type yang
   /// diubah. Kontrol "boleh lihat/tidak" dilakukan di sisi UI.
@@ -216,16 +255,34 @@ mixin ChatServiceRoomMx on ChatBase {
     String messageId, {
     bool isRoom = false,
     bool video = false,
+    String? chatId,
   }) async {
+    final newType = video ? 'video_once_expired' : 'view_once_expired';
     try {
       await _sb
           .from(isRoom ? 'messages' : 'private_messages')
-          .update({
-            'type': video ? 'video_once_expired' : 'view_once_expired',
-          })
+          .update({'type': newType})
           .eq('id', messageId);
     } catch (e) {
       dlog('[ChatService] expireViewOnce error: $e');
+    }
+    // REALTIME PENANDA "SUDAH DILIHAT" untuk PENGIRIM.
+    //
+    // Kenapa perlu broadcast: event `UPDATE` postgres hanya sampai ke klien
+    // yang sedang berlangganan channel tabel itu, dan pada beberapa device
+    // (MIUI/Doze) event-nya telat. Pengirim jadi tetap melihat kartu foto
+    // sekali-lihat walau penerima sudah membukanya. Broadcast ringan ini
+    // langsung dikirim setelah UPDATE sukses → pengirim mengunci kartu
+    // seketika (tanpa menunggu refetch).
+    if (chatId != null && chatId.isNotEmpty) {
+      try {
+        await _sendViewOnceSeen(chatId, {
+          'chat_id': chatId,
+          'message_id': messageId,
+          'type': newType,
+          'is_room': isRoom,
+        });
+      } catch (_) {}
     }
   }
 

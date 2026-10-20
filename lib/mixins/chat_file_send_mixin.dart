@@ -77,6 +77,7 @@ mixin ChatFileSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      repliedToMeta: sendReplyMeta(reply),
     );
     ChatFile.rememberLocal(pending.id, path);
     setState(() {
@@ -130,6 +131,7 @@ mixin ChatFileSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        repliedToMeta: sendReplyMeta(reply),
         videoDurationMs: size,
       );
       photoOnSent('file');

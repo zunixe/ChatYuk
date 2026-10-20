@@ -112,6 +112,7 @@ mixin _PcBuildMx on _PrivateChatBase {
             repliedToId: reply?.id,
             repliedToText: reply?.text,
             repliedToSenderName: reply?.senderName,
+            repliedToMeta: sendReplyMeta(reply),
           );
     } catch (_) {
       if (!mounted) return;
@@ -592,6 +593,7 @@ mixin _PcBuildMx on _PrivateChatBase {
                       : replyingTo!.senderName,
                   s: s,
                   onCancel: cancelReply,
+                  cacheChatKey: cacheKeyFor(widget.chatId),
                 ),
               if (editingMessage != null)
                 Padding(

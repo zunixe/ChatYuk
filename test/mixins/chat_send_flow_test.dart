@@ -149,6 +149,7 @@ class SendHostState extends State<SendHost>
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    Map<String, dynamic>? repliedToMeta,
     int? viewOnceSecs,
     int? videoDurationMs,
     String videoPoster = '',

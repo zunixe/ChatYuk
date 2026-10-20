@@ -7,6 +7,8 @@ import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/chat/chat_location.dart';
+import '../core/chat/reply_meta.dart';
+import '../core/cache/photo_aspect_cache.dart';
 import '../utils.dart' show capitalizeFirst;
 import '../utils/mention.dart';
 import '../widgets/anon_prompt_dialog.dart';
@@ -76,6 +78,50 @@ mixin ChatSendMixin<T extends StatefulWidget>
 
   /// Kandidat mention untuk layar ini.
   List<Mention> sendMentionCandidates();
+
+  /// Chat key cache lokal untuk thumbnail kutipan (`private_<chatId>` /
+  /// `room_<id>`). Kosong = thumbnail foto tidak dirender di kutipan.
+  String get sendReplyCacheKey => '';
+
+  /// Lebar kolom media (px) — dipakai memperkirakan dimensi thumbnail foto
+  /// yang dibalas. Null = pakai lebar layar saat ini.
+  double? get sendReplyMediaWidth => null;
+
+  /// Metadata kutipan balasan (ala WhatsApp) dari pesan yang dibalas.
+  ///
+  /// Menyimpan JENIS media + dimensi + path video + kunci cache supaya
+  /// bubble penerima bisa menampilkan thumbnail kecil di sisi kanan kutipan
+  /// — tanpa perlu mengunduh apa pun (foto dari PhotoCache lokal, video dari
+  /// poster yang sama dengan kartunya). Null bila bukan balasan.
+  Map<String, dynamic>? sendReplyMeta(MessageModel? reply) {
+    if (reply == null) return null;
+    // Stiker & teks: cukup teks (perilaku lama). Teks lokasi tetap dikirim
+    // apa adanya; UI mengenalinya sendiri.
+    final kind = replyMediaKindOfType(reply.type);
+    if (kind == ReplyMediaKind.sticker) {
+      return buildReplyMeta(type: reply.type, messageId: reply.id);
+    }
+    int? w;
+    int? h;
+    if (kind == ReplyMediaKind.photo) {
+      // Rasio dari cache aspek (diisi MessageImage saat foto tampil) →
+      // thumbnail kutipan tidak loncat ukuran.
+      final aspect = PhotoAspectCache.instance.aspectOf(reply.id);
+      if (aspect != null && aspect > 0) {
+        final width = sendReplyMediaWidth ?? MediaQuery.sizeOf(context).width * 0.72;
+        w = width.round();
+        h = (width / aspect).round();
+      }
+    }
+    return buildReplyMeta(
+      type: reply.type,
+      messageId: reply.id,
+      width: w,
+      height: h,
+      videoPath: reply.imageData,
+      chatKey: sendReplyCacheKey,
+    );
+  }
 
   /// Cek tambahan sebelum kirim. Return false = batalkan (pesan sudah
   /// ditampilkan sendiri oleh implementor).
@@ -246,6 +292,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
     sendClearComposer();
     sendIsSending = true;
     final reply = sendReplyingTo;
+    final replyMeta = sendReplyMeta(reply);
     final mentions = parseMentions(text, candidates: sendMentionCandidates());
     final pending = MessageModel(
       id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
@@ -260,6 +307,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      repliedToMeta: replyMeta,
       mentions: mentions,
     );
     setState(() {
@@ -277,6 +325,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        repliedToMeta: replyMeta,
         mentions: mentions,
       );
       sendIsSending = false;
@@ -294,6 +343,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
           repliedToId: reply?.id,
           repliedToText: reply?.text,
           repliedToSenderName: reply?.senderName,
+          repliedToMeta: replyMeta,
           mentions: mentions,
         );
         sendIsSending = false;
@@ -324,6 +374,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
           repliedToId: reply?.id,
           repliedToText: reply?.text,
           repliedToSenderName: reply?.senderName,
+          repliedToMeta: replyMeta,
           mentions: mentions,
         );
       } else {

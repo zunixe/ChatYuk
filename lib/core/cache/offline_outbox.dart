@@ -21,6 +21,9 @@ class OutboxEntry {
   final String? repliedToId;
   final String? repliedToText;
   final String? repliedToSenderName;
+  /// Metadata kutipan (jenis media + dimensi + path video) → thumbnail
+  /// di kutipan balasan. Null = kutipan teks saja.
+  final Map<String, dynamic>? repliedToMeta;
   final bool isForwarded;
   final List<Mention> mentions;
   final DateTime createdAt;
@@ -46,6 +49,7 @@ class OutboxEntry {
     this.repliedToId,
     this.repliedToText,
     this.repliedToSenderName,
+    this.repliedToMeta,
     this.isForwarded = false,
     this.mentions = const [],
     required this.createdAt,
@@ -70,6 +74,7 @@ class OutboxEntry {
         'repliedToId': repliedToId,
         'repliedToText': repliedToText,
         'repliedToSenderName': repliedToSenderName,
+        'repliedToMeta': repliedToMeta,
         'isForwarded': isForwarded,
         'mentions': Mention.listTo(mentions),
         'createdAt': createdAt.toUtc().toIso8601String(),
@@ -94,6 +99,9 @@ class OutboxEntry {
         repliedToId: m['repliedToId'] as String?,
         repliedToText: m['repliedToText'] as String?,
         repliedToSenderName: m['repliedToSenderName'] as String?,
+        repliedToMeta: m['repliedToMeta'] is Map
+            ? Map<String, dynamic>.from(m['repliedToMeta'] as Map)
+            : null,
         isForwarded: m['isForwarded'] == true,
         mentions: Mention.listFrom(m['mentions']),
         createdAt: DateTime.tryParse('${m['createdAt'] ?? ''}') ?? DateTime.now(),

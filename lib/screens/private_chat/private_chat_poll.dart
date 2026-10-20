@@ -51,6 +51,7 @@ mixin _PcPollMx on _PrivateChatBase {
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      repliedToMeta: sendReplyMeta(reply),
       poll: poll,
     );
     setState(() {
@@ -70,6 +71,7 @@ mixin _PcPollMx on _PrivateChatBase {
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+      repliedToMeta: sendReplyMeta(reply),
       );
       photoOnSent('poll');
     } catch (_) {

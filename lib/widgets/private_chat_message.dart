@@ -219,6 +219,59 @@ class MessageBubble extends StatelessWidget {
         ),
       );
     }
+    // Kutipan balasan (dipakai di tata letak mana pun).
+    final quote = ReplyQuote.fromMessage(
+      context: context,
+      repliedToText: msg.repliedToText,
+      repliedToId: msg.repliedToId,
+      repliedToSenderName: msg.repliedToSenderName,
+      isMe: isMe,
+      deletedIds: deletedIds,
+      meta: msg.repliedToMeta,
+    );
+    // Ada isi kutipan? (teks ATAU jenis media — WhatsApp selalu mengutip
+    // foto/video walau tanpa caption).
+    final hasReply = !msg.isDeleted &&
+        msg.type != 'sticker' &&
+        ((msg.repliedToText?.isNotEmpty ?? false) ||
+            (msg.repliedToMeta != null && msg.repliedToMeta!.isNotEmpty));
+    final screenW = MediaQuery.sizeOf(context).width;
+    // MEDIA berbalasan (ala WhatsApp): media di KIRI, kutipan + caption +
+    // jam di PANEL KANAN. File & kontak tetap bertumpuk (kartunya sendiri
+    // sudah lebar & berteks) — sama seperti WhatsApp.
+    final mediaReplyLayout =
+        quote != null &&
+        hasReply &&
+        !isSticker &&
+        isMediaCard &&
+        msg.type != 'contact' &&
+        msg.type != 'file';
+    // Lebar bubble: media berbalasan → panel teks kanan yang menentukan
+    // (konstrain bubble dilonggarkan; media dibatasi mediaReplyW sendiri).
+    final double? bubbleLetter = mediaReplyLayout
+        ? null
+        : (isMediaCard ? 0.9 : 0.8);
+    // Tanpa caption: panel teks hanya nama + 1 baris ringkasan + jam.
+    final replyPanelW = (msg.text.isNotEmpty ? 148.0 : 112.0).clamp(
+      96.0,
+      screenW * 0.4,
+    );
+    final mediaReplyW = (chatMediaWidth(screenW) * 0.6).clamp(
+      110.0,
+      screenW * 0.9 - replyPanelW - 22,
+    );
+    // Lebar media kutipan: konstrain media dibatasi (tanpa Overflow saat
+    // layar sempit / font besar).
+    Widget replyMediaBox(Widget child) {
+      if (!mediaReplyLayout) return child;
+      // Kartu foto/video SEKALI-LIHAT sudah punya lebar sendiri (tidak
+      // responsif) → biarkan apa adanya (kalau dipaksa sempit isinya
+      // terpotong/overflow); panel kanan cukup berdampingan dengannya.
+      if (msg.type == 'view_once' || msg.type == 'view_once_expired') {
+        return child;
+      }
+      return SizedBox(width: mediaReplyW, child: child);
+    }
     return CompositedTransformTarget(
       link: link,
       // AppGestureDetector: tahan 600ms (longPressBubble) → toolbar seleksi/
@@ -235,6 +288,7 @@ class MessageBubble extends StatelessWidget {
           child: Padding(
           padding: EdgeInsets.only(bottom: reactions != null && reactions!.isNotEmpty ? 12 : 8),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: isMe
                 ? MainAxisAlignment.end
                 : MainAxisAlignment.start,
@@ -249,8 +303,10 @@ class MessageBubble extends StatelessWidget {
                   // kartunya sehingga margin kiri-kanan terlihat lebar.
                   // Beri ruang pas untuk kartu media; teks tetap 80%.
                   constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width *
-                        (isMediaCard ? 0.9 : 0.8),
+                    // `bubbleLetter` null (media berbalasan) → panel teks
+                    // kanan yang menentukan lebar; lebar media dihitung
+                    // terpisah (mediaReplyW).
+                    maxWidth: screenW * (bubbleLetter ?? 1.0),
                   ),
                   // Stiker melayang: tanpa padding card.
                   padding: isSticker
@@ -297,7 +353,11 @@ class MessageBubble extends StatelessWidget {
                   ),
                   child: _replyWidth(
                     stretchReply,
-                    Column(
+                    _replyPanel(
+                      layout: mediaReplyLayout,
+                      quote: quote,
+                      panelWidth: replyPanelW,
+                      children: [
                     // Konten (teks + jam) center vertikal dalam bubble saat
                     // bubble lebih tinggi dari konten (mis. caption pendek di
                     // bawah foto).
@@ -305,9 +365,8 @@ class MessageBubble extends StatelessWidget {
                     // rata kanan (kutipan & teks menggantung di kanan). Teks
                     // ber-balasan: kutipan SELEBAR bubble (StretchTo
                     // Widest hanya di kasus ini → biaya layout tetap kecil).
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                    // DIBUNGKUS panel: bubble MEDIA berbalasan → media kiri +
+                    // panel kanan (kutipan/caption/jam), lihat _replyPanel.
                       if (msg.isForwarded)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 2),
@@ -339,16 +398,6 @@ class MessageBubble extends StatelessWidget {
                             color: const Color(0xFFFFB300),
                           ),
                         ),
-                      if (msg.repliedToText != null &&
-                          msg.repliedToText!.isNotEmpty)
-                        ReplyQuote.fromMessage(
-                          context: context,
-                          repliedToText: msg.repliedToText,
-                          repliedToId: msg.repliedToId,
-                          repliedToSenderName: msg.repliedToSenderName,
-                          isMe: isMe,
-                          deletedIds: deletedIds,
-                        )!,
                       // Monitor admin: pesan yang dihapus pengirim tetap
                       // menampilkan ISI ASLI, ditandai banner jelas supaya
                       // admin tahu itu sudah dihapus.
@@ -456,9 +505,12 @@ class MessageBubble extends StatelessWidget {
                         // Jam di BAWAH video dalam bubble (kanan) — TIDAK
                         // overlay supaya tidak bertumpuk dengan badge durasi
                         // di dalam video. Sama untuk pengirim & penerima.
-                        // Lebar dikunci selebar video (ala LocationBubble).
-                        SizedBox(
-                          width: ChatVideoBubble.widthOf(context),
+                        // Lebar dikunci selebar video (ala LocationBubble);
+                        // media berbalasan → dilebarkan panel kanan (Row).
+                        replyMediaBox(SizedBox(
+                          width: mediaReplyLayout
+                              ? mediaReplyW
+                              : ChatVideoBubble.widthOf(context),
                           child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -479,7 +531,7 @@ class MessageBubble extends StatelessWidget {
                             // tinggi): caption pendek → jam nempel di ujung
                             // baris; caption panjang → jam di akhir baris
                             // terakhir. Tanpa caption → jam di bawah (rapat).
-                            if (msg.text.isNotEmpty)
+                            if (msg.text.isNotEmpty && !mediaReplyLayout)
                               Padding(
                                 padding: const EdgeInsets.only(
                                   top: 4,
@@ -502,6 +554,10 @@ class MessageBubble extends StatelessWidget {
                                   leftInset: 8,
                                 ),
                               )
+                            else if (mediaReplyLayout)
+                              // Jam dilipat ke panel kanan (Row) — panel
+                              // sudah menyediakan teks + jam.
+                              const SizedBox.shrink()
                             else
                               Padding(
                                 padding:
@@ -537,7 +593,7 @@ class MessageBubble extends StatelessWidget {
                               ),
                           ],
                           ),
-                        )
+                        ))
                       else if (msg.type == 'image' && msg.imageData.isNotEmpty)
                         _PhotoBubble(
                           msg: msg,
@@ -550,6 +606,9 @@ class MessageBubble extends StatelessWidget {
                           showChecksBothSides: showChecksBothSides,
                           highlightMentionAll: highlightMentionAll,
                           autoLinkPreview: autoLinkPreview,
+                          // Media berbalasan: caption dirender di panel kanan
+                          // (lihat _replyPanel) — jangan dobel di bawah foto.
+                          suppressCaption: mediaReplyLayout,
                         )
                       else if (msg.type == 'image' &&
                           msg.imageData.isEmpty &&
@@ -591,14 +650,16 @@ class MessageBubble extends StatelessWidget {
                         )
                       else if (msg.type == 'location' &&
                           parseLocation(msg.text) != null)
-                        LocationBubble(
+                        // Media berbalasan → lebar peta mengikuti panel kanan
+                        // (thumbnail peta tetap persegi, ala WhatsApp).
+                        replyMediaBox(LocationBubble(
                           location: parseLocation(msg.text)!,
-                          timeStr: timeStr,
+                          timeStr: mediaReplyLayout ? '' : timeStr,
                           showChecks: isMe || showChecksBothSides,
                           isPending: isPending,
                           isQueued: isQueued,
                           isRead: isRead,
-                        )
+                        ))
                       else if (msg.type == 'sticker')
                         // Melayang ala Telegram: gambar saja, tanpa jam/centang.
                         StickerBubble(
@@ -607,8 +668,9 @@ class MessageBubble extends StatelessWidget {
       )
                       else if (msg.type == 'view_once' ||
                           msg.type == 'view_once_expired')
-                        Column(
+                        replyMediaBox(Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Stack(
                               children: [
@@ -621,6 +683,15 @@ class MessageBubble extends StatelessWidget {
                                   isExpired: msg.type == 'view_once_expired',
                                   isAdminView: isAdminView,
                                   isRoom: isRoom,
+                                  // Lebar NYATA untuk media (bukan 72% layar
+                                  // mentah): selisih lebar kartu vs bubble
+                                  // dulu membuat RenderFlex overflow karena
+                                  // tinggi kartu mengikuti aspek × lebar.
+                                  mediaMaxWidth: mediaReplyLayout
+                                      ? mediaReplyW
+                                      : MediaQuery.sizeOf(context).width *
+                                              (bubbleLetter ?? 1.0) -
+                                          8,
                                 ),
                                 Positioned(
                                   right: 6,
@@ -670,7 +741,8 @@ class MessageBubble extends StatelessWidget {
                             ),
                             // Caption foto sekali-lihat (dulu tersimpan di DB
                             // tapi TIDAK dirender → teks seolah hilang).
-                            if (msg.text.isNotEmpty)
+                            // Media berbalasan: caption pindah ke panel kanan.
+                            if (msg.text.isNotEmpty && !mediaReplyLayout)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: MentionAwareText(
@@ -682,7 +754,7 @@ class MessageBubble extends StatelessWidget {
                                 ),
                               ),
                           ],
-                        )
+                        ))
                       else if (msg.type == 'coin')
                         Builder(
                           builder: (context) {
@@ -935,8 +1007,8 @@ class MessageBubble extends StatelessWidget {
                           ],
                         ),
                     ],
-                  ),
-                  ),
+                    ),
+                    ),
                     ),
                       if (reactions != null && reactions!.isNotEmpty)
                       Positioned(
@@ -1027,6 +1099,11 @@ class _PhotoBubble extends StatefulWidget {
   final bool highlightMentionAll;
   final bool autoLinkPreview;
 
+  /// Sembunyikan caption di bawah foto karena sudah dirender di PANEL KANAN
+  /// (bubble foto berbalasan, ala WhatsApp). Jam ikut disembunyikan (panel
+  /// punya jamnya sendiri).
+  final bool suppressCaption;
+
   const _PhotoBubble({
     required this.msg,
     required this.chatKey,
@@ -1038,6 +1115,7 @@ class _PhotoBubble extends StatefulWidget {
     required this.showChecksBothSides,
     required this.highlightMentionAll,
     this.autoLinkPreview = true,
+    this.suppressCaption = false,
   });
 
   @override
@@ -1053,9 +1131,13 @@ class _PhotoBubbleState extends State<_PhotoBubble> {
     final msg = widget.msg;
     final isMe = widget.isMe;
     final showChecks = isMe || widget.showChecksBothSides;
-    final hasCaption = msg.text.isNotEmpty;
-    final hasLink =
-        hasCaption && LinkPreviewService.instance.extractUrl(msg.text) != null;
+    // Caption/link/jam DISEMBUNYIKAN bila pemanggil menaruhnya di panel
+    // kanan (media berbalasan) — hanya kartu foto yang dirender di sini.
+    final hasCaption = msg.text.isNotEmpty && !widget.suppressCaption;
+    final hasLink = !widget.suppressCaption &&
+        msg.text.isNotEmpty &&
+        LinkPreviewService.instance.extractUrl(msg.text) != null;
+    final hideOverlayTime = widget.suppressCaption;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1077,7 +1159,7 @@ class _PhotoBubbleState extends State<_PhotoBubble> {
               ),
               // Overlay jam HANYA bila tanpa caption (ada caption → jam di
               // bawah, rata kanan sejajar tepi foto).
-              if (!hasCaption)
+              if (!hasCaption && !hideOverlayTime)
                 Positioned(
                   right: 6,
                   bottom: 6,
@@ -1159,9 +1241,71 @@ class _PhotoBubbleState extends State<_PhotoBubble> {
   }
 }
 
+/// Tata letak isi bubble dengan KUTIPAN BALASAN (ala WhatsApp).
+///
+/// - [layout] false (pesan TEKS / media non-kartu / tanpa kutipan): kutipan
+///   bertumpuk di ATAS isi seperti sebelumnya.
+/// - [layout] true (FOTO/VIDEO/LOKASI/VIEW-ONCE berbalasan): isi dibungkus
+///   Row — MEDIA (elemen pertama [children]) di KIRI dan PANEL KANAN berisi
+///   kutipan + caption + jam. Caption ("teks isi") sengaja dipindah ke panel
+///   kanan agar bubble tidak memanjang ke bawah (persis WhatsApp).
+///
+/// Elemen pertama [children] WAJIB media (kartu) saat [layout] true; sisanya
+/// (caption/link/jam) masuk panel kanan.
+Widget _replyPanel({
+  required bool layout,
+  required ReplyQuote? quote,
+  required double panelWidth,
+  required List<Widget> children,
+}) {
+  if (quote == null) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+  if (!layout) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [quote, ...children],
+    );
+  }
+  final media = children.isNotEmpty ? children.first : const SizedBox.shrink();
+  final rest = children.length > 1 ? children.sublist(1) : const <Widget>[];
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      media,
+      const SizedBox(width: 6),
+      ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: 96,
+          maxWidth: panelWidth + 6,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 2),
+              child: quote,
+            ),
+            ...rest,
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
 /// Pesan teks yang membalas: isi bubble ditata [StretchToWidestColumn]
 /// (lebar = konten terlebar, kutipan dibentang selebar bubble ala WhatsApp).
 /// Selain itu Column biasa (tanpa biaya layout ekstra).
-Widget _replyWidth(bool stretch, Column col) => stretch
-    ? StretchToWidestColumn(children: col.children)
-    : col;
+Widget _replyWidth(bool stretch, Widget body) => stretch
+    ? StretchToWidestColumn(
+        children: body is Column ? body.children : [body],
+      )
+    : body;

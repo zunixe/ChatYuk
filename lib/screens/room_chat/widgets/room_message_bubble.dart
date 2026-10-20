@@ -81,20 +81,6 @@ class RoomMessageBubble extends StatelessWidget {
   /// & tanpa baris jam — sama seperti private chat.
   bool get _isSticker => msg.type == 'sticker';
 
-  // Konten bubble: foto / view-once / teks — dipakai untuk pesan sendiri & orang lain.
-  Widget _replyQuote(BuildContext context) {
-    return ReplyQuote.fromMessage(
-          context: context,
-          repliedToText: msg.repliedToText,
-          repliedToId: msg.repliedToId,
-          repliedToSenderName: msg.repliedToSenderName,
-          isMe: isMe,
-          deletedIds: deletedIds,
-          senderColor: AppTheme.primary,
-        ) ??
-        const SizedBox.shrink();
-  }
-
   Widget _content(
     BuildContext context,
     String timeStr, {
@@ -105,7 +91,6 @@ class RoomMessageBubble extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _replyQuote(context),
           VoiceBubble(
             path: msg.imageData,
             durationMs: msg.durationMs ?? 0,
@@ -119,7 +104,6 @@ class RoomMessageBubble extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _replyQuote(context),
           FileBubble(
             msg: msg,
             timeStr: timeStr,
@@ -133,7 +117,6 @@ class RoomMessageBubble extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _replyQuote(context),
           LocationBubble(
             location: parseLocation(msg.text)!,
             timeStr: timeStr,
@@ -152,7 +135,6 @@ class RoomMessageBubble extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _replyQuote(context),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: Stack(
@@ -328,7 +310,6 @@ class RoomMessageBubble extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _replyQuote(context),
         if (hasLink)
           LinkPreview(
             text: msg.text,
@@ -377,6 +358,20 @@ class RoomMessageBubble extends StatelessWidget {
     }
     final timeStr = formatBubbleTime(msg.timestamp);
 
+    // Kutipan balasan pesan SENDIRI (nama pengirim tetap nama LAWAN yang
+    // dikutip) — bentuk sama dengan private chat.
+    final selfQuote = isMe
+        ? ReplyQuote.fromMessage(
+            context: context,
+            repliedToText: msg.repliedToText,
+            repliedToId: msg.repliedToId,
+            repliedToSenderName: msg.repliedToSenderName,
+            isMe: true,
+            deletedIds: deletedIds,
+            senderColor: AppTheme.primary,
+            meta: msg.repliedToMeta,
+          )
+        : null;
     // Pesan sendiri: biru muda (sama private), rata kanan, tanpa avatar
     if (isMe) {
       return Padding(
@@ -428,9 +423,12 @@ class RoomMessageBubble extends StatelessWidget {
                         ],
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Kutipan balasan (ala WhatsApp) — juga untuk media
+                    // (nama + ikon jenis + thumbnail kecil).
+                    if (selfQuote != null) selfQuote,
                     _content(context, timeStr, alignRight: true),
                     // Room & grup TANPA centang status (beda dari private 1:1):
                     // hanya teks "menunggu koneksi" saat pesan terantre offline.
@@ -454,6 +452,17 @@ class RoomMessageBubble extends StatelessWidget {
       );
     }
 
+    // Kutipan balasan (ala WhatsApp) — dibangun sekali per build.
+    final quote = ReplyQuote.fromMessage(
+      context: context,
+      repliedToText: msg.repliedToText,
+      repliedToId: msg.repliedToId,
+      repliedToSenderName: msg.repliedToSenderName,
+      isMe: false,
+      deletedIds: deletedIds,
+      senderColor: AppTheme.primary,
+      meta: msg.repliedToMeta,
+    );
     // Pesan user lain: avatar + nama warna + bubble abu-abu (sama private), rata kiri
     return Padding(
       padding: EdgeInsets.only(bottom: 8),
@@ -555,44 +564,10 @@ class RoomMessageBubble extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (msg.repliedToId != null)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 5),
-                          padding: const EdgeInsets.all(7),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(6),
-                            border: const Border(
-                              left: BorderSide(
-                                color: AppTheme.primary,
-                                width: 3,
-                              ),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                msg.repliedToSenderName ?? '',
-                                style: AppText.chatName.copyWith(
-                                  color: AppTheme.primary,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                msg.repliedToText ?? '',
-                                style: AppText.chatBodySmall.copyWith(
-                                  color: _textColor.withValues(alpha: 0.6),
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
+                      // Kutipan balasan SERAGAM dengan private chat:
+                      // ikon jenis + label + thumbnail kecil (foto/video).
+                      // `quote` null = tak ada isi kutipan → tanpa blok kosong.
+                      if (quote != null) quote,
                       _content(context, timeStr, alignRight: false),
                     ],
                   ),

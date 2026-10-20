@@ -174,6 +174,9 @@ mixin ChatServicePrivateMx on ChatBase {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    /// Metadata kutipan (jenis media, dimensi, path video) — JSON
+    /// `replied_to_meta`. Lihat `core/chat/reply_meta.dart`.
+    Map<String, dynamic>? repliedToMeta,
     bool isForwarded = false,
     List<Mention> mentions = const [],
     String videoPoster = '',
@@ -277,6 +280,8 @@ mixin ChatServicePrivateMx on ChatBase {
       if (repliedToText != null) 'replied_to_text': repliedToText,
       if (repliedToSenderName != null)
         'replied_to_sender_name': repliedToSenderName,
+      if (repliedToMeta != null && repliedToMeta.isNotEmpty)
+        'replied_to_meta': repliedToMeta,
       if (isForwarded) 'is_forwarded': true,
       if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
     }).select('id').maybeSingle();

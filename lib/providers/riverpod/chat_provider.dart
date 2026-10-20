@@ -69,6 +69,7 @@ class ChatNotifier extends Notifier<ChatState> {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    Map<String, dynamic>? repliedToMeta,
     bool isForwarded = false,
     List<Mention> mentions = const [],
     String videoPoster = '',
@@ -87,6 +88,7 @@ class ChatNotifier extends Notifier<ChatState> {
     repliedToId: repliedToId,
     repliedToText: repliedToText,
     repliedToSenderName: repliedToSenderName,
+    repliedToMeta: repliedToMeta,
     isForwarded: isForwarded,
     mentions: mentions,
     videoPoster: videoPoster,
@@ -209,6 +211,7 @@ class ChatNotifier extends Notifier<ChatState> {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    Map<String, dynamic>? repliedToMeta,
     bool isForwarded = false,
     List<Mention> mentions = const [],
     String videoPoster = '',
@@ -227,6 +230,7 @@ class ChatNotifier extends Notifier<ChatState> {
     repliedToId: repliedToId,
     repliedToText: repliedToText,
     repliedToSenderName: repliedToSenderName,
+    repliedToMeta: repliedToMeta,
     isForwarded: isForwarded,
     mentions: mentions,
     videoPoster: videoPoster,
@@ -264,8 +268,14 @@ class ChatNotifier extends Notifier<ChatState> {
     String messageId, {
     bool isRoom = false,
     bool video = false,
+    String? chatId,
   }) async {
-    await _service.clearViewOnceImage(messageId, isRoom: isRoom, video: video);
+    await _service.clearViewOnceImage(
+      messageId,
+      isRoom: isRoom,
+      video: video,
+      chatId: chatId,
+    );
   }
 
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {

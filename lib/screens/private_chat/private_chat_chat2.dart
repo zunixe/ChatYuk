@@ -314,6 +314,7 @@ void _sendTypingSignal() {
       repliedToId: e.repliedToId,
       repliedToText: e.repliedToText,
       repliedToSenderName: e.repliedToSenderName,
+      repliedToMeta: e.repliedToMeta,
       isForwarded: e.isForwarded,
       mentions: e.mentions,
       videoPoster: posterPath,

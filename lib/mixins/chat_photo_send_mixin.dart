@@ -63,6 +63,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    /// Metadata kutipan (jenis media + dimensi + path video) → thumbnail di
+    /// kutipan balasan. Null = kutipan teks saja (perilaku lama).
+    Map<String, dynamic>? repliedToMeta,
     int? viewOnceSecs,
     /// Durasi VIDEO (ms) untuk bubble + validasi server. Null = bukan video.
     int? videoDurationMs,

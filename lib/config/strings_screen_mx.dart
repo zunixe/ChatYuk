@@ -557,6 +557,15 @@ mixin SScreenMx {
       : 'Allow ChatYuk to access photos to pick from your gallery.';
   String get galleryOpenSettings => isId ? 'Buka Setelan' : 'Open Settings';
   String get msgLocation => isId ? '[Lokasi]' : '[Location]';
+  // ── Kutipan balasan (reply quote) untuk pesan MEDIA ──
+  // WhatsApp menampilkan nama + ikon jenis + thumbnail di kutipan; label ini
+  // dipakai saat pesan asli tidak punya caption.
+  String get previewPoll => isId ? '[Polling]' : '[Poll]';
+  String get msgCall => isId ? '[Panggilan]' : '[Call]';
+  String get replyVideoOnce =>
+      isId ? '[Video sekali lihat]' : '[View once video]';
+  String get replyPhotoOnce =>
+      isId ? '[Foto sekali lihat]' : '[View once photo]';
   String get locSendTitle => isId ? 'Kirim Lokasi' : 'Send Location';
   String get locFetching =>
       isId ? 'Mendeteksi lokasi...' : 'Detecting location...';
