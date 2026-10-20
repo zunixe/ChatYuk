@@ -1,3 +1,19 @@
+## 2026-10-20 — Metadata kutipan balasan (replied_to_meta) (SUDAH APPLY via Management API)
+
+- **Migrasi** `20261020120000_reply_meta.sql` — ADITIF: kolom
+  `replied_to_meta jsonb` di `private_messages` DAN `messages` (`add column if
+  not exists` — idempotent, baris lama NULL → kutipan jatuh ke mode teks).
+  Menyimpan payload JSON ringkas kutipan (tipe/id/dimensi/path) untuk kutipan
+  media (foto/video/lokasi/stiker) — thumbnail tetap dari cache lokal.
+- **Insiden:** migrasi ini sempat BELUM di-apply padahal klien baru (pull
+  2026-10-20) sudah SELECT kolomnya → `PostgrestException 42703 column
+  private_messages.replied_to_meta does not exist` → SEMUA fetch pesan gagal
+  (chat tampak kosong di build baru). Terdeteksi dari log HP (build profil).
+- **Verifikasi:** kolom terlihat di `information_schema.columns` untuk kedua
+  tabel; log HP setelah apply: fetch sukses `server=135ms n=100`; versi
+  tercatat di `supabase_migrations.schema_migrations`.
+- **Catatan:** tidak ada fungsi FROZEN yang disentuh; snapshot tidak berubah.
+
 ## 2026-10-18 — Label media last_message & notif private (SUDAH APPLY via Management API)
 
 - **Migrasi** `20261018140000_last_message_media_labels.sql` (FROZEN:

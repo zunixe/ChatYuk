@@ -2,6 +2,15 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-20 — Metadata kutipan balasan (replied_to_meta)
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261020120000_reply_meta.sql`
+  (kolom `replied_to_meta jsonb` di `private_messages` & `messages`, aditif).
+- **Penting:** klien build ≥ 2026-10-20 melakukan SELECT kolom ini; kalau belum
+  di-apply → `42703` → SELURUH fetch pesan gagal (chat tampak kosong).
+- **Verifikasi:** `information_schema.columns` (2 tabel) + log HP fetch `n=100`;
+  versi tercatat di `supabase_migrations.schema_migrations`.
+
 ## 2026-10-18 — Label media last_message/notif
 
 - **Status:** SUDAH TERAPPLIED via Management API — `20261018140000_last_message_media_labels.sql`
