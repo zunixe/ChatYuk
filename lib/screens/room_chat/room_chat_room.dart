@@ -23,6 +23,12 @@ mixin _RcRoomMx on _RoomChatBase {
       );
       if (mounted && g != _isGrantedBroadcast)
         setState(() => _isGrantedBroadcast = g);
+      // Simpan untuk buka berikutnya (tampil sejak frame 1, tanpa blink).
+      BroadcastStateCache.save(
+        widget.room.id,
+        granted: g,
+        liveUid: _liveUid,
+      );
     } catch (e) {
       dlog('[BDBG] refreshGrant error: $e');
     }
@@ -291,6 +297,11 @@ mixin _RcRoomMx on _RoomChatBase {
     setState(() {
       _liveUid = (live != null && live.isNotEmpty) ? live : null;
     });
+    BroadcastStateCache.save(
+      widget.room.id,
+      granted: _isGrantedBroadcast || _liveUid == _auth.uid,
+      liveUid: _liveUid,
+    );
     _syncBroadcastSession();
   }
 

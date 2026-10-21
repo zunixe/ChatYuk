@@ -307,13 +307,35 @@ mixin _RcBuildMx on _RoomChatBase {
   }
 
   PreferredSizeWidget _buildRoomAppBar(BuildContext context, S s) {
+    // Tombol aksi RAPAT (tanpa padding bawaan IconButton 48px) — kamera &
+    // anggota berdempet tanpa jeda.
+    Widget tightIcon({
+      required String tooltip,
+      required Widget icon,
+      required VoidCallback? onPressed,
+    }) => IconButton(
+      tooltip: tooltip,
+      icon: icon,
+      onPressed: onPressed,
+      // Jeda tipis antar ikon: 0 terlalu dempet, 48 (default) terlalu jauh.
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 38),
+      style: IconButton.styleFrom(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
     return AppBar(
+      // Nama grup RATA KIRI (Android default bisa ikut centerTitle theme).
+      centerTitle: false,
       title: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         children: [
           Text(widget.room.icon, style: TextStyle(fontSize: AppGlyph.sm)),
           SizedBox(width: 8),
-          Text(widget.room.name),
+          // Nama room panjang (mis. "Testing Broadcast ...") tidak boleh
+          // menabrak tombol aksi → elipsis.
+          Flexible(child: Text(widget.room.name, overflow: TextOverflow.ellipsis)),
         ],
       ),
       actions: [
@@ -336,47 +358,28 @@ mixin _RcBuildMx on _RoomChatBase {
                       isGrantedBroadcast &&
                       !iAmBroadcasting)) ||
               _broadcastStarting)
-            GestureDetector(
-              onTap: _broadcastStarting ? null : _onStartBroadcastTap,
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(
-                    alpha: _broadcastStarting ? 0.25 : 0.12,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_broadcastStarting)
-                      const SizedBox(
-                        width: 12,
-                        height: 12,
+            // KOMPAK: ikon saja (tooltip = teks lengkap) — dulu pill
+            // ikon+teks "Mulai Broadcast" berdesakan dengan nama room di
+            // app bar. Teks lengkap tetap ada di banner dalam body.
+            _broadcastStarting
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      Icon(
-                        Icons.videocam_rounded,
-                        color: AppTheme.primary,
-                        size: 16,
-                      ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _broadcastStarting
-                          ? (s.roomBroadcastConnecting)
-                          : s.privateRoomsStartBroadcast,
-                      style: AppText.label.copyWith(
-                        color: AppTheme.primary.withValues(
-                          alpha: _broadcastStarting ? 0.6 : 1,
-                        ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
+                  )
+                : tightIcon(
+                    tooltip: s.privateRoomsStartBroadcast,
+                    icon: const Icon(
+                      Icons.videocam_rounded,
+                      color: AppTheme.primary,
+                    ),
+                    onPressed: _onStartBroadcastTap,
+                  ),
           if (iAmBroadcasting)
             IconButton(
               tooltip: s.privateRoomsStopBroadcast,
@@ -393,7 +396,7 @@ mixin _RcBuildMx on _RoomChatBase {
                   });
               },
             ),
-          IconButton(
+          tightIcon(
             tooltip: s.privateRoomsMembersTitle,
             icon: Badge(
               isLabelVisible: canModerate && _pendingCount > 0,

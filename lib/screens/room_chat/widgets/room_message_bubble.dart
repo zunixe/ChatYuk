@@ -448,9 +448,15 @@ class RoomMessageBubble extends StatelessWidget {
                               vertical: 5,
                             )),
                 decoration: BoxDecoration(
+                  // SOLID seperti private chat: tint primary 25% di-BLEND ke
+                  // bgCard, bukan alpha transparan (dulu background foto
+                  // tembus di dalam bubble → kartu terlihat transparan).
                   color: _isSticker && !isSelected
                       ? Colors.transparent
-                      : AppTheme.primary.withValues(alpha: 0.25),
+                      : Color.alphaBlend(
+                          AppTheme.primary.withValues(alpha: 0.25),
+                          AppTheme.bgCard,
+                        ),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(10),
                     topRight: Radius.circular(10),
@@ -588,9 +594,12 @@ class RoomMessageBubble extends StatelessWidget {
                                 vertical: 5,
                               )),
                   decoration: BoxDecoration(
+                    // SOLID seperti private chat: bgCard (bukan bgInput /
+                    // transparan) supaya kartu chat/kontak tidak tembus
+                    // background.
                     color: _isSticker && !isSelected
                         ? Colors.transparent
-                        : AppTheme.bgInput,
+                        : AppTheme.bgCard,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(10),
                       topRight: Radius.circular(10),

@@ -74,6 +74,7 @@ import '../mixins/chat_sticker_send_mixin.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../core/media/chat_background.dart';
+import '../core/cache/broadcast_state_cache.dart';
 
 part 'room_chat/room_chat_core.dart';
 part 'room_chat/room_chat_room.dart';

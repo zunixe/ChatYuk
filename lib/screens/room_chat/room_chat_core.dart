@@ -591,6 +591,15 @@ mixin _RcCoreMx on _RoomChatBase {
   void initState() {
     super.initState();
     _openedAt = DateTime.now();
+    // FRAME PERTAMA: pakai status broadcast terakhir (cache sesi) → tombol
+    // kamera & banner "Mulai Broadcast" langsung tampil sejak frame 1,
+    // tidak "ngeblink" menunggu RPC myBroadcastGranted selesai.
+    final bc = BroadcastStateCache.peek(widget.room.id);
+    if (bc != null) {
+      _isGrantedBroadcast = bc.granted;
+      _liveUid = bc.liveUid;
+      _broadcastReady = true;
+    }
     WidgetsBinding.instance.addObserver(this);
     // Ukuran font chat berubah (slider) → rebuild bubble & composer room.
     ChatTextScale.notifier.addListener(_onFontScaleChanged);
@@ -752,6 +761,12 @@ mixin _RcCoreMx on _RoomChatBase {
         ).read(roomProvider.notifier).myBroadcastGranted(widget.room.id);
         _isGrantedBroadcast = granted || _liveUid == _auth.uid;
         dlog('[BDBG] init granted=$_isGrantedBroadcast live=$_liveUid');
+        // Cache untuk buka berikutnya → kontrol broadcast tampil frame 1.
+        BroadcastStateCache.save(
+          widget.room.id,
+          granted: _isGrantedBroadcast,
+          liveUid: _liveUid,
+        );
       } catch (e) {
         dlog('[BDBG] init myBroadcastGranted error: $e');
       }

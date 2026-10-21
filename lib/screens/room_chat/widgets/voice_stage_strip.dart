@@ -184,7 +184,9 @@ class VoiceStageStrip extends StatelessWidget {
         if (speakers.isEmpty) return const SizedBox.shrink();
         return Container(
           height: 86,
-          color: AppTheme.bgCard,
+          // Transparan agar background chat tembus (paritas dengan strip
+          // avatar & area pesan).
+          color: Colors.transparent,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

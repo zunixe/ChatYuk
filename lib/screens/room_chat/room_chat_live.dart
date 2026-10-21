@@ -740,7 +740,9 @@ mixin _RcLiveMx on _RoomChatBase {
         if (isPrivateRoom || (_showUsers && !_voiceStripCoversUsers))
           Container(
             height: 90,
-            color: AppTheme.bgCard,
+            // Transparan: background chat (foto) ikut tembus di balik strip
+            // avatar — sama seperti area pesan, bukan blok putih.
+            color: Colors.transparent,
             child: StreamBuilder<List<UserModel>>(
               stream: _usersStream,
               builder: (_, snap) {
