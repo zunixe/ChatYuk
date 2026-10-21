@@ -100,13 +100,17 @@ select cron.unschedule('sweep_room_voice')
 where exists (select 1 from cron.job where jobname = 'sweep_room_voice');
 
 -- 4) outbox-worker: turunkan frekuensi ke */2 (masih cepat, beban separuh).
-select cron.alter_job(27, schedule := '*/2 * * * *');
+-- guard: jobid cloud tidak portabel — cari jobid by jobname, skip jika job tidak ada
+select cron.alter_job(jobid, schedule := '*/2 * * * *') from cron.job where jobname = 'chatyuk-outbox-worker';
 
 -- 5) Sebar job */5 yang tidak dikunci test ke menit berbeda.
 --    (chatyuk-call-sweep TIDAK disentuh — dikunci call_test.sql.)
-select cron.alter_job(9,  schedule := '1-59/5 * * * *');  -- dummy-heartbeat
-select cron.alter_job(14, schedule := '2-59/5 * * * *');  -- chatyuk-ai-presence
-select cron.alter_job(20, schedule := '3-59/5 * * * *');  -- chatyuk-ai-claim-recovery
+-- guard: jobid cloud tidak portabel — cari jobid by jobname, skip jika job tidak ada
+select cron.alter_job(jobid, schedule := '1-59/5 * * * *') from cron.job where jobname = 'dummy-heartbeat';
+-- guard: jobid cloud tidak portabel — cari jobid by jobname, skip jika job tidak ada
+select cron.alter_job(jobid, schedule := '2-59/5 * * * *') from cron.job where jobname = 'chatyuk-ai-presence';
+-- guard: jobid cloud tidak portabel — cari jobid by jobname, skip jika job tidak ada
+select cron.alter_job(jobid, schedule := '3-59/5 * * * *') from cron.job where jobname = 'chatyuk-ai-claim-recovery';
 
 -- Verifikasi:
 --   select jobid, schedule, jobname from cron.job

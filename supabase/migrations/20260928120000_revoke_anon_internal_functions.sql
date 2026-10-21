@@ -23,14 +23,58 @@
 -- ============================================================
 
 revoke execute on function public.admin_contact_delete(p_id uuid) from public, anon, authenticated;
-revoke execute on function public.admin_contact_messages_page(p_limit integer, p_offset integer) from public, anon, authenticated;
-revoke execute on function public.admin_contact_set_read(p_id uuid, p_read boolean) from public, anon, authenticated;
-revoke execute on function public.admin_registrations_daily(p_year integer, p_month integer) from public, anon, authenticated;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'admin_contact_messages_page'
+    and pg_get_function_identity_arguments(p.oid) = 'p_limit integer, p_offset integer';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.admin_contact_messages_page(p_limit integer, p_offset integer) from public, anon, authenticated$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'admin_contact_set_read'
+    and pg_get_function_identity_arguments(p.oid) = 'p_id uuid, p_read boolean';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.admin_contact_set_read(p_id uuid, p_read boolean) from public, anon, authenticated$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'admin_registrations_daily'
+    and pg_get_function_identity_arguments(p.oid) = 'p_year integer, p_month integer';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.admin_registrations_daily(p_year integer, p_month integer) from public, anon, authenticated$sql$;
+  end if;
+end $do$;
 revoke execute on function public.admin_set_privacy_bypass(p_enabled boolean) from public, anon, authenticated;
 revoke execute on function public.admin_storage_stats() from public, anon, authenticated;
 revoke execute on function public.admin_sweep_calls() from public, anon, authenticated;
 revoke execute on function public.ai_reply_enqueue() from public, anon, authenticated;
-revoke execute on function public.ai_reply_post(p_chat_id text, p_trigger_msg_id bigint, p_sender_id uuid, p_dummy_uid uuid, p_proactive boolean) from public, anon, authenticated;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'ai_reply_post'
+    and pg_get_function_identity_arguments(p.oid) = 'p_chat_id text, p_trigger_msg_id bigint, p_sender_id uuid, p_dummy_uid uuid, p_proactive boolean';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.ai_reply_post(p_chat_id text, p_trigger_msg_id bigint, p_sender_id uuid, p_dummy_uid uuid, p_proactive boolean) from public, anon, authenticated$sql$;
+  end if;
+end $do$;
 revoke execute on function public.call_history_insert() from public, anon, authenticated;
 revoke execute on function public.check_private_chat_update() from public, anon, authenticated;
 revoke execute on function public.comment_like_count_sync() from public, anon, authenticated;
@@ -39,16 +83,93 @@ revoke execute on function public.dummy_heartbeat() from public, anon, authentic
 revoke execute on function public.dummy_uids() from public, anon, authenticated;
 revoke execute on function public.enforce_invisible() from public, anon, authenticated;
 revoke execute on function public.fix_story_visibility() from public, anon, authenticated;
-revoke execute on function public.fn_archive_deleted_user(p_uid uuid, p_reason text, p_claimed_by uuid, p_claimed_nick text) from public, anon, authenticated;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'fn_archive_deleted_user'
+    and pg_get_function_identity_arguments(p.oid) = 'p_uid uuid, p_reason text, p_claimed_by uuid, p_claimed_nick text';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.fn_archive_deleted_user(p_uid uuid, p_reason text, p_claimed_by uuid, p_claimed_nick text) from public, anon, authenticated$sql$;
+  end if;
+end $do$;
 revoke execute on function public.follow_count_sync() from public, anon, authenticated;
-revoke execute on function public.get_chat_messages(p_chat_id text, p_before_id bigint, p_limit integer) from public, anon, authenticated;
-revoke execute on function public.get_data_sizes() from public, anon, authenticated;
-revoke execute on function public.get_room_messages(p_room_id text, p_before_id bigint, p_limit integer) from public, anon, authenticated;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'get_chat_messages'
+    and pg_get_function_identity_arguments(p.oid) = 'p_chat_id text, p_before_id bigint, p_limit integer';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.get_chat_messages(p_chat_id text, p_before_id bigint, p_limit integer) from public, anon, authenticated$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'get_data_sizes'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.get_data_sizes() from public, anon, authenticated$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'get_room_messages'
+    and pg_get_function_identity_arguments(p.oid) = 'p_room_id text, p_before_id bigint, p_limit integer';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.get_room_messages(p_room_id text, p_before_id bigint, p_limit integer) from public, anon, authenticated$sql$;
+  end if;
+end $do$;
 revoke execute on function public.get_share_url() from public, anon, authenticated;
-revoke execute on function public.get_table_sizes() from public, anon, authenticated;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'get_table_sizes'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.get_table_sizes() from public, anon, authenticated$sql$;
+  end if;
+end $do$;
 revoke execute on function public.handle_new_private_message() from public, anon, authenticated;
-revoke execute on function public.increment_unread(chat_id text, receiver_id uuid) from public, anon, authenticated;
-revoke execute on function public.ledger_spend_topup(p_user uuid, p_type text, p_amount integer, p_ref text) from public, anon, authenticated;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'increment_unread'
+    and pg_get_function_identity_arguments(p.oid) = 'chat_id text, receiver_id uuid';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.increment_unread(chat_id text, receiver_id uuid) from public, anon, authenticated$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'ledger_spend_topup'
+    and pg_get_function_identity_arguments(p.oid) = 'p_user uuid, p_type text, p_amount integer, p_ref text';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.ledger_spend_topup(p_user uuid, p_type text, p_amount integer, p_ref text) from public, anon, authenticated$sql$;
+  end if;
+end $do$;
 revoke execute on function public.list_topup_packages() from public, anon, authenticated;
 revoke execute on function public.notify_broadcast_started() from public, anon, authenticated;
 revoke execute on function public.notify_call_ended() from public, anon, authenticated;
@@ -66,7 +187,18 @@ revoke execute on function public.post_like_count_sync() from public, anon, auth
 revoke execute on function public.posts_fill_country() from public, anon, authenticated;
 revoke execute on function public.profiles_ledger_signup() from public, anon, authenticated;
 revoke execute on function public.purge_expired_stories() from public, anon, authenticated;
-revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'rls_auto_enable'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_oid is not null then
+    execute $sql$revoke execute on function public.rls_auto_enable() from public, anon, authenticated$sql$;
+  end if;
+end $do$;
 revoke execute on function public.scrub_reply_snapshot_private() from public, anon, authenticated;
 revoke execute on function public.scrub_reply_snapshot_room() from public, anon, authenticated;
 revoke execute on function public.set_participant_registered() from public, anon, authenticated;
@@ -82,24 +214,134 @@ revoke execute on function public.wallet_sync_points(p_user uuid) from public, a
 -- service_role & postgres tetap boleh EXECUTE (dipakai admin panel/edge/cron).
 -- (service_role default sudah punya; ini eksplisit untuk kejelasan.)
 grant execute on function public.admin_contact_delete(p_id uuid) to service_role;
-grant execute on function public.admin_contact_messages_page(p_limit integer, p_offset integer) to service_role;
-grant execute on function public.admin_contact_set_read(p_id uuid, p_read boolean) to service_role;
-grant execute on function public.admin_registrations_daily(p_year integer, p_month integer) to service_role;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'admin_contact_messages_page'
+    and pg_get_function_identity_arguments(p.oid) = 'p_limit integer, p_offset integer';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.admin_contact_messages_page(p_limit integer, p_offset integer) to service_role$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'admin_contact_set_read'
+    and pg_get_function_identity_arguments(p.oid) = 'p_id uuid, p_read boolean';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.admin_contact_set_read(p_id uuid, p_read boolean) to service_role$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'admin_registrations_daily'
+    and pg_get_function_identity_arguments(p.oid) = 'p_year integer, p_month integer';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.admin_registrations_daily(p_year integer, p_month integer) to service_role$sql$;
+  end if;
+end $do$;
 grant execute on function public.admin_set_privacy_bypass(p_enabled boolean) to service_role;
 grant execute on function public.admin_storage_stats() to service_role;
 grant execute on function public.admin_sweep_calls() to service_role;
 grant execute on function public.ai_reply_enqueue() to service_role;
-grant execute on function public.ai_reply_post(p_chat_id text, p_trigger_msg_id bigint, p_sender_id uuid, p_dummy_uid uuid, p_proactive boolean) to service_role;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'ai_reply_post'
+    and pg_get_function_identity_arguments(p.oid) = 'p_chat_id text, p_trigger_msg_id bigint, p_sender_id uuid, p_dummy_uid uuid, p_proactive boolean';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.ai_reply_post(p_chat_id text, p_trigger_msg_id bigint, p_sender_id uuid, p_dummy_uid uuid, p_proactive boolean) to service_role$sql$;
+  end if;
+end $do$;
 grant execute on function public.call_history_insert() to service_role;
-grant execute on function public.get_chat_messages(p_chat_id text, p_before_id bigint, p_limit integer) to service_role;
-grant execute on function public.get_data_sizes() to service_role;
-grant execute on function public.get_room_messages(p_room_id text, p_before_id bigint, p_limit integer) to service_role;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'get_chat_messages'
+    and pg_get_function_identity_arguments(p.oid) = 'p_chat_id text, p_before_id bigint, p_limit integer';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.get_chat_messages(p_chat_id text, p_before_id bigint, p_limit integer) to service_role$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'get_data_sizes'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.get_data_sizes() to service_role$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'get_room_messages'
+    and pg_get_function_identity_arguments(p.oid) = 'p_room_id text, p_before_id bigint, p_limit integer';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.get_room_messages(p_room_id text, p_before_id bigint, p_limit integer) to service_role$sql$;
+  end if;
+end $do$;
 grant execute on function public.get_share_url() to service_role;
-grant execute on function public.get_table_sizes() to service_role;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'get_table_sizes'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.get_table_sizes() to service_role$sql$;
+  end if;
+end $do$;
 grant execute on function public.dummy_heartbeat() to service_role;
 grant execute on function public.dummy_uids() to service_role;
-grant execute on function public.fn_archive_deleted_user(p_uid uuid, p_reason text, p_claimed_by uuid, p_claimed_nick text) to service_role;
-grant execute on function public.ledger_spend_topup(p_user uuid, p_type text, p_amount integer, p_ref text) to service_role;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'fn_archive_deleted_user'
+    and pg_get_function_identity_arguments(p.oid) = 'p_uid uuid, p_reason text, p_claimed_by uuid, p_claimed_nick text';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.fn_archive_deleted_user(p_uid uuid, p_reason text, p_claimed_by uuid, p_claimed_nick text) to service_role$sql$;
+  end if;
+end $do$;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'ledger_spend_topup'
+    and pg_get_function_identity_arguments(p.oid) = 'p_user uuid, p_type text, p_amount integer, p_ref text';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.ledger_spend_topup(p_user uuid, p_type text, p_amount integer, p_ref text) to service_role$sql$;
+  end if;
+end $do$;
 grant execute on function public.list_topup_packages() to service_role;
 grant execute on function public.posts_fill_country() to service_role;
 grant execute on function public.purge_expired_stories() to service_role;
@@ -107,4 +349,15 @@ grant execute on function public.fix_story_visibility() to service_role;
 grant execute on function public.scrub_reply_snapshot_private() to service_role;
 grant execute on function public.scrub_reply_snapshot_room() to service_role;
 grant execute on function public.wallet_sync_points(p_user uuid) to service_role;
-grant execute on function public.increment_unread(chat_id text, receiver_id uuid) to service_role;
+-- guard: fungsi drift (definisi tidak ada / signature beda di migrations)
+do $do$
+declare v_oid oid;
+begin
+  select p.oid into v_oid
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'increment_unread'
+    and pg_get_function_identity_arguments(p.oid) = 'chat_id text, receiver_id uuid';
+  if v_oid is not null then
+    execute $sql$grant execute on function public.increment_unread(chat_id text, receiver_id uuid) to service_role$sql$;
+  end if;
+end $do$;

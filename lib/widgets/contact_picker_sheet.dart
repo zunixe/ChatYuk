@@ -112,45 +112,90 @@ class _ContactPickerSheetState extends ConsumerState<_ContactPickerSheet> {
   }
 
   /// Teman ∪ pernah-chat (chat yang tampil di tab Pesan), dedupe by uid.
+  ///
+  /// PENTING: seluruh body dibungkus try/finally. Dulu `ref.read(authProvider)`
+  /// (atau provider lain) bisa MELEMPAR (mis. Supabase belum siap saat cold
+  /// start) → exception lolos dari async tanpa menyentuh `_loadingUsers`,
+  /// sehingga spinner berputar SELAMANYA dan daftar tak pernah muncul.
   Future<void> _loadUsers() async {
+    try {
+      await _loadUsersImpl();
+    } catch (_) {
+      // Jangan pernah biarkan spinner menggantung karena error apa pun.
+    } finally {
+      if (mounted && _loadingUsers) {
+        setState(() => _loadingUsers = false);
+      }
+    }
+  }
+
+  Future<void> _loadUsersImpl() async {
     final myUid = ref.read(authProvider).uid ?? '';
     if (myUid.isEmpty) {
       if (mounted) setState(() => _loadingUsers = false);
       return;
     }
+    List<({String uid, String name, String gender})> mapChats(
+      List<PrivateChatInfo> chats,
+    ) => [
+      for (final c in chats)
+        if (c.participants.firstWhere(
+              (p) => p != myUid,
+              orElse: () => '',
+            )
+            case final other when other.isNotEmpty)
+          (
+            uid: other,
+            name: c.participantNames[other] ?? '',
+            gender: c.participantGenders[other] ?? '',
+          ),
+    ];
+
+    // FAST PATH: snapshot daftar Pesan yang sudah ada di memori → tampil
+    // SEKETIKA tanpa menunggu jaringan (dulu spinner bisa menggantung lama
+    // karena `socialList` tidak punya timeout sama sekali).
+    final cached = ref
+        .read(chatProvider.notifier)
+        .lastPrivateChatsSnapshot(myUid);
+    if (cached != null && cached.isNotEmpty) {
+      final instant = mergePickerUsers(
+        friends: const [],
+        chatted: mapChats(cached),
+      );
+      if (mounted) {
+        setState(() {
+          _users = instant;
+          _loadingUsers = false;
+        });
+      }
+    }
+
+    // SLOW PATH: teman + chat diambil PARALEL (dulu berurutan → total waktu =
+    // jumlah keduanya) dan masing-masing dibatasi timeout supaya tidak
+    // menggantung selamanya.
     var friends = const <Map<String, dynamic>>[];
     var chatted = const <({String uid, String name, String gender})>[];
-    // Teman.
-    try {
-      friends = await ref
+    final results = await Future.wait<Object?>([
+      ref
           .read(socialProvider.notifier)
-          .socialList('friends', myUid, limit: 200);
-    } catch (_) {}
-    // Pernah chat (snapshot daftar Pesan — stream men-replay snapshot terakhir).
-    try {
-      final chats = await ref
+          .socialList('friends', myUid, limit: 200)
+          .timeout(const Duration(seconds: 5))
+          .catchError((_) => const <Map<String, dynamic>>[]),
+      ref
           .read(chatProvider.notifier)
           .getMyPrivateChats(myUid)
           .first
-          .timeout(const Duration(seconds: 3));
-      chatted = [
-        for (final c in chats)
-          if (c.participants.firstWhere(
-                (p) => p != myUid,
-                orElse: () => '',
-              )
-              case final other when other.isNotEmpty)
-            (
-              uid: other,
-              name: c.participantNames[other] ?? '',
-              gender: c.participantGenders[other] ?? '',
-            ),
-      ];
-    } catch (_) {}
+          .timeout(const Duration(seconds: 5))
+          .catchError((_) => const <PrivateChatInfo>[]),
+    ]);
+    friends = results[0] as List<Map<String, dynamic>>;
+    chatted = mapChats(results[1] as List<PrivateChatInfo>);
+
     final list = mergePickerUsers(friends: friends, chatted: chatted);
     if (!mounted) return;
     setState(() {
-      _users = list;
+      // Jangan kosongkan daftar yang sudah tampil kalau jaringan gagal.
+      if (list.isNotEmpty || _users.isEmpty) _users = list;
       _loadingUsers = false;
     });
   }

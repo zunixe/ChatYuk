@@ -310,7 +310,9 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
     );
   }
 
-  /// [2] BAGIAN ATAS: avatar 84 + 3 statistik sejajar, lalu nama/status/bio/info.
+  /// [2] BAGIAN ATAS: avatar 84 + 3 statistik sejajar, lalu nama/status/info,
+  /// lalu baris TENTANG (label + nilai + pensil edit) — satu-satunya tampilan
+  /// & editor about (bio lama dihapus supaya tidak dobel).
   Widget _topSection(
     BuildContext context,
     S s,
@@ -322,7 +324,6 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
   ) {
     final online = profile?.status == 'online';
     final name = profile?.nickname ?? '-';
-    final bio = profile?.about ?? '';
     final loc = [
       if ((profile?.city ?? '').isNotEmpty) profile!.city,
       if ((profile?.country ?? '').isNotEmpty) profile!.country,
@@ -473,17 +474,6 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
               _statusPill(online),
             ],
           ),
-          if (bio.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              bio,
-              style: TextStyle(
-                fontSize: AppTextSize.s14,
-                height: AppTextSize.lh145,
-                color: AppTheme.textPrimary.withValues(alpha: 0.88),
-              ),
-            ),
-          ],
           if (info.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
@@ -493,6 +483,102 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
               style: TextStyle(fontSize: AppTextSize.s135, color: AppTheme.textSecondary),
             ),
           ],
+          // TENTANG — diedit inline di tempat (logika lama di profile_body).
+          // Ditampilkan sebagai baris label + nilai + pensil edit agar fitur
+          // "About" yang sebelumnya hilang di redesign kembali tersedia.
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.labelAbout,
+                      style: TextStyle(
+                        fontSize: AppTextSize.s12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    if (_editingAbout)
+                      TextField(
+                        controller: _aboutCtrl,
+                        autofocus: true,
+                        maxLength: 150,
+                        maxLines: null,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _saveAbout(),
+                        style: TextStyle(
+                          fontSize: AppTextSize.s14,
+                          color: AppTheme.textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: s.hintAbout,
+                          hintStyle: TextStyle(
+                            fontSize: AppTextSize.s13,
+                            color: AppTheme.textSecondary,
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 4,
+                          ),
+                        ),
+                      )
+                    else
+                      Text(
+                        (profile?.about ?? '').isEmpty
+                            ? s.aboutEmpty
+                            : profile!.about,
+                        style: (profile?.about ?? '').isEmpty
+                            ? TextStyle(
+                                fontSize: AppTextSize.s135,
+                                color: AppTheme.textSecondary,
+                              )
+                            : TextStyle(
+                                fontSize: AppTextSize.s14,
+                                height: AppTextSize.lh145,
+                                color: AppTheme.textPrimary.withValues(
+                                  alpha: 0.88,
+                                ),
+                              ),
+                      ),
+                  ],
+                ),
+              ),
+              if (_editingAbout) ...[
+                if (_savingAbout)
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else ...[
+                  IconButton(
+                    icon: const Icon(Icons.check, size: 20),
+                    color: AppTheme.primary,
+                    onPressed: _saveAbout,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    color: AppTheme.textSecondary,
+                    onPressed: _savingAbout ? null : _cancelEditAbout,
+                  ),
+                ],
+              ] else
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  color: AppTheme.primary,
+                  tooltip: s.btnEditProfile,
+                  onPressed: () => _startEditAbout(profile?.about ?? ''),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -662,11 +748,11 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Row(
         children: [
-          Expanded(child: _actionBtn('${s.btnEditProfile}', onTap: _editProfile)),
+          Expanded(child: _actionBtn(s.btnEditProfile, onTap: _editProfile)),
           const SizedBox(width: 8),
           Expanded(
             child: _actionBtn(
-              '${s.btnShareApp}',
+              s.btnShareApp,
               onTap: () async {
                 await Share.share(s.msgShareApp);
               },

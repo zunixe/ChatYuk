@@ -59,6 +59,23 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
     }, onError: (e) {
       debugPrint('[NAV] msgs stream error: $e');
     });
+    // PUSH SNAPSHOT AWAL (fix "pesan baru tidak muncul sampai keluar-masuk
+    // chat"): stream hanya mengirim EMIT BERIKUTNYA. Bila sesi ini sudah punya
+    // snapshot (pesan baru masuk saat chat tertutup / cache disk), listener
+    // di atas tak pernah menerimanya → daftar tetap kosong sampai ada event
+    // baru. Dorong snapshot (sesi → cache memori → cache disk) SEBELUM
+    // menunggu emit, supaya bubble langsung tampil saat layar dibuka.
+    void pushSnapshot() {
+      if (_msgsStreamCtrl.isClosed) return;
+      try {
+        final snap =
+            MessageCache.instance.peekMessages(cacheKeyFor(widget.chatId));
+        if (snap != null && snap.isNotEmpty) _msgsStreamCtrl.add(snap);
+      } catch (_) {}
+    }
+
+    pushSnapshot();
+    WidgetsBinding.instance.addPostFrameCallback((_) => pushSnapshot());
   }
 
   /// P0: lepas subscription ASLI (memicu `ChatStreamSession.onCancel` →

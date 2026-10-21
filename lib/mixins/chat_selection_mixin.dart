@@ -271,6 +271,10 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   Future<void> copySelected() async {
     final msg = singleSelected;
     if (msg == null || msg.text.isEmpty) return;
+    // PENTING: yang disalin adalah `msg.text` ASLI — untuk pesan berisi link,
+    // teks = URL-nya, jadi yang tercopy adalah LINK-nya. Tampilan boleh
+    // menyembunyikan URL di bawah kartu link, tapi data mentahnya tetap utuh
+    // supaya copy selalu memberi link (minta user).
     await Clipboard.setData(ClipboardData(text: msg.text));
     if (!mounted) return;
     showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.msgMessageCopied);
