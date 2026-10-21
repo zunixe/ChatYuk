@@ -77,8 +77,10 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
   List<String> _hashtags = [];
   // About diedit inline di tempat (tanpa bottom sheet).
   bool _editingAbout = false;
+
   /// Chip hashtag "+ Tambah" sedang jadi TextField (edit inline).
   bool _editingHashtag = false;
+
   /// Salinan slot foto ekstra (dibaca seksi Foto tanpa watch provider).
   int _extraSlotsCache = 0;
   String? _appVersionCache;
@@ -116,17 +118,36 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
   Future<String> _appVersion();
   // Seksi UI baru (stub di base — pola sama `_buildBodySliver`).
   Widget _anonBanner(BuildContext context, S s);
-  Widget _topSection(BuildContext context, S s, UserModel? profile,
-      Uint8List? avatarBytes, Color avatarColor, String genderLabel,
-      bool emailConfirmed);
+  Widget _topSection(
+    BuildContext context,
+    S s,
+    UserModel? profile,
+    Uint8List? avatarBytes,
+    Color avatarColor,
+    String genderLabel,
+    bool emailConfirmed,
+  );
   Widget _hashtagSection(BuildContext context, S s);
   Widget _actionButtons(BuildContext context, S s, UserModel? profile);
   Widget _friendRequestBanner(BuildContext context, S s);
   Widget _photosSection(BuildContext context, S s);
-  Widget _accountSection(BuildContext context, S s, UserModel? profile,
-      String? uid, String? userEmail, bool emailConfirmed);
+  Widget _accountSection(
+    BuildContext context,
+    S s,
+    UserModel? profile,
+    String? uid,
+    String? userEmail,
+    bool emailConfirmed,
+  );
   Widget _otherSection(BuildContext context, S s);
-  Widget _pointsInfo(int points, int extraSlots, bool v2);
+  Widget _pointsInfo(
+    BuildContext context,
+    S s,
+    int points,
+    int extraSlots,
+    bool v2, {
+    bool isAnon,
+  });
   Widget _footer(BuildContext context, S s);
   Future<void> _editProfile();
   Future<void> _saveAbout();

@@ -148,8 +148,7 @@ mixin _ProfileUiMx on _ProfileBase {
                     ) ??
                     const SizedBox.shrink(),
               ),
-            if (isAnon && !dummyActive)
-              _anonBanner(context, s),
+            if (isAnon && !dummyActive) _anonBanner(context, s),
             _topSection(
               context,
               s,
@@ -161,12 +160,27 @@ mixin _ProfileUiMx on _ProfileBase {
             ),
             _hashtagSection(context, s),
             _actionButtons(context, s, profile),
+            if (pointsEnabled)
+              _pointsInfo(
+                context,
+                s,
+                pointsValue,
+                extraPhotoSlots,
+                yukcoinV2Active,
+                isAnon: isAnon,
+              ),
             _friendRequestBanner(context, s),
             _photosSection(context, s),
             if (!isAnon)
-              _accountSection(context, s, profile, uid, userEmail, emailConfirmed),
+              _accountSection(
+                context,
+                s,
+                profile,
+                uid,
+                userEmail,
+                emailConfirmed,
+              ),
             _otherSection(context, s),
-            if (pointsEnabled) _pointsInfo(pointsValue, extraPhotoSlots, yukcoinV2Active),
             _footer(context, s),
           ],
         ),
@@ -231,8 +245,6 @@ Widget _statusPill(bool online) {
     ),
   );
 }
-
-
 
 /// Seksi-seksi halaman Profil (bagian atas, hashtag, aksi, foto, akun, lainnya).
 ///
@@ -359,10 +371,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
                         radius: 42,
                         backgroundColor: avatarColor,
                         backgroundImage: avatarBytes != null
-                            ? ResizeImage(
-                                MemoryImage(avatarBytes),
-                                width: 168,
-                              )
+                            ? ResizeImage(MemoryImage(avatarBytes), width: 168)
                             : null,
                         child: (profile?.avatar ?? '').isEmpty
                             ? Text(
@@ -419,8 +428,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
                         () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) =>
-                                SocialListScreen(kind: 'followers'),
+                            builder: (_) => SocialListScreen(kind: 'followers'),
                           ),
                         ),
                       ),
@@ -432,8 +440,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
                         () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) =>
-                                SocialListScreen(kind: 'following'),
+                            builder: (_) => SocialListScreen(kind: 'following'),
                           ),
                         ),
                       ),
@@ -480,7 +487,10 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
               info,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: AppTextSize.s135, color: AppTheme.textSecondary),
+              style: TextStyle(
+                fontSize: AppTextSize.s135,
+                color: AppTheme.textSecondary,
+              ),
             ),
           ],
           // TENTANG — diedit inline di tempat (logika lama di profile_body).
@@ -606,7 +616,10 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: AppTextSize.s125, color: AppTheme.textSecondary),
+              style: TextStyle(
+                fontSize: AppTextSize.s125,
+                color: AppTheme.textSecondary,
+              ),
             ),
           ],
         ),
@@ -625,11 +638,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             for (final t in _hashtags)
-              _hashChip(
-                context,
-                t,
-                () => _removeHashtag(t),
-              ),
+              _hashChip(context, t, () => _removeHashtag(t)),
             _addHashtagChip(context, s),
           ],
         ),
@@ -687,9 +696,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
             border: Border.all(color: _Pc.border),
           ),
           child: Text(
-            _hashtags.isEmpty
-                ? '+ ${s.hashtagAdd}'
-                : '+ ${s.hashtagAddShort}',
+            _hashtags.isEmpty ? '+ ${s.hashtagAdd}' : '+ ${s.hashtagAddShort}',
             style: TextStyle(
               fontSize: AppTextSize.s13,
               fontWeight: FontWeight.w600,
@@ -705,11 +712,17 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
       child: TextField(
         controller: _hashtagCtrl,
         autofocus: true,
-        style: TextStyle(fontSize: AppTextSize.s13, color: AppTheme.textPrimary),
+        style: TextStyle(
+          fontSize: AppTextSize.s13,
+          color: AppTheme.textPrimary,
+        ),
         decoration: InputDecoration(
           isDense: true,
           hintText: s.hintHashtag,
-          hintStyle: TextStyle(fontSize: AppTextSize.s13, color: AppTheme.textSecondary),
+          hintStyle: TextStyle(
+            fontSize: AppTextSize.s13,
+            color: AppTheme.textSecondary,
+          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 10,
             vertical: 6,
@@ -839,9 +852,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
               borderRadius: BorderRadius.circular(14),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const FriendRequestsScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const FriendRequestsScreen()),
               ),
               child: Container(
                 height: 56,

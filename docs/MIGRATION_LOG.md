@@ -1,3 +1,58 @@
+## 2026-10-21 — Guard MIME bucket `chat-photos` diselaraskan (SUDAH APPLY)
+
+- **Migrasi** `20261021030000_align_chat_photos_guard_mime.sql` — APPLIED via
+  Management API. **Akar masalah sebenarnya** dari penolakan upload
+  stiker/dokumen: trigger lama `trg_chat_photos_guard` →
+  `public.chat_photos_guard()` hanya mengizinkan jpeg/png/webp + audio
+  terbatas dan melempar `check_violation` (23514). Jadi — terlepas dari
+  `allowed_mime_types` bucket — `.tgs` (`application/gzip`), `.gif`, PDF/DOCX/
+  XLSX/PPTX/ZIP/TXT, dan `video/webm` SELALU gagal. Bukti data:
+  `storage.objects` bucket `chat-photos` folder `stickers` hanya berisi
+  video/mp4 dan folder `chat` hanya video — tidak ada stiker gambar/`.tgs`
+  maupun dokumen sama sekali.
+- **Perbaikan:** guard kini membaca `storage.buckets.allowed_mime_types`
+  (single source of truth), MIME kosong ditolak, batas ukuran video 50 MB /
+  file lain 20 MB (≤ `file_size_limit`).
+- **Verifikasi (curl ke Storage REST, tanpa sesi):** `application/gzip`,
+  `image/gif`, `application/pdf`, `video/webm` → lolos guard (berhenti di RLS
+  403 seperti seharusnya); `application/x-msdownload` → 415 dari allowlist.
+- **SAFE:** hanya `create or replace` fungsi trigger bucket `chat-photos`;
+  RLS policy, grant, dan tabel bersama tidak disentuh.
+
+## 2026-10-21 — Batas bucket storage (MIME allowlist) (SUDAH APPLY)
+
+- **Migrasi** `20261021010000_storage_bucket_limits.sql` — metadata bucket
+  `chat-photos`: `file_size_limit` 50 MiB + `allowed_mime_types`.
+  **SUDAH di-apply** via Management API (versi `20261021010000` tercatat).
+  Live: `file_size_limit = 52428800`, `allowed_mime_types` 25 entri.
+- **Wajib sebelum apply** (revisi reviewer 2026-10-21): allowlist WAJIB memuat
+  `image/svg+xml`, `image/svg+xml-compressed`, `application/gzip` (stiker
+  Telegram `.tgs` — klien mengirim content-type hasil tebakan ekstensi path,
+  `.tgs` → `image/svg+xml`, BUKAN `application/octet-stream`) dan `audio/m4a`.
+  Tanpa itu upload stiker/voice ditolak 400.
+- **Klien ikut diperbaiki:** `StoragePhotoService.uploadSticker` kini kirim
+  `contentType` eksplisit per ekstensi (`stickerMime`), `uploadStoryImage` /
+  `uploadPostImage` kirim `_detectImageFormat().mime`, dan `uploadVoice`
+  memakai `audio/mp4` (bukan `audio/m4a` yang tak terdaftar di daftar media
+  type Supabase Storage).
+
+## 2026-10-21 — DIBATALKAN: fix scrub_reply_snapshot_cast
+
+- File `20261021020000_fix_scrub_reply_snapshot_cast.sql` **DIBATALKAN/
+  dihapus** sebelum apply. Premisnya salah: ia mengubah
+  `scrub_reply_snapshot_private` kembali ke `new.id` (bigint), padahal
+  `private_messages.replied_to_id` bertipe **text** di live dan fungsi live
+  SUDAH memakai `new.id::text` (perbaikan `20260923160000`). Bila di-apply →
+  `operator does not exist: bigint = text` (42883) dan SEMUA soft-delete
+  pesan gagal — persis insiden yang ingin dicegah.
+- **Verifikasi live (Management API, 2026-10-21):**
+  `messages.replied_to_id` = bigint, `private_messages.replied_to_id` = text;
+  `scrub_reply_snapshot_private` = `pm.replied_to_id = new.id::text`,
+  `scrub_reply_snapshot_room` = `m.replied_to_id = new.id`. Konsisten dengan
+  pgTAP `supabase/tests/delete_message_test.sql`.
+- **Catatan:** entri log `20260923160000` (DITERAPKAN & TERVERIFIKASI LIVE)
+  tetap benar; klaim "kolom bigint" pada migrasi yang dibatalkan adalah salah.
+
 ## 2026-10-20 — Metadata kutipan balasan (replied_to_meta) (SUDAH APPLY via Management API)
 
 - **Migrasi** `20261020120000_reply_meta.sql` — ADITIF: kolom

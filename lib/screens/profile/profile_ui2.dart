@@ -15,7 +15,10 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
           s.titleMyPhotos,
           trailing: Text(
             '${_photos.length} ${s.ofLabel} $maxPhotos',
-            style: TextStyle(fontSize: AppTextSize.s125, color: AppTheme.textSecondary),
+            style: TextStyle(
+              fontSize: AppTextSize.s125,
+              color: AppTheme.textSecondary,
+            ),
           ),
         ),
         SizedBox(
@@ -302,7 +305,10 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                     value,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: AppTextSize.s15, color: AppTheme.textPrimary),
+                    style: TextStyle(
+                      fontSize: AppTextSize.s15,
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -429,46 +435,152 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
-  /// Info poin (hanya bila sistem koin aktif) — ringkas, satu baris.
-  Widget _pointsInfo(int points, int extraSlots, bool v2) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: _Pc.card,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.stars_rounded, size: 18, color: AppTheme.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'YukCoin: $points${v2 ? ' · v2' : ''} · slot foto +$extraSlots',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: AppTextSize.s13, color: AppTheme.textSecondary),
+  /// Info YukCoin (hanya bila sistem koin aktif) — kartu saldo + pintu
+  /// riwayat/topup, diletakkan dekat atas agar tidak tenggelam di bawah.
+  Widget _pointsInfo(
+    BuildContext context,
+    S s,
+    int points,
+    int extraSlots,
+    bool v2, {
+    bool isAnon = false,
+  }) {
+    void openHistory() => Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PointHistoryScreen()),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        _sectionTitle(s.pointsTitle),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFFB300), Color(0xFFFF8F00)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
+              borderRadius: BorderRadius.circular(14),
             ),
-            InkWell(
-              onTap: _buyExtraSlots,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Text(
-                  '+ Slot',
-                  style: TextStyle(
-                    fontSize: AppTextSize.s13,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.primary,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: openHistory,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.22),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          // Akun anonim: poin bisa hilang → ikon gembok.
+                          isAnon
+                              ? Icons.lock_outlined
+                              : Icons.monetization_on_outlined,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s.walletTotal,
+                              style: AppText.caption.copyWith(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              formatPoints(points),
+                              style: AppText.display.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              '${s.yukcoinFeatureExtraPhoto}: +$extraSlots'
+                              '${v2 ? ' · v2' : ''}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.caption.copyWith(
+                                color: Colors.white.withValues(alpha: 0.85),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Tombol diletakkan di Row sendiri dengan tap-target
+                      // penuh: IconButton 48dp lebih tinggi dari isi kartu,
+                      // jadi tap di atas/bawah ikon dulu jatuh ke InkWell
+                      // kartu (buka riwayat padahal maksudnya "+ Slot").
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: _buyExtraSlots,
+                            tooltip: s.extraPhotoBuy,
+                            icon: const Icon(
+                              Icons.add_circle_outline,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: openHistory,
+                            tooltip: s.pointHistoryTitle,
+                            icon: const Icon(
+                              Icons.chevron_right,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
-      ),
+        // Peringatan akun anonim: poin bisa HILANG saat logout/ganti
+        // perangkat. Dulu ada di kartu lama — jangan sampai hilang.
+        if (isAnon)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 8, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 14,
+                  color: Colors.orange.shade300,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    s.pointsAnonymousLose,
+                    style: AppText.caption.copyWith(
+                      color: Colors.orange.shade300,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 

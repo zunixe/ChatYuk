@@ -146,8 +146,17 @@ class StoragePhotoService {
   }) async {
     try {
       final bytes = base64Decode(base64);
+      // contentType eksplisit (bukan tebakan ekstensi) supaya cocok dengan
+      // allowlist bucket & bytes-nya.
+      final fmt = _detectImageFormat(bytes);
       final path = storyPath(uid);
-      await _sb.storage.from(_bucket).uploadBinary(path, bytes);
+      await _sb.storage
+          .from(_bucket)
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(contentType: fmt.mime),
+          );
       return path;
     } catch (e) {
       dlog('[StoragePhoto] uploadStoryImage error: $e');
@@ -163,6 +172,33 @@ class StoragePhotoService {
     'png', 'webp', 'gif', 'tgs', 'mp4', 'mov', 'webm',
   };
 
+  /// MIME eksplisit untuk stiker sesuai ekstensi. WAJIB dikirim saat upload:
+  /// tanpa `fileOptions`, klien menebak dari ekstensi path dan `.tgs` dipetakan
+  /// ke `image/svg+xml` — sebenarnya bukan (payload gzip/JSON), dan mudah
+  /// ditolak allowlist bucket. Nilai di sini sengaja "netral" & didukung
+  /// allowlist (`20261021010000_storage_bucket_limits.sql`).
+  static String stickerMime(String ext) {
+    switch (ext.toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'gif':
+        return 'image/gif';
+      case 'mp4':
+        return 'video/mp4';
+      case 'mov':
+        return 'video/quicktime';
+      case 'webm':
+        return 'video/webm';
+      case 'tgs':
+        // Lottie Telegram = gzip JSON, bukan gambar.
+        return 'application/gzip';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
   /// Path STIKER di bucket: `stickers/<uid>/<stamp>.<ext>`.
   String stickerPath(String uid, {String ext = 'png'}) =>
       'stickers/$uid/${_stamp()}.$ext';
@@ -176,7 +212,13 @@ class StoragePhotoService {
     try {
       final bytes = base64Decode(base64);
       final path = stickerPath(uid, ext: ext);
-      await _sb.storage.from(_bucket).uploadBinary(path, bytes);
+      await _sb.storage
+          .from(_bucket)
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(contentType: stickerMime(ext)),
+          );
       return path;
     } catch (e) {
       dlog('[StoragePhoto] uploadSticker error: $e');
@@ -448,8 +490,15 @@ class StoragePhotoService {
   }) async {
     try {
       final bytes = base64Decode(base64);
+      final fmt = _detectImageFormat(bytes);
       final path = postImagePath(uid);
-      await _sb.storage.from(_bucket).uploadBinary(path, bytes);
+      await _sb.storage
+          .from(_bucket)
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(contentType: fmt.mime),
+          );
       return path;
     } catch (e) {
       dlog('[StoragePhoto] uploadPostImage error: $e');
@@ -512,7 +561,10 @@ class StoragePhotoService {
       await _sb.storage.from(_bucket).uploadBinary(
             path,
             bytes,
-            fileOptions: const FileOptions(contentType: 'audio/m4a'),
+            // audio/mp4 (bukan 'audio/m4a'): m4a TIDAK terdaftar di daftar
+            // media type IANA yang dipakai Supabase Storage → dulu bisa
+            // ditolak allowlist bucket. `.m4a` tetap kontainer MP4/AAC.
+            fileOptions: const FileOptions(contentType: 'audio/mp4'),
           );
       return path;
     } catch (e) {

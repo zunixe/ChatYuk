@@ -23,7 +23,10 @@ void showReportUserDialog(
   required String reportedName,
 }) {
   String reason = '';
-  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+  final s = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(localeProvider).s;
   showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -44,11 +47,16 @@ void showReportUserDialog(
         ),
         TextButton(
           onPressed: () {
-            ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).reportUser(
-              reporterId: ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid!,
-              reportedId: reportedId,
-              reason: reason,
-            );
+            ProviderScope.containerOf(context, listen: false)
+                .read(chatProvider.notifier)
+                .reportUser(
+                  reporterId: ProviderScope.containerOf(
+                    context,
+                    listen: false,
+                  ).read(authProvider.notifier).uid!,
+                  reportedId: reportedId,
+                  reason: reason,
+                );
             Navigator.of(ctx).pop();
             ScaffoldMessenger.of(
               context,
@@ -72,79 +80,115 @@ Future<int?> showSendCoinDialog(
   required bool pointsEnabled,
   required int paidBalance,
 }) {
-  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-  final amountCtrl = TextEditingController();
-  int selected = 0;
-  const presets = [5, 10, 25, 50, 100];
+  return showDialog<int>(
+    context: context,
+    builder: (ctx) => _SendCoinDialog(
+      otherName: otherName,
+      pointsEnabled: pointsEnabled,
+      paidBalance: paidBalance,
+    ),
+  );
+}
 
-  try {
-    return showDialog<int>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setInner) => Dialog(
-          backgroundColor: const Color(0xFF1E1E2E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header gradient elegan
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppTheme.primaryDark,
-                      AppTheme.primary,
-                      AppTheme.accent,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 58,
-                      height: 58,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          '🪙',
-                          style: TextStyle(fontSize: AppGlyph.lg),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      s.sendCoinTitle,
-                      style: AppText.title.copyWith(color: Colors.white),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      s.sendCoinTo(otherName),
-                      style: AppText.caption.copyWith(color: Colors.white70),
-                    ),
+class _SendCoinDialog extends StatefulWidget {
+  const _SendCoinDialog({
+    required this.otherName,
+    required this.pointsEnabled,
+    required this.paidBalance,
+  });
+
+  final String otherName;
+  final bool pointsEnabled;
+  final int paidBalance;
+
+  @override
+  State<_SendCoinDialog> createState() => _SendCoinDialogState();
+}
+
+class _SendCoinDialogState extends State<_SendCoinDialog> {
+  final _amountCtrl = TextEditingController();
+  int _selected = 0;
+  static const _presets = [5, 10, 25, 50, 100];
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.86;
+
+    return Dialog(
+      backgroundColor: const Color(0xFF1E1E2E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header gradient elegan
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppTheme.primaryDark,
+                    AppTheme.primary,
+                    AppTheme.accent,
                   ],
                 ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              Padding(
+              child: Column(
+                children: [
+                  Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        '🪙',
+                        style: TextStyle(fontSize: AppGlyph.lg),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    s.sendCoinTitle,
+                    style: AppText.title.copyWith(color: Colors.white),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    s.sendCoinTo(widget.otherName),
+                    style: AppText.caption.copyWith(color: Colors.white70),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Saldo kamu
-                    if (pointsEnabled)
+                    if (widget.pointsEnabled)
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -177,7 +221,7 @@ Future<int?> showSendCoinDialog(
                               ),
                             ),
                             Text(
-                              '$paidBalance',
+                              '${widget.paidBalance}',
                               style: AppText.bodyStrong.copyWith(
                                 color: const Color(0xFFFFB300),
                               ),
@@ -197,12 +241,12 @@ Future<int?> showSendCoinDialog(
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: presets.map((p) {
-                        final isSel = selected == p;
+                      children: _presets.map((p) {
+                        final isSel = _selected == p;
                         return GestureDetector(
-                          onTap: () => setInner(() {
-                            selected = p;
-                            amountCtrl.text = '$p';
+                          onTap: () => setState(() {
+                            _selected = p;
+                            _amountCtrl.text = '$p';
                           }),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
@@ -235,9 +279,9 @@ Future<int?> showSendCoinDialog(
                     const SizedBox(height: 12),
                     // Input custom
                     TextField(
-                      controller: amountCtrl,
+                      controller: _amountCtrl,
                       keyboardType: TextInputType.number,
-                      onChanged: (_) => setInner(() => selected = 0),
+                      onChanged: (_) => setState(() => _selected = 0),
                       style: AppText.body.copyWith(color: Colors.white),
                       decoration: InputDecoration(
                         hintText: s.coinAmountHint,
@@ -262,65 +306,62 @@ Future<int?> showSendCoinDialog(
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: Text(
-                          s.btnCancel,
-                          style: AppText.bodyStrong.copyWith(
-                            color: Colors.white60,
-                          ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(
+                        s.btnCancel,
+                        style: AppText.bodyStrong.copyWith(
+                          color: Colors.white60,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: FilledButton(
-                        onPressed: () {
-                          final amount =
-                              int.tryParse(amountCtrl.text.trim()) ?? 0;
-                          if (amount < 5) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(content: Text(s.errCoinMin)),
-                            );
-                            return;
-                          }
-                          if (pointsEnabled && amount > paidBalance) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(content: Text(s.errCoinInsufficient)),
-                            );
-                            return;
-                          }
-                          Navigator.pop(ctx, amount);
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(
+                      onPressed: () {
+                        final amount =
+                            int.tryParse(_amountCtrl.text.trim()) ?? 0;
+                        if (amount < 5) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(s.errCoinMin)));
+                          return;
+                        }
+                        if (widget.pointsEnabled &&
+                            amount > widget.paidBalance) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(s.errCoinInsufficient)),
+                          );
+                          return;
+                        }
+                        Navigator.pop(context, amount);
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                        child: Text(s.btnSend, style: AppText.button),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
+                      child: Text(s.btnSend, style: AppText.button),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
-  } finally {
-    // Controller dibuang setelah dialog tertutup (fungsi ini await Future-nya).
-    // Tidak ada listener TextField lagi setelah pop.
-    Future.microtask(amountCtrl.dispose);
   }
 }
 
@@ -332,7 +373,10 @@ Future<GiftItem?> showGiftPickerSheet(
   required int bonusBalance,
   required int bonusMultiplier,
 }) {
-  final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+  final s = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(localeProvider).s;
   return showModalBottomSheet<GiftItem>(
     context: context,
     backgroundColor: AppTheme.bgCard,
@@ -350,9 +394,7 @@ Future<GiftItem?> showGiftPickerSheet(
             const SizedBox(height: 4),
             Text(
               s.giftPick,
-              style: AppText.bodySmall.copyWith(
-                color: AppTheme.textSecondary,
-              ),
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 16),
             if (!pointsEnabled) ...[
@@ -379,7 +421,8 @@ Future<GiftItem?> showGiftPickerSheet(
                 itemCount: kGiftCatalog.length,
                 itemBuilder: (ctx, i) {
                   final g = kGiftCatalog[i];
-                  final afford = g.coins <= paidBalance ||
+                  final afford =
+                      g.coins <= paidBalance ||
                       (g.coins * bonusMultiplier) <= bonusBalance;
                   return InkWell(
                     onTap: afford ? () => Navigator.pop(ctx, g) : null,
