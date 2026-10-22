@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
+import '../utils.dart';
 import '../widgets/chat_info_snack.dart';
 
 /// Modul BERSAMA perekam voice note (private ↔ room).
@@ -75,7 +76,11 @@ mixin VoiceRecorderMixin<T extends StatefulWidget> on State<T> {
       return;
     }
     try {
-      if (!await voiceRecorder.hasPermission()) return;
+      if (!await voiceRecorder.hasPermission()) {
+        // Dulu `return` senyap → user menekan tombol dan tak terjadi apa pun.
+        if (mounted) showChatSnack(context, voiceStartFailedMessage());
+        return;
+      }
       final dir = await getTemporaryDirectory();
       final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
       await voiceRecorder.start(
@@ -95,7 +100,25 @@ mixin VoiceRecorderMixin<T extends StatefulWidget> on State<T> {
       });
       voiceSendRecordingSignal();
       startVoiceTimer();
-    } catch (_) {}
+    } catch (e) {
+      // Dulu `catch (_) {}`: recorder.start() melempar (mic dipakai app lain /
+      // encoder tak didukung) → tidak ada rekaman, tidak ada pesan apa pun →
+      // user mengira tombol rusak. Sekarang tampilkan feedback + reset state.
+      dlog('[Voice] startVoiceRecord gagal: $e');
+      try {
+        await voiceRecorder.cancel();
+      } catch (_) {}
+      voiceTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          voiceRecording = false;
+          voicePaused = false;
+          voiceLocked = false;
+          voicePickUp = false;
+        });
+        showChatSnack(context, voiceStartFailedMessage());
+      }
+    }
   }
 
   /// Stop + baca file. [send] false (mis. batal) → tidak lanjut kirim.
@@ -107,8 +130,16 @@ mixin VoiceRecorderMixin<T extends StatefulWidget> on State<T> {
     voiceLocked = false;
     voicePaused = false;
     voicePickUp = false;
-    final path = await voiceRecorder.stop();
-    setState(() => voiceRecording = false);
+    // stop() bisa MELEMPAR bila recorder sudah error/di-dispose di tengah
+    // (mis. start gagal sebagian). Dulu exception bocor ke gesture handler dan
+    // menggagalkan seluruh rantai kirim. Sekarang: anggap rekaman batal.
+    String? path;
+    try {
+      path = await voiceRecorder.stop();
+    } catch (e) {
+      dlog('[Voice] stopVoiceRecord gagal: $e');
+    }
+    if (mounted) setState(() => voiceRecording = false);
     if (!send || path == null) return;
     final f = File(path);
     if (!await f.exists()) return;
@@ -152,4 +183,7 @@ mixin VoiceRecorderMixin<T extends StatefulWidget> on State<T> {
   // Pesan error i18n — implementor mengembalikan string sesuai locale.
   String voicePermissionMessage();
   String voiceTooShortMessage();
+
+  /// Pesan saat perekaman gagal DIMULAI (mic sibuk / error hardware).
+  String voiceStartFailedMessage();
 }

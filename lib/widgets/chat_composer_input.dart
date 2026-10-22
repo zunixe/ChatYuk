@@ -158,6 +158,10 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
   String voiceTooShortMessage() =>
       ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errVoiceTooShort;
 
+  @override
+  String voiceStartFailedMessage() =>
+      ProviderScope.containerOf(context, listen: false).read(localeProvider).s.errVoiceStartFailed;
+
 
 
 

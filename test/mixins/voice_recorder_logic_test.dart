@@ -28,6 +28,8 @@ class VoiceHostState extends State<VoiceHost> with VoiceRecorderMixin<VoiceHost>
   String voicePermissionMessage() => 'perm';
   @override
   String voiceTooShortMessage() => 'too short';
+  @override
+  String voiceStartFailedMessage() => 'start failed';
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();

@@ -462,6 +462,11 @@ mixin SScreenMx {
       isId ? 'Izin mikrofon ditolak' : 'Microphone permission denied';
   String get errVoiceTooShort =>
       isId ? 'Rekaman terlalu pendek' : 'Recording too short';
+  /// Rekaman gagal DIMULAI (mic dipakai app lain / error hardware). Dulu
+  /// exception ditelan `catch (_) {}` → tombol voice terasa "rusak" tanpa pesan.
+  String get errVoiceStartFailed => isId
+      ? 'Gagal mulai merekam. Coba lagi (mikrofon mungkin dipakai aplikasi lain).'
+      : 'Could not start recording. Try again (microphone may be in use).';
   String get msgVoice => isId ? '[Voice]' : '[Voice]';
   String get hintHoldToRecord => isId ? 'Tahan untuk rekam' : 'Hold to record';
   String get hintSlideToCancel =>
