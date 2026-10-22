@@ -342,28 +342,42 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     if (_tick.totalSecs <= 0) return;
     _tick.left = _tick.totalSecs;
     _tick.countdown.value = _tick.totalSecs;
-    _tick.timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      _tick.left--;
-      _tick.countdown.value = _tick.left;
-      if (_tick.left <= 0) {
+    // Tick GLOBAL hidup lebih lama dari bubble (scroll/rebuild/keluar chat).
+    // Navigator & aksi kedaluwarsa diambil SEKARANG selagi mounted — dulu
+    // `_expireNow` berhenti di `!mounted` → kartu tak pernah terkunci & server
+    // tak ditandai → foto bisa dibuka berulang (bug 2026-10-22).
+    final nav = Navigator.of(context);
+    final expire = _expirer();
+    final tick = _tick;
+    tick.timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      tick.left--;
+      tick.countdown.value = tick.left;
+      if (tick.left <= 0) {
         t.cancel();
-        _tick.timer = null;
-        if (_tick.viewerOpen && mounted) Navigator.of(context).maybePop();
-        _expireNow();
+        tick.timer = null;
+        if (tick.viewerOpen) nav.maybePop();
+        expire();
         return;
       }
       if (mounted) setState(() {});
     });
   }
 
-  /// Kunci permanen + bersihkan server (dipakai timer habis & viewer 1x ditutup).
-  void _expireNow() {
-    if (!mounted) return;
-    _viewerPending = false;
-    _tick.state = ViewOnceState.expired;
-    ScreenSecureService.exitViewOnce();
-    setState(() {});
-    _clearFromServer();
+  /// Aksi "kunci permanen + tandai server" yang TIDAK bergantung pada widget
+  /// ini tetap mounted. Wajib dibuat saat mounted (butuh context).
+  VoidCallback _expirer() {
+    final tick = _tick;
+    final clear = _serverClearer();
+    return () {
+      if (tick.state == ViewOnceState.expired) return;
+      _viewerPending = false;
+      tick.state = ViewOnceState.expired;
+      tick.decoded = null;
+      ScreenSecureService.exitViewOnce();
+      dlog('[VO-SEEN] expire id=${widget.messageId} mounted=$mounted');
+      if (mounted) setState(() => _decoded = null);
+      clear();
+    };
   }
 
   /// Loader HD dibuang: kualitas ditentukan saat KIRIM (toggle HD di
@@ -377,6 +391,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       return;
     }
     _tick.viewerOpen = true;
+    final tick = _tick;
+    final expire = _expirer();
     // SAMA seperti lihat foto biasa: fullscreen PhotoViewerScreen (bukan
     // bottom-sheet slide dari bawah). Countdown view-once tetap diteruskan.
     Navigator.of(context)
@@ -389,33 +405,41 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           ),
         )
         .whenComplete(() {
-          _tick.viewerOpen = false;
+          tick.viewerOpen = false;
           // Mode 1x: viewer ditutup = sudah dilihat → kunci permanen.
-          if (_tick.totalSecs <= 0 && _tick.state == ViewOnceState.viewing) {
-            _expireNow();
+          if (tick.totalSecs <= 0 && tick.state == ViewOnceState.viewing) {
+            expire();
           }
         });
   }
 
-  Future<void> _clearFromServer() async {
+  /// Penanda server (type → expired + broadcast `view_once_seen`). Notifier &
+  /// id diambil SEKARANG agar tetap jalan walau bubble sudah dibuang.
+  VoidCallback _serverClearer() {
     final id = widget.messageId;
-    if (id == null || id.startsWith('pending-')) return;
-    try {
-      // chatId dikirim supaya server juga menyiarkan broadcast
-      // `view_once_seen` → PENGIRIM langsung mengunci kartu (realtime).
-      // Private DAN room didukung (topik = `viewOnceSeenTopic`).
-      final chatId = widget.chatKey.startsWith('private_')
-          ? widget.chatKey.substring('private_'.length)
-          : widget.chatKey.startsWith('room_')
-          ? widget.chatKey.substring('room_'.length)
-          : '';
-      dlog('[VO-SEEN] clear id=$id chatKey=${widget.chatKey} chatId=$chatId isRoom=${widget.isRoom}');
-      await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).clearViewOnceImage(
-        id,
-        isRoom: widget.isRoom,
-        chatId: chatId.isEmpty ? null : chatId,
-      );
-    } catch (_) {}
+    if (id == null || id.startsWith('pending-')) return () {};
+    // chatId dikirim supaya server juga menyiarkan broadcast
+    // `view_once_seen` → PENGIRIM langsung mengunci kartu (realtime).
+    // Private DAN room didukung (topik = `viewOnceSeenTopic`).
+    final chatKey = widget.chatKey;
+    final isRoom = widget.isRoom;
+    final chatId = chatKey.startsWith('private_')
+        ? chatKey.substring('private_'.length)
+        : chatKey.startsWith('room_')
+        ? chatKey.substring('room_'.length)
+        : '';
+    final notifier = ProviderScope.containerOf(context, listen: false)
+        .read(chatProvider.notifier);
+    return () {
+      dlog('[VO-SEEN] clear id=$id chatKey=$chatKey chatId=$chatId isRoom=$isRoom');
+      unawaited(notifier
+          .clearViewOnceImage(
+            id,
+            isRoom: isRoom,
+            chatId: chatId.isEmpty ? null : chatId,
+          )
+          .catchError((Object e) => dlog('[VO-SEEN] clear gagal: $e')));
+    };
   }
 
   Widget _buildAdminView(BuildContext context) {
