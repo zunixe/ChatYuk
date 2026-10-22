@@ -1,3 +1,44 @@
+## 2026-10-22 (lanjutan) — Tabrakan timestamp diperbaiki + blokir chat ditegakkan
+
+### Anomali yang ditemukan & ditutup
+`20261022010000` dipakai **DUA** file sekaligus (`secure_money_rpcs` dan
+`private_chats_update_check`). `supabase_migrations.schema_migrations` hanya
+bisa menyimpan satu baris per `version` → salah satu migrasi berisiko terlewat
+dan `scripts/check_migrations.sh` menolak seluruh repo.
+
+**Bukti live sebelum perbaikan:** guard `spend_yukcoin` ADA; policy
+`private_chats_update` TANPA `WITH CHECK`; fungsi/trigger `enforce_chat_block`
+TIDAK ADA.
+
+### Tindakan
+1. **Rename** `20261022010000_private_chats_update_check.sql` →
+   `20261022010100_private_chats_update_check.sql` (+ penanda `-- SAFE:` pada
+   baris `drop policy` & `create policy`, wajib oleh gate [6]).
+2. **Apply** `20261022010100` → `private_chats_update` kini punya
+   `with check (auth.uid() = ANY (participants))`. **SAFE:** hanya mengetatkan,
+   aturan sama dengan `USING`; pin/mute/hide/read-receipt tetap jalan.
+3. **Apply** `20261022000000_chat_block_enforcement.sql` (fungsi
+   `enforce_chat_block()` + trigger `enforce_chat_block_trg` BEFORE INSERT pada
+   `private_messages`). Sebelumnya blokir HANYA dicek klien → klien lain /
+   REST langsung tetap bisa mengirim ke orang yang memblokirnya.
+4. **Hapus** `supabase/migrations/points_v1.sql` — duplikat persis:
+   9/9 fungsinya dibuat ulang di migrasi ber-timestamp (2–30 file per fungsi),
+   tabel `point_events` sudah ada di `20260814090000_points_v1_baseline.sql`
+   dan ada di live. Nama tanpa prefix timestamp membuat file ini **tidak pernah**
+   di-push tooling mana pun.
+5. **pgTAP baru** `supabase/tests/security_guards_test.sql` (8 assert):
+   guard `auth.uid()` pada 4 RPC, `*_impl` tidak bisa dieksekusi
+   `authenticated`, `private_chats_update` punya `WITH CHECK`, trigger blokir
+   terpasang. Terdaftar di `scripts/run_sql_tests.sh` → ikut CI.
+
+### Verifikasi
+- Uji trigger di transaksi ROLLBACK: pesan dari pasangan TERBLOKIR ditolak
+  (`blk=1`), pesan pasangan normal lolos (`lolos=1`).
+- Pasca-apply: `trigger_blokir=1`, `with_check=true`.
+- Versi tercatat: `20261022000000`, `20261022010100`.
+- `scripts/check_migrations.sh --all` → **OK bersih** (sebelumnya DITOLAK).
+- `scripts/run_sql_tests.sh` → semua lolos (security_guards 8/8).
+
 ## 2026-10-22 — Tutup kebocoran `app_shared_secret` + rotasi (SUDAH APPLY)
 
 - **Migrasi** `20261022120000_app_settings_hide_shared_secret.sql` — APPLIED via

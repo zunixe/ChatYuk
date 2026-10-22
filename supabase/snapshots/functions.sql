@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-10-18T14:45:37Z
+-- Timestamp: 2026-10-22T23:25:31Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -927,7 +927,7 @@ begin
                             'expires_at', r.expires_at);
 end; $function$
 
--- snapshot-fn: deduct_chat_point @ points_v1.sql
+-- snapshot-fn: deduct_chat_point @ 20260815120000_photo_paywall_point_settings.sql
 CREATE OR REPLACE FUNCTION public.deduct_chat_point(msg_type text)
  RETURNS integer
  LANGUAGE plpgsql
@@ -973,7 +973,7 @@ begin
   return coalesce(tot, 0);
 end; $function$
 
--- snapshot-fn: one_time_bonus @ points_v1.sql
+-- snapshot-fn: one_time_bonus @ 20261001010000_disable_free_points.sql
 CREATE OR REPLACE FUNCTION public.one_time_bonus(action_key text, bonus integer)
  RETURNS integer
  LANGUAGE plpgsql
@@ -1133,7 +1133,7 @@ begin
     'gift', p_gift_id, 'gross', n, 'net', net, 'cut', cut, 'tier', tier);
 end; $function$
 
--- snapshot-fn: room_read_bonus @ points_v1.sql
+-- snapshot-fn: room_read_bonus @ 20261001010000_disable_free_points.sql
 CREATE OR REPLACE FUNCTION public.room_read_bonus()
  RETURNS integer
  LANGUAGE plpgsql
@@ -1146,7 +1146,7 @@ begin
   return coalesce(tot, 0);
 end; $function$
 
--- snapshot-fn: daily_login_bonus @ points_v1.sql
+-- snapshot-fn: daily_login_bonus @ 20261001010000_disable_free_points.sql
 CREATE OR REPLACE FUNCTION public.daily_login_bonus()
  RETURNS jsonb
  LANGUAGE plpgsql
