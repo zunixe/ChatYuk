@@ -192,31 +192,38 @@ class ChatStreamSession {
   ///   supaya tidak duplikasi pekerjaan realtime tiap 30 detik.
   ChatMessageStream start() {
     final controller = StreamController<List<MessageModel>>.broadcast();
-    // Penanda SESI SUDAH DITUTUP (dideklarasikan paling awal: dipakai guard
-    // di seluruh body). Wajib karena controller `broadcast` sengaja TIDAK
-    // di-close() di onCancel (bisa di-subscribe ulang) → `controller.isClosed`
-    // SELALU false dan guard berbasis isClosed tak pernah melindungi apa pun;
-    // akibatnya timer reconnect yang menyala setelah chat ditutup membuat
-    // channel realtime baru yang tak pernah di-remove (langganan yatim).
-    // Sesi bisa dipakai ULANG (subscribe → cancel → subscribe lagi), jadi
-    // "mati" hanya bila controller benar-benar closed. Guard ini tetap
-    // dibutuhkan karena semua kerja async (reload/openChannel) harus batal
-    // bila controller sudah closed.
-    bool _isDead() => controller.isClosed;
+    // Penanda SESI DITUTUP (dideklarasikan paling awal: dipakai guard di
+    // seluruh body). Controller `broadcast` sengaja TIDAK di-close() di
+    // onCancel (bisa di-subscribe ulang) → `controller.isClosed` SELALU false,
+    // jadi guard berbasis isClosed saja tak pernah melindungi apa pun. Dulu
+    // akibatnya: `removeChannel` di onCancel memicu status `closed` →
+    // requestReconnect → ~2 dtk kemudian reload + channel BARU yang tak
+    // pernah dibuang (langganan yatim, 2026-10-22). `sessionClosed` di-set di
+    // onCancel (semua kerja async + tulis cache berhenti) dan di-reset di
+    // onListen saat sesi dipakai ulang (channel & timer dihidupkan lagi).
+    var sessionClosed = false;
+    bool _isDead() => sessionClosed || controller.isClosed;
     var _current = <MessageModel>[];
     var _loadingOlder = false;
     var _hasMore = true;
     final _loadMoreReqs = <Completer<void>>[];
 
     // Batas pesan yang ditahan di memori per chat. Tanpa ini `_current` tumbuh
-    // tak terbatas saat user scroll ke atas (loadOlder tak pernah memangkas) →
-    // tiap emit `controller.add(...)` menyalin list makin besar + ListView
-    // makin panjang → "ngelag makin lama dipakai", pulih setelah tutup-buka
-    // chat (state sesi dibuat ulang). 100 = cukup untuk viewport + scroll
-    // mundur wajar; pesan lebih lama dibaca ulang dari disk saat di-scroll
-    // (pagination tetap jalan). Diturunkan 300→150→100 agar footprint Dart
-    // kecil di HP memori ketat (kurangi halaman ter-swap → ngetik tak freeze).
+    // tak terbatas → tiap emit `controller.add(...)` menyalin list makin
+    // besar + ListView makin panjang → "ngelag makin lama dipakai".
+    // DUA batas (2026-10-22, bug "loadOlder dibuang trim"):
+    // - `_maxMessages` (100) = jendela TERBARU — dipakai selama user belum
+    //   scroll mundur, dan yang disimpan ke cache lokal (cache tetap kecil).
+    // - `maxHistory` (1100) = batas KERAS riwayat di memori setelah
+    //   loadOlder (= jendela + 10 halaman, sama dengan loop jump-to-reply
+    //   room). Dulu loadOlder menambah 100 pesan lama lalu `_trim()` ke 100
+    //   terbaru → yang baru dimuat LANGSUNG dibuang → scroll mentok & lompat
+    //   ke balasan lama tak pernah sampai.
+    // `windowCap` = batas aktif: naik saat loadOlder (maks `maxHistory`);
+    // trim hanya memangkas ujung LAMA saat pesan baru masuk / reload.
     const _maxMessages = 100;
+    const maxHistory = 1100;
+    var windowCap = _maxMessages;
     // Kursor paginasi TERPISAH dari `_current.first`: trim memangkas pesan
     // terlama dari `_current`, tapi kursor harus tetap menunjuk ke pesan
     // TERLAMA yang pernah dimuat sesi ini — kalau pakai `_current.first`
@@ -224,12 +231,18 @@ class ChatStreamSession {
     // mati palsu → history >300 tak bisa di-scroll (regresi trim).
     DateTime? _oldestFetchedTs;
     void _trim() {
-      if (_current.length <= _maxMessages) return;
+      if (_current.length <= windowCap) return;
       // Buang dari DEPAN (terlama) — pertahankan pesan terbaru + posisi
       // scroll di bawah. Karena dipangkas dari atas, `_hasMore` dibiarkan
       // (masih ada yang lebih lama di server).
-      _current = _current.sublist(_current.length - _maxMessages);
+      _current = _current.sublist(_current.length - windowCap);
     }
+
+    // Yang ditulis ke cache lokal: HANYA jendela terbaru (riwayat hasil
+    // loadOlder tak ikut) — tulis cache tetap murah & isi cache bounded.
+    List<MessageModel> cacheWindow() => _current.length <= _maxMessages
+        ? _current
+        : _current.sublist(_current.length - _maxMessages);
 
     // A1 (2026-10-11): REVISI isi — naik tiap kali isi pesan berubah.
     // `controller.add` di bawah SELALU lewat `_emit()` yang menaikkan ini.
@@ -261,11 +274,12 @@ class ChatStreamSession {
       saveDebounce?.cancel();
       saveDebounce = Timer(const Duration(seconds: 2), () async {
         if (_isDead()) return;
-        final sig = messageCacheSignature(_current);
+        final win = cacheWindow();
+        final sig = messageCacheSignature(win);
         if (sig == lastSavedSig) return;
         lastSavedSig = sig;
         try {
-          await MessageCache.instance.saveMessages(cacheKey, _current);
+          await MessageCache.instance.saveMessages(cacheKey, win);
         } catch (e) {
           dlog('[ChatService] clearViewOnceImage ignored: $e');
         }
@@ -326,6 +340,7 @@ class ChatStreamSession {
           // Download path storage dibatasi paralelnya (4) supaya tidak
           // membuka banyak koneksi sekaligus.
           for (var i = 0; i < batch.length; i += 4) {
+            if (_isDead()) return;
             final chunk = batch.skip(i).take(4).toList();
             // Id pesan yang full-res-nya sudah di PhotoCache (prefetch list /
             // buka sebelumnya) — lewati download + tulis ulang di bawah.
@@ -351,6 +366,7 @@ class ChatStreamSession {
               final data = results[j];
               dlog('[PHOTO-DBG] drain ${m.id} srcLen=${(byId[m.id] ?? '').length} dlLen=${data.length}');
               if (data.isEmpty) continue;
+              if (_isDead()) return;
               // save() menyimpan full-res + membuat thumbnail (dikembalikan).
               // Bubble pakai thumbnail supaya decode cepat; full-res di PhotoCache.
               // Cache-hit (prefetch) → full+thumb sudah di disk: ambil thumb
@@ -557,6 +573,7 @@ class ChatStreamSession {
     Timer? reloadDebounce;
 
     Future<void> reload() async {
+      if (_isDead()) return;
       if (_reloading) {
         _reloadQueued = true;
         return;
@@ -694,7 +711,10 @@ class ChatStreamSession {
     // sufiks `-<n>` membuatnya tidak pernah cocok. Reconnect tetap aman:
     // channel lama di-`removeChannel` SEBELUM channel baru dibuat.
     final channelName = chatStreamTopic(cacheKey);
-    late RealtimeChannel channel;
+    // null = tak ada channel aktif (sedang dibuang / sesi ditutup). WAJIB
+    // di-null-kan SEBELUM `removeChannel`: status `closed` yang dipicunya
+    // lalu gagal lolos guard `identical(ch, channel)` → tak memicu reconnect.
+    RealtimeChannel? channel;
     // Forward-declare: attach() memicu reconnect lewat ini, tapi definisi
     // `_scheduleChannelReconnect` ada SETELAH attach (butuh `openChannel`
     // yang butuh `attach` — sirkular, tak bisa urut linear).
@@ -797,6 +817,7 @@ class ChatStreamSession {
       ),
       callback: (payload) {
         _hiddenCutoffCache.remove(filterVal);
+        if (_isDead()) return;
         lastRealtime = DateTime.now();
         try {
           dlog('[RT-UPDATE] $filterVal id=${payload.newRecord['id']} '
@@ -828,6 +849,7 @@ class ChatStreamSession {
       ),
       callback: (_) {
         _hiddenCutoffCache.remove(filterVal);
+        if (_isDead()) return;
         lastRealtime = DateTime.now();
         scheduleReload();
       },
@@ -874,6 +896,7 @@ class ChatStreamSession {
     // kartunya (tanpa menunggu refetch/event UPDATE postgres yang bisa telat
     // di MIUI/Doze).
     ch.onBroadcast(event: 'view_once_seen', callback: (payload, [ref]) {
+      if (_isDead()) return;
       try {
         final mid = payload['message_id']?.toString() ?? '';
         final newType = payload['type']?.toString() ?? 'view_once_expired';
@@ -894,7 +917,9 @@ class ChatStreamSession {
       // oleh reconnect/resume). removeChannel memicu status `closed` di
       // instance lama — tanpa guard ini tiap reconnect menjadwalkan
       // reconnect berikutnya → loop buat-buang kanal tiap ~2 dtk.
-      if (!identical(ch, channel)) return;
+      // Sesi DITUTUP → abaikan semua status (termasuk `closed` dari
+      // removeChannel di onCancel) supaya tak ada reconnect/channel yatim.
+      if (_isDead() || !identical(ch, channel)) return;
       if (err != null) dlog('[ChatStream] realtime error: $err');
       // REALTIME RESILIENT: channel mati (mis. 1002 saat network blip) →
       // reconnect via channel BARU (bukan subscribe ulang instance).
@@ -914,8 +939,21 @@ class ChatStreamSession {
 
     void openChannel() {
       _subscribedNow = false;
-      channel = _sb.channel(channelName);
-      attach(channel);
+      final ch = _sb.channel(channelName);
+      channel = ch;
+      attach(ch);
+    }
+
+    // Lepas channel aktif: null-kan DULU (lihat komentar `channel`), baru
+    // removeChannel.
+    Future<void> dropChannel() async {
+      final old = channel;
+      channel = null;
+      _subscribedNow = false;
+      if (old == null) return;
+      try {
+        await _sb.removeChannel(old);
+      } catch (_) {}
     }
     openChannel();
 
@@ -949,11 +987,10 @@ class ChatStreamSession {
         unawaited(reload());
         // Buang channel lama lalu buat BARU (Supabase melarang subscribe
         // ulang pada instance yang sama).
-        final old = channel;
-        try {
-          await _sb.removeChannel(old);
-        } catch (_) {}
-        if (_isDead()) return;
+        await dropChannel();
+        // `channel != null` = sudah dibuka jalur lain (onListen/resume)
+        // selama await → jangan buka kedua (yang satu jadi yatim).
+        if (_isDead() || channel != null) return;
         try {
           openChannel();
         } catch (e) {
@@ -979,11 +1016,8 @@ class ChatStreamSession {
       _resumeTimer = Timer(Duration.zero, () async {
         _reconnecting = false;
         if (_isDead() || _subscribedNow) return;
-        final old = channel;
-        try {
-          await _sb.removeChannel(old);
-        } catch (_) {}
-        if (_isDead()) return;
+        await dropChannel();
+        if (_isDead() || channel != null) return;
         try {
           openChannel();
         } catch (e) {
@@ -1020,7 +1054,8 @@ class ChatStreamSession {
     // query. Terukur sebagai sumber beban timer global (audit: 58 timer
     // periodic vs ±3 di WhatsApp yang push-only). 20s = 3×/menit: masih
     // terasa responsif sebagai cadangan, beban turun ~60%.
-    final pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    Timer? pollTimer;
+    void startPoll() => pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       // BATERAI (P2): JANGAN poll saat app di-background (layar mati/tidak
       // dilihat). Dulu timer hidup terus → wake + query DB saat diam.
       // Pesan saat background tetap andal via FCM; sinkron saat resume.
@@ -1039,11 +1074,15 @@ class ChatStreamSession {
       if (DateTime.now().difference(lastRealtime).inSeconds < 25) return;
       reload();
     });
+    startPoll();
 
     // Load pesan lebih lama (pagination): ambil 100 pesan SEBELUM pesan tertua.
     Future<void> loadOlder() async {
       if (_loadingOlder || !_hasMore || _current.isEmpty || _isDead())
         return;
+      // Batas keras riwayat di memori tercapai → berhenti memuat (bounded).
+      // `_hasMore` dibiarkan: riwayat di server memang masih ada.
+      if (_current.length >= maxHistory) return;
       _loadingOlder = true;
       try {
         // Pakai kursor sesi (`_oldestFetchedTs`), BUKAN `_current.first` —
@@ -1063,12 +1102,20 @@ class ChatStreamSession {
           _hasMore = false;
         } else {
           final seen = _current.map((m) => m.id).toSet();
-          final newMsgs = older.reversed.where((m) => seen.add(m.id)).toList();
+          var newMsgs = older.reversed.where((m) => seen.add(m.id)).toList();
           if (newMsgs.isEmpty) {
             _hasMore = false;
           } else {
+            // JANGAN `_trim()` di sini — itu membuang pesan yang BARU dimuat.
+            // Ambil secukupnya sampai `maxHistory` (batch ASC → sisakan yang
+            // terbaru), lalu naikkan jendela aktif supaya trim berikutnya
+            // (pesan masuk / reload) tidak memangkas riwayat ini.
+            final room = maxHistory - _current.length;
+            if (newMsgs.length > room) {
+              newMsgs = newMsgs.sublist(newMsgs.length - room);
+            }
             _current = [...newMsgs, ..._current];
-            _trim();
+            if (_current.length > windowCap) windowCap = _current.length;
             // Stiker lama: isi path (halaman lama tak lewat loadPhotosAsync).
             final oldSk = [for (final m in newMsgs) if (m.type == 'sticker' && m.imageData.isEmpty) m];
             if (oldSk.isNotEmpty) {
@@ -1105,6 +1152,7 @@ class ChatStreamSession {
         final cached = await PhotoCache.instance.loadThumb(cacheKey, m.id);
         var data = cached;
         if (data == null) {
+          if (_isDead()) return;
           final row = await _sb
               .from(table)
               .select('image_data,image_path')
@@ -1118,12 +1166,16 @@ class ChatStreamSession {
             full = await StoragePhotoService.instance.download(full) ?? '';
           }
           if (full.isNotEmpty) {
+            if (_isDead()) return;
             data = await PhotoCache.instance.save(cacheKey, m.id, full) ?? full;
           }
         }
         if (_isDead()) return;
         if (data != null && data.isNotEmpty) {
-          _current[idx] = _current[idx].copyWith(imageData: data);
+          // Indeks bisa bergeser selama await (loadOlder/insert) → cari ulang.
+          final i = _current.indexWhere((x) => x.id == messageId);
+          if (i < 0) return;
+          _current[i] = _current[i].copyWith(imageData: data);
           _emit();
           scheduleCacheSave();
         }
@@ -1136,6 +1188,25 @@ class ChatStreamSession {
     // terjadi sebelum StreamBuilder subscribe akan hilang. Kirim ulang
     // _current saat listener pertama datang supaya frame pertama instan.
     controller.onListen = () {
+      if (sessionClosed && !controller.isClosed) {
+        // Sesi DIPAKAI ULANG setelah onCancel: hidupkan lagi yang dimatikan
+        // onCancel (channel, poll, hook resume) + ambil yang terlewat.
+        sessionClosed = false;
+        _reconnecting = false;
+        _reconnectAttempt = 0;
+        _fgWas = AppForeground.now;
+        AppForeground.isForeground.addListener(_onFgChanged);
+        startPoll();
+        if (channel == null) {
+          try {
+            openChannel();
+          } catch (e) {
+            dlog('[ChatStream] reopen gagal: $e');
+            _scheduleChannelReconnect();
+          }
+        }
+        unawaited(reload());
+      }
       if (_current.isNotEmpty && !_isDead()) {
         _emit();
       }
@@ -1148,14 +1219,17 @@ class ChatStreamSession {
       // di-remove (langganan yatim: traffic & memori naik, "makin lama makin
       // lag").
       // CATATAN: sesi ini SENGAJA bisa di-subscribe ULANG (lihat komentar
-      // `controller.close()` di bawah), jadi onCancel TIDAK boleh menandai
-      // sesi mati permanen — ia juga terpicu oleh `handle.stream.first`.
+      // `controller.close()` di bawah) — `sessionClosed` di-reset di onListen.
+      // `sessionClosed` DULU (sebelum teardown) supaya status `closed` dari
+      // removeChannel & semua kerja async yang masih berjalan diabaikan.
+      sessionClosed = true;
       _reconnecting = false;
       _reconnectTimer?.cancel();
       _reconnectTimer = null;
       _resumeTimer?.cancel();
       _resumeTimer = null;
-      pollTimer.cancel();
+      pollTimer?.cancel();
+      pollTimer = null;
       saveDebounce?.cancel();
       reloadDebounce?.cancel();
       AppForeground.isForeground.removeListener(_onFgChanged);
@@ -1163,19 +1237,27 @@ class ChatStreamSession {
       // channel DITUNDA ke microtask berikutnya agar TIDAK jatuh di frame
       // transisi pop (tutup chat). Dulu keduanya sinkron di sini → "tutup
       // private chat ngelag".
-      final snapshot = _current;
+      // Tulis ini = flush SAAT ditutup; sesudahnya tak ada jalur lain yang
+      // menulis cache (semua cek `_isDead`) — penting saat logout.
+      final snapshot = cacheWindow();
       final sig = messageCacheSignature(snapshot);
       final needSave = snapshot.isNotEmpty && sig != lastSavedSig;
+      if (needSave) lastSavedSig = sig;
+      // Lepas referensi SEKARANG (sinkron); removeChannel-nya di microtask.
       final ch = channel;
+      channel = null;
+      _subscribedNow = false;
       scheduleMicrotask(() {
         if (needSave) {
           MessageCache.instance
               .saveMessages(cacheKey, snapshot)
               .catchError((_) {});
         }
-        try {
-          _sb.removeChannel(ch);
-        } catch (_) {}
+        if (ch != null) {
+          try {
+            unawaited(_sb.removeChannel(ch).catchError((_) => 'error'));
+          } catch (_) {}
+        }
         // P0b DIBATALKAN: JANGAN `controller.close()` di sini — stream ini
         // `broadcast` & bisa di-subscribe ULANG (`handle.stream.first` → cancel
         // → subscribe lagi). Menutup di onCancel merusak pemakaian berulang
@@ -1185,6 +1267,7 @@ class ChatStreamSession {
     };
 
     void markDeleted(String messageId, bool deleted) {
+      if (_isDead()) return;
       final i = _current.indexWhere((m) => m.id == messageId);
       if (i < 0 || _current[i].isDeleted == deleted) return;
       if (deleted) {
@@ -1201,9 +1284,10 @@ class ChatStreamSession {
       _emit();
       // Tulis cache SEGERA (bukan debounce 2s) — user bisa langsung keluar.
       saveDebounce?.cancel();
-      lastSavedSig = messageCacheSignature(_current);
+      final win = cacheWindow();
+      lastSavedSig = messageCacheSignature(win);
       unawaited(MessageCache.instance
-          .saveMessages(cacheKey, _current)
+          .saveMessages(cacheKey, win)
           .catchError((_) {}));
     }
 

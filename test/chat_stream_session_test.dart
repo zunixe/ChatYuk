@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/services/chat_stream_session.dart';
 
 import 'supabase_test_client.dart';
@@ -111,93 +112,30 @@ void main() {
       expect(list.map((m) => m.text), ['lama', 'baru']);
     });
 
-    // Room & grup memakai `_cachedMessagesStream(cacheKey: 'room_<id>')` yang
-    // SAMA dengan ChatStreamSession → cap berlaku untuk keduanya. Diuji untuk
-    // kedua jenis cacheKey (room global & grup) supaya terkunci.
-    Future<void> capTest(String key) async {
+    // Handler paginasi: tiap halaman = 100 pesan lebih tua dari `before`.
+    FakeSupabaseHandler pagedHandler({List<String>? befores}) {
       final handler = FakeSupabaseHandler();
-      var page = 0;
-      int oldestFetched = 100000;
-      handler.on('/rest/v1/messages', (req) {
-        if (req.url.query.contains('created_at=lt.')) {
-          final base = DateTime.utc(2026, 1, 1);
-          final start = oldestFetched - 100 * (page + 1);
-          return [
-            for (var i = 0; i < 100; i++)
-              row(
-                start + i,
-                'old${start + i}',
-                createdAt: base
-                    .add(Duration(minutes: start + i - 100000))
-                    .toIso8601String(),
-              ),
-          ];
-        }
-        final base = DateTime.utc(2026, 1, 1);
-        return [
-          for (var i = 0; i < 100; i++)
-            row(
-              99900 + i,
-              'new$i',
-              createdAt: base.add(Duration(minutes: i)).toIso8601String(),
-            ),
-        ];
-      });
-
-      final handle = session(handler, key).start();
-      var list = await handle.stream.first.timeout(const Duration(seconds: 3));
-      expect(list.length, 100);
-
-      // Paginasi berulang → melewati cap 100.
-      for (var k = 0; k < 5; k++) {
-        oldestFetched -= 100;
-        page = k;
-        final bigger = handle.stream.firstWhere(
-          (l) => l.length > list.length || l.length == 100,
-        );
-        await handle.loadOlder();
-        list = await bigger.timeout(const Duration(seconds: 3));
-      }
-      expect(list.length, lessThanOrEqualTo(100),
-          reason: '[$key] list pesan harus dibatasi (anti tumbuh = lag)');
-    }
-
-    test('ROOM: list DIBATASI 100 pesan (anti-tumbuh = lag)', () async {
-      await capTest('room_cap');
-    });
-
-    test('GROUP: list DIBATASI 100 pesan (anti-tumbuh = lag)', () async {
-      await capTest('group_cap_123');
-    });
-
-    test('trim TIDAK merusak paginasi dalam (kursor sesi, bukan depan list)',
-        () async {
-      // Regresi: trim memangkas depan `_current`; kalau `loadOlder` memakai
-      // `_current.first` sebagai kursor, `before` mundur → fetch duplikat →
-      // history >100 tak bisa di-scroll. Kursor sesi harus terus mundur.
-      final handler = FakeSupabaseHandler();
-      final befores = <String>[];
+      var pages = 0;
       handler.on('/rest/v1/messages', (req) {
         final q = req.url.query;
         if (q.contains('created_at=lt.')) {
           final m = RegExp(r'created_at=lt\.([^&]+)').firstMatch(q);
-          befores.add(m?.group(1) ?? '');
-          // Tiap halaman: 100 pesan lebih tua dari `before`.
+          befores?.add(m?.group(1) ?? '');
+          pages++;
           final beforeTs = DateTime.parse(Uri.decodeComponent(m!.group(1)!));
           final base = beforeTs.subtract(const Duration(minutes: 100));
           return [
-            for (var i = 0; i < 100; i++)
+            for (var i = 99; i >= 0; i--)
               row(
-                befores.length * 1000 + i,
-                'old${befores.length}-$i',
-                createdAt:
-                    base.add(Duration(minutes: i)).toIso8601String(),
+                pages * 1000 + i,
+                'old$pages-$i',
+                createdAt: base.add(Duration(minutes: i)).toIso8601String(),
               ),
           ];
         }
         final base = DateTime.utc(2026, 1, 1);
         return [
-          for (var i = 0; i < 100; i++)
+          for (var i = 99; i >= 0; i--)
             row(
               90000 + i,
               'n$i',
@@ -205,20 +143,91 @@ void main() {
             ),
         ];
       });
+      return handler;
+    }
 
-      final handle = session(handler, 'room_deep').start();
-      var list = await handle.stream.first.timeout(const Duration(seconds: 3));
-      expect(list.length, 100);
-      // Paginasi 5× (total 600 > cap 100).
-      for (var k = 0; k < 5; k++) {
-        final prevLen = list.length;
-        final next = handle.stream.firstWhere(
-          (l) => l.length != prevLen || l.length == 100,
-        );
-        await handle.loadOlder();
-        list = await next.timeout(const Duration(seconds: 3));
+    // Listener PERSISTEN (seperti layar chat asli) — simpan emit terakhir.
+    Future<(ChatMessageStream, List<MessageModel> Function())> openPaged(
+      FakeSupabaseHandler handler,
+      String key,
+    ) async {
+      final handle = session(handler, key).start();
+      var latest = <MessageModel>[];
+      handle.stream.listen((l) => latest = l);
+      final deadline = DateTime.now().add(const Duration(seconds: 3));
+      while (latest.length < 100 && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
       }
-      expect(list.length, lessThanOrEqualTo(100));
+      expect(latest.length, 100);
+      return (handle, () => latest);
+    }
+
+    Future<void> loadOlderAndSettle(ChatMessageStream h) async {
+      await h.loadOlder();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+
+    // Regresi 2026-10-22 (bug B): dulu loadOlder menambah 100 pesan lama lalu
+    // `_trim()` ke 100 TERBARU → yang baru dimuat langsung dibuang (scroll
+    // mentok di 100, jump-to-reply room tak pernah sampai).
+    test('loadOlder MENAMBAH riwayat & tidak dibuang trim', () async {
+      final (handle, latest) =
+          await openPaged(pagedHandler(), 'room_older_kept');
+      for (var k = 1; k <= 5; k++) {
+        await loadOlderAndSettle(handle);
+        expect(latest().length, 100 + 100 * k);
+        // Halaman yang BARU dimuat ada di depan list.
+        expect(latest().first.text, 'old$k-0');
+      }
+      // Halaman lebih awal tetap ada (tidak dipangkas).
+      expect(latest().any((m) => m.text == 'old1-50'), isTrue);
+      // Urut menaik.
+      final ts = latest().map((m) => m.timestamp).toList();
+      for (var i = 1; i < ts.length; i++) {
+        expect(ts[i].isBefore(ts[i - 1]), isFalse);
+      }
+    });
+
+    // Room & grup memakai `_cachedMessagesStream(cacheKey: 'room_<id>')` yang
+    // SAMA dengan ChatStreamSession → cap berlaku untuk keduanya. Diuji untuk
+    // kedua jenis cacheKey (room global & grup) supaya terkunci.
+    Future<void> capTest(String key) async {
+      final handler = pagedHandler();
+      final (handle, latest) = await openPaged(handler, key);
+      // 15 halaman (1600 pesan) > batas riwayat 1100.
+      for (var k = 0; k < 15; k++) {
+        await loadOlderAndSettle(handle);
+      }
+      expect(latest().length, 1100,
+          reason: '[$key] riwayat di memori harus dibatasi (anti tumbuh = lag)');
+      // Pesan terbaru tetap utuh di ujung bawah.
+      expect(latest().last.text, 'n99');
+      // Setelah batas tercapai loadOlder berhenti menembak server.
+      final pageReqs = handler.captured
+          .where((r) => r.url.query.contains('created_at=lt.'))
+          .length;
+      expect(pageReqs, 10);
+    }
+
+    test('ROOM: riwayat DIBATASI 1100 pesan (anti-tumbuh = lag)', () async {
+      await capTest('room_cap');
+    });
+
+    test('GROUP: riwayat DIBATASI 1100 pesan (anti-tumbuh = lag)', () async {
+      await capTest('group_cap_123');
+    });
+
+    test('paginasi dalam: kursor sesi terus mundur', () async {
+      // Regresi: kalau `loadOlder` memakai `_current.first` sebagai kursor
+      // dan depan list kepangkas, `before` mundur → fetch duplikat → history
+      // tak bisa di-scroll. Kursor sesi harus terus mundur.
+      final befores = <String>[];
+      final (handle, latest) =
+          await openPaged(pagedHandler(befores: befores), 'room_deep');
+      for (var k = 0; k < 5; k++) {
+        await loadOlderAndSettle(handle);
+      }
+      expect(latest().length, 600);
       // Kursor `before` harus MONOTON MUNDUR (tiap halaman lebih tua) —
       // bukti paginasi jalan terus walau depan list kepangkas trim.
       expect(befores.length, 5);
@@ -260,6 +269,49 @@ void main() {
         const Duration(seconds: 3),
       );
       expect(again.map((m) => m.text), contains('satu'));
+    });
+  });
+
+  group('lifecycle: tutup chat → tidak ada channel yatim', () {
+    // Regresi 2026-10-22 (bug A): `removeChannel` di onCancel memicu status
+    // `closed` pada channel lama; guard `identical(ch, channel)` masih cocok →
+    // requestReconnect → ~2 dtk kemudian reload + channel BARU yang tak pernah
+    // dibuang. Setelah onCancel: 0 channel, 0 fetch, 0 reconnect.
+    test('setelah cancel: channel dibuang, tak ada reload/channel baru',
+        () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/messages', (_) => [
+            row(1, 'satu', createdAt: '2026-01-01T00:00:01Z'),
+          ]);
+      final sb = fakeSupabaseClient(handler: handler);
+      final handle = ChatStreamSession(
+        sb: sb,
+        cacheKey: 'room_orphan',
+        needsPhotoFill: (_) => false,
+        downloadVoiceToCache: (_, __) async {},
+        prefetchVoiceBytes: (_) async {},
+      ).start();
+      final sub = handle.stream.listen((_) {});
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(sb.getChannels().length, 1);
+
+      await sub.cancel();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final fetchesAtClose = handler.captured
+          .where((r) => r.url.path.contains('/rest/v1/messages'))
+          .length;
+      // Lewati jendela backoff reconnect pertama (2 dtk ± 25%).
+      await Future<void>.delayed(const Duration(milliseconds: 3200));
+
+      expect(sb.getChannels(), isEmpty,
+          reason: 'channel realtime harus dibuang & tidak dibuat ulang');
+      expect(
+        handler.captured
+            .where((r) => r.url.path.contains('/rest/v1/messages'))
+            .length,
+        fetchesAtClose,
+        reason: 'tak boleh ada reload dari timer reconnect setelah ditutup',
+      );
     });
   });
 

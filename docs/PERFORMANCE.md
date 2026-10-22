@@ -4955,3 +4955,48 @@ harus langsung "Foto sudah kadaluarsa".
 - Jangan hapus guard `identical(ch, channel)` — loop 2 dtk kembali.
 - Jangan hapus hook resume — realtime kembali "hilang" setelah background.
 - Jangan menaruh `removeChannel` tanpa guard di jalur teardown mana pun.
+
+## §59. Sesi stream chat: channel yatim saat tutup chat + loadOlder dibuang trim (2026-10-22)
+
+File: `lib/services/chat_stream_session.dart`. Guard test:
+`test/chat_stream_session_test.dart` (grup `lifecycle: tutup chat → tidak ada
+channel yatim` + grup `loadOlder`).
+
+### A. Channel realtime yatim tiap chat ditutup
+- **Akar:** `onCancel` me-`removeChannel` di microtask → status `closed` di
+  callback channel itu; guard §58 `identical(ch, channel)` MASIH cocok (field
+  `channel` belum diganti) → `requestReconnect()` → ~2 dtk kemudian `reload()`
+  (fetch 100 baris) + channel BARU yang tak pernah dibuang (`_isDead()` =
+  `controller.isClosed` selalu false karena controller broadcast sengaja tak
+  di-close). Terbukti test: 3 dtk setelah cancel masih ada 1 channel.
+- **Perbaikan:** flag `sessionClosed` di-set PALING AWAL di `onCancel`, dicek
+  `_isDead()` (→ reload, reconnect, callback subscribe/UPDATE/DELETE/
+  broadcast, drain foto, fetchImage, markDeleted semuanya berhenti — tak ada
+  tulis cache lokal setelah ditutup, penting saat logout). `channel` kini
+  nullable & di-null-kan SEBELUM `removeChannel` (onCancel + `dropChannel()`
+  di reconnect/resume) → status `closed` dari teardown gagal lolos guard.
+  Setelah `await dropChannel()`, reconnect hanya membuka channel bila
+  `channel == null` (anti dua channel). Sesi tetap bisa dipakai ULANG:
+  `onListen` me-reset flag + hidupkan lagi channel/poll/hook resume + reload.
+- **Dampak:** 0 channel & 0 fetch setelah chat ditutup (dulu +1 channel
+  permanen + reload per tutup chat saat jaringan blip/test env).
+
+### B. Scroll ke pesan lama mentok di 100
+- **Akar:** `loadOlder` menambah 100 pesan lama lalu `_trim()` ke 100
+  TERBARU → yang baru dimuat langsung dibuang; jump-to-reply room
+  (`room_chat_room.dart` `_jumpToMessage`, loop 10× loadOlder) tak pernah sampai.
+- **Perbaikan:** dua batas. `_maxMessages` (100) = jendela awal + yang
+  DISIMPAN ke cache lokal (`cacheWindow()` — tulis cache tetap murah/bounded,
+  pruning `message_store.dart` hanya menyentuh baris cache, bukan riwayat
+  memori sesi). `maxHistory` (1100 = jendela + 10 halaman) = batas KERAS di
+  memori. `loadOlder` tidak trim; menaikkan `windowCap` (batas aktif trim saat
+  pesan baru masuk/reload) dan berhenti menembak server saat 1100 tercapai.
+- **Dampak memori:** worst case 1100 `MessageModel` tanpa bytes foto penuh
+  (thumb saja, lazy) — hanya bila user memang scroll jauh; tanpa scroll
+  mundur tetap 100 seperti sebelumnya. Cache lokal tetap ≤100/chat.
+
+### JANGAN dibalik
+- Jangan kembalikan `_isDead()` ke `controller.isClosed` saja.
+- Jangan pindahkan `channel = null` ke SETELAH `removeChannel`.
+- Jangan panggil `_trim()` di `loadOlder` / jangan simpan `_current` penuh ke
+  cache (pakai `cacheWindow()`).
