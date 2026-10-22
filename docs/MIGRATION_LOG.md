@@ -1,3 +1,26 @@
+## 2026-10-22 — Tutup kebocoran `app_shared_secret` + rotasi (SUDAH APPLY)
+
+- **Migrasi** `20261022120000_app_settings_hide_shared_secret.sql` — APPLIED via
+  Dashboard SQL Editor (token Management API di `.env` kedaluwarsa); versi
+  tercatat di `supabase_migrations.schema_migrations`.
+- **Celah:** `20260922130000` meng-`grant select` level TABEL `app_settings` →
+  `app_shared_secret` terbaca anon via REST publishable key (HTTP 200).
+  Dengan secret itu: push ke token/topik mana pun, `ai-reply` atas nama dummy,
+  `email-worker`, `migrate-photos`, `outbox-worker`, `sticker-gc`.
+- **Fix:** revoke SELECT tabel + grant dinamis semua kolom KECUALI
+  `app_shared_secret`. Kolom BARU di `app_settings` wajib grant kolom sendiri.
+- **Verifikasi live:** `has_column_privilege` secret = false (anon+auth),
+  `latest_version` = true; pgTAP `app_settings_secret_test.sql` 3/3; probe anon
+  `select=app_shared_secret` & `select=*` → 401, `select=latest_version` → OK.
+- **Rotasi `APP_SHARED_SECRET`:** nilai baru dibuat di DB (`gen_random_bytes`),
+  diterapkan ke **3 tempat yang WAJIB sama**: Edge secret `APP_SHARED_SECRET`,
+  `app_settings.app_shared_secret`, `ai_internal_config.callback_secret`
+  (dipakai `ai_reply_post` → `ai-reply`). Cocok via SHA-256 digest Dashboard.
+  Gangguan push/AI ±04:33–07:09 UTC (Edge secret terlambat diganti); 07:10
+  `outbox-worker` 200 `sent:4` (antrean terkirim). Baris staging dihapus.
+- **Catatan:** `email-worker` 500 `RESEND_API_KEY belum diset` sudah ada
+  sebelumnya (tidak terkait).
+
 ## 2026-10-22 — Kunci keamanan RPC uang & metadata (SUDAH APPLY)
 
 - **Migrasi** `20261022010000_secure_money_rpcs.sql` — APPLIED via Management
