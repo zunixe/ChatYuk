@@ -1,3 +1,4 @@
+import '../../utils.dart';
 import '../../utils/mention.dart';
 import 'message_cache.dart';
 
@@ -187,7 +188,11 @@ class OfflineOutbox {
         }
         _items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       }
-    } catch (_) {}
+    } catch (e) {
+      // Antrean lama korup/gagal baca: jangan senyap — tanpa log, pesan yang
+      // "hilang" mustahil didiagnosa dari laporan user.
+      dlog('[Outbox] load gagal: $e');
+    }
   }
 
   Future<void> _persist() async {
@@ -199,7 +204,12 @@ class OfflineOutbox {
       await MessageCache.instance.saveRawObj(_kvKey, {
         'items': _items.map((e) => e.toMap()).toList(),
       });
-    } catch (_) {}
+    } catch (e) {
+      // PENTING: dulu `catch (_) {}` → bila tulis disk gagal (kuota/disk
+      // penuh/korup), antrean hanya hidup di MEMORI dan HILANG saat app
+      // di-restart — tanpa satu pun jejak log. Sekarang selalu tercatat.
+      dlog('[Outbox] persist gagal (antrean hanya di memori): $e');
+    }
   }
 
   Future<void> enqueue(OutboxEntry entry) async {
