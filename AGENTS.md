@@ -393,18 +393,18 @@ pastikan uid ter-exclude tidak muncul.
     debug `.dev`, jangan dipakai untuk HP harian.)
   - Gerbang wajib SEBELUM upload rilis: `./scripts/check_release_apk.sh <apk>`
     → harus "OK bersih". Kalau DITOLAK, build salah target.
-- Keystore aktif: `android/keystore/chatyuk-release-v2.jks` (alias `chatyuk`, pass `chatyuk2024secure`)
+- Keystore aktif: `android/keystore/chatyuk-release-v2.jks` (alias `chatyuk`, pass di `.env` → `KEYSTORE_PASS`/`KEY_PASS`, JANGAN tulis di dokumen)
 - **WAJIB** pakai obfuscation + split debug info supaya kode Dart sulit di-reverse engineering:
    - Flavor **apkpure** (default; appId `com.chatyuk.chatyuk`):
      ```bash
-     KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+     KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
        flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
        --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
        --obfuscate --split-debug-info=build/app/symbols
      ```
    - Flavor **play** (Google Play; appId `com.chatyuk.chatyuk` — sama dengan apkpure; `google-services.json` khusus di `android/app/src/play/`):
      ```bash
-     KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+     KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
        flutter build apk --release --flavor playProd --dart-define=APP_FLAVOR=play \
        --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
        --obfuscate --split-debug-info=build/app/symbols
@@ -422,7 +422,7 @@ pastikan uid ter-exclude tidak muncul.
   - Build TANPA `--flavor` akan gagal (dua flavor terdaftar).
 - AAB untuk Google Play juga pakai flag yang sama (flavor play):
   ```bash
-  KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+  KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
     flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
     --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
     --obfuscate --split-debug-info=build/app/symbols
@@ -467,7 +467,7 @@ BuildType `profile` di `android/app/build.gradle.kts` sudah di-sign
 ```bash
 rm -rf build/app/outputs build/app/intermediates \
   build/app/tmp .dart_tool/flutter_build
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --profile --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
 cp build/app/outputs/flutter-apk/app-apkpureprod-profile.apk ~/Downloads/chatyuk_profile.apk
 ```
@@ -497,7 +497,7 @@ APKSIGNER=$HOME/Library/Android/sdk/build-tools/36.0.0/apksigner
 KS=android/keystore/chatyuk-release-v2.jks
 for f in chatyuk-debug chatyuk-admin-debug; do
   "$APKSIGNER" sign --ks "$KS" \
-    --ks-pass pass:chatyuk2024secure --key-pass pass:chatyuk2024secure \
+    --ks-pass env:KEYSTORE_PASS --key-pass env:KEY_PASS \
     --ks-key-alias chatyuk --out "$HOME/Downloads/${f}-signed.apk" "$HOME/Downloads/${f}.apk"
   "$APKSIGNER" verify --print-certs "$HOME/Downloads/${f}-signed.apk" | grep SHA-1
   # WAJIB muncul: 8ccc42e3fe9337216ce4250e2bfccb22941e50a2
@@ -649,7 +649,7 @@ export PATH="$PATH:$HOME/Library/Android/sdk/platform-tools"
 APK="build/app/outputs/flutter-apk/app-apkpureprod-release.apk"
 
 flutter clean
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --obfuscate --split-debug-info=build/app/symbols
 
@@ -668,7 +668,7 @@ done
   bisa menyalakannya via registry (`Access is denied`).
 - Padanan path: adb di `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe`,
   Downloads di `%USERPROFILE%\Downloads`. Env keystore di PowerShell:
-  `$env:KEYSTORE_PASS="chatyuk2024secure"; $env:KEY_PASS="chatyuk2024secure"`.
+  `$env:KEYSTORE_PASS` / `$env:KEY_PASS` diisi dari `.env`.
 - Nama APK admin: `app-adminprod-release.apk` → copy sebagai
   `chatyuk-admin.apk` (jangan timpa `chatyuk.apk`) lalu push ke HP yang sama.
 - Build admin yang terverifikasi (2026-09-24, 157 MB, appId
@@ -761,7 +761,7 @@ Langkah:
     Cek kapan pun:
     ```bash
     keytool -list -v -keystore android/keystore/chatyuk-release-v2.jks \
-      -alias chatyuk -storepass chatyuk2024secure | grep SHA1
+      -alias chatyuk -storepass "$KEYSTORE_PASS" | grep SHA1
     ```
   - SHA ini harus ada di Firebase Console → Project settings → Your apps →
     Android `com.chatyuk.chatyuk` → **SHA certificate hashes** (bersama Web

@@ -55,6 +55,8 @@ function phpKsort(obj: Record<string, unknown>): Record<string, unknown> {
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  // Fail-closed: tanpa VA, kunci HMAC kosong → signature bisa dipalsukan.
+  if (!IPAYMU_VA) return json({ error: 'Disabled' }, 503);
 
   try {
     const contentType = req.headers.get('content-type') || '';

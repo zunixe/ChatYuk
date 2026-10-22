@@ -87,7 +87,7 @@ rilis** (SHA-256 `84e9...` = SHA-1 `8ccc42e3...`) → Sign-In jalan, tapi
 cd /Users/zunixe/Documents/ChatYuk
 rm -rf build/app/outputs build/app/intermediates build/app/tmp .dart_tool/flutter_build
 
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --profile --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
 
 APK=build/app/outputs/flutter-apk/app-apkpureprod-profile.apk
@@ -146,7 +146,7 @@ flutter build apk --debug --flavor apkpure --dart-define=APP_FLAVOR=apkpure
 APKSIGNER=~/Library/Android/sdk/build-tools/36.0.0/apksigner
 cp build/app/outputs/flutter-apk/app-apkpure-debug.apk /tmp/dbg.apk
 "$APKSIGNER" sign --ks android/keystore/chatyuk-release-v2.jks \
-  --ks-pass pass:chatyuk2024secure --key-pass pass:chatyuk2024secure \
+  --ks-pass env:KEYSTORE_PASS --key-pass env:KEY_PASS \
   --ks-key-alias chatyuk --out /tmp/dbg_release.apk /tmp/dbg.apk
 "$APKSIGNER" verify --print-certs /tmp/dbg_release.apk | grep SHA-1
 # harus: 8ccc42e3fe9337216ce4250e2bfccb22941e50a2

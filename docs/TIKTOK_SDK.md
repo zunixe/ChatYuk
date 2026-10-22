@@ -102,14 +102,14 @@ await TikTokService.instance.purchase(
 Token **tidak** ditulis di source — disuntik saat build via `--dart-define`:
 
 ```bash
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --dart-define=TIKTOK_ACCESS_TOKEN=TT2RbU3f6OkDcOPKBuE000wbBGtKL2Rb
 ```
 
 Play / AAB:
 ```bash
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
   --dart-define=TIKTOK_ACCESS_TOKEN=TT2RbU3f6OkDcOPKBuE000wbBGtKL2Rb \
   --obfuscate --split-debug-info=build/app/symbols

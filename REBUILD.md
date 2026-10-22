@@ -25,7 +25,7 @@ Catatan biar tidak bolak-balik build karena perubahan tidak muncul di device.
    ```bash
    cd /Users/zunixe/Documents/ChatYuk
    flutter clean
-   KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+   KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
      flutter build appbundle --release --flavor playProd \
      --dart-define=APP_FLAVOR=play \
      --obfuscate --split-debug-info=build/app/symbols
@@ -92,7 +92,7 @@ di-sign keystore RILIS (SHA-1 `8ccc42e3...`) → Google Sign-In jalan, tapi
 ```bash
 cd /Users/zunixe/Documents/ChatYuk
 rm -rf build/app/outputs build/app/intermediates build/app/tmp .dart_tool/flutter_build
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --profile --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
 cp build/app/outputs/flutter-apk/app-apkpureprod-profile.apk ~/Downloads/chatyuk_profile.apk
 ```
@@ -125,7 +125,7 @@ flutter clean
 flutter pub get
 
 # 2. Build release (flavor apkpure — fitur penuh) + obfuscation
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --obfuscate --split-debug-info=build/app/symbols
 ```
@@ -142,7 +142,7 @@ cd /Users/zunixe/Documents/ChatYuk
 rm -rf build/app/outputs build/app/symbols build/app/intermediates \
   build/app/tmp .dart_tool/flutter_build
 
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --obfuscate --split-debug-info=build/app/symbols
 ```
@@ -196,7 +196,7 @@ adb -s 192.168.18.33:37501 shell am start -n com.chatyuk.chatyuk/.MainActivity
 ## Flavor play (Google Play — topup & cash-out disembunyikan)
 
 ```bash
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
   --obfuscate --split-debug-info=build/app/symbols
 ```

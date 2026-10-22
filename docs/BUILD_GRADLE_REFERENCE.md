@@ -82,7 +82,7 @@ lint {
 ## Upload Google Play (AAB)
 ```bash
 flutter clean
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build appbundle --release --flavor playProd \
   --dart-define=APP_FLAVOR=play \
   --obfuscate --split-debug-info=build/app/symbols

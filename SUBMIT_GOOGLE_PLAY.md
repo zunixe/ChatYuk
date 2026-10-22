@@ -65,7 +65,7 @@ Upload resmi pakai AAB flavor `play` (bukan APK apkpure):
 ```bash
 # wajib bump version: x.y.z+N (N tidak boleh dipakai ulang)
 flutter clean && flutter pub get
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
   --obfuscate --split-debug-info=build/app/symbols
 fastlane play_upload track:alpha   # atau track:production

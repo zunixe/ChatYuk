@@ -17,7 +17,8 @@ cd "$(dirname "$0")/.."
 EXPECTED_SHA="8C:CC:42:E3:FE:93:37:21:6C:E4:25:0E:2B:FC:CB:22:94:1E:50:A2"
 KEYSTORE="android/keystore/chatyuk-release-v2.jks"
 ALIAS="chatyuk"
-PASS="chatyuk2024secure"
+PASS="${KEYSTORE_PASS:-$(grep -E '^KEYSTORE_PASS=' .env 2>/dev/null | cut -d= -f2- | tr -d '"\r')}"
+[ -z "$PASS" ] && { echo "KEYSTORE_PASS tidak ada (env / .env)" >&2; exit 1; }
 GS="android/app/google-services.json"
 # Flavor play WAJIB memakai project Firebase AKTIF yang sama (7c9e4) —
 # project lama chatyuk-8470e sudah tidak dipakai; pernah bikin Sign-In Play

@@ -91,7 +91,7 @@ rilis/profil** (nilai dari `.env`). Tanpa ini SDK TikTok tetap init tapi
 
 ```bash
 flutter clean
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
   --obfuscate --split-debug-info=build/app/symbols
@@ -101,7 +101,7 @@ KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
 ### Flavor playProd (Google Play — appId sama `com.chatyuk.chatyuk`, google-services.json khusus `android/app/src/play/`)
 
 ```bash
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
   --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
   --obfuscate --split-debug-info=build/app/symbols
@@ -111,7 +111,7 @@ KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
 ### Flavor adminProd (internal — JANGAN upload store; appId `com.chatyuk.chatyuk.admin`)
 
 ```bash
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --release --flavor adminProd -t lib/main_admin.dart \
   --dart-define=APP_FLAVOR=apkpure --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
   --obfuscate --split-debug-info=build/app/symbols
@@ -122,7 +122,7 @@ Catatan:
 - **JANGAN build flavor `play`/AAB untuk Play tanpa instruksi eksplisit** — default `apkpureProd`.
 - Sebelum push rilis, jalankan gerbang anti-admin: `./scripts/check_release_apk.sh <apk>` → harus "OK bersih".
 - Debug symbols di `build/app/symbols` jangan dihapus (dipakai `flutter symbolize`).
-- Keystore aktif: `android/keystore/chatyuk-release-v2.jks` (alias `chatyuk`, pass `chatyuk2024secure`).
+- Keystore aktif: `android/keystore/chatyuk-release-v2.jks` (alias `chatyuk`, pass di `.env` → `KEYSTORE_PASS`/`KEY_PASS`, JANGAN tulis di dokumen).
 
 ## Push ke HP (install manual)
 
@@ -133,7 +133,7 @@ MIUI/Xiaomi menolak `adb install` — install manual dari File Manager
 export PATH="$PATH:$HOME/Library/Android/sdk/platform-tools"
 APK="build/app/outputs/flutter-apk/app-apkpureprod-release.apk"
 
-KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
   flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --dart-define=TIKTOK_ACCESS_TOKEN="$TIKTOK_ACCESS_TOKEN" \
   --obfuscate --split-debug-info=build/app/symbols

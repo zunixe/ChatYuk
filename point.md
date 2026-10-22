@@ -193,7 +193,7 @@ di `lib/screens/` dan `lib/providers/`.
 7. `supabase db push` (migration 1 & 2) + verifikasi RPC di dashboard
 8. Build release:
    ```bash
-   KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+   KEYSTORE_PASS="$KEYSTORE_PASS" KEY_PASS="$KEY_PASS" \
      flutter build apk --release --obfuscate --split-debug-info=build/app/symbols
    ```
 9. Install & test di HP

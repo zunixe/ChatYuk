@@ -30,6 +30,8 @@ async function sha512Hex(input: string): Promise<string> {
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  // Fail-closed: tanpa server key, signature bisa dihitung siapa pun → tolak.
+  if (!MIDTRANS_SERVER_KEY) return json({ error: 'Disabled' }, 503);
 
   try {
     const body = await req.json();
