@@ -1,3 +1,36 @@
+## 2026-10-22 — Kunci keamanan RPC uang & metadata (SUDAH APPLY)
+
+- **Migrasi** `20261022010000_secure_money_rpcs.sql` — APPLIED via Management
+  API (versi tercatat di `supabase_migrations.schema_migrations`).
+- **Celah yang ditutup (audit 2026-10-21, diverifikasi live):**
+  1. `spend_yukcoin(p_user, ...)` SECURITY DEFINER + EXECUTE `authenticated`,
+     **tanpa** cek `auth.uid()` → siapa pun berakun bisa memanggil RPC dengan
+     uid ORANG LAIN dan menguras saldo YukCoin korban (client memakainya untuk
+     view-once & foto HD berbayar; saldo berasal dari top-up Play Billing).
+     **CRITICAL** — 277 baris `coin_ledger`, 232 profil bersaldo.
+  2. `charge_metered(p_caller, ...)` sama (tanpa cek pemilik). Pemanggil sah
+     satu-satunya `call_billing_tick`, yang sudah mengisi `p_caller := auth.uid()`.
+  3. `list_my_groups(p_uid)` / `list_my_global_rooms(p_uid)` menerima uid
+     sembarang → bocor daftar grup/room privat user lain (MEDIUM).
+- **Perbaikan:** guard `auth.uid()` pada keempat RPC (`service_role` dikecualikan
+  karena `auth.uid()` NULL di sana). **Revoke sengaja TIDAK dipakai** untuk
+  `charge_metered`: `call_billing_tick` dipanggil dari sesi user saat call
+  berjalan — revoke akan mematikan penagihan call (regresi finansial arah
+  sebaliknya).
+- **Body fungsi = salinan PERSIS `pg_get_functiondef` live** + blok guard di
+  awal body (diverifikasi programatik: 4/4 identik). `list_my_*` dipecah jadi
+  `*_impl` (body asli, EXECUTE dicabut dari anon/authenticated) + wrapper
+  publik ber-guard — nama yang dipanggil klien tidak berubah.
+- **Uji negatif dijalankan (transaksi rollback sebelum apply):**
+  `spend_yukcoin(uid_lain)` → `42501 Forbidden`; `list_my_groups(uid_lain)` →
+  `42501`; `list_my_global_rooms(uid_lain)` → `42501`;
+  `charge_metered(uid_lain)` → `42501`. Pemakaian sah (uid sendiri) lolos.
+- **Verifikasi pasca-apply:** `pg_get_functiondef` keempat RPC memuat
+  `auth.uid()`; `*_impl` tanpa guard dan `EXECUTE=False` untuk anon &
+  authenticated.
+- **SAFE:** hanya `create or replace` isi fungsi + 2 fungsi `_impl` baru;
+  RLS policy, grant tabel, dan tabel bersama tidak disentuh.
+
 ## 2026-10-21 — Guard MIME bucket `chat-photos` diselaraskan (SUDAH APPLY)
 
 - **Migrasi** `20261021030000_align_chat_photos_guard_mime.sql` — APPLIED via
