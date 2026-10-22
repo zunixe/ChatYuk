@@ -1,5 +1,5 @@
 import '../../models/room_model.dart';
-import '../../services/chat_service.dart' show PrivateChatInfo;
+import 'private_chat_info.dart';
 import '../cache/group_pin_store.dart';
 
 DateTime _epoch0() => DateTime.fromMillisecondsSinceEpoch(0);

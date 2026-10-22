@@ -28,7 +28,19 @@ LIMIT=1000
 # (net +2 dari pekerjaan padding balasan). Utang teknis TETAP: pecah widget
 # bubble (voice/video/foto/sticker) ke file terpisah; setelah dipecah angka
 # ini WAJIB turun/dihapus.
-ALLOWLIST=(lib/widgets/private_chat_message.dart:1158)
+# 2026-10-22: private_chat_message.dart DIPECAH (1311 -> 969) → keluar dari
+# allowlist (ratchet turun). Sisa file >1000 yang belum dipecah didaftarkan di
+# angka SEKARANG; jangan dinaikkan, hanya boleh turun/hapus.
+ALLOWLIST=(
+  lib/widgets/post_card.dart:1091
+  lib/widgets/chat_video_bubble.dart:1006
+  lib/widgets/chat_composer_input.dart:1082
+  lib/screens/private_chats/private_chats_build.dart:1342
+  lib/screens/private_chat/private_chat_core.dart:1016
+  lib/screens/room_chat/room_chat_live.dart:1070
+  lib/services/chat_stream_session.dart:1219
+  lib/main_notifications.dart:1010
+)
 
 fail=0
 # 1) File > LIMIT yang TIDAK ada di allowlist = penambahan baru → tolak.
