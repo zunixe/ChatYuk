@@ -143,9 +143,13 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
     if (entries.isEmpty) return;
     outboxIsFlushing = true;
     try {
-      final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+      // Baca provider SEKALI sebelum await — `context` tak aman dipakai
+      // setelah widget dibuang (throw non-jaringan → entri hilang tanpa refund).
+      final container = ProviderScope.containerOf(context, listen: false);
+      final pp = container.read(pointsProvider.notifier);
+      final storage = container.read(storageProvider);
       var sent = 0;
-      for (final e in entries) {
+      for (var e in entries) {
         if (!mounted || !outboxIsOnline) break;
         if (!e.pointsDeducted && e.pointsKind != 'none') {
           final r = await pp.deductBeforeSend(e.pointsKind);
@@ -156,21 +160,21 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
               outboxQueuedIds.remove(e.pendingId);
               outboxPending.removeWhere((m) => m.id == e.pendingId);
             });
-            if (mounted) {
-              pp.showOutOfPointsDialog(
-                context,
-                ProviderScope.containerOf(context, listen: false).read(localeProvider).s.isId,
-              );
-            }
+            pp.showOutOfPointsDialog(context, container.read(localeProvider).s.isId);
             continue;
           }
           if (r < 0) break; // Error jaringan/transien → coba lagi nanti.
+          // Persist flag SEGERA: gagal jaringan di bawah → flush berikutnya
+          // tidak memotong poin lagi.
+          e = e.copyWith(pointsDeducted: true);
+          await OfflineOutbox.instance.markPointsDeducted(e.pendingId);
+          if (!mounted) break;
         }
         try {
           var imageData = e.imagePayload;
           if (e.needsUpload && imageData.isNotEmpty) {
             if (e.uploadKind == 'voice') {
-              final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadVoice(
+              final path = await storage.uploadVoice(
                 chatId: outboxUploadChatId,
                 bytes: base64Decode(imageData),
               );
@@ -180,7 +184,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
               imageData = path;
             } else if (e.uploadKind == 'video') {
               // Video: payload = bytes video mentah (base64).
-              final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadChatVideo(
+              final path = await storage.uploadChatVideo(
                 chatId: outboxUploadChatId,
                 bytes: base64Decode(imageData),
               );
@@ -189,7 +193,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
               }
               imageData = path;
             } else {
-              final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).upload(
+              final path = await storage.upload(
                 chatId: outboxUploadChatId,
                 base64: imageData,
               );
@@ -201,6 +205,9 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
               warmPhotoCacheForPath(path, imageData);
               imageData = path;
             }
+            // Widget dibuang saat upload → entri (flag poin sudah tersimpan)
+            // tetap di antrean untuk flush berikutnya.
+            if (!mounted) break;
           }
           await outboxSendEntry(e, imageData);
           await OfflineOutbox.instance.remove(e.pendingId);
@@ -221,7 +228,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
         }
       }
       if (sent > 0 && mounted) {
-        showChatSnack(context, ProviderScope.containerOf(context, listen: false).read(localeProvider).s.msgQueueSent(sent));
+        showChatSnack(context, container.read(localeProvider).s.msgQueueSent(sent));
         outboxScrollToBottom();
       }
     } finally {

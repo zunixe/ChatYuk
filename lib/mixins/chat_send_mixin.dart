@@ -349,9 +349,9 @@ mixin ChatSendMixin<T extends StatefulWidget>
         sendIsSending = false;
         return;
       }
-      setState(() => outboxPending.remove(pending));
       sendIsSending = false;
       if (!mounted) return;
+      setState(() => outboxPending.remove(pending));
       final ss = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
       if (remaining == -1) {
         pp.showOutOfPointsDialog(context, ss.isId);

@@ -32,13 +32,19 @@ class _TestAuth extends AuthNotifier {
 
 class TestPoints extends PointsNotifier {
   final int deductResult;
-  TestPoints({this.deductResult = 50});
+  TestPoints({this.deductResult = 50}) : super(service: MockPointsService());
+  int deductCalls = 0;
+  int refundCalls = 0;
   @override
   PointsState build() => const PointsState();
   @override
-  Future<int> deductBeforeSend(String _) async => deductResult;
+  Future<int> deductBeforeSend(String _) async {
+    deductCalls++;
+    return deductResult;
+  }
+
   @override
-  Future<void> refundChatPoint(String _) async {}
+  Future<void> refundChatPoint(String _) async => refundCalls++;
 }
 
 /// Harness `ChatOutboxMixin` — mengunci antrean offline (AGENTS.md: modul
@@ -58,6 +64,7 @@ class OutboxHostState extends State<OutboxHost> with ChatOutboxMixin<OutboxHost>
   final List<String> sentOrder = [];
   int onSentCount = 0;
   int scrollCount = 0;
+  Object? sendError;
 
   @override
   String get outboxKind => 'private';
@@ -80,6 +87,7 @@ class OutboxHostState extends State<OutboxHost> with ChatOutboxMixin<OutboxHost>
   @override
   Future<void> outboxSendEntry(OutboxEntry e, String imageData) async {
     if (widget.sendThrows) throw Exception('bukan error jaringan');
+    if (sendError != null) throw sendError!;
     sentOrder.add(e.pendingId);
   }
 
@@ -107,6 +115,7 @@ Future<OutboxHostState> pumpOutbox(
   bool online = true,
   bool sendThrows = false,
   int deductResult = 50,
+  TestPoints? points,
 }) async {
   final svc = MockPointsService();
   when(() => svc.deductChatPoint(any())).thenAnswer((_) async => deductResult);
@@ -118,7 +127,9 @@ Future<OutboxHostState> pumpOutbox(
 
   final container = ProviderContainer(
     overrides: [
-      pointsProvider.overrideWith(() => TestPoints(deductResult: deductResult)),
+      pointsProvider.overrideWith(
+        () => points ?? TestPoints(deductResult: deductResult),
+      ),
       authProvider.overrideWith(_TestAuth.new),
     ],
   );
@@ -127,7 +138,9 @@ Future<OutboxHostState> pumpOutbox(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        home: OutboxHost(online: online, sendThrows: sendThrows),
+        home: Scaffold(
+          body: OutboxHost(online: online, sendThrows: sendThrows),
+        ),
       ),
     ),
   );
@@ -221,6 +234,63 @@ void main() {
       await tester.pump();
       expect(s.sentOrder, isEmpty, reason: 'flush kedua harus diabaikan');
       expect(s.flushing, isTrue, reason: 'tidak menimpa flag milik flush aktif');
+    });
+  });
+
+  group('ChatOutboxMixin — flushOutbox poin (I/O nyata)', () {
+    OutboxEntry entry(String id) => OutboxEntry(
+          pendingId: id,
+          kind: 'private',
+          chatId: 'chat_1',
+          senderId: 'u-me',
+          senderName: 'Me',
+          senderGender: 'male',
+          text: '[TEST] halo',
+          createdAt: DateTime.now(),
+          pointsKind: 'text',
+        );
+
+    testWidgets('deduct sukses + error jaringan → flush kedua TIDAK memotong lagi',
+        (tester) async {
+      final points = TestPoints();
+      final s = await pumpOutbox(tester, points: points);
+      s.sendError = const SocketException('offline');
+      await tester.runAsync(() async {
+        await OfflineOutbox.instance.enqueue(entry('p-net'));
+        await s.flushOutbox();
+      });
+      expect(points.deductCalls, 1);
+      final kept = OfflineOutbox.instance.forChat('private', 'chat_1').single;
+      expect(kept.pointsDeducted, isTrue,
+          reason: 'flag poin wajib tersimpan sebelum kirim');
+
+      await tester.runAsync(() => s.flushOutbox());
+      expect(points.deductCalls, 1, reason: 'poin tidak boleh terpotong dua kali');
+      expect(points.refundCalls, 0);
+
+      s.sendError = null;
+      await tester.runAsync(() => s.flushOutbox());
+      await tester.pump();
+      expect(points.deductCalls, 1);
+      expect(s.sentOrder, ['p-net']);
+      expect(OfflineOutbox.instance.forChat('private', 'chat_1'), isEmpty);
+    });
+
+    testWidgets('deduct sukses + error non-jaringan → refund + entri dibuang',
+        (tester) async {
+      final points = TestPoints();
+      final s = await pumpOutbox(tester, points: points);
+      s.sendError = Exception('bukan error jaringan');
+      s.pendingList.add(pendingMsg('p-bad'));
+      await tester.runAsync(() async {
+        await OfflineOutbox.instance.enqueue(entry('p-bad'));
+        await s.flushOutbox();
+      });
+      await tester.pump();
+      expect(points.deductCalls, 1);
+      expect(points.refundCalls, 1, reason: 'poin yang sudah dipotong wajib di-refund');
+      expect(OfflineOutbox.instance.forChat('private', 'chat_1'), isEmpty);
+      expect(s.pendingList, isEmpty);
     });
   });
 }

@@ -58,6 +58,31 @@ class OutboxEntry {
     this.videoPosterB64 = '',
   });
 
+  OutboxEntry copyWith({bool? pointsDeducted}) => OutboxEntry(
+        pendingId: pendingId,
+        kind: kind,
+        chatId: chatId,
+        senderId: senderId,
+        senderName: senderName,
+        senderGender: senderGender,
+        text: text,
+        type: type,
+        imagePayload: imagePayload,
+        needsUpload: needsUpload,
+        uploadKind: uploadKind,
+        durationMs: durationMs,
+        repliedToId: repliedToId,
+        repliedToText: repliedToText,
+        repliedToSenderName: repliedToSenderName,
+        repliedToMeta: repliedToMeta,
+        isForwarded: isForwarded,
+        mentions: mentions,
+        createdAt: createdAt,
+        pointsDeducted: pointsDeducted ?? this.pointsDeducted,
+        pointsKind: pointsKind,
+        videoPosterB64: videoPosterB64,
+      );
+
   Map<String, dynamic> toMap() => {
         'pendingId': pendingId,
         'kind': kind,
@@ -180,6 +205,16 @@ class OfflineOutbox {
     final n = _items.length;
     _items.removeWhere((e) => e.pendingId == pendingId);
     if (_items.length != n) await _persist();
+  }
+
+  /// Tandai poin entri sudah dipotong (persist) — flush ulang tidak memotong
+  /// lagi. Tidak menambah entri bila sudah dihapus.
+  Future<void> markPointsDeducted(String pendingId) async {
+    await load();
+    final i = _items.indexWhere((e) => e.pendingId == pendingId);
+    if (i < 0 || _items[i].pointsDeducted) return;
+    _items[i] = _items[i].copyWith(pointsDeducted: true);
+    await _persist();
   }
 
   /// True bila error terlihat seperti gangguan jaringan (bukan RLS/blokir).
