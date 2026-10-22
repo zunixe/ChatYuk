@@ -292,7 +292,11 @@ class MessageCache {
       // Memori dulu (sinkron untuk pembaca berikutnya), lalu disk.
       _putMemRawObj(key, Map<String, dynamic>.of(obj));
       await _ensureDb();
-      await MessageStore.instance.saveKv(key, jsonEncode(obj));
+      // Encode di ISOLATE (pola sama dengan saveRawList). Antrean offline bisa
+      // memuat beberapa payload base64 video (MB) — `jsonEncode` sinkron di UI
+      // thread memblokir frame saat kirim media / putus koneksi.
+      final encoded = await compute(_encodeJsonObj, obj);
+      await MessageStore.instance.saveKv(key, encoded);
     } catch (_) {}
   }
 
@@ -539,3 +543,8 @@ class MessageCache {
 
 /// Encode JSON di isolate (top-level agar bisa dipakai `compute`).
 String _encodeJson(List<Map<String, dynamic>> rows) => jsonEncode(rows);
+
+/// Encode satu objek besar (mis. antrean offline berisi payload base64 video)
+/// di ISOLATE. Encode di UI thread memblokir frame — terukur pada antrean
+/// offline: seluruh antrean di-encode ulang tiap perubahan entri.
+String _encodeJsonObj(Map<String, dynamic> obj) => jsonEncode(obj);

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_foreground.dart';
+import '../../core/nav_visibility.dart';
 import '../../core/cache/message_cache.dart';
 import '../../core/perf/perf_probe.dart';
 import '../../services/rt_resilient.dart';
@@ -293,6 +294,15 @@ class TimelineNotifier extends Notifier<TimelineState> {
     }
   }
 
+  /// Dipanggil layar Timeline saat tab kembali terlihat: kalau ada event
+  /// realtime yang dilewati (tab tak aktif), segarkan sekali agar daftar
+  /// tidak basi.
+  Future<void> consumeHiddenRtDirty() async {
+    if (!_rtDirtyWhileHidden) return;
+    _rtDirtyWhileHidden = false;
+    await load(_scope, refresh: true);
+  }
+
   void _listenRealtime() {
     _rtSub?.cancel();
     _rtSub = listenResilient(
@@ -309,12 +319,34 @@ class TimelineNotifier extends Notifier<TimelineState> {
       _service.watchPostComments(postId, onEvent);
 
   @visibleForTesting
-  void debugOnNewPost(Map<String, dynamic> msg) => _onNewPost(msg);
+  void debugOnNewPost(Map<String, dynamic> msg) =>
+      _handleNewPost(msg, applyRegardlessOfVisibility: true);
 
-  void _onNewPost(Map<String, dynamic> msg) {
+  // Penanda ada event realtime yang DILEWATI karena tab Timeline tidak
+  // terlihat → dipakai refresh sekali saat tab dibuka kembali.
+  bool _rtDirtyWhileHidden = false;
+
+  void _onNewPost(Map<String, dynamic> msg) => _handleNewPost(msg);
+
+  /// [applyRegardlessOfVisibility] dipakai test & jalur yang sudah pasti
+  /// terlihat (mis. refresh terkontrol), karena gate tab membaca
+  /// `visibleMainTab` global yang di test tidak di-set.
+  void _handleNewPost(
+    Map<String, dynamic> msg, {
+    bool applyRegardlessOfVisibility = false,
+  }) {
     final event = msg['event'] as String? ?? 'insert';
     final row = msg['row'] as Map<String, dynamic>?;
     if (row == null || row.isEmpty) return;
+    // Hemat CPU/baterai (2026-10-22): tabel `posts` menerima UPDATE tiap
+    // like/comment/share SELURUH aplikasi (tanpa filter per-user, karena
+    // timeline publik memang global). Saat tab Timeline tidak terlihat,
+    // pemrosesan row hanya membuang kerja (channel tetap hidup). Tandai
+    // kotor lalu segarkan sekali saat tab dibuka.
+    if (!applyRegardlessOfVisibility && visibleMainTab.value != 2) {
+      _rtDirtyWhileHidden = true;
+      return;
+    }
     if (event == 'delete') {
       final id = row['id'];
       if (id != null) removePost('$id');

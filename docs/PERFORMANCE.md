@@ -489,6 +489,54 @@ adb -s $DEV shell dumpsys SurfaceFlinger --latency \
 
 ---
 
+### 2.24 Realtime global → filter per-user, gate tab, & payload (2026-10-22)
+
+**Akar:** dokumen ini sendiri menyimpulkan tersangka utama = WAKTU DATA, bukan
+render (p50 3.5ms, 0% jank). Audit menemukan 3 kanal realtime yang memicu RPC
+dari aktivitas ORANG LAIN, plus jalur data yang menarik lebih banyak daripada
+yang dipakai.
+
+**Diubah (semua terverifikasi di kode sebelum disentuh):**
+
+1. `story_views` — subscribe TANPA filter (`story_service.dart`). Tiap insert
+   view milik SIAPA PUN sampai ke semua client → `refresh` tray (RPC
+   `story_tray`) tiap ≤45s. Sekarang `filter: viewer_id=eq.<uid>`: perangkat
+   lain milik user yang sama tetap sinkron (tujuan kanal), event orang lain
+   tidak dikirim. RLS tabel ini memang hanya mengizinkan view sendiri.
+2. `follows` / `friend_requests` — TANPA filter, satu event → **5 RPC**
+   (`Future.wait`: social_list×2, my_subscriptions, outbox, inbox). Sekarang
+   difilter `followee_id=eq.<uid>` + `to_id=eq.<uid>` + `from_id=eq.<uid>`
+   (arah keluar wajib: agar outbox pengirim ikut segar saat request
+   dijawab). Tidak memakai TTL — data tetap akurat, cakupan event menyempit.
+3. `posts` (timeline) — `event: all` global. Saat tab Timeline tidak terlihat,
+   row tidak lagi diproses; ditandai kotor dan disegarkan sekali saat tab
+   aktif kembali (`visibleMainTab == 2` → `consumeHiddenRtDirty`).
+4. `saveRawObj` — `jsonEncode` dipindah ke ISOLATE (`compute`). Antrean
+   offline memuat payload base64 video (MB) dan dulu di-encode SINKRON di UI
+   thread tiap perubahan entri.
+5. `calls` — `select('*')` → kolom eksplisit (`id,status,caller_id,callee_id,
+   call_type,chat_id`). Panggilan ini berjalan 8×/2s saat ringing + tiap 12s
+   in-call.
+6. `fetchRooms` — `seed_rooms` dulu di-`await` SEBELUM query (round-trip
+   serial). Sekarang keduanya paralel (`Future.wait`).
+7. `private_chats` — limit tetap 200 tapi **bertahap**: 50 baris/halaman,
+   lanjut hanya bila halaman penuh (maks 4 = 200). Data live: 1350 baris,
+   932 B/baris (≈186 KB untuk 200), p50 user hanya 2 chat, maks 212.
+   Halaman tambahan terukur di `chat.listFetchMore`.
+8. `RepaintBoundary` per kartu di list Grup / Followers / Subscriptions
+   (kartunya ber-shadow blur 8 + Dismissible — pola sama list lain).
+9. `missions_screen` — status klaim dipindah ke `ValueNotifier`, sehingga 3×
+   `setState` per klik tidak lagi membangun ulang header + TabBar + ketiga
+   daftar (dan animasi tiap `MissionCard` tidak diulang).
+
+**Sengaja TIDAK dikerjakan:** TTL panjang/penundaan refresh (user menolak data
+telat); pemecahan 3× pemetaan di monitor admin (jalur merge pernah buggy,
+dampak hanya panel admin); `screenW` sebagai parameter bubble (risiko regresi
+layout chat tinggi, jank belum terukur).
+
+**Verifikasi:** `flutter analyze` 0 error/0 warning; `flutter test` 2324 lulus
+(baseline 2314); gate boundary/file-size/migrations hijau.
+
 ## 2. Optimasi yang SUDAH diterapkan (jangan dibalik!)
 
 ### 2.1 `TickerMode` per tab — `lib/app.dart`

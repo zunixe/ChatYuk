@@ -103,8 +103,21 @@ class CallService {
     }
   }
 
+  /// Kolom yang BENAR-BENAR dipakai pemanggil [getCall] — semua pemanggil
+  /// hanya membaca `status` (poll ringing/in-call), plus alur auto-accept
+  /// sistem yang membaca `caller_id`/`call_type`/`chat_id`.
+  /// Dulu `select('*')`: tiap panggilan ini menarik SEMUA kolom (termasuk yang
+  /// ikut bertambah saat skema berubah) dan dipanggil berulang — 8× tiap 2 dtk
+  /// saat ringing + tiap 12 dtk saat in-call.
+  static const _callPollCols =
+      'id, status, caller_id, callee_id, call_type, chat_id';
+
   Future<Map<String, dynamic>?> getCall(String callId) async {
-    return _sb.from('calls').select('*').eq('id', callId).maybeSingle();
+    return _sb
+        .from('calls')
+        .select(_callPollCols)
+        .eq('id', callId)
+        .maybeSingle();
   }
 
   /// Riwayat panggilan milik user ini (masuk/keluar), terbaru dulu.

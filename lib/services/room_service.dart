@@ -24,15 +24,25 @@ class RoomService {
   Future<List<RoomModel>> fetchRooms(String country) async {
     // Seed sekali per negara (upsert idempotent) agar semua kategori lengkap
     // walaupun sebagian room sudah ada (mis. hasil tes/insert manual).
-    await seedCountryRooms(country);
-    final rows = await _sb
+    //
+    // PARALEL (2026-10-22): dulu `await seedCountryRooms()` BARU query →
+    // +1 round-trip (130-260ms) sia-sia di jalur buka tab Room, padahal seed
+    // tidak diperlukan untuk membaca room yang sudah ada. Sekarang keduanya
+    // jalan bersamaan; seed tetap ditunggu agar daftar tidak bolong saat
+    // pertama kali (kategori belum ter-seed).
+    final seed = seedCountryRooms(country).catchError((_) {});
+    final query = _sb
         .from('rooms')
         .select(_roomCols)
         .eq('country', country)
         .eq('is_private', false)
         .order('order')
         .limit(200);
-    return rows.map((row) => RoomModel.fromMap('${row['id']}', row)).toList();
+    final results = await Future.wait<Object?>([seed, query]);
+    final rows = (results[1] as List?) ?? const [];
+    return rows
+        .map((row) => RoomModel.fromMap('${row['id']}', row as Map<String, dynamic>))
+        .toList();
   }
 
   /// Buat/lengkapi room kategori untuk satu negara via RPC security definer.

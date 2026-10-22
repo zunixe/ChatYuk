@@ -280,13 +280,32 @@ class StoryService {
   }
 
   /// Realtime story_views — untuk update ring "sudah dilihat" live.
+  ///
+  /// FILTER `viewer_id = auth.uid()` (2026-10-22): dulu TANPA filter, jadi
+  /// SETIAP insert story_views milik siapa pun di seluruh aplikasi dikirim ke
+  /// semua client → tiap event memicu refresh tray (RPC `story_tray`).
+  /// Padahal RLS `story_views_select` hanya mengizinkan `viewer_id =
+  /// auth.uid()` atau pemilik story, jadi view orang lain memang tidak boleh
+  /// terlihat. Dengan filter ini: perangkat LAIN milik user yang sama tetap
+  /// sinkron (tujuan sebenarnya kanal ini — `markSeen` sudah optimistis
+  /// lokal di perangkat yang menonton), event orang lain tidak lagi dikirim.
   Stream<String> watchStoryViews() {
     final controller = StreamController<String>.broadcast();
-    final channel = _sb.channel('story-views-realtime');
+    final myUid = uid;
+    if (myUid == null) {
+      controller.close();
+      return controller.stream;
+    }
+    final channel = _sb.channel('story-views-realtime-$myUid');
     channel.onPostgresChanges(
       event: PostgresChangeEvent.insert,
       schema: 'public',
       table: 'story_views',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'viewer_id',
+        value: myUid,
+      ),
       callback: (payload) {
         if (!controller.isClosed) controller.add('insert');
       },

@@ -178,17 +178,51 @@ class SocialNotifier extends Notifier<SocialState> {
     final uid = _service.uid;
     if (uid == null) return;
     final channel = _sb.channel('social-rt-$uid');
+    // FILTER PER-USER (2026-10-22). Dulu TANPA filter: SETIAP follow /
+    // friend_request milik siapa pun di seluruh aplikasi dikirim ke semua
+    // client, dan tiap event memicu `_refreshSelfSetsNow()` = 5 RPC
+    // (social_list×2, my_subscriptions, outbox, inbox). Terukur: baseline RPC
+    // 130-260ms → sekali event orang lain = ~0.7-1.3s kerja jaringan/user.
+    //
+    // Supabase hanya mendukung SATU filter per `onPostgresChanges`, jadi
+    // friend_requests butuh dua listener (masuk & keluar). Arah KELUAR wajib
+    // ada: saat permintaan saya diterima/ditolak orang lain, baris berubah
+    // dengan from_id = uid saya dan outbox harus ikut segar.
+    //
+    // Aksi user SENDIRI tetap instan: follow/friend-request dari perangkat ini
+    // diperbarui optimistis di tempat pemanggil (tidak bergantung event).
     channel
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'follows',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'followee_id',
+            value: uid,
+          ),
           callback: (payload) => _refreshSelfSets(),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'friend_requests',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'to_id',
+            value: uid,
+          ),
+          callback: (payload) => _refreshSelfSets(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'friend_requests',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'from_id',
+            value: uid,
+          ),
           callback: (payload) => _refreshSelfSets(),
         )
         .subscribe((status, err) {

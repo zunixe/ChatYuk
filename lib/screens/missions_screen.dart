@@ -27,7 +27,9 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen>
   List<dynamic> _oneTime = [];
   int _points = 0;
   int _streak = 0;
-  String? _claiming;
+  // Status klaim per kartu lewat ValueNotifier: dulu `setState` di root
+  // membangun ulang seluruh layar (header + TabBar + 3 daftar) 3× per klik.
+  final ValueNotifier<String?> _claimingN = ValueNotifier<String?>(null);
 
   @override
   void initState() {
@@ -45,6 +47,7 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen>
 
   @override
   void dispose() {
+    _claimingN.dispose();
     _tab.dispose();
     super.dispose();
   }
@@ -69,8 +72,8 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen>
   }
 
   Future<void> _claim(String key, int reward) async {
-    if (_claiming != null) return;
-    setState(() => _claiming = key);
+    if (_claimingN.value != null) return;
+    _claimingN.value = key;
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     try {
       final res = await _service.claimWeeklyQuest(key, _tzOffset);
@@ -88,7 +91,7 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen>
         ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
       }
     } finally {
-      if (mounted) setState(() => _claiming = null);
+      _claimingN.value = null;
     }
   }
 
@@ -230,7 +233,7 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen>
         itemCount: items.length,
         itemBuilder: (_, i) => MissionCard(
           data: Map<String, dynamic>.from(items[i] as Map),
-          claimingKey: _claiming,
+          claimingKey: _claimingN,
           onClaim: _claim,
           index: i,
         ),

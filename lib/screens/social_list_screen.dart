@@ -165,7 +165,12 @@ class _SocialListScreenState extends ConsumerState<SocialListScreen> {
                       ),
                     );
                   }
-                  return _SocialTile(entry: _items[i]);
+                  // RepaintBoundary per kartu (pola sama list lain): kartu
+                  // punya shadow blur 8 + InkWell; tanpa layer sendiri, satu
+                  // kartu berubah (tap/ripple) menandai SELURUH list repaint.
+                  return RepaintBoundary(
+                    child: _SocialTile(entry: _items[i]),
+                  );
                 },
               ),
             ),

@@ -114,7 +114,9 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                   final uid = '${e['uid'] ?? ''}';
                   final price = (e['price'] as num?)?.toInt() ?? 0;
                   final registered = e['is_registered'] == true;
-                  return Container(
+                  // Layer repaint sendiri per kartu (pola list lain).
+                  return RepaintBoundary(
+                    child: Container(
                     margin: EdgeInsets.only(bottom: 8),
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
@@ -172,6 +174,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                         ),
                       ],
                     ),
+                  ),
                   );
                 },
               ),

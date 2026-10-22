@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
@@ -8,7 +9,13 @@ import '../../../providers/riverpod/locale_provider.dart';
 // ── Kartu misi ──
 class MissionCard extends ConsumerWidget {
   final Map<String, dynamic> data;
-  final String? claimingKey;
+
+  /// Status "sedang diklaim" sebagai ValueListenable (2026-10-22).
+  /// Dulu `String? claimingKey` biasa → `setState` di ROOT layar membuat
+  /// SELURUH daftar misi + header + TabBarView dibangun ulang (dan
+  /// TweenAnimationBuilder tiap kartu mengulang animasi). Dengan listenable,
+  /// hanya kartu yang statusnya berubah yang rebuild.
+  final ValueListenable<String?> claimingKey;
   final void Function(String key, int reward) onClaim;
   final int index;
   const MissionCard({
@@ -92,7 +99,7 @@ class MissionCard extends ConsumerWidget {
     final target = (data['target'] as num?)?.toInt() ?? 1;
     final current = (data['current'] as num?)?.toInt() ?? 0;
     final hasProgress = target > 1;
-    final isClaiming = claimingKey == key;
+    final isClaiming = claimingKey.value == key;
     final meta =
         _meta[key] ??
         (icon: Icons.emoji_events_rounded, color: AppTheme.primary);

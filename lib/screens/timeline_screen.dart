@@ -17,6 +17,7 @@ import '../widgets/empty_state_view.dart';
 import '../core/perf/perf_probe.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
+import '../core/nav_visibility.dart';
 
 // ── Warna header ringkas ala Instagram (DINAMIS mengikuti tema) ──
 // SAMA dengan header halaman Profil: bg = bgScreen, teks = textPrimary
@@ -87,11 +88,21 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     for (final c in _scrolls) {
       c.addListener(_onScroll);
     }
+    // Event realtime yang dilewati saat tab Timeline tak terlihat ditandai
+    // provider → segarkan sekali ketika tab ini aktif lagi.
+    visibleMainTab.addListener(_onTabVisibilityChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load(refresh: true));
+  }
+
+  void _onTabVisibilityChanged() {
+    if (visibleMainTab.value != 2) return;
+    if (!mounted) return;
+    unawaited(ref.read(timelineProvider.notifier).consumeHiddenRtDirty());
   }
 
   @override
   void dispose() {
+    visibleMainTab.removeListener(_onTabVisibilityChanged);
     _searchDebounce?.cancel();
     _scrollDebounce?.cancel();
     for (final c in _scrolls) {

@@ -324,20 +324,31 @@ mixin ChatServicePrivateChatListMx on ChatBase {
         'last_message,last_message_at,last_sender_id,message_count,'
         'unread_counts,last_read_at,pinned_by,pinned_at,muted_by,archived_by,'
         'deleted_participants,hidden_by';
-    // Limit 50 → 200: daftar Pesan memaginasi di klien (`take(page*20)`),
-    // jadi chat ke-51+ dulu TIDAK PERNAH termuat (paginasi klien palsu bila
-    // server cuma kirim 50). 200 menutup celah itu untuk mayoritas user tanpa
-    // payload berat (payload per baris sudah dipangkas di atas). Realtime
-    // tetap menjaga baris ini fresh; refetch penuh sudah 30s-gated.
-    final rows = await PerfProbe.timed(
-      'chat.listFetch',
+    // LIMIT BERTAHAP (2026-10-22). Dulu selalu 200 baris (~186 KB @932 B/baris
+    // terukur di live: 1350 baris total, 932 B rata-rata) padahal daftar
+    // memaginasi di klien (`take(page*20)`) dan p50 user hanya punya 2 chat.
+    // Paginasi klien memotong data yang SUDAH ada di memori — jadi limit
+    // server harus >= jumlah chat user; kalau tidak, chat ke-51+ hilang.
+    // Solusi: minta 50 dulu; kalau hasilnya penuh 50, tarik halaman berikutnya
+    // (maks 4 halaman = 200, sama seperti batas lama) agar user "berat"
+    // (live: maks 212 chat) tetap utuh. Realtime menjaga baris tetap fresh.
+    Future<List<dynamic>> fetchPage(int from, int to) => PerfProbe.timed(
+      from == 0 ? 'chat.listFetch' : 'chat.listFetchMore',
       () => _sb
           .from('private_chats')
           .select(cols)
           .contains('participants', [myUid])
           .order('last_message_at', ascending: false)
-          .limit(200),
+          .range(from, to),
     );
+    const pageSize = 50;
+    final rows = <dynamic>[];
+    for (var page = 0; page < 4; page++) {
+      final from = page * pageSize;
+      final batch = await fetchPage(from, from + pageSize - 1);
+      rows.addAll(batch);
+      if (batch.length < pageSize) break;
+    }
     // Saring chat yang disembunyikan user ini — di klien, tanpa round-trip.
     final hiddenSet = <String>{};
     for (final r in rows) {

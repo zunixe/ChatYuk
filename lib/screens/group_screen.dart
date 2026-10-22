@@ -128,7 +128,12 @@ class _GroupListState extends ConsumerState<_GroupList> {
           ListView.builder(
             padding: const EdgeInsets.fromLTRB(10, 12, 10, 88),
             itemCount: rooms.length,
-            itemBuilder: (_, i) => GroupCard(room: rooms[i]),
+            // RepaintBoundary per kartu: kartu membawa shadow blur 8 +
+            // Dismissible; tanpa layer sendiri, perubahan satu kartu menandai
+            // seluruh list untuk repaint (pola sama list Online/Chat).
+            itemBuilder: (_, i) => RepaintBoundary(
+              child: GroupCard(room: rooms[i]),
+            ),
           ),
         Positioned(
           right: 16,
