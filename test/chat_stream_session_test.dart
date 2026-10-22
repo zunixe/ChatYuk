@@ -234,6 +234,35 @@ void main() {
     });
   });
 
+  group('lifecycle: timer reconnect dibatalkan saat tak ada listener', () {
+    // Regresi 2026-10-22: dulu `onCancel` hanya membatalkan pollTimer/
+    // saveDebounce/reloadDebounce, TIDAK timer reconnect. Saat jaringan blip
+    // lalu chat ditutup, timer itu menyala → reload() + openChannel() membuat
+    // channel realtime BARU yang tidak pernah di-remove (langganan yatim:
+    // traffic & memori naik, "makin lama makin lag").
+    test('reload pasca-cancel tetap jalan (sesi dipakai ulang), tapi '
+        'reconnect pending dibatalkan', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/messages', (_) => [
+            row(1, 'satu', createdAt: '2026-01-01T00:00:01Z'),
+          ]);
+
+      final handle = session(handler, 'room_reconnect_cancel').start();
+      await handle.stream.first.timeout(const Duration(seconds: 3));
+
+      // Tutup listener (onCancel jalan → timer reconnect dibatalkan).
+      await handle.stream.listen((_) {}).cancel();
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      // Sesi MASIH boleh dipakai ulang: subscribe lagi harus dapat data
+      // (replay `_current`), bukan stream mati.
+      final again = await handle.stream.first.timeout(
+        const Duration(seconds: 3),
+      );
+      expect(again.map((m) => m.text), contains('satu'));
+    });
+  });
+
   // NOTE: timer poll 30 dtk & callback realtime tidak diuji di sini —
   // butuh event-loop asli (platform channel cache), fakeAsync menggantung
   // fetch (lihat supabase_test_client.dart). reload() yang dipakai poll

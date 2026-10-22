@@ -192,6 +192,17 @@ class ChatStreamSession {
   ///   supaya tidak duplikasi pekerjaan realtime tiap 30 detik.
   ChatMessageStream start() {
     final controller = StreamController<List<MessageModel>>.broadcast();
+    // Penanda SESI SUDAH DITUTUP (dideklarasikan paling awal: dipakai guard
+    // di seluruh body). Wajib karena controller `broadcast` sengaja TIDAK
+    // di-close() di onCancel (bisa di-subscribe ulang) → `controller.isClosed`
+    // SELALU false dan guard berbasis isClosed tak pernah melindungi apa pun;
+    // akibatnya timer reconnect yang menyala setelah chat ditutup membuat
+    // channel realtime baru yang tak pernah di-remove (langganan yatim).
+    // Sesi bisa dipakai ULANG (subscribe → cancel → subscribe lagi), jadi
+    // "mati" hanya bila controller benar-benar closed. Guard ini tetap
+    // dibutuhkan karena semua kerja async (reload/openChannel) harus batal
+    // bila controller sudah closed.
+    bool _isDead() => controller.isClosed;
     var _current = <MessageModel>[];
     var _loadingOlder = false;
     var _hasMore = true;
@@ -228,7 +239,7 @@ class ChatStreamSession {
     // Dengan revisi: derive HANYA saat isi benar-benar berubah.
     final revision = ValueNotifier<int>(0);
     void _emit() {
-      if (controller.isClosed) return;
+      if (_isDead()) return;
       revision.value = revision.value + 1;
       controller.add(List.unmodifiable(_current));
     }
@@ -246,10 +257,10 @@ class ChatStreamSession {
     String? lastSavedSig;
 
     void scheduleCacheSave() {
-      if (controller.isClosed || _current.isEmpty) return;
+      if (_isDead() || _current.isEmpty) return;
       saveDebounce?.cancel();
       saveDebounce = Timer(const Duration(seconds: 2), () async {
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         final sig = messageCacheSignature(_current);
         if (sig == lastSavedSig) return;
         lastSavedSig = sig;
@@ -351,7 +362,7 @@ class ChatStreamSession {
                       m.id,
                       data,
                     );
-              if (controller.isClosed) return;
+              if (_isDead()) return;
               final idx = _current.indexWhere((x) => x.id == m.id);
               if (idx >= 0 && _needsPhotoFill(_current[idx])) {
                 _current[idx] = _current[idx].copyWith(
@@ -404,7 +415,7 @@ class ChatStreamSession {
       if (voices.isNotEmpty) {
         unawaited(() async {
           for (final m in voices.take(10)) {
-            if (controller.isClosed) return;
+            if (_isDead()) return;
             await _prefetchVoiceBytes(m.imageData);
           }
         }());
@@ -418,7 +429,7 @@ class ChatStreamSession {
       // Tanpa ini bubble kosong usai reload ("muncul lalu ilang").
       final stickers = [for (final m in models) if (m.type == 'sticker' && m.imageData.isEmpty) m];
       if (stickers.isNotEmpty) {
-        unawaited(fillStickerPaths(sb: _sb, table: table, stickers: stickers, currentGetter: () => _current, isClosed: () => controller.isClosed, emit: _emit, scheduleCacheSave: scheduleCacheSave));
+        unawaited(fillStickerPaths(sb: _sb, table: table, stickers: stickers, currentGetter: () => _current, isClosed: () => _isDead(), emit: _emit, scheduleCacheSave: scheduleCacheSave));
       }
       if (photos.isEmpty) return;
       // LAZY PENUH: hanya decrypt upfront untuk foto terbaru yang terlihat
@@ -442,12 +453,12 @@ class ChatStreamSession {
       _photoLoadGate.run(() async {
         if (defer) {
           await Future<void>.delayed(const Duration(milliseconds: 280));
-          if (controller.isClosed) return;
+          if (_isDead()) return;
         }
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         final chunk = head.map((m) => m.id).toList();
         final map = await PhotoCache.instance.loadMany(cacheKey, chunk);
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         // ZERO-JANK: SATU emit setelah batch (dulu _emit per foto → s.d. 12
         // rebuild ListView berurutan saat foto head tiba bersamaan).
         var changed = false;
@@ -558,7 +569,7 @@ class ChatStreamSession {
         // pesan". Kalau kosong (cold start), lanjut ke muat SQLite.
         if (_current.isEmpty) {
           final mem = MessageCache.instance.peekMessages(cacheKey);
-          if (mem != null && mem.isNotEmpty && !controller.isClosed) {
+          if (mem != null && mem.isNotEmpty && !_isDead()) {
             _current = mem;
             _emit();
             loadPhotosAsync(mem);
@@ -577,13 +588,13 @@ class ChatStreamSession {
             ? MessageCache.instance.loadMessages(cacheKey)
             : Future<List<MessageModel>>.value(const <MessageModel>[]);
         final cached = await cacheF;
-        if (cached.isNotEmpty && !controller.isClosed) {
+        if (cached.isNotEmpty && !_isDead()) {
           _current = cached;
           _emit();
           loadPhotosAsync(cached);
         }
         _hiddenCutoff = await cutoffF;
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         if (_hiddenCutoff != null && _current.isNotEmpty) {
           final filtered = _current
               .where((m) => m.timestamp.isAfter(_hiddenCutoff!))
@@ -597,7 +608,7 @@ class ChatStreamSession {
         dlog(
           '[CACHE-TIME] $cacheKey server=${swServer.elapsedMilliseconds}ms n=${server.length}',
         );
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         if (_hiddenCutoff != null) {
           server.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));
         }
@@ -643,7 +654,7 @@ class ChatStreamSession {
         // Filter hiddenCutoff TETAP diterapkan — cache lokal bisa berisi
         // history sebelum delete yang tidak boleh muncul lagi.
         MessageCache.instance.loadMessages(cacheKey).then((cached) {
-          if (cached.isNotEmpty && !controller.isClosed && _current.isEmpty) {
+          if (cached.isNotEmpty && !_isDead() && _current.isEmpty) {
             var list = cached;
             if (_hiddenCutoff != null) {
               list = list
@@ -660,7 +671,7 @@ class ChatStreamSession {
         _reloading = false;
         // Ada permintaan reload yang datang saat proses berjalan → jalankan
         // sekali lagi supaya tidak ada event yang hilang.
-        if (_reloadQueued && !controller.isClosed) {
+        if (_reloadQueued && !_isDead()) {
           _reloadQueued = false;
           reload();
         }
@@ -708,7 +719,7 @@ class ChatStreamSession {
       ),
       callback: (payload) {
         _hiddenCutoffCache.remove(filterVal);
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         try {
           final row = payload.newRecord;
           if (row[filterKey]?.toString() != filterVal) return;
@@ -824,7 +835,7 @@ class ChatStreamSession {
     ch.onBroadcast(event: 'new_message', callback: (payload, [ref]) async {
       _hiddenCutoffCache.remove(filterVal);
       lastRealtime = DateTime.now();
-      if (controller.isClosed) return;
+      if (_isDead()) return;
       try {
         final data = payload;
         if (data['chat_id']?.toString() != filterVal && data['room_id']?.toString() != filterVal) return;
@@ -912,11 +923,14 @@ class ChatStreamSession {
     final _rng = Random();
     final _reconnectDelays = const [2, 4, 8, 16, 32, 60];
     Timer? _reconnectTimer;
+    // `reconnectNow` (resume) memakai Timer(Duration.zero); SIMPAN supaya bisa
+    // dibatalkan saat chat ditutup (dulu tak terlacak → channel yatim).
+    Timer? _resumeTimer;
 
     // Reconnect ter-debounce + backoff. Idempoten via flag `_reconnecting`.
     bool _reconnecting = false;
     void _scheduleChannelReconnect() {
-      if (_reconnecting || controller.isClosed) return;
+      if (_isDead() || _reconnecting) return;
       _reconnecting = true;
       final base = _reconnectDelays[_reconnectAttempt.clamp(
         0,
@@ -929,7 +943,7 @@ class ChatStreamSession {
       _reconnectTimer?.cancel();
       _reconnectTimer = Timer(Duration(milliseconds: ms), () async {
         _reconnecting = false;
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         if (!AppForeground.now) return; // jangan bangun proses saat background
         // Ambil pesan yang mungkin terlewat selama channel putus.
         unawaited(reload());
@@ -939,7 +953,7 @@ class ChatStreamSession {
         try {
           await _sb.removeChannel(old);
         } catch (_) {}
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         try {
           openChannel();
         } catch (e) {
@@ -958,16 +972,18 @@ class ChatStreamSession {
     // lewat poll 20 dtk ("masih ga realtime"). Di resume: reload untuk ambil
     // yang terlewat + hidupkan kanal SEKETIKA bila belum subscribed.
     void reconnectNow() {
+      if (_isDead()) return;
       _reconnectTimer?.cancel();
+      _resumeTimer?.cancel();
       _reconnecting = true;
-      Timer(Duration.zero, () async {
+      _resumeTimer = Timer(Duration.zero, () async {
         _reconnecting = false;
-        if (controller.isClosed || _subscribedNow) return;
+        if (_isDead() || _subscribedNow) return;
         final old = channel;
         try {
           await _sb.removeChannel(old);
         } catch (_) {}
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         try {
           openChannel();
         } catch (e) {
@@ -982,7 +998,7 @@ class ChatStreamSession {
       final now = AppForeground.now;
       if (now == _fgWas) return;
       _fgWas = now;
-      if (!now || controller.isClosed) return;
+      if (!now || _isDead()) return;
       dlog('[ChatStream] resume filter=$filterVal '
           'subscribed=$_subscribedNow');
       unawaited(reload());
@@ -1026,7 +1042,7 @@ class ChatStreamSession {
 
     // Load pesan lebih lama (pagination): ambil 100 pesan SEBELUM pesan tertua.
     Future<void> loadOlder() async {
-      if (_loadingOlder || !_hasMore || _current.isEmpty || controller.isClosed)
+      if (_loadingOlder || !_hasMore || _current.isEmpty || _isDead())
         return;
       _loadingOlder = true;
       try {
@@ -1035,7 +1051,7 @@ class ChatStreamSession {
         // dari yang sebenarnya sudah dimuat (lihat komentar `_trim`).
         final oldest = _oldestFetchedTs ?? _current.first.timestamp;
         var older = await fetchServer(before: oldest, limit: 100);
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         // Pagination juga harus menghormati cutoff delete — pesan sebelum
         // cutoff tidak boleh muncul meski di-scroll ke atas.
         if (_hiddenCutoff != null) {
@@ -1056,7 +1072,7 @@ class ChatStreamSession {
             // Stiker lama: isi path (halaman lama tak lewat loadPhotosAsync).
             final oldSk = [for (final m in newMsgs) if (m.type == 'sticker' && m.imageData.isEmpty) m];
             if (oldSk.isNotEmpty) {
-              unawaited(fillStickerPaths(sb: _sb, table: table, stickers: oldSk, currentGetter: () => _current, isClosed: () => controller.isClosed, emit: _emit, scheduleCacheSave: scheduleCacheSave));
+              unawaited(fillStickerPaths(sb: _sb, table: table, stickers: oldSk, currentGetter: () => _current, isClosed: () => _isDead(), emit: _emit, scheduleCacheSave: scheduleCacheSave));
             }
             // Majukan kursor ke pesan terlama batch ini (lebih tua dari
             // kursor lama) agar paginasi berikutnya lanjut ke belakang.
@@ -1105,7 +1121,7 @@ class ChatStreamSession {
             data = await PhotoCache.instance.save(cacheKey, m.id, full) ?? full;
           }
         }
-        if (controller.isClosed) return;
+        if (_isDead()) return;
         if (data != null && data.isNotEmpty) {
           _current[idx] = _current[idx].copyWith(imageData: data);
           _emit();
@@ -1120,12 +1136,25 @@ class ChatStreamSession {
     // terjadi sebelum StreamBuilder subscribe akan hilang. Kirim ulang
     // _current saat listener pertama datang supaya frame pertama instan.
     controller.onListen = () {
-      if (_current.isNotEmpty && !controller.isClosed) {
+      if (_current.isNotEmpty && !_isDead()) {
         _emit();
       }
     };
 
     controller.onCancel = () {
+      // Hentikan timer reconnect yang PENDING saat tak ada listener.
+      // Tanpa ini: chat ditutup saat jaringan blip → timer reconnect menyala
+      // → reload + openChannel membuat channel realtime baru yang tidak pernah
+      // di-remove (langganan yatim: traffic & memori naik, "makin lama makin
+      // lag").
+      // CATATAN: sesi ini SENGAJA bisa di-subscribe ULANG (lihat komentar
+      // `controller.close()` di bawah), jadi onCancel TIDAK boleh menandai
+      // sesi mati permanen — ia juga terpicu oleh `handle.stream.first`.
+      _reconnecting = false;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      _resumeTimer?.cancel();
+      _resumeTimer = null;
       pollTimer.cancel();
       saveDebounce?.cancel();
       reloadDebounce?.cancel();
