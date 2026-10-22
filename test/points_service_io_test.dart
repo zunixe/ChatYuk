@@ -38,22 +38,6 @@ void main() {
       rpcRequestOf(handler, 'daily_login_bonus');
     });
 
-    test('claimWeeklyQuest: quest_key + tz_offset_minutes terkirim', () async {
-      final handler = FakeSupabaseHandler();
-      handler.on(
-        '/rest/v1/rpc/claim_weekly_quest',
-        (_) => {'points': 20, 'claimed': true},
-      );
-      final svc = PointsService(fakeSupabaseClient(handler: handler));
-
-      final res = await svc.claimWeeklyQuest('weekly_chat', 420);
-
-      expect(res['claimed'], isTrue);
-      final params = rpcParamsOf(handler, 'claim_weekly_quest');
-      expect(params['quest_key'], 'weekly_chat');
-      expect(params['tz_offset_minutes'], 420);
-    });
-
     test('unlockPhoto: p_photo_id + p_mode terkirim', () async {
       final handler = FakeSupabaseHandler();
       handler.on(
@@ -121,19 +105,6 @@ void main() {
       final svc = PointsService(fakeSupabaseClient(handler: handler));
 
       expect(await svc.fetchEnabled(), isTrue);
-    });
-
-    test('quests: tz_offset_minutes terkirim + default saat kosong', () async {
-      final handler = FakeSupabaseHandler();
-      handler.on(
-        '/rest/v1/rpc/points_quests',
-        (_) => {'points': 0, 'streak': 0, 'daily': [], 'weekly': []},
-      );
-      final svc = PointsService(fakeSupabaseClient(handler: handler));
-
-      await svc.quests(420);
-
-      expect(rpcParamsOf(handler, 'points_quests')['tz_offset_minutes'], 420);
     });
 
     test('activityLeaderboard: RPC + params p_scope/p_limit + parsing', () async {

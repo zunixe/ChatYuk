@@ -101,8 +101,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// Set preview foto di composer (private: + fokus & scroll; room: set saja).
   void photoSetPreview(String base64);
 
-  /// Set preview VIDEO di composer (poster + durasi). Hanya private yang
-  /// mengisi; room default no-op (video room belum aktif).
+  /// Set preview VIDEO di composer (poster + durasi).
+  /// Default no-op — di-override oleh private chat DAN room (video room sudah
+  /// aktif sejak paritas media 2026-10-21; lihat `room_chat_core.dart`).
   void videoSetPreview({
     required String path,
     required String posterBase64,
@@ -115,7 +116,8 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// Path video yang sedang di-preview (null = tidak ada). Room selalu null.
   String? get pendingVideoPath => null;
 
-  /// True bila fitur video aktif di layar ini (private). Room: false.
+  /// True bila fitur video aktif di layar ini. Default false; private chat &
+  /// room meng-override jadi true.
   bool get videoSendEnabled => false;
 
   /// Video dikirim sebagai "sekali lihat"? (private: toggle di preview).

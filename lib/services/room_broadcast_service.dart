@@ -237,16 +237,6 @@ class RoomBroadcastSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ignore: unused_element
-  Future<String?> _currentLiveUid() async {
-    try {
-      final row = await _sb.from('rooms').select('live_uid').eq('id', roomId).maybeSingle();
-      return row?['live_uid']?.toString();
-    } catch (_) {
-      return null;
-    }
-  }
-
   void _onSignal(Map<String, dynamic> sig) {
     if (_closed) return;
     // Dedupe by signal id — realtime & polling bisa menyampaikan row yang

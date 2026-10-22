@@ -456,9 +456,6 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   Future<Map<String, dynamic>> buyGhostMode({int days = 1}) =>
       _service.buyGhostMode(days: days);
 
-  Future<Map<String, dynamic>> quests(int tz) => _service.quests(tz);
-  Future<Map<String, dynamic>> claimWeeklyQuest(String key, int tz) =>
-      _service.claimWeeklyQuest(key, tz);
   Future<Map<String, dynamic>> leaderboard(
     String scope, {
     int limit = 50,

@@ -487,46 +487,6 @@ class PointsService {
     return {'scope': scope, 'entries': [], 'me': null};
   }
 
-  /// Status semua misi (harian/mingguan/sekali). tzOffset = menit offset lokal.
-  Future<Map<String, dynamic>> quests(int tzOffsetMinutes) {
-    // PERF: TTL cache 30s — buka layar Misi berulang tak RPC tiap kali.
-    // Di-invalidate setelah claimWeeklyQuest.
-    return _coalesce<Map<String, dynamic>>(
-      'points_quests:$tzOffsetMinutes',
-      () async {
-        final res = await measuredRpc(_sb, 
-          'points_quests',
-          params: {'tz_offset_minutes': tzOffsetMinutes},
-        );
-        if (res is Map) return Map<String, dynamic>.from(res);
-        return {
-          'points': 0,
-          'streak': 0,
-          'daily': [],
-          'weekly': [],
-          'oneTime': [],
-        };
-      },
-      ttl: true,
-      ttlDuration: _ttlLong,
-    );
-  }
-
-  /// Klaim misi mingguan. Return {points, claimed}.
-  Future<Map<String, dynamic>> claimWeeklyQuest(
-    String key,
-    int tzOffsetMinutes,
-  ) async {
-    final res = await measuredRpc(_sb, 
-      'claim_weekly_quest',
-      params: {'quest_key': key, 'tz_offset_minutes': tzOffsetMinutes},
-    );
-    // Cache quests basi setelah klaim.
-    invalidateTtlPrefix('points_quests:');
-    if (res is Map) return Map<String, dynamic>.from(res);
-    return {'points': 0, 'claimed': false};
-  }
-
   /// Harga room (dual pricing) dari server.
   Future<Map<String, dynamic>> roomPricing() async {
     try {

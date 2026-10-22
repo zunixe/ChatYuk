@@ -4,7 +4,6 @@ import '../utils.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
-import '../core/call/signal_route.dart' as signal_route;
 import 'call/call_ui.dart' show CallUi;
 import 'call/call_ui_factory.dart' show createCallUi;
 
@@ -332,12 +331,6 @@ class CallService {
   //
   // Kedua jalur menyatu ke SATU stream (controller) supaya CallSession
   // tak perlu tahu asal sinyal.
-  static const String _signalBroadcastEvent = 'sig';
-
-  /// True bila [type] boleh dikirim ephemeral (tanpa persist DB).
-  /// Logika murni ada di `core/call/signal_route.dart`.
-  static bool isEphemeralSignal(String type) =>
-      signal_route.isEphemeralSignal(type);
 
   Stream<Map<String, dynamic>> onSignal(String callId) {
     final controller = _signalStreams.putIfAbsent(
@@ -363,32 +356,12 @@ class CallService {
           _emitSignal(payload.newRecord, controller);
         },
       );
-      // Jalur ephemeral: candidate via broadcast (tidak masuk DB).
-      channel.onBroadcast(
-        event: _signalBroadcastEvent,
-        callback: (msg) {
-          if (controller.isClosed) return;
-          _emitBroadcastSignal(msg, controller);
-        },
-      );
       channel.subscribe((status, err) {
         if (err != null) dlog('[CallService] signal realtime error: $err');
       });
       _signalChannels[callId] = channel;
     }
     return controller.stream;
-  }
-
-  /// Teruskan sinyal broadcast ephemeral (candidate) ke controller.
-  /// Bentuk payload identik dengan sinyal DB: {type, ...payload}.
-  void _emitBroadcastSignal(
-    Map<String, dynamic> msg,
-    StreamController<Map<String, dynamic>> controller,
-  ) {
-    if (controller.isClosed) return;
-    final signal = signal_route.decodeEphemeralEnvelope(msg, myUid: uid);
-    if (signal == null) return;
-    controller.add(signal);
   }
 
   Future<void> _catchUpSignals(
@@ -423,34 +396,11 @@ class CallService {
     String type, {
     Map<String, dynamic>? payload,
   }) async {
-    final ephemeral = isEphemeralSignal(type);
-    dlog(
-      '[CallService] sendSignal callId=$callId type=$type ephemeral=$ephemeral',
-    );
-    if (ephemeral) {
-      // Candidate: kirim via realtime broadcast (ephemeral, tanpa DB).
-      // Fallback ke DB bila channel belum siap (mis. dipanggil sebelum
-      // subscribe) supaya candidate TIDAK pernah hilang diam-diam.
-      final ch = _signalChannels[callId];
-      if (ch != null) {
-        try {
-          await ch.sendBroadcastMessage(
-            event: _signalBroadcastEvent,
-            payload: signal_route.buildEphemeralEnvelope(
-              fromUid: uid,
-              type: type,
-              payload: payload,
-              seq: _broadcastSeq++,
-              micros: DateTime.now().microsecondsSinceEpoch,
-            ),
-          );
-          return;
-        } catch (e) {
-          dlog('[CallService] broadcast candidate gagal → fallback DB: $e');
-        }
-      }
-      // Channel belum ada → tetap persist (jarang; setup awal).
-    }
+    // SEMUA sinyal (termasuk `candidate`) lewat DB `call_signals`.
+    // Jalur Realtime Broadcast sudah dihapus 2026-10-22 — uji 2-device
+    // menunjukkan candidate via broadcast tidak sampai ke peer sehingga call
+    // "menghubungkan lama"; jalur DB terbukti cepat & reliabel.
+    dlog('[CallService] sendSignal callId=$callId type=$type');
     try {
       await _sb.from('call_signals').insert({
         'call_id': callId,
@@ -462,8 +412,6 @@ class CallService {
       dlog('[CallService] sendSignal error: $e');
     }
   }
-
-  int _broadcastSeq = 0;
 
   /// Ambil semua signal (offer/candidates) untuk sebuah call — dipakai untuk
   /// re-sync agar tidak ada kandidat yang terlewat.

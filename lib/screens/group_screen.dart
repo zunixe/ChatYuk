@@ -1,197 +1,23 @@
+// Helper dialog/pembuatan grup (DIPAKAI: chats_screen & online_users_screen).
+//
+// Kelas `GroupScreen` + `_GroupList` (list grup berdiri sendiri) DIHAPUS
+// 2026-10-22: sudah digantikan list terpadu di `private_chats_build.dart`
+// (grup tampil inline di daftar Pesan) dan tak pernah diinstansiasi lagi —
+// grep `GroupScreen(` = 0 pemakaian. Dua fungsi di bawah TETAP dipakai.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config/theme.dart';
 import '../core/admin_gate.dart';
-import '../core/perf/perf_probe.dart';
-import '../models/room_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
-import '../widgets/empty_state_view.dart';
-import 'group/create_group_sheet.dart';
-import 'group/group_widgets.dart';
-import 'room_members_sheet.dart';
 import '../widgets/person_avatar.dart';
-import '../config/theme.dart';
+import 'group/create_group_sheet.dart';
+import 'room_members_sheet.dart';
 
-/// Tab "Grup": list grup private milikku + FAB buat grup.
-/// Dipindah dari lobby_screen (dulu tab Private di dalam Room).
-/// [externalQuery]: filter nama dari ikon cari AppBar (pola Pesan).
-class GroupScreen extends StatefulWidget {
-  final String? externalQuery;
-  const GroupScreen({super.key, this.externalQuery});
-
-  @override
-  State<GroupScreen> createState() => _GroupScreenState();
-}
-
-class _GroupScreenState extends State<GroupScreen> {
-  /// Akses statis untuk memuat-ulang list dari dialog buat grup.
-  static final GlobalKey<_GroupListState> _listKey = GlobalKey();
-
-  @override
-  Widget build(BuildContext context) {
-    return _GroupList(key: _listKey, externalQuery: widget.externalQuery);
-  }
-}
-
-class _GroupList extends ConsumerStatefulWidget {
-  final String? externalQuery;
-  const _GroupList({super.key, this.externalQuery});
-  @override
-  ConsumerState<_GroupList> createState() => _GroupListState();
-}
-
-class _GroupListState extends ConsumerState<_GroupList> {
-  /// Muat-ulang dari luar (dialog buat grup) — langsung ke provider supaya
-  /// jalan dari konteks mana pun (FAB tab Grup maupun menu ⋮ chat list yang
-  /// tidak punya _GroupListState sebagai ancestor).
-  static void reloadCurrent(BuildContext context) {
-    ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(roomProvider.notifier).loadMyGroups(refresh: true);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  /// List grup MILIKKU dari RoomProvider (cache memori/TTL/disk — klik tab
-  /// instan, spinner hanya saat cache benar-benar kosong). Grup expired
-  /// disembunyikan kecuali milik sendiri (owner bisa perpanjang).
-  Future<void> _load({bool refresh = false}) async {
-    await ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(roomProvider.notifier).loadMyGroups(refresh: refresh);
-  }
-
-  List<RoomModel> _visibleGroups(List<RoomModel> myGroups) {
-    final myUid =
-        ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(roomProvider.notifier).prvUid ??
-        '';
-    final now = DateTime.now();
-    return myGroups.where((m) {
-      final expired = m.expiresAt != null && m.expiresAt!.isBefore(now);
-      return !(expired && m.ownerId != myUid);
-    }).toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    PerfProbe.buildCount('Group');
-    final s = ref.watch(localeProvider).s;
-    // PERF: dulu `watch<RoomProvider>()` penuh → SELURUH daftar grup rebuild
-    // tiap RoomProvider notify (4 realtime sub: counts/private/membership/
-    // presence → sering). `select` hanya field yang dirender; `myGroups`
-    // adalah field tersimpan (identity stabil) → rebuild hanya saat benar
-    // berubah.
-    final myGroups = ref.watch(roomProvider.select((rp) => rp.myGroups));
-    final myGroupsLoading = ref.watch(
-      roomProvider.select((rp) => rp.myGroupsLoading),
-    );
-    final q = (widget.externalQuery ?? '').trim().toLowerCase();
-    final rooms = q.isEmpty
-        ? _visibleGroups(myGroups)
-        : _visibleGroups(
-            myGroups,
-          ).where((r) => r.name.toLowerCase().contains(q)).toList();
-    final searching = q.isNotEmpty;
-    if (myGroupsLoading && rooms.isEmpty && !searching) {
-      return const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: AppTheme.primary,
-          ),
-        ),
-      );
-    }
-    return Stack(
-      children: [
-        if (rooms.isEmpty)
-          EmptyStateView(
-            icon: searching ? Icons.search_off_rounded : Icons.lock_rounded,
-            title: searching ? s.searchNoResult : s.noGroups,
-            hint: searching ? '' : s.noGroupsHint,
-          )
-        else
-          ListView.builder(
-            padding: const EdgeInsets.fromLTRB(10, 12, 10, 88),
-            itemCount: rooms.length,
-            // RepaintBoundary per kartu: kartu membawa shadow blur 8 +
-            // Dismissible; tanpa layer sendiri, perubahan satu kartu menandai
-            // seluruh list untuk repaint (pola sama list Online/Chat).
-            itemBuilder: (_, i) => RepaintBoundary(
-              child: GroupCard(room: rooms[i]),
-            ),
-          ),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(22),
-              onTap: () => showCreateGroupDialog(context),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppTheme.primaryDark,
-                      AppTheme.primary,
-                      AppTheme.accent,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primary.withValues(alpha: 0.35),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.add_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      s.btnCreateGroup,
-                      style: AppText.bodyStrong.copyWith(color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Dialog buat grup — publik: dipakai FAB tab Grup DAN menu ⋮ chat list.
 Future<void> showCreateGroupDialog(BuildContext context) async {
   final s = ProviderScope.containerOf(
     context,
@@ -302,8 +128,9 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text(s.groupCreated)),
   );
-  // List milikku berubah (grup baru) — muat ulang.
-  _GroupListState.reloadCurrent(context);
+  // List milikku berubah (grup baru) — daftar Pesan memuat ulang sendiri
+  // lewat realtime (dulu: `_GroupListState.reloadCurrent`, kini kelas itu
+  // sudah dihapus bersama GroupScreen).
   // Langkah 2: tawarkan UNDANG anggota (atau lewati) sebelum masuk grup.
   final newId = '${res['id'] ?? ''}';
   if (newId.isNotEmpty) {
