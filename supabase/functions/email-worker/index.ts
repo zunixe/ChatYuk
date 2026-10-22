@@ -85,14 +85,10 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const resendKey = Deno.env.get('RESEND_API_KEY') ?? '';
-    if (!resendKey) {
-      return new Response(JSON.stringify({ error: 'RESEND_API_KEY belum diset' }), { status: 500 });
-    }
-
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // Setelan pengirim + kill-switch.
+    // Setelan pengirim + kill-switch. Dicek SEBELUM RESEND_API_KEY: cron jalan
+    // tiap menit — saat fitur OFF jangan banjiri log dengan 500.
     const { data: cfg } = await admin
       .from('app_settings')
       .select('email_marketing_enabled, email_from_name, email_from_address, email_daily_cap')
@@ -100,6 +96,10 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!cfg || cfg.email_marketing_enabled !== true) {
       return new Response(JSON.stringify({ ok: true, skipped: 'disabled' }), { status: 200 });
+    }
+    const resendKey = Deno.env.get('RESEND_API_KEY') ?? '';
+    if (!resendKey) {
+      return new Response(JSON.stringify({ error: 'RESEND_API_KEY belum diset' }), { status: 500 });
     }
     const fromName = cfg.email_from_name || 'ChatYuk';
     const fromAddr = cfg.email_from_address || 'noreply@chatyuk.com';
