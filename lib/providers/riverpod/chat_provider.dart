@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/user_model.dart';
+import '../../utils.dart' show dlog;
 import '../../utils/mention.dart';
 import '../../services/chat_service.dart';
 import '../../services/chat_stream_session.dart';
@@ -9,6 +10,7 @@ export '../../services/chat_stream_session.dart' show ChatMessageStream;
 export '../../services/chat_service.dart' show PrivateChatInfo;
 import '../../core/cache/chat_poster_cache.dart';
 import '../../core/cache/message_cache.dart';
+import '../../core/cache/offline_outbox.dart';
 import '../../core/cache/photo_aspect_cache.dart';
 import '../../core/cache/photo_cache.dart';
 
@@ -381,17 +383,28 @@ class ChatNotifier extends Notifier<ChatState> {
       ChatService.effectiveStatusOf(raw, lastSeen);
   bool isBlocked(String uid) => _blockedUids.contains(uid);
 
-  void reset() {
+  /// Bersihkan semua data chat akun lama (logout). Urutan penting: timer
+  /// save & antrean memori dibuang DULU, baru wipe disk — kalau terbalik,
+  /// timer/flush yang tertunda menulis ulang data akun lama.
+  Future<void> reset() async {
     _blockedUids = [];
     _service.clearCachedStreams();
-    MessageCache.instance.clearAll();
-    PhotoCache.instance.clearAll();
-    // Poster/aspek foto chat milik user lama — hanya di sini (logout), BUKAN
-    // saat background (poster harus persisten untuk cold start).
-    unawaited(ChatPosterCache.instance.clear());
-    unawaited(PhotoAspectCache.instance.clear());
+    OfflineOutbox.instance.resetForLogout();
     _emit();
+    await Future.wait<void>([
+      _guard(MessageCache.instance.clearAll()),
+      _guard(PhotoCache.instance.clearAll()),
+      // Poster/aspek foto chat milik user lama — hanya di sini (logout),
+      // BUKAN saat background (poster harus persisten untuk cold start).
+      _guard(ChatPosterCache.instance.clear()),
+      _guard(PhotoAspectCache.instance.clear()),
+    ]);
+    // Antrean bisa dimuat ulang dari disk selagi wipe berjalan → buang lagi.
+    OfflineOutbox.instance.resetForLogout();
   }
+
+  static Future<void> _guard(Future<void> f) =>
+      f.catchError((Object e) => dlog('[CHAT] reset cache error: $e'));
 
   void _disposeAll() {
     _disposed = true;

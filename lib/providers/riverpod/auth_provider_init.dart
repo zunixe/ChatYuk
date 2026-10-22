@@ -159,10 +159,11 @@ mixin _AuthInitMx on _AuthBase {
         _profileSub?.cancel();
         _isIdle = false;
         _profile = null;
-        // Safety-net logout paksa (sesi kedaluwarsa/kick server): tutup
-        // stream & channel chat milik user lama — logout manual sudah
-        // menangani via ChatProvider.reset() di ProfileScreen.
-        _onSignedOut?.call();
+        // Safety-net logout paksa (sesi kedaluwarsa/kick server): jalur
+        // bersih-bersih yang SAMA dengan signOut() manual. Token FCM tidak
+        // bisa dilepas di server (sesi sudah mati) → hapus token lokal saja.
+        safeUnawaited(_logoutCleanup());
+        safeUnawaited(_deleteLocalFcmToken());
         _emit();
       },
       onError: (e) {
@@ -170,11 +171,6 @@ mixin _AuthInitMx on _AuthBase {
       },
     );
   }
-
-  /// Hook opsional: dipasang root widget untuk membersihkan resource
-  /// chat saat signedOut TIDAK lewat tombol logout (sesi mati).
-  void Function()? _onSignedOut;
-  set onSignedOut(void Function()? cb) => _onSignedOut = cb;
 
   /// Cache profil sendiri (SharedPreferences): cold start dengan sesi
   /// existing langsung tampil MainNav dari disk, revalidasi network di

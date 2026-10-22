@@ -12,6 +12,7 @@ import '../../models/auth_data.dart';
 import '../../models/user_model.dart';
 import '../../models/user_photo.dart';
 import '../../providers/riverpod/locale_provider.dart';
+import 'chat_provider.dart';
 import '../../core/admin_gate.dart';
 import '../../services/avatar_service.dart';
 import '../../services/auth_service.dart';
@@ -124,6 +125,8 @@ abstract class _AuthBase extends Notifier<AuthData> {
   Future<void> _bindAndClaimReferrer();
   void _syncTikTok({TikTokEvent? event});
   Future<void> updateFcmToken();
+  Future<void> _logoutCleanup();
+  Future<void> _deleteLocalFcmToken();
   Future<void> _saveCachedProfile(UserModel p);
   void _disposeAll();
   Future<void> _claimDailyPoints();

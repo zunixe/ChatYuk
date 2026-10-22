@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../core/ui/dispose_after_dialog.dart';
 import '../providers/riverpod/auth_provider.dart';
-import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../utils.dart';
 import '../widgets/phone_edit_dialog.dart';
@@ -691,10 +690,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       context,
       listen: false,
     ).read(authProvider.notifier);
-    final chat = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatProvider.notifier);
 
     // Admin dilarang self-delete di sisi server — tidak tampilkan menu.
     if (auth.isRealAdmin) {
@@ -835,9 +830,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       } catch (e) {
         dlog('[ACCOUNT] signOut setelah hapus akun error: $e', tag: 'ACCOUNT');
       }
-      try {
-        chat.reset();
-      } catch (_) {}
       if (!mounted) return;
       // Paksa kembali ke root — gate menampilkan EntryScreen. Tanpa ini,
       // route lama (Pengaturan/Akun) tetap di stack → user bisa "back" ke
@@ -870,10 +862,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       context,
       listen: false,
     ).read(authProvider.notifier);
-    final chat = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -950,12 +938,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         '[ACCOUNT] signOut timeout/error, lanjut paksa keluar: $e',
         tag: 'ACCOUNT',
       );
-    } finally {
-      // reset chat apa pun hasilnya
-      try {
-        chat.reset();
-      } catch (_) {}
     }
+    // Bersih-bersih chat/outbox/cache sudah di jalur tunggal signOut().
     if (!mounted) return;
     // JANGAN reset `_leaving` di sini. Bila di-reset, ada 1 frame di mana
     // `_leaving=false` + `isAnonymous` masih true → kartu kuning "Keamanan

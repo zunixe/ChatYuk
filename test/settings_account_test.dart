@@ -41,7 +41,7 @@ class TestChat extends ChatNotifier {
   TestChat(MockChatService svc) : super(service: svc);
   int resets = 0;
   @override
-  void reset() {
+  Future<void> reset() async {
     resets++;
   }
 }

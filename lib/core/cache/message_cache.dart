@@ -503,8 +503,13 @@ class MessageCache {
     _memRawObj.clear();
     _memChatMeta.clear();
     try {
+      // DB bisa belum terbuka (logout sebelum prewarm selesai) — tanpa
+      // ini clearAll() diam-diam dilewati & pesan akun lama tetap di disk.
+      await _ensureDb();
       await MessageStore.instance.clearAll();
-    } catch (_) {}
+    } catch (e) {
+      dlog('[MessageCache] clearAll gagal: $e');
+    }
     final prefs = await SharedPreferences.getInstance();
     for (final prefix in [
       'chat_cache_v1_',

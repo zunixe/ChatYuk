@@ -349,6 +349,8 @@ mixin _AuthActionsMx on _AuthBase {
       _profileSub?.cancel();
       _isIdle = false;
       await _auth.goOffline();
+      // Lepas push akun lama SEBELUM sesi dibuang (RPC butuh auth.uid()).
+      await _releasePushForLogout();
       // Sesi lokal WAJIB dibuang apa pun hasil revoke server: network
       // error/timeout di sini dulu melempar keluar sehingga `_loading`
       // tetap true selamanya → gate root nyangkut di splash dan user
@@ -373,6 +375,7 @@ mixin _AuthActionsMx on _AuthBase {
       // Buang SEMUA cache gambar (bitmap + bytes foto chat) — HP bisa
       // dipakai bergantian orang; foto user lama tidak boleh tinggal di RAM.
       ImageCacheHygiene.clearAll();
+      await _logoutCleanup();
       // Sesi benar-benar kosong sekarang → EntryScreen (bukan splash).
       // `loading=false` + `profile=null` + `signingOut=true` = gate root
       // menampilkan EntryScreen pada frame yang sama.
@@ -386,6 +389,42 @@ mixin _AuthActionsMx on _AuthBase {
       // gate bisa tertinggal di splash bila notify terakhir terlewat.
       _loading = false;
       _emit();
+    }
+  }
+
+  /// Langkah 1 jalur logout terpusat: putus push akun lama dari device ini.
+  /// Server: hanya baris device ini (bukan device lain akun yang sama).
+  /// Lokal: `deleteToken()` → token lama mati di FCM walau RPC gagal
+  /// (offline) — push akun lama tidak bisa sampai lagi. Login berikutnya
+  /// `updateFcmToken()` mengambil token BARU untuk akun baru.
+  Future<void> _releasePushForLogout() async {
+    try {
+      await _auth.releaseFcmTokenForLogout();
+    } catch (e) {
+      dlog('[AUTH] releaseFcmToken gagal: $e');
+    }
+    await _deleteLocalFcmToken();
+  }
+
+  Future<void> _deleteLocalFcmToken() async {
+    try {
+      await FirebaseMessaging.instance
+          .deleteToken()
+          .timeout(const Duration(seconds: 3));
+    } catch (e) {
+      dlog('[AUTH] FCM deleteToken gagal: $e');
+    }
+  }
+
+  /// Langkah 2 jalur logout terpusat (setelah sesi dibuang): data chat akun
+  /// lama — stream, timer save list chat, antrean offline (memori + disk),
+  /// cache pesan/foto. Dipakai logout manual (semua tombol, termasuk layar
+  /// banned) DAN logout paksa (sesi mati) — jangan panggil dari screen.
+  Future<void> _logoutCleanup() async {
+    try {
+      await ref.read(chatProvider.notifier).reset();
+    } catch (e) {
+      dlog('[AUTH] logout cleanup error: $e');
     }
   }
 
@@ -451,8 +490,6 @@ mixin _AuthActionsMx on _AuthBase {
     // Tahap lengkap: avatar (cache per path, biasanya instan).
     try {
       _profile = await _auth.getProfile();
-      // DIAG2 sementara.
-      print('[ABOUT2] reloadProfile full about="${_profile?.about}"');
       dlog('[AUTH] reloadProfile full -> ${_profile?.uid}');
     } catch (e) {
       dlog('[AUTH] reloadProfile full FAILED: $e');

@@ -146,6 +146,16 @@ class OfflineOutbox {
 
   final List<OutboxEntry> _items = [];
   bool _loaded = false;
+  int _generation = 0;
+
+  /// Kosongkan antrean di MEMORI (logout). Disk dihapus terpisah oleh
+  /// `MessageCache.clearAll` — tanpa ini entri akun lama tetap tampil &
+  /// ter-flush oleh akun berikutnya sampai app di-restart.
+  void resetForLogout() {
+    _generation++;
+    _items.clear();
+    _loaded = false;
+  }
 
   List<OutboxEntry> get all => List.unmodifiable(_items);
 
@@ -158,8 +168,11 @@ class OfflineOutbox {
   Future<void> load() async {
     if (_loaded) return;
     _loaded = true;
+    final gen = _generation;
     try {
       final obj = await MessageCache.instance.loadRawObj(_kvKey);
+      // Logout terjadi selagi baca disk → hasil milik akun lama, buang.
+      if (gen != _generation) return;
       final raw = obj['items'];
       if (raw is List) {
         _items.clear();

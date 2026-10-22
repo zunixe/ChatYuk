@@ -308,13 +308,6 @@ class _MainNavState extends ConsumerState<_MainNav>
     if (uid != null) {
       ref.read(chatProvider.notifier).loadBlockedUids(uid);
     }
-    // Logout paksa (sesi kedaluwarsa) tidak lewat tombol logout → pasang
-    // hook: tutup stream chat & channel milik user lama.
-    auth.onSignedOut = () {
-      try {
-        ref.read(chatProvider.notifier).reset();
-      } catch (_) {}
-    };
     // Prewarm timeline di background (3s setelah frame pertama — lewat
     // warm-up utama auth/rooms/online): saat user tap tab Timeline feed
     // sudah terisi, tidak ada spinner RPC list_posts pertama.

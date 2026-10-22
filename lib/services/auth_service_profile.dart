@@ -374,6 +374,25 @@ mixin AuthServiceProfileMx on AuthBase {
     } catch (_) {}
   }
 
+  /// Logout: lepas token FCM device INI dari akun yang sedang keluar.
+  /// RPC hanya menyentuh baris `(uid, install_id device ini)` — token
+  /// device lain milik akun yang sama TIDAK tersentuh (lihat
+  /// docs/INCIDENT_FCM_TOKEN_WIPE.md). Wajib dipanggil SEBELUM sesi
+  /// dibuang (RPC butuh auth.uid()). Best-effort + timeout pendek.
+  Future<void> releaseFcmTokenForLogout() async {
+    if (uid == null) return;
+    try {
+      final installId = await DeviceInfoService.instance.installId();
+      if (installId.isEmpty) return;
+      await _sb.rpc(
+        'update_device_fcm_token',
+        params: {'p_install_id': installId, 'p_token': ''},
+      ).timeout(const Duration(seconds: 3));
+    } catch (e) {
+      dlog('[AUTH] releaseFcmToken error: $e');
+    }
+  }
+
   /// Set status offline saat logout. Pakai timeout pendek — jalur logout
   /// tidak boleh menunggu jaringan tanpa batas (spinner muter selamanya).
   /// Best-effort: kalau gagal, server tetap menandai offline lewat idle

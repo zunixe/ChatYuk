@@ -63,6 +63,13 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     }
   }
 
+  @visibleForTesting
+  void debugScheduleChatListSave(String myUid) => _scheduleChatListSave(myUid);
+
+  @visibleForTesting
+  int get debugPendingChatListSaves =>
+      _chatListSaveTimers.values.where((t) => t.isActive).length;
+
   void _scheduleChatListSave(String myUid) {
     _chatListSaveTimers[myUid]?.cancel();
     _chatListSaveTimers[myUid] = Timer(const Duration(seconds: 2), () {
@@ -274,6 +281,18 @@ mixin ChatServicePrivateChatListMx on ChatBase {
 
   void clearCachedStreams() {
     _chatReloaders.clear();
+    // Timer save 2 dtk WAJIB batal sebelum wipe cache (logout) — kalau
+    // tidak, list chat akun lama ditulis ulang ke disk setelah dihapus.
+    for (final t in _chatListSaveTimers.values) {
+      t.cancel();
+    }
+    _chatListSaveTimers.clear();
+    for (final t in _chatListReloadDebounce.values) {
+      t.cancel();
+    }
+    _chatListReloadDebounce.clear();
+    _privateChatsLast.clear();
+    _privateChatsHidden.clear();
     for (final t in _chatListEmitDebounce.values) {
       t.cancel();
     }
