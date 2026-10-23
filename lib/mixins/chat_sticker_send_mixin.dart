@@ -42,6 +42,16 @@ mixin ChatStickerSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
     );
   }
 
+  /// Gagal kirim: BLOKIR → bubble tetap centang-1 (senyap); lainnya → buang
+  /// bubble + snackbar.
+  Future<void> _failPending(MessageModel m, Object e) async {
+    if (isSilentBlock(e)) {
+      await keepBlocked(m);
+      return;
+    }
+    _dropPending(m);
+  }
+
   void _dropPending(MessageModel m) {
     if (!mounted) return;
     setState(() => outboxPending.removeWhere((x) => x.id == m.id));
@@ -73,8 +83,8 @@ mixin ChatStickerSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
       // Pengirim langsung lihat versi server tanpa unduh.
       StickerBubble.seedCache(path, png);
       await stickerDispatch(path);
-    } catch (_) {
-      _dropPending(pending);
+    } catch (e) {
+      await _failPending(pending, e);
     }
   }
 
@@ -87,8 +97,8 @@ mixin ChatStickerSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
     outboxScrollToBottom();
     try {
       await stickerDispatch(path);
-    } catch (_) {
-      _dropPending(pending);
+    } catch (e) {
+      await _failPending(pending, e);
     }
   }
 }

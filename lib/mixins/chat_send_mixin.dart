@@ -377,20 +377,19 @@ mixin ChatSendMixin<T extends StatefulWidget>
           repliedToMeta: replyMeta,
           mentions: mentions,
         );
+      } else if (isSilentBlock(e)) {
+        // BLOKIR: sengaja TANPA snackbar & bubble TETAP di layar.
+        // Penerima blokir tak boleh tahu dirinya diblokir; pengirim cukup
+        // melihat pesannya tetap centang-1 (tidak pernah jadi centang-2).
+        // Poin dikembalikan karena pesan tidak benar-benar terkirim.
+        safeUnawaited(pp.refundChatPoint('text'));
+        await keepBlocked(pending);
       } else {
         safeUnawaited(pp.refundChatPoint('text'));
         if (mounted) {
           setState(() => outboxPending.remove(pending));
           final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-          // Server menolak karena BLOKIR (trigger enforce_chat_block
-          // melempar 'blocked'); klien dulu hanya mengenali 42501/policy
-          // sehingga pesan gagal tanpa penjelasan.
-          showChatSnack(
-            context,
-            OfflineOutbox.isBlockedError(e)
-                ? s.msgBlockedByOther
-                : s.errSendFailed,
-          );
+          showChatSnack(context, s.errSendFailed);
         }
       }
     } finally {

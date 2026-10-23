@@ -27,6 +27,7 @@ import '../core/cache/message_cache.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/cache/post_photo_cache.dart';
 import '../core/cache/offline_outbox.dart';
+import '../core/chat/pending_merge.dart';
 import '../core/chat/read_receipt.dart';
 import '../core/chat/pending_confirm.dart';
 import '../core/app_foreground.dart';

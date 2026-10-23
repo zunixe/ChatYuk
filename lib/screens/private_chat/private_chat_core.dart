@@ -400,7 +400,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    onSelected: (val) {
+                    onSelected: (val) async {
                       if (val == 'search') {
                         _openSearch();
                       } else if (val == 'follow') {
@@ -439,11 +439,50 @@ mixin _PcCoreMx on _PrivateChatBase {
                           );
                         });
                       } else if (val == 'block') {
-                        chat.blockUser(myUid!, widget.otherUid);
-                        showChatSnack(
-                          context,
-                          s.snackBlocked(widget.otherName),
-                        );
+                        // WAJIB await: dulu fire-and-forget → snackbar "sudah
+                        // diblokir" muncul walau INSERT gagal (RLS/jaringan),
+                        // jadi user merasa blokir tak berfungsi.
+                        final messenger = ScaffoldMessenger.of(context);
+                        final uidMe = myUid;
+                        if (uidMe == null) return;
+                        try {
+                          await chat.blockUser(uidMe, widget.otherUid);
+                          dlog('[BLOCK] ok me=$uidMe other=${widget.otherUid}');
+                          if (!mounted) return;
+                          showChatSnackVia(
+                            messenger,
+                            context,
+                            s.snackBlocked(widget.otherName),
+                          );
+                        } catch (e) {
+                          dlog('[BLOCK] GAGAL me=$uidMe other=${widget.otherUid} err=$e');
+                          if (!mounted) return;
+                          showChatSnackVia(
+                            messenger,
+                            context,
+                            s.blockFailed(
+                              offline: OfflineOutbox.isNetworkError(e),
+                            ),
+                          );
+                        }
+                      } else if (val == 'unblock') {
+                        final messenger = ScaffoldMessenger.of(context);
+                        final uidMe = myUid;
+                        if (uidMe == null) return;
+                        try {
+                          await chat.unblockUser(uidMe, widget.otherUid);
+                          dlog('[BLOCK] unblock ok me=$uidMe other=${widget.otherUid}');
+                          if (!mounted) return;
+                          showChatSnackVia(
+                            messenger,
+                            context,
+                            s.unblockSuccess,
+                          );
+                        } catch (e) {
+                          dlog('[BLOCK] unblock GAGAL err=$e');
+                          if (!mounted) return;
+                          showChatSnackVia(messenger, context, s.errGeneric);
+                        }
                       } else if (val == 'report') {
                         _showReportDialog();
                       }
@@ -505,17 +544,19 @@ mixin _PcCoreMx on _PrivateChatBase {
                         ],
                         const PopupMenuDivider(height: 1),
                         PopupMenuItem(
-                          value: 'block',
+                          value: isBlocked ? 'unblock' : 'block',
                           child: ListTile(
                             dense: true,
                             contentPadding: EdgeInsets.zero,
-                            leading: const Icon(
-                              Icons.block_rounded,
+                            leading: Icon(
+                              isBlocked
+                                  ? Icons.lock_open_rounded
+                                  : Icons.block_rounded,
                               size: 20,
                               color: AppTheme.danger,
                             ),
                             title: Text(
-                              s.btnBlock,
+                              isBlocked ? s.btnUnblock : s.btnBlock,
                               style: const TextStyle(color: AppTheme.danger),
                             ),
                           ),
@@ -612,7 +653,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                               // stream, jadi `_deriveItems` tetap cache-hit).
                               final all = _pending.isEmpty
                                   ? msgs
-                                  : [...msgs, ..._pending];
+                                  : mergePendingChrono(msgs, _pending);
                               // Pesan baru dari lawan bicara = typing selesai.
                               // Matikan bubble via post-frame (anti setState saat build).
                               // Ini otoritatif: pulse telat dari invokasi lama yang

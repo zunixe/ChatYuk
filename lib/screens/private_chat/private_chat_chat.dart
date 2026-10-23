@@ -149,6 +149,17 @@ mixin _PcChatMx on _PrivateChatBase {
         if (_pending.isEmpty || !mounted) return;
         final mySenderIds = _pending.map((p) => p.senderId).toSet();
         var changed = false;
+        // Bubble DITOLAK BLOKIR (centang-1 permanen) TIDAK ikut dicocokkan —
+        // kalau ikut, kiriman baru sejenis setelah unblock "memakan" bubble
+        // blokir lama & bubble barunya dobel dengan versi server.
+        final live = [
+          for (final p in _pending)
+            if (!outboxBlockedIds.contains(p.id)) p,
+        ];
+        void drop(int idx) {
+          _pending.remove(live.removeAt(idx));
+          changed = true;
+        }
         // A2 (2026-10-11): SATU pass atas `msgs` (dulu 6 loop penuh terpisah).
         // Semantik SAMA — tiap jenis diklasifikasi via switch, aksi per-jenis
         // dijalankan inline. Bounded N≤100, tapi dari 6×O(N) → 1×O(N)/emit.
@@ -157,10 +168,9 @@ mixin _PcChatMx on _PrivateChatBase {
           switch (m.type) {
             case 'call':
               if (m.timestamp.isAfter(_openedAt)) {
-                final idx = _pending.indexWhere((p) => p.type == 'call');
+                final idx = live.indexWhere((p) => p.type == 'call');
                 if (idx != -1) {
-                  _pending.removeAt(idx);
-                  changed = true;
+                  drop(idx);
                 }
               }
               break;
@@ -170,15 +180,14 @@ mixin _PcChatMx on _PrivateChatBase {
               if (m.timestamp.isAfter(_openedAt) &&
                   _confirmedPhotoIds.add(m.id)) {
                 _trimConfirmed(_confirmedPhotoIds);
-                final idx = _pending.indexWhere(
+                final idx = live.indexWhere(
                   (p) =>
                       p.type == 'image' ||
                       p.type == 'view_once' ||
                       p.type == 'view_once_expired',
                 );
                 if (idx != -1) {
-                  _pending.removeAt(idx);
-                  changed = true;
+                  drop(idx);
                 }
               }
               break;
@@ -186,10 +195,9 @@ mixin _PcChatMx on _PrivateChatBase {
               if (m.timestamp.isAfter(_openedAt) &&
                   _confirmedVoiceIds.add(m.id)) {
                 _trimConfirmed(_confirmedVoiceIds);
-                final idx = _pending.indexWhere((p) => p.type == 'voice');
+                final idx = live.indexWhere((p) => p.type == 'voice');
                 if (idx != -1) {
-                  _pending.removeAt(idx);
-                  changed = true;
+                  drop(idx);
                 }
               }
               break;
@@ -199,15 +207,14 @@ mixin _PcChatMx on _PrivateChatBase {
               if (m.timestamp.isAfter(_openedAt) &&
                   _confirmedVideoIds.add(m.id)) {
                 _trimConfirmed(_confirmedVideoIds);
-                final idx = _pending.indexWhere(
+                final idx = live.indexWhere(
                   (p) =>
                       p.type == 'video' ||
                       p.type == 'video_once' ||
                       p.type == 'video_once_expired',
                 );
                 if (idx != -1) {
-                  _pending.removeAt(idx);
-                  changed = true;
+                  drop(idx);
                 }
               }
               break;
@@ -217,12 +224,11 @@ mixin _PcChatMx on _PrivateChatBase {
                   server: m,
                   openedAt: _openedAt,
                   consumedIds: _confirmedPhotoIds,
-                  pendings: _pending,
+                  pendings: live,
                 );
                 _trimConfirmed(_confirmedPhotoIds);
                 if (idx != -1) {
-                  _pending.removeAt(idx);
-                  changed = true;
+                  drop(idx);
                 }
               }
               break;
@@ -232,12 +238,11 @@ mixin _PcChatMx on _PrivateChatBase {
                   server: m,
                   openedAt: _openedAt,
                   consumedIds: _confirmedTextIds,
-                  pendings: _pending,
+                  pendings: live,
                 );
                 _trimConfirmed(_confirmedTextIds);
                 if (idx != -1) {
-                  _pending.removeAt(idx);
-                  changed = true;
+                  drop(idx);
                 }
               }
               break;
@@ -247,12 +252,11 @@ mixin _PcChatMx on _PrivateChatBase {
                   server: m,
                   openedAt: _openedAt,
                   consumedIds: _confirmedTextIds,
-                  pendings: _pending,
+                  pendings: live,
                 );
                 _trimConfirmed(_confirmedTextIds);
                 if (idx != -1) {
-                  _pending.removeAt(idx);
-                  changed = true;
+                  drop(idx);
                 }
               }
               break;
@@ -262,12 +266,11 @@ mixin _PcChatMx on _PrivateChatBase {
                   server: m,
                   openedAt: _openedAt,
                   consumedIds: _confirmedVideoIds,
-                  pendings: _pending,
+                  pendings: live,
                 );
                 _trimConfirmed(_confirmedVideoIds);
                 if (idx != -1) {
-                  _pending.removeAt(idx);
-                  changed = true;
+                  drop(idx);
                 }
               }
               break;
@@ -279,13 +282,12 @@ mixin _PcChatMx on _PrivateChatBase {
                   server: m,
                   openedAt: _openedAt,
                   consumedIds: _confirmedTextIds,
-                  pendings: _pending,
+                  pendings: live,
                 );
                 _trimConfirmed(_confirmedTextIds);
                 if (idx != -1) {
-                  _queuedIds.remove(_pending[idx].id);
-                  _pending.removeAt(idx);
-                  changed = true;
+                  _queuedIds.remove(live[idx].id);
+                  drop(idx);
                 }
               }
           }

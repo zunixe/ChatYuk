@@ -617,6 +617,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       return;
     }
 
+    // Path storage hasil upload — dipakai bubble BLOKIR (base64 video
+    // terlalu besar untuk disimpan di antrean lokal).
+    String? uploadedVideoPath;
     try {
       final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadChatVideo(
         chatId: photoUploadChatId,
@@ -635,6 +638,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         }
         return;
       }
+      uploadedVideoPath = path;
       // "Sekali lihat" video ditandai lewat TYPE (video_once) — bukan
       // durationMs yang sudah dipakai untuk panjang video. Nilai `isOnce`
       // ditangkap pemanggil SEBELUM preview dibersihkan.
@@ -696,6 +700,11 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
           repliedToText: reply?.text,
           repliedToSenderName: reply?.senderName,
         );
+      } else if (isSilentBlock(e)) {
+        // BLOKIR: TANPA snackbar & bubble video TETAP (centang-1).
+        // Penerima blokir tak boleh tahu; pengirim cukup lihat centang-1.
+        safeUnawaited(pp.refundChatPoint('image'));
+        await keepBlocked(pendingVideo, imagePayload: uploadedVideoPath ?? '');
       } else {
         safeUnawaited(pp.refundChatPoint('image'));
         if (mounted) {
@@ -940,6 +949,11 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
           repliedToText: reply?.text,
           repliedToSenderName: reply?.senderName,
         );
+      } else if (isSilentBlock(e)) {
+        // BLOKIR: TANPA snackbar & bubble foto TETAP (centang-1).
+        // Penerima blokir tak boleh tahu; pengirim cukup lihat centang-1.
+        safeUnawaited(pp.refundChatPoint(effKind));
+        await keepBlocked(pendingPhoto);
       } else {
         safeUnawaited(pp.refundChatPoint(effKind));
         if (mounted) {

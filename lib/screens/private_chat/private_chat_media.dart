@@ -467,6 +467,9 @@ mixin _PcMediaMx on _PrivateChatBase {
           imagePayload: storagePath,
           durationMs: recordedMs,
         );
+      } else if (isSilentBlock(e)) {
+        // BLOKIR: bubble voice tetap centang-1, tanpa snackbar (senyap).
+        await keepBlocked(optimistic);
       } else if (mounted) {
         setState(() => _pending.remove(optimistic));
         showChatSnack(

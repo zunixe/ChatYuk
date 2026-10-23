@@ -114,7 +114,29 @@ mixin _PcBuildMx on _PrivateChatBase {
             repliedToSenderName: reply?.senderName,
             repliedToMeta: sendReplyMeta(reply),
           );
-    } catch (_) {
+    } catch (e) {
+      // BLOKIR: kartu lokasi tetap tampil centang-1, tanpa snackbar (senyap).
+      if (isSilentBlock(e)) {
+        if (mounted) setState(() => _pendingLocation = null);
+        await keepBlocked(
+          MessageModel(
+            id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+            senderId: uid,
+            senderName: profile.nickname,
+            senderGender: profile.gender,
+            isRegistered: profile.isRegistered,
+            text: payload.encode(),
+            type: 'location',
+            imageData: '',
+            timestamp: DateTime.now(),
+            repliedToId: reply?.id,
+            repliedToText: reply?.text,
+            repliedToSenderName: reply?.senderName,
+            repliedToMeta: sendReplyMeta(reply),
+          ),
+        );
+        return;
+      }
       if (!mounted) return;
       showChatSnack(
         context,
@@ -170,34 +192,11 @@ mixin _PcBuildMx on _PrivateChatBase {
   set sendPendingPhotoBase64(String? v) => _pendingPhotoBase64 = v;
   @override
   Future<bool> sendPreCheck() async {
-    final chat = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatRiverpod.chatProvider.notifier);
-    // Arah 1: SAYA memblokir dia (cache lokal, tanpa network).
-    if (chat.isBlocked(widget.otherUid)) {
-      if (mounted) {
-        final s = ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(localeProvider).s;
-        showChatSnack(context, s.msgBlocked);
-      }
-      return false;
-    }
-    // Arah 2: DIA memblokir saya. RLS `blocks` tidak mengizinkan klien
-    // membacanya → perlu RPC. Tanpa cek ini, pesan tampil optimistis lalu
-    // ditolak trigger server dan hilang tanpa penjelasan.
-    final st = await chat.chatBlockState(widget.otherUid);
-    if (!mounted) return st.canSend;
-    if (!st.canSend) {
-      final s = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(localeProvider).s;
-      showChatSnack(context, s.msgBlockedByOther);
-      return false;
-    }
+    // BLOKIR TIDAK DICek DI SINI (keputusan produk 2026-10-23):
+    // penerima blokir tidak boleh tahu dirinya diblokir. Pesan tetap tampil
+    // optimistis (centang-1) lalu DITOLAK trigger server
+    // `enforce_chat_block` → centang tetap 1 (tidak terkirim), tanpa snackbar.
+    // Lihat penanganan `OfflineOutbox.isBlockedError` di ChatSendMixin.
     return true;
   }
 

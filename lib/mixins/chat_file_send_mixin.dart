@@ -136,8 +136,14 @@ mixin ChatFileSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
       );
       photoOnSent('file');
       outboxScrollToBottom();
-    } catch (_) {
+    } catch (e) {
       unawaited(pp.refundChatPoint('image'));
+      // BLOKIR: kartu file tetap centang-1 (path lokal masih diingat),
+      // tanpa snackbar (senyap).
+      if (isSilentBlock(e)) {
+        await keepBlocked(pending);
+        return;
+      }
       dropPending();
       fail();
     }

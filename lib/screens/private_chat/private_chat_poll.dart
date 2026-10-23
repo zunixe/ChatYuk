@@ -74,7 +74,12 @@ mixin _PcPollMx on _PrivateChatBase {
       repliedToMeta: sendReplyMeta(reply),
       );
       photoOnSent('poll');
-    } catch (_) {
+    } catch (e) {
+      // BLOKIR: bubble tetap centang-1, tanpa snackbar (senyap).
+      if (isSilentBlock(e)) {
+        await keepBlocked(pending);
+        return;
+      }
       if (!mounted) return;
       setState(() => _pending.removeWhere((m) => m.id == pending.id));
       showChatSnack(context, s.errSendPoll);
