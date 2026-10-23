@@ -33,6 +33,13 @@ class OutboxEntry {
   /// Poster video (base64 JPEG, opsional) — disimpan agar kirim ulang dari
   /// outbox tetap menyertakan thumbnail preview penerima.
   final String videoPosterB64;
+  /// Ditolak server karena BLOKIR. Bubble tetap tampil (centang-1) lintas
+  /// buka-tutup chat, tapi TIDAK PERNAH di-flush — termasuk setelah blokir
+  /// dibuka (pesan saat diblokir memang tidak pernah sampai, ala WhatsApp).
+  final bool blocked;
+  /// Payload poll/kontak (JSON) — supaya bubble tampil lagi setelah dimuat.
+  final Map<String, dynamic>? poll;
+  final Map<String, dynamic>? contact;
 
   const OutboxEntry({
     required this.pendingId,
@@ -57,9 +64,12 @@ class OutboxEntry {
     this.pointsDeducted = false,
     this.pointsKind = 'text',
     this.videoPosterB64 = '',
+    this.blocked = false,
+    this.poll,
+    this.contact,
   });
 
-  OutboxEntry copyWith({bool? pointsDeducted}) => OutboxEntry(
+  OutboxEntry copyWith({bool? pointsDeducted, bool? blocked}) => OutboxEntry(
         pendingId: pendingId,
         kind: kind,
         chatId: chatId,
@@ -82,6 +92,9 @@ class OutboxEntry {
         pointsDeducted: pointsDeducted ?? this.pointsDeducted,
         pointsKind: pointsKind,
         videoPosterB64: videoPosterB64,
+        blocked: blocked ?? this.blocked,
+        poll: poll,
+        contact: contact,
       );
 
   Map<String, dynamic> toMap() => {
@@ -107,6 +120,9 @@ class OutboxEntry {
         'pointsDeducted': pointsDeducted,
         'pointsKind': pointsKind,
         'videoPosterB64': videoPosterB64,
+        if (blocked) 'blocked': true,
+        if (poll != null) 'poll': poll,
+        if (contact != null) 'contact': contact,
       };
 
   factory OutboxEntry.fromMap(Map<String, dynamic> m) => OutboxEntry(
@@ -134,6 +150,11 @@ class OutboxEntry {
         pointsDeducted: m['pointsDeducted'] == true,
         pointsKind: '${m['pointsKind'] ?? 'text'}',
         videoPosterB64: '${m['videoPosterB64'] ?? ''}',
+        blocked: m['blocked'] == true,
+        poll: m['poll'] is Map ? Map<String, dynamic>.from(m['poll'] as Map) : null,
+        contact: m['contact'] is Map
+            ? Map<String, dynamic>.from(m['contact'] as Map)
+            : null,
       );
 }
 
@@ -217,9 +238,25 @@ class OfflineOutbox {
     _items.removeWhere((e) => e.pendingId == entry.pendingId);
     _items.add(entry);
     _items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    _trimToMax();
+    await _persist();
+  }
+
+  /// Batas [_maxItems]: buang entri BLOKIR tertua dulu — jangan sampai
+  /// bubble blokir menggusur pesan offline yang masih menunggu terkirim.
+  void _trimToMax() {
     while (_items.length > _maxItems) {
-      _items.removeAt(0);
+      final i = _items.indexWhere((e) => e.blocked);
+      _items.removeAt(i >= 0 ? i : 0);
     }
+  }
+
+  /// Tandai entri ditolak karena BLOKIR (tetap tampil, tak di-flush lagi).
+  Future<void> markBlocked(String pendingId) async {
+    await load();
+    final i = _items.indexWhere((e) => e.pendingId == pendingId);
+    if (i < 0 || _items[i].blocked) return;
+    _items[i] = _items[i].copyWith(blocked: true);
     await _persist();
   }
 

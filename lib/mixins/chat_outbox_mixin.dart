@@ -4,12 +4,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/chat_contact.dart';
+import '../models/chat_poll.dart';
 import '../models/message_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../providers/riverpod/storage_provider.dart';
+import '../utils.dart' show dlog;
 import '../utils/mention.dart';
 import '../widgets/chat_info_snack.dart';
 import '../widgets/message/image_decode_core.dart' show warmPhotoCacheForPath;
@@ -46,6 +49,17 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
   Future<void> outboxSendEntry(OutboxEntry e, String imageData);
   void outboxOnSent();
 
+  /// Id bubble yang DITOLAK karena blokir (centang-1 permanen). Pencocokan
+  /// konfirmasi server WAJIB melewati id ini — kalau tidak, kiriman baru
+  /// sejenis setelah unblock "memakan" bubble blokir lama.
+  final Set<String> outboxBlockedIds = {};
+
+  /// Ditolak karena BLOKIR → tangani senyap (bubble tetap centang-1). Hanya
+  /// chat PRIVATE: di room, 42501/RLS berarti bukan anggota/dibisukan —
+  /// user WAJIB diberi tahu, jangan disenyapkan.
+  bool isSilentBlock(Object e) =>
+      outboxKind == 'private' && OfflineOutbox.isBlockedError(e);
+
   /// Muat sisa antrean sesi lalu untuk chat ini — bubble langsung tampil lagi.
   Future<void> loadQueuedForChat() async {
     await OfflineOutbox.instance.load();
@@ -55,8 +69,9 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
     if (entries.isEmpty) return;
     setState(() {
       for (final e in entries) {
+        if (e.blocked) outboxBlockedIds.add(e.pendingId);
         if (outboxPending.any((m) => m.id == e.pendingId)) {
-          outboxQueuedIds.add(e.pendingId);
+          if (!e.blocked) outboxQueuedIds.add(e.pendingId);
           continue;
         }
         outboxPending.add(
@@ -79,9 +94,11 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
             repliedToMeta: e.repliedToMeta,
             isForwarded: e.isForwarded,
             mentions: e.mentions,
+            poll: ChatPoll.tryParse(e.poll),
+            contact: ChatContact.tryParse(e.contact),
           ),
         );
-        outboxQueuedIds.add(e.pendingId);
+        if (!e.blocked) outboxQueuedIds.add(e.pendingId);
       }
     });
     outboxScrollToBottom();
@@ -135,11 +152,62 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
     setState(() => outboxQueuedIds.add(pending.id));
   }
 
+  /// Pesan DITOLAK server karena BLOKIR: bubble TETAP (centang-1), tanpa
+  /// snackbar (blokir senyap), dan disimpan lokal supaya tidak hilang saat
+  /// chat ditutup-buka. Tidak pernah dikirim ulang. [imagePayload] = data
+  /// yang dipakai bubble untuk tampil lagi (base64/path lokal/path storage).
+  Future<void> keepBlocked(
+    MessageModel pending, {
+    String? imagePayload,
+    int? durationMs,
+  }) async {
+    dlog('[BLOCK] kirim ditolak (blokir) id=${pending.id} type=${pending.type}');
+    if (mounted) {
+      setState(() {
+        outboxBlockedIds.add(pending.id);
+        outboxQueuedIds.remove(pending.id);
+        if (!outboxPending.any((m) => m.id == pending.id)) {
+          outboxPending.add(pending);
+        }
+      });
+    } else {
+      outboxBlockedIds.add(pending.id);
+    }
+    await OfflineOutbox.instance.enqueue(
+      OutboxEntry(
+        pendingId: pending.id,
+        kind: outboxKind,
+        chatId: outboxChatId,
+        senderId: pending.senderId,
+        senderName: pending.senderName,
+        senderGender: pending.senderGender,
+        text: pending.text,
+        type: pending.type,
+        imagePayload: imagePayload ?? pending.imageData,
+        durationMs: durationMs ?? pending.durationMs,
+        repliedToId: pending.repliedToId,
+        repliedToText: pending.repliedToText,
+        repliedToSenderName: pending.repliedToSenderName,
+        repliedToMeta: pending.repliedToMeta,
+        isForwarded: pending.isForwarded,
+        mentions: pending.mentions,
+        createdAt: pending.timestamp,
+        pointsKind: 'none',
+        blocked: true,
+        poll: pending.poll?.toJson(),
+        contact: pending.contact?.toJson(),
+      ),
+    );
+  }
+
   /// Kirim semua antrean chat ini (dipanggil saat koneksi pulih).
   Future<void> flushOutbox() async {
     if (outboxIsFlushing || !mounted) return;
     if (!outboxIsOnline) return;
-    final entries = OfflineOutbox.instance.forChat(outboxKind, outboxChatId);
+    final entries = OfflineOutbox.instance
+        .forChat(outboxKind, outboxChatId)
+        .where((e) => !e.blocked)
+        .toList();
     if (entries.isEmpty) return;
     outboxIsFlushing = true;
     try {
@@ -218,6 +286,18 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
           if (OfflineOutbox.isNetworkError(err)) break;
           if (e.pointsDeducted && e.pointsKind != 'none') {
             safeUnawaited(pp.refundChatPoint(e.pointsKind));
+          }
+          if (isSilentBlock(err)) {
+            // Ditolak BLOKIR saat flush: bubble tetap (centang-1), entri
+            // ditandai agar tidak dicoba lagi. Tanpa snackbar (senyap).
+            dlog('[BLOCK] flush ditolak (blokir) id=${e.pendingId}');
+            await OfflineOutbox.instance.markBlocked(e.pendingId);
+            if (!mounted) break;
+            setState(() {
+              outboxQueuedIds.remove(e.pendingId);
+              outboxBlockedIds.add(e.pendingId);
+            });
+            continue;
           }
           await OfflineOutbox.instance.remove(e.pendingId);
           if (!mounted) break;

@@ -293,4 +293,91 @@ void main() {
       expect(s.pendingList, isEmpty);
     });
   });
+
+  // BLOKIR SENYAP (2026-10-23): pesan yang ditolak karena blokir TETAP tampil
+  // centang-1 lintas buka-tutup chat & TIDAK PERNAH dikirim ulang.
+  group('ChatOutboxMixin — blokir (I/O nyata)', () {
+    final blockedErr = Exception(
+      'PostgrestException(message: blocked, code: P0001, details: null)',
+    );
+    OutboxEntry entry(String id) => OutboxEntry(
+          pendingId: id,
+          kind: 'private',
+          chatId: 'chat_1',
+          senderId: 'u-me',
+          senderName: 'Me',
+          senderGender: 'male',
+          text: '[TEST] diblokir',
+          createdAt: DateTime.now(),
+          pointsKind: 'text',
+        );
+
+    testWidgets('keepBlocked: bubble tetap, bukan antrean kirim, tersimpan',
+        (tester) async {
+      final s = await pumpOutbox(tester);
+      final m = pendingMsg('p-blk');
+      s.pendingList.add(m);
+      await tester.runAsync(() => s.keepBlocked(m));
+      await tester.pump();
+      expect(s.pendingList.map((e) => e.id), ['p-blk']);
+      expect(s.queued, isNot(contains('p-blk')));
+      expect(s.outboxBlockedIds, contains('p-blk'));
+      final saved = OfflineOutbox.instance.forChat('private', 'chat_1').single;
+      expect(saved.blocked, isTrue);
+      expect(saved.pointsKind, 'none', reason: 'tak pernah memotong poin');
+    });
+
+    testWidgets('flush MELEWATI entri blokir (tidak dikirim ulang)',
+        (tester) async {
+      final points = TestPoints();
+      final s = await pumpOutbox(tester, points: points);
+      await tester.runAsync(() async {
+        await OfflineOutbox.instance.enqueue(
+          entry('p-old').copyWith(blocked: true),
+        );
+        await s.flushOutbox();
+      });
+      expect(s.sentOrder, isEmpty);
+      expect(points.deductCalls, 0);
+      expect(OfflineOutbox.instance.forChat('private', 'chat_1'), hasLength(1));
+    });
+
+    testWidgets('flush ditolak BLOKIR → ditandai, bubble tetap, poin refund',
+        (tester) async {
+      final points = TestPoints();
+      final s = await pumpOutbox(tester, points: points);
+      s.sendError = blockedErr;
+      s.pendingList.add(pendingMsg('p-q'));
+      s.queued.add('p-q');
+      await tester.runAsync(() async {
+        await OfflineOutbox.instance.enqueue(entry('p-q'));
+        await s.flushOutbox();
+      });
+      await tester.pump();
+      expect(points.refundCalls, 1);
+      expect(s.pendingList.map((e) => e.id), ['p-q'],
+          reason: 'bubble TIDAK dibuang (blokir senyap)');
+      expect(s.queued, isNot(contains('p-q')));
+      expect(s.outboxBlockedIds, contains('p-q'));
+      expect(OfflineOutbox.instance.forChat('private', 'chat_1').single.blocked,
+          isTrue);
+    });
+
+    testWidgets('buka ulang chat → bubble blokir muncul lagi (centang-1)',
+        (tester) async {
+      final s = await pumpOutbox(tester);
+      await tester.runAsync(() async {
+        await OfflineOutbox.instance.enqueue(
+          entry('p-back').copyWith(blocked: true),
+        );
+        await s.loadQueuedForChat();
+      });
+      await tester.pump();
+      expect(s.pendingList.map((e) => e.id), ['p-back']);
+      expect(s.queued, isNot(contains('p-back')),
+          reason: 'bukan "menunggu koneksi" — memang tak akan terkirim');
+      expect(s.outboxBlockedIds, contains('p-back'));
+      expect(s.sentOrder, isEmpty);
+    });
+  });
 }
