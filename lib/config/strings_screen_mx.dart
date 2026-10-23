@@ -650,6 +650,20 @@ mixin SScreenMx {
   String get reportBtn => isId ? 'Kirim Laporan' : 'Submit Report';
   String get reportSuccess => isId ? 'Laporan terkirim' : 'Report submitted';
   String get blockSuccess => isId ? 'Pengguna diblokir' : 'User blocked';
+  String get blockConfirmTitle => isId ? 'Blokir pengguna?' : 'Block this user?';
+  String get blockConfirmBody => isId
+      ? '{name} tidak akan bisa mengirim pesan atau melihat profilmu. '
+          'Kamu bisa membuka blokir kapan saja.'
+      : "{name} won't be able to message you or see your profile. "
+          'You can unblock them anytime.';
+  /// Gagal blokir: [offline] = tidak ada koneksi (bukan ditolak server).
+  String blockFailed({required bool offline}) => offline
+      ? (isId
+          ? 'Tidak ada koneksi internet. Coba blokir lagi setelah online.'
+          : "No internet connection. Try blocking again once you're online.")
+      : (isId
+          ? 'Gagal memblokir pengguna. Coba lagi nanti.'
+          : "Couldn't block this user. Please try again later.");
   String get unblockSuccess => isId ? 'Blokir dibuka' : 'User unblocked';
   String get btnDeleteChat => isId ? 'Hapus Chat' : 'Delete Chat';
   String get deleteChatSuccess => isId ? 'Chat dihapus' : 'Chat deleted';

@@ -794,11 +794,14 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     }
   }
 
+  /// Insert ignore-duplicates (`ON CONFLICT DO NOTHING`). Dulu upsert biasa
+  /// (`DO UPDATE`) → butuh policy UPDATE yang TIDAK ada di `blocks` → blokir
+  /// ulang user yang barisnya sudah ada ditolak RLS.
   Future<void> blockUser(String myUid, String blockedUid) async {
     await _sb.from('blocks').upsert({
       'blocker_id': myUid,
       'blocked_id': blockedUid,
-    }, onConflict: 'blocker_id,blocked_id');
+    }, onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true);
   }
 
   Future<void> unblockUser(String myUid, String blockedUid) async {

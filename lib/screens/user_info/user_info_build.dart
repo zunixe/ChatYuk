@@ -105,29 +105,29 @@ mixin _UiBuildMx on _UserInfoBase {  Widget build(BuildContext context) {
   /// Tanpa foto sama sekali → lingkaran inisial (tidak bisa digeser).
   /// Blokir user ini (konfirmasi dulu, gaya dialog desain baru).
   Future<void> _blockUser(BuildContext context) async {
+    final s = ref.read(localeProvider).s;
     final ok = await confirmPUnfriend(
       context,
       name: widget.fallbackName,
-      title: 'Blokir pengguna?',
-      body:
-          '{name} tidak akan bisa mengirim pesan atau melihat profilmu. '
-          'Kamu bisa membuka blokir kapan saja.',
-      confirmLabel: 'Blokir',
+      title: s.blockConfirmTitle,
+      body: s.blockConfirmBody,
+      confirmLabel: s.btnBlock,
     );
     if (!ok || !mounted) return;
-    final auth = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(authProvider.notifier);
-    final myUid = auth.uid;
+    final myUid = ref.read(authProvider.notifier).uid;
     if (myUid == null) return;
     try {
-      await ProviderScope.containerOf(context, listen: false)
-          .read(chatProvider.notifier)
-          .blockUser(myUid, widget.userId);
-      if (mounted) showProfileToast(context, 'Pengguna diblokir');
-    } catch (_) {
-      if (mounted) showProfileToast(context, 'Gagal memblokir');
+      await ref.read(chatProvider.notifier).blockUser(myUid, widget.userId);
+      dlog('[BLOCK] ok (profil) me=$myUid other=${widget.userId}');
+      if (mounted) showProfileToast(context, s.blockSuccess);
+    } catch (e) {
+      dlog('[BLOCK] GAGAL (profil) me=$myUid other=${widget.userId} err=$e');
+      if (mounted) {
+        showProfileToast(
+          context,
+          s.blockFailed(offline: ChatNotifier.isNetworkError(e)),
+        );
+      }
     }
   }
 

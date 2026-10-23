@@ -305,6 +305,10 @@ class ChatNotifier extends Notifier<ChatState> {
   }
 
   // Block / Report
+  /// Error gangguan jaringan (offline/DNS/timeout), bukan ditolak server —
+  /// dipakai UI untuk memilih pesan gagal yang tepat.
+  static bool isNetworkError(Object e) => OfflineOutbox.isNetworkError(e);
+
   Future<void> blockUser(String myUid, String otherUid) async {
     await _service.blockUser(myUid, otherUid);
     await loadBlockedUids(myUid);

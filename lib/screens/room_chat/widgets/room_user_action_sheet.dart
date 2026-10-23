@@ -7,6 +7,7 @@ import '../../../models/message_model.dart';
 import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/chat_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
+import '../../../utils.dart' show dlog;
 import '../../../widgets/chat_info_snack.dart';
 import '../../../widgets/person_avatar.dart';
 import '../../../widgets/social_counts_line.dart';
@@ -169,12 +170,25 @@ void showRoomUserActionSheet(
               style: const TextStyle(color: AppTheme.danger),
             ),
             onTap: () async {
+              final myUid = auth.uid;
+              final chat = ProviderScope.containerOf(context, listen: false)
+                  .read(chatProvider.notifier);
               Navigator.of(context).pop();
-              await ProviderScope.containerOf(context, listen: false)
-                  .read(chatProvider.notifier)
-                  .blockUser(auth.uid!, msg.senderId);
-              if (context.mounted) {
-                showChatSnack(context, s.blockSuccess);
+              if (myUid == null) return;
+              // Dulu tanpa try/catch → gagal (offline/RLS) jadi exception
+              // tak tertangani & user tak diberi tahu.
+              try {
+                await chat.blockUser(myUid, msg.senderId);
+                dlog('[BLOCK] ok (room) me=$myUid other=${msg.senderId}');
+                if (context.mounted) showChatSnack(context, s.blockSuccess);
+              } catch (e) {
+                dlog('[BLOCK] GAGAL (room) me=$myUid other=${msg.senderId} err=$e');
+                if (context.mounted) {
+                  showChatSnack(
+                    context,
+                    s.blockFailed(offline: ChatNotifier.isNetworkError(e)),
+                  );
+                }
               }
             },
           ),
