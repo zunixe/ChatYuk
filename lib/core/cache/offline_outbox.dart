@@ -240,6 +240,21 @@ class OfflineOutbox {
     await _persist();
   }
 
+  /// True bila kegagalan kirim disebabkan BLOKIR (server menolak).
+  ///
+  /// Server: trigger `enforce_chat_block` melempar
+  /// `raise exception 'blocked' using errcode = 'P0001'`.
+  /// Dulu klien hanya mengenali `42501`/`policy`/`insufficient_privilege`
+  /// sehingga penolakan blokir jatuh ke pesan generik ("gagal kirim") dan
+  /// user tidak tahu ia diblokir.
+  static bool isBlockedError(Object e) {
+    final msg = e.toString().toLowerCase();
+    return msg.contains('blocked') ||
+        msg.contains('42501') ||
+        msg.contains('insufficient_privilege') ||
+        msg.contains('row-level security');
+  }
+
   /// True bila error terlihat seperti gangguan jaringan (bukan RLS/blokir).
   static bool isNetworkError(Object e) {
     final msg = e.toString().toLowerCase();

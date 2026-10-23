@@ -155,4 +155,32 @@ void main() {
       }
     });
   });
+
+  group('OutboxEntry.isBlockedError', () {
+    // Regresi 2026-10-22: server menolak kirim ke orang yang memblokir kita
+    // dengan `raise exception 'blocked' using errcode='P0001'` (trigger
+    // enforce_chat_block). Klien dulu hanya mengenali 42501/policy →
+    // penolakan blokir tampil sebagai "gagal kirim" generik.
+    test('pesan server trigger blokir dikenali', () {
+      for (final msg in [
+        Exception('blocked'),
+        Exception('PostgrestException(message: blocked, code: P0001)'),
+        Exception('42501 permission denied'),
+        Exception('insufficient_privilege'),
+        Exception('new row violates row-level security policy'),
+      ]) {
+        expect(OfflineOutbox.isBlockedError(msg), isTrue, reason: '$msg');
+      }
+    });
+
+    test('error jaringan / lain TIDAK dianggap blokir', () {
+      for (final msg in [
+        Exception('SocketException: failed host lookup'),
+        Exception('duplicate key value violates unique constraint'),
+        Exception('JWT expired'),
+      ]) {
+        expect(OfflineOutbox.isBlockedError(msg), isFalse, reason: '$msg');
+      }
+    });
+  });
 }

@@ -838,6 +838,37 @@ mixin ChatServicePrivateChatListMx on ChatBase {
         .eq('blocker_id', myUid);
     return res.map((r) => '${r['blocked_id']}').toList();
   }
+
+  /// Status blokir DUA ARAH dengan satu lawan bicara.
+  ///
+  /// RLS `blocks` hanya mengizinkan SELECT baris milik sendiri, jadi klien
+  /// TIDAK bisa tahu bila dirinya diblokir orang lain → dulu user mengetik,
+  /// bubble tampil optimistis, lalu INSERT ditolak trigger
+  /// (`enforce_chat_block`, 'blocked'/P0001) dan pesan hilang tanpa sebab.
+  /// RPC `chat_block_state` hanya mengembalikan boolean (tanpa identitas),
+  /// jadi privasi tetap: kita tahu "tidak bisa kirim", bukan "siapa memblokir".
+  Future<({bool iBlockedOther, bool otherBlockedMe, bool canSend})>
+  getChatBlockState(String otherUid) async {
+    try {
+      final res = await _sb.rpc(
+        'chat_block_state',
+        params: {'p_other': otherUid},
+      );
+      final m = res is Map ? Map<String, dynamic>.from(res) : const {};
+      final iBlocked = m['i_blocked_other'] == true;
+      final otherBlocked = m['other_blocked_me'] == true;
+      return (
+        iBlockedOther: iBlocked,
+        otherBlockedMe: otherBlocked,
+        canSend: m['can_send'] == true && !iBlocked && !otherBlocked,
+      );
+    } catch (e) {
+      // Gagal RPC (offline dsb) → jangan blokir user dari mengirim; server
+      // tetap penjaga terakhir lewat trigger.
+      dlog('[Chat] getChatBlockState error: $e');
+      return (iBlockedOther: false, otherBlockedMe: false, canSend: true);
+    }
+  }
 }
 
 // ── Throttle markAsRead: GLOBAL (lintas instance ChatService) ──

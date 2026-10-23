@@ -1,3 +1,29 @@
+## 2026-10-22 (lanjutan 2) — Status blokir dua arah untuk klien
+
+**Masalah:** trigger `enforce_chat_block` sudah menolak INSERT dua arah, TAPI
+klien tidak bisa tahu dirinya diblokir: RLS `blocks` hanya mengizinkan SELECT
+baris milik sendiri (`auth.uid() = blocker_id`) — benar untuk privasi, tapi
+akibatnya user mengetik → bubble tampil optimistis → INSERT ditolak
+(`blocked`, P0001) → pesan hilang tanpa penjelasan. Klien juga hanya mengenali
+`42501`/`policy`, jadi penolakan blokir tampil sebagai "gagal kirim" generik.
+
+**Perbaikan:**
+1. Migrasi `20261022150000_chat_block_state.sql` — RPC `chat_block_state(p_other)`
+   mengembalikan `{i_blocked_other, other_blocked_me, can_send}` (boolean saja,
+   TANPA identitas → privasi tetap: kita tahu "tidak bisa kirim", bukan "siapa
+   memblokir"). `security definer` read-only; EXECUTE hanya authenticated.
+2. Klien: `ChatService.getChatBlockState()` + `chatProvider.chatBlockState()`;
+   `sendPreCheck()` sekarang memeriksa DUA arah → composer menolak kirim dengan
+   pesan `msgBlockedByOther` sebelum bubble optimistis dibuat.
+3. `OfflineOutbox.isBlockedError()` mengenali `blocked`/`42501`/
+   `insufficient_privilege`/RLS → snack yang benar bila penolakan tetap terjadi.
+4. pgTAP `security_guards_test.sql` +2 assert (total 10/10) dan unit test
+   `isBlockedError` (2 kasus positif, 3 negatif).
+
+**Verifikasi live (ROLLBACK):** pemblokir ditolak (`blocked`), yang diblokir
+ditolak (`blocked`); `chat_block_state` dari sisi B →
+`{can_send:false, i_blocked_other:false, other_blocked_me:true}`.
+
 ## 2026-10-22 (lanjutan) — Tabrakan timestamp diperbaiki + blokir chat ditegakkan
 
 ### Anomali yang ditemukan & ditutup

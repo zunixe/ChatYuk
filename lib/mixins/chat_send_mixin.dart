@@ -382,13 +382,14 @@ mixin ChatSendMixin<T extends StatefulWidget>
         if (mounted) {
           setState(() => outboxPending.remove(pending));
           final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-          final blockedByOther =
-              e.toString().contains('42501') ||
-              e.toString().toLowerCase().contains('insufficient_privilege') ||
-              e.toString().toLowerCase().contains('policy');
+          // Server menolak karena BLOKIR (trigger enforce_chat_block
+          // melempar 'blocked'); klien dulu hanya mengenali 42501/policy
+          // sehingga pesan gagal tanpa penjelasan.
           showChatSnack(
             context,
-            blockedByOther ? s.msgBlockedByOther : s.errSendFailed,
+            OfflineOutbox.isBlockedError(e)
+                ? s.msgBlockedByOther
+                : s.errSendFailed,
           );
         }
       }

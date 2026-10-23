@@ -170,10 +170,12 @@ mixin _PcBuildMx on _PrivateChatBase {
   set sendPendingPhotoBase64(String? v) => _pendingPhotoBase64 = v;
   @override
   Future<bool> sendPreCheck() async {
-    if (ProviderScope.containerOf(
+    final chat = ProviderScope.containerOf(
       context,
       listen: false,
-    ).read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid)) {
+    ).read(chatRiverpod.chatProvider.notifier);
+    // Arah 1: SAYA memblokir dia (cache lokal, tanpa network).
+    if (chat.isBlocked(widget.otherUid)) {
       if (mounted) {
         final s = ProviderScope.containerOf(
           context,
@@ -181,6 +183,19 @@ mixin _PcBuildMx on _PrivateChatBase {
         ).read(localeProvider).s;
         showChatSnack(context, s.msgBlocked);
       }
+      return false;
+    }
+    // Arah 2: DIA memblokir saya. RLS `blocks` tidak mengizinkan klien
+    // membacanya → perlu RPC. Tanpa cek ini, pesan tampil optimistis lalu
+    // ditolak trigger server dan hilang tanpa penjelasan.
+    final st = await chat.chatBlockState(widget.otherUid);
+    if (!mounted) return st.canSend;
+    if (!st.canSend) {
+      final s = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(localeProvider).s;
+      showChatSnack(context, s.msgBlockedByOther);
       return false;
     }
     return true;

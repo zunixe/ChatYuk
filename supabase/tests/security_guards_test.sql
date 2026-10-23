@@ -80,5 +80,23 @@ select supabase_tests.check('trigger enforce_chat_block_trg terpasang',
       and t.tgname = 'enforce_chat_block_trg' and not t.tgisinternal
   ));
 
+-- ── 5. RPC chat_block_state: dua arah, tanpa membocorkan identitas ─────────
+select supabase_tests.check('fungsi chat_block_state ada & hanya authenticated',
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'chat_block_state'
+      and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+      and not has_function_privilege('anon', p.oid, 'EXECUTE')
+  ));
+
+select supabase_tests.check('chat_block_state mengembalikan 3 boolean (tanpa identitas)',
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'chat_block_state'
+      and pg_get_functiondef(p.oid) like '%i_blocked_other%'
+      and pg_get_functiondef(p.oid) like '%other_blocked_me%'
+      and pg_get_functiondef(p.oid) like '%can_send%'
+  ));
+
 select supabase_tests.report() as result;
 rollback;

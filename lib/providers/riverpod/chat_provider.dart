@@ -383,6 +383,12 @@ class ChatNotifier extends Notifier<ChatState> {
       ChatService.effectiveStatusOf(raw, lastSeen);
   bool isBlocked(String uid) => _blockedUids.contains(uid);
 
+  /// Status blokir DUA ARAH (saya↔dia). Lihat
+  /// `ChatService.getChatBlockState` — RLS `blocks` membuat klien tak bisa
+  /// tahu bila dirinya diblokir, sehingga perlu RPC.
+  Future<({bool iBlockedOther, bool otherBlockedMe, bool canSend})>
+  chatBlockState(String otherUid) => _service.getChatBlockState(otherUid);
+
   /// Bersihkan semua data chat akun lama (logout). Urutan penting: timer
   /// save & antrean memori dibuang DULU, baru wipe disk — kalau terbalik,
   /// timer/flush yang tertunda menulis ulang data akun lama.
