@@ -2,6 +2,11 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-24 — refund_chat_point idempoten (SEC-02)
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261024100000_refund_chat_point_idempotent.sql`.
+- **Verifikasi:** `scripts/run_sql_tests.sh refund_chat_point_test.sql` 7/7; suite penuh hijau.
+
 ## 2026-10-20 — Metadata kutipan balasan (replied_to_meta)
 
 - **Status:** SUDAH TERAPPLIED via Management API — `20261020120000_reply_meta.sql`

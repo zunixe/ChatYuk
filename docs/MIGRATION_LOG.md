@@ -2820,3 +2820,17 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - **Idempoten:** hanya baris dengan `image_blurhashes = '[]'`.
 - **Verifikasi:** `select count(*) filter (where image_blurhashes <> '[]')`
   = **22** dari 22 post berfoto.
+
+## 20261024100000_refund_chat_point_idempotent
+
+- **Status:** TERAPPLIED via Management API (2026-10-24), versi tercatat di
+  `supabase_migrations.schema_migrations`.
+- **Masalah (REVIEW_2026-10-24 SEC-02):** `refund_chat_point` me-refund spend
+  `spend_chat` terakhir tanpa penanda → bisa dipanggil berulang = koin tak
+  terbatas. Saat apply: `points_enabled=false`, 17 baris `spend_chat` lama,
+  **0 baris `spend_refund`** (belum pernah disalahgunakan).
+- **Fix:** hanya spend ≤ 10 menit; `metadata.refund_of` = id spend asal; spend
+  yang sudah di-refund dilewati; unique index parsial `coin_ledger_refund_once`
+  (user_id, refund_of) + advisory lock per user. Kontrak RPC tetap.
+- **Test:** `supabase/tests/refund_chat_point_test.sql` 7/7 (merah sebelum
+  apply: refund ke-2/ke-3 menambah saldo); seluruh suite pgTAP 37 file hijau.
