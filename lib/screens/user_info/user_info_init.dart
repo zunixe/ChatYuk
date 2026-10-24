@@ -2,7 +2,6 @@ part of '../user_info_screen.dart';
 
 // Analyzer limitation: pada `part`+mixin, method yang dideklarasikan stubs di
 // base tampak 'unused' walau dipanggil lintas-mixin. Aman diabaikan.
-// ignore_for_file: unused_element
 
 mixin _UiInitMx on _UserInfoBase {
   @override

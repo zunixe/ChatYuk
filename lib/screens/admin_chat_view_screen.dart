@@ -35,8 +35,6 @@ part 'admin_chat_view/admin_chat_view_watch.dart';
 part 'admin_chat_view/admin_chat_view_data.dart';
 part 'admin_chat_view/admin_chat_view_build.dart';
 
-const int _maxPhotoLoads = 3;
-
 /// Sisi kiri (lawan bicara) monitor chat — fungsi MURNI agar prioritas
 /// terkunci test (`test/admin_chat_leftuid_test.dart`). Harus STABIL
 /// (tidak ikut urutan kedatangan) supaya bubble tidak berpindah sisi.
@@ -113,9 +111,6 @@ abstract class _AdminBase extends ConsumerState<AdminChatViewScreen>
   // (pola sama seperti private chat). Tanpa ini tiap foto menembak RPC +
   // download + isolate thumbnail SEKALIGUS → berebut bandwidth/CPU dan
   // semua spinner foto muter lama.
-  final List<String> _photoQueue = [];
-  final Set<String> _photoQueued = {};
-  int _photoActive = 0;
 
   /// Batas jumlah foto yang dipra-muat otomatis (dari pesan TERBARU). Sisa
   /// foto dimuat saat discroll/bubble-nya muncul — buka chat dengan ratusan

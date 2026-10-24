@@ -91,11 +91,14 @@ abstract class _UserInfoBase extends ConsumerState<UserInfoScreen> {
   bool _friend = false;
   bool _friendRequestSent = false;
   bool _subscribed = false;
+  // Guard aksi sosial (dipakai lintas part user_info_init.dart). Ditandai
+  // ignore karena hanya ditulis, belum dibaca — nanti dipakai untuk
+  // menonaktifkan tombol selama request berjalan.
+  // ignore: unused_field
   bool _busySocial = false;
 
   // Carousel foto: geser kiri-kanan (avatar + foto terbuka).
   late final PageController _carouselCtrl = PageController();
-  int _carouselIndex = 0;
 
   // Kontrak lintas-mixin.
   Future<void> _addFriend();

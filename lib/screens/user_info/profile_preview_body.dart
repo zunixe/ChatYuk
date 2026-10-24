@@ -1,6 +1,5 @@
 part of '../user_info_screen.dart';
 
-// ignore_for_file: unused_element
 
 /// ─────────────────────────────────────────────────────────────────
 /// Tampilan PROFIL gaya Instagram/WA (hero foto + stats + info + aksi).

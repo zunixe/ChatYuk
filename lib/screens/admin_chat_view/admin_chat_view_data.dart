@@ -1,6 +1,5 @@
 part of '../admin_chat_view_screen.dart';
 
-// ignore_for_file: unused_element, unused_element_parameter
 
 mixin _AcDataMx on _AdminBase {
   bool _applyMessages() {
@@ -341,23 +340,6 @@ mixin _AcDataMx on _AdminBase {
 
   /// Jalankan antrean foto maksimal [_maxPhotoLoads] bersamaan.
   /// Selesai satu (sukses/gagal) → lanjutkan berikutnya.
-  void _drainPhotoQueue() {
-    if (!mounted) return;
-    while (_photoActive < _maxPhotoLoads && _photoQueue.isNotEmpty) {
-      final id = _photoQueue.removeAt(0);
-      _photoQueued.remove(id);
-      final idx = _msgIndexById[id] ?? -1;
-      if (idx < 0) continue;
-      final m = _msgs[idx];
-      if (m.imageData.isNotEmpty || m.isDeleted) continue;
-      final target = m;
-      _photoActive++;
-      _loadOnePhoto(target).whenComplete(() {
-        _photoActive--;
-        _drainPhotoQueue();
-      });
-    }
-  }
 
   /// Sesi HP harus akun admin asli (bukan sesi dummy hasil swap) —
   /// kalau tidak, RPC foto melempar 'Unauthorized' dan foto tak pernah

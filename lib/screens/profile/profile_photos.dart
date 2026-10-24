@@ -1,6 +1,5 @@
 part of '../profile_screen.dart';
 
-// ignore_for_file: unused_element, unused_element_parameter
 
 mixin _ProfilePhotosMx on _ProfileBase {
   Future<void> _loadPhotos() async {

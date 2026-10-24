@@ -1,6 +1,5 @@
 part of '../private_chats_screen.dart';
 
-// ignore_for_file: unused_element
 
 mixin _PcFilterMx on _PcBase {
   Widget _chatFilterBar(S s) {

@@ -1,6 +1,5 @@
 part of '../profile_screen.dart';
 
-// ignore_for_file: unused_element, unused_element_parameter
 
 /// Seksi lanjutan halaman Profil: Foto Saya, Akun, Lainnya, poin, footer.
 mixin _ProfileUiSections2Mx on _ProfileBase {

@@ -1,6 +1,5 @@
 part of '../room_chat_screen.dart';
 
-// ignore_for_file: unused_element, unused_element_parameter
 
 mixin _RcCoreMx on _RoomChatBase {
   // ── Kontrak ChatSelectionMixin ──

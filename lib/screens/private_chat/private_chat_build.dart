@@ -1,6 +1,5 @@
 part of '../private_chat_screen.dart';
 
-// ignore_for_file: unused_element, unused_element_parameter
 
 mixin _PcBuildMx on _PrivateChatBase {
   @override

@@ -1,6 +1,5 @@
 part of '../profile_screen.dart';
 
-// ignore_for_file: unused_element, unused_element_parameter
 
 /// Warna halaman Profil — DINAMIS mengikuti tema aplikasi (bukan warna baru).
 /// `bg`/`card`/`divider` memakai palet yang sudah ada di [AppTheme].
@@ -8,7 +7,6 @@ class _Pc {
   static Color get bg => AppTheme.bgScreen;
   static Color get card => AppTheme.bgCard;
   static Color get cardDivider => AppTheme.divider;
-  static Color get divider => AppTheme.divider;
   static Color get button => AppTheme.bgInput;
   static Color get border => AppTheme.divider;
 }

@@ -1,6 +1,5 @@
 part of '../story_composer_screen.dart';
 
-// ignore_for_file: unused_element
 
 mixin _ScBuildMx on _StoryComposerBase {
   Widget build(BuildContext context) {

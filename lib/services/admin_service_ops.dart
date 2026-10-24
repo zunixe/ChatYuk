@@ -1,6 +1,5 @@
 part of 'admin_service.dart';
 
-// ignore_for_file: unused_element
 
 mixin _AdminOpsMx on _AdminBase {
   Future<Map<String, dynamic>> setAiSettings({
