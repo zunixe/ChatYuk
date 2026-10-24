@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import '../../../config/theme.dart';
 import '../../../models/user_model.dart';
 import '../../../providers/riverpod/locale_provider.dart';
+import '../../../widgets/deleted_user_builder.dart';
 import '../../../widgets/person_avatar.dart';
 
 class RoomUserChip extends StatelessWidget {
@@ -25,14 +26,19 @@ class RoomUserChip extends StatelessWidget {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              // PersonAvatar = standar yang sama persis dengan Pengguna
-              // Online (foto + latar tint + ring warna gender).
-              PersonAvatar(
+              // Akun dihapus → avatar redup (sama dengan bubble room).
+              DeletedUserBuilder(
                 uid: user.uid,
-                name: user.nickname,
-                gender: user.gender,
-                avatarB64: user.avatar,
-                size: 44,
+                builder: (_, deleted) => Opacity(
+                  opacity: deleted ? 0.45 : 1,
+                  child: PersonAvatar(
+                    uid: user.uid,
+                    name: user.nickname,
+                    gender: user.gender,
+                    avatarB64: user.avatar,
+                    size: 44,
+                  ),
+                ),
               ),
               if (user.isRegistered)
                 Positioned(

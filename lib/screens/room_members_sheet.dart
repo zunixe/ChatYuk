@@ -11,6 +11,7 @@ import '../providers/riverpod/social_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../widgets/sheet_drag_handle.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/deleted_user_builder.dart';
 import '../widgets/social_counts_line.dart';
 import '../config/theme.dart';
 
@@ -348,13 +349,18 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
                         final m = _members[i];
                         return ListTile(
                       dense: true,
-                      // PersonAvatar = standar yang sama persis dengan
-                      // Pengguna Online (foto + latar tint + ring gender).
-                      leading: PersonAvatar(
+                      // Akun dihapus → avatar redup (sama bubble room).
+                      leading: DeletedUserBuilder(
                         uid: '${m['user_id'] ?? ''}',
-                        name: '${m['nickname'] ?? '?'}',
-                        gender: '${m['gender'] ?? ''}',
-                        size: 32,
+                        builder: (_, deleted) => Opacity(
+                          opacity: deleted ? 0.45 : 1,
+                          child: PersonAvatar(
+                            uid: '${m['user_id'] ?? ''}',
+                            name: '${m['nickname'] ?? '?'}',
+                            gender: '${m['gender'] ?? ''}',
+                            size: 32,
+                          ),
+                        ),
                       ),
                       title: Text(
                         '${m['nickname'] ?? '?'}',
@@ -729,7 +735,13 @@ class _GroupInvitePickerSheetState
     final done = _invited.contains(uid);
     return ListTile(
       dense: true,
-      leading: PersonAvatar(uid: uid, name: name, gender: e['gender'] ?? '', size: 32),
+      leading: DeletedUserBuilder(
+        uid: uid,
+        builder: (_, deleted) => Opacity(
+          opacity: deleted ? 0.45 : 1,
+          child: PersonAvatar(uid: uid, name: name, gender: e['gender'] ?? '', size: 32),
+        ),
+      ),
       title: Text(name, style: AppText.bodySmall),
       trailing: done
           ? Row(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../config/theme.dart';
 import '../../../models/user_model.dart';
 import '../../../providers/riverpod/room_voice_provider.dart';
+import '../../../widgets/deleted_user_builder.dart';
 import '../../../widgets/person_avatar.dart';
 
 /// Tombol mic voice stage di AppBar room global.
@@ -140,13 +141,18 @@ class _SpeakingAvatarState extends State<_SpeakingAvatar>
               ],
             )
           : null,
-      // PersonAvatar = standar yang sama persis dengan Pengguna Online
-      // (foto + latar tint + ring warna gender).
-      child: PersonAvatar(
+      // Akun dihapus → avatar redup (sama dengan bubble room).
+      child: DeletedUserBuilder(
         uid: widget.uid,
-        name: widget.label,
-        gender: widget.gender,
-        size: 44,
+        builder: (_, deleted) => Opacity(
+          opacity: deleted ? 0.45 : 1,
+          child: PersonAvatar(
+            uid: widget.uid,
+            name: widget.label,
+            gender: widget.gender,
+            size: 44,
+          ),
+        ),
       ),
     );
     if (!widget.speaking) return avatar;

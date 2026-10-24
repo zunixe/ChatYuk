@@ -7,6 +7,7 @@ import '../../../config/theme.dart';
 import '../../../models/user_model.dart';
 import '../../../providers/riverpod/locale_provider.dart';
 import '../../../providers/riverpod/social_provider.dart';
+import '../../../widgets/deleted_user_builder.dart';
 import '../../../widgets/app_gesture.dart';
 import '../../../widgets/person_avatar.dart';
 import '../../../widgets/social_actions.dart';
@@ -132,16 +133,20 @@ class _UserCardState extends ConsumerState<UserCard> {
                 children: [
                   GestureDetector(
                     onTap: () => onAvatarTap(color),
-                    // PersonAvatar: satu-satunya sumber bentuk avatar orang
-                    // (foto + tint & ring WARNA GENDER + titik presence) —
-                    // SAMA PERSIS dengan header chat, profil, dll.
-                    child: PersonAvatar(
+                    // Akun dihapus → avatar redup (sama dengan bubble room).
+                    child: DeletedUserBuilder(
                       uid: user.uid,
-                      name: user.nickname,
-                      gender: user.gender,
-                      avatarB64: user.avatar,
-                      size: 40,
-                      status: user.status,
+                      builder: (_, deleted) => Opacity(
+                        opacity: deleted ? 0.45 : 1,
+                        child: PersonAvatar(
+                          uid: user.uid,
+                          name: user.nickname,
+                          gender: user.gender,
+                          avatarB64: user.avatar,
+                          size: 40,
+                          status: user.status,
+                        ),
+                      ),
                     ),
                   ),
                   if (unreadCount > 0)

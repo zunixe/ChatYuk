@@ -11,6 +11,7 @@ import '../models/user_model.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
 import '../providers/riverpod/auth_provider.dart';
+import 'deleted_user_builder.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/theme_provider.dart';
@@ -432,21 +433,28 @@ class LeaderboardRow extends ConsumerWidget {
               name: nickname,
               ring: borderColor,
             ),
-            child: isTop3
-                ? ProfileAvatar(
-                    uid: uid,
-                    name: nickname,
-                    size: 32,
-                    borderColor: borderColor,
-                    borderWidth: 1.6,
-                  )
-                : PersonAvatar(
-                    uid: uid,
-                    name: nickname,
-                    gender: gender,
-                    avatarB64: entry['avatar']?.toString() ?? '',
-                    size: 32,
-                  ),
+            // Akun dihapus → avatar redup (sama dengan bubble room).
+            child: DeletedUserBuilder(
+              uid: uid,
+              builder: (_, deleted) => Opacity(
+                opacity: deleted ? 0.45 : 1,
+                child: isTop3
+                    ? ProfileAvatar(
+                        uid: uid,
+                        name: nickname,
+                        size: 32,
+                        borderColor: borderColor,
+                        borderWidth: 1.6,
+                      )
+                    : PersonAvatar(
+                        uid: uid,
+                        name: nickname,
+                        gender: gender,
+                        avatarB64: entry['avatar']?.toString() ?? '',
+                        size: 32,
+                      ),
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
