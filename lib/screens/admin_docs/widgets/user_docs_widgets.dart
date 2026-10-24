@@ -30,6 +30,8 @@ class UserDocsList extends ConsumerWidget {
       _DocSection(s.docsUserTimelineTitle, s.docsUserTimelineBody, Icons.dynamic_feed_outlined, Colors.deepOrange),
       _DocSection(s.docsUserNearbyTitle, s.docsUserNearbyBody, Icons.near_me_outlined, Colors.orange),
       _DocSection(s.docsUserSocialTitle, s.docsUserSocialBody, Icons.diversity_3_outlined, Colors.brown),
+      // (Bagian "Misi" dihapus 2026-10-22 — fitur misi sudah dihapus; judul
+      // docsUserMissions* kini hanya "Top Aktif".)
       _DocSection(s.docsUserMissionsTitle, s.docsUserMissionsBody, Icons.emoji_events_outlined, Colors.amber),
       _DocSection(s.docsUserTopupTitle, s.docsUserTopupBody, Icons.monetization_on_outlined, Colors.yellow),
       _DocSection(s.docsUserCoinFxTitle, s.docsUserCoinFxBody, Icons.auto_awesome_outlined, Colors.yellowAccent),

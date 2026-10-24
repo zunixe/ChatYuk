@@ -78,12 +78,15 @@ extension SDocsX on S {
       ? 'Temukan user lain di sekitarmu berbasis lokasi di peta.\n\n• Nyalakan Bagikan Lokasi + atur radius pencarian.\n• Ketuk pin/nama untuk profil & chat.\n• Lokasi GPS tidak pernah ditimpa perkiraan IP — tetap akurat.\n• Fitur harian berbayar YukCoin (diaktifkan admin bila dipublish).'
       : 'Discover other users around you on a location map.\n\n• Turn on Share Location + set search radius.\n• Tap a pin/name for profile & chat.\n• GPS location is never overwritten by IP estimates — stays accurate.\n• Daily paid feature in YukCoin (enabled by admin when published).';
 
-  // ── PENGGUNA: Misi & Leaderboard ──
+  // ── PENGGUNA: Leaderboard (Top Aktif) ──
+  // Bagian Misi DIHAPUS 2026-10-22: fitur misi sudah dihapus total (layar,
+  // provider, RPC klien). Menampilkan deskripsinya di docs hanya memandu
+  // user ke fitur yang tidak ada.
   String get docsUserMissionsTitle =>
-      isId ? '🏆 Misi & Top Aktif' : '🏆 Missions & Top Active';
+      isId ? '🏆 Top Aktif' : '🏆 Top Active';
   String get docsUserMissionsBody => isId
-      ? 'Kumpulkan YukCoin gratis lewat misi, dan adu aktif di papan peringkat.\n\n• Misi harian, mingguan, dan sekali-selesai — klaim hadiahnya, jaga streak login.\n• Top Aktif: peringkat chat terseru minggu ini / sepanjang masa.\n• Ada juga Top Saldo di Profil (berbasis koin).'
-      : 'Earn free YukCoin through missions, and compete on activity boards.\n\n• Daily, weekly, and one-time quests — claim rewards, keep your streak.\n• Top Active: chattiest ranking this week / all time.\n• There is also a Top Balance board in Profile (coin-based).';
+      ? 'Adu aktif di papan peringkat.\n\n• Top Aktif: peringkat chat terseru minggu ini / sepanjang masa.\n• Ada juga Top Saldo di Profil (berbasis koin).'
+      : 'Compete on the activity boards.\n\n• Top Active: chattiest ranking this week / all time.\n• There is also a Top Balance board in Profile (coin-based).';
 
   // ── PENGGUNA: Top up & riwayat ──
   String get docsUserTopupTitle =>
