@@ -45,6 +45,28 @@ class AdminPanelScreen extends ConsumerStatefulWidget {
   ConsumerState<AdminPanelScreen> createState() => _AdminPanelScreenState();
 }
 
+/// Identitas tiap tab panel admin — SATU sumber urutan untuk label (TabBar)
+/// dan isi (TabBarView). Dulu label & body ditulis sebagai dua daftar terpisah
+/// dan bisa bergeser (insiden: tab "Timeline" menampilkan Dokumentasi karena
+/// `AdminTimelineTab` ditaruh di indeks body 13 sementara label-nya indeks 11).
+/// Dengan enum ini label dan body TIDAK mungkin lagi tidak sinkron.
+enum _AdminTab {
+  globalSetting,
+  overview,
+  point,
+  chatMonitor,
+  roomMonitor,
+  dummy,
+  contact,
+  device,
+  deleted,
+  attribution,
+  story,
+  timeline,
+  docs,
+  marketing,
+}
+
 class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final _bonusCtrl = TextEditingController(text: '100');
@@ -364,20 +386,8 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
           ),
           indicatorSize: TabBarIndicatorSize.tab,
           tabs: [
-            Tab(text: s.adminGlobalSettingTab),
-            Tab(text: s.adminOverview),
-            Tab(text: s.adminPointTab),
-            Tab(text: s.adminChatMonitor),
-            Tab(text: s.adminRoomMonitor),
-            Tab(text: s.adminDummyTab),
-            Tab(text: s.adminContactTab),
-            Tab(text: s.adminDeviceTab),
-            Tab(text: s.adminDeletedTab),
-            Tab(text: s.adminAttributionTab),
-            Tab(text: s.adminStoryTab),
-            Tab(text: s.adminTimelineTab),
-            Tab(text: s.adminDocsTab),
-            Tab(text: s.adminMarketingTab),
+            for (final tab in _AdminTab.values)
+              Tab(text: _tabLabel(tab, s)),
           ],
         ),
       ),
@@ -386,76 +396,63 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
         children: [
           // Lazy tab: halaman data-berat hanya dibangun (dan di-fetch)
           // saat tab-nya pertama dibuka. Placeholder menjaga indeks stabil.
-          if (_visitedTabs.contains(0))
-            const AdminGlobalSettingTab()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(1))
-            rv.Consumer(
-              builder: (ctx, ref, __) {
-                final ap = ref.watch(adminProvider);
-                return _buildOverviewTab(ap, s, ap.stats);
-              },
-            )
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(2))
-            rv.Consumer(
-              builder: (ctx, ref, __) {
-                final ap = ref.watch(adminProvider);
-                return _buildPointTab(ap, s, ap.stats);
-              },
-            )
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(3))
-            const AdminChatListScreen()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(4))
-            const AdminRoomListScreen()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(5))
-            const AdminDummyTab()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(6))
-            const AdminContactTab()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(7))
-            const AdminDevicesTab()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(8))
-            const AdminDeletedTab()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(9))
-            const AdminAttributionTab()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(10))
-            const AdminStoryTab()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(11))
-            const AdminDocsTab()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(12))
-            const AdminMarketingTab()
-          else
-            const SizedBox.shrink(),
-          if (_visitedTabs.contains(13))
-            const AdminTimelineTab()
-          else
-            const SizedBox.shrink(),
+          // Urutan diambil dari `_AdminTab.values` — SATU sumber kebenaran
+          // dengan label TabBar sehingga index label == index body.
+          for (var i = 0; i < _AdminTab.values.length; i++)
+            _visitedTabs.contains(i)
+                ? _tabBody(_AdminTab.values[i], s)
+                : const SizedBox.shrink(),
         ],
       ),
     );
   }
+
+  /// Label tab (dipakai TabBar). Satu-satunya tempat teks label per tab.
+  String _tabLabel(_AdminTab tab, S s) => switch (tab) {
+        _AdminTab.globalSetting => s.adminGlobalSettingTab,
+        _AdminTab.overview => s.adminOverview,
+        _AdminTab.point => s.adminPointTab,
+        _AdminTab.chatMonitor => s.adminChatMonitor,
+        _AdminTab.roomMonitor => s.adminRoomMonitor,
+        _AdminTab.dummy => s.adminDummyTab,
+        _AdminTab.contact => s.adminContactTab,
+        _AdminTab.device => s.adminDeviceTab,
+        _AdminTab.deleted => s.adminDeletedTab,
+        _AdminTab.attribution => s.adminAttributionTab,
+        _AdminTab.story => s.adminStoryTab,
+        _AdminTab.timeline => s.adminTimelineTab,
+        _AdminTab.docs => s.adminDocsTab,
+        _AdminTab.marketing => s.adminMarketingTab,
+      };
+
+  /// Isi tab (dipakai TabBarView). Urutan mengikuti [_AdminTab.values] →
+  /// tidak bisa lagi bergeser dari label.
+  Widget _tabBody(_AdminTab tab, S s) => switch (tab) {
+        _AdminTab.globalSetting => const AdminGlobalSettingTab(),
+        _AdminTab.overview => rv.Consumer(
+            builder: (ctx, ref, __) {
+              final ap = ref.watch(adminProvider);
+              return _buildOverviewTab(ap, s, ap.stats);
+            },
+          ),
+        _AdminTab.point => rv.Consumer(
+            builder: (ctx, ref, __) {
+              final ap = ref.watch(adminProvider);
+              return _buildPointTab(ap, s, ap.stats);
+            },
+          ),
+        _AdminTab.chatMonitor => const AdminChatListScreen(),
+        _AdminTab.roomMonitor => const AdminRoomListScreen(),
+        _AdminTab.dummy => const AdminDummyTab(),
+        _AdminTab.contact => const AdminContactTab(),
+        _AdminTab.device => const AdminDevicesTab(),
+        _AdminTab.deleted => const AdminDeletedTab(),
+        _AdminTab.attribution => const AdminAttributionTab(),
+        _AdminTab.story => const AdminStoryTab(),
+        _AdminTab.timeline => const AdminTimelineTab(),
+        _AdminTab.docs => const AdminDocsTab(),
+        _AdminTab.marketing => const AdminMarketingTab(),
+      };
 
   Widget _buildOverviewTab(AdminProvider admin, S s, Map<String, dynamic>? stats) {
     // Layar error penuh HANYA bila memang belum ada data sama sekali
