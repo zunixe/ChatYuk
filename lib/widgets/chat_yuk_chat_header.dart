@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
@@ -134,7 +133,7 @@ class ChatYukChatHeader extends StatelessWidget
             child: SizeTransition(
               sizeFactor: anim,
               axis: Axis.horizontal,
-              axisAlignment: -1,
+              alignment: Alignment.centerLeft,
               child: child,
             ),
           ),

@@ -312,7 +312,7 @@ class DummyCard extends StatelessWidget {
     ];
     final safeValue = values.contains(current) ? current : 'offline';
     return DropdownButtonFormField<String>(
-      value: safeValue,
+      initialValue: safeValue,
       isExpanded: true,
       isDense: true,
       style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),

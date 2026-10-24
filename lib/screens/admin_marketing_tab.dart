@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
-import '../providers/admin_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../widgets/admin_error_view.dart';

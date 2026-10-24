@@ -36,7 +36,6 @@ import 'providers/riverpod/nav_provider.dart';
 import 'providers/riverpod/theme_provider.dart';
 import 'providers/riverpod/timeline_provider.dart';
 import 'providers/riverpod/update_provider.dart';
-import 'services/chat_service.dart';
 import 'core/perf/perf_probe.dart';
 import 'main.dart';
 import 'screens/entry_screen.dart';

@@ -138,7 +138,7 @@ class SupabaseConfig {
         'sb-${Uri.parse(url).host.split('.').first}-auth-token';
     await Supabase.initialize(
       url: url,
-      anonKey: publishableKey,
+      publishableKey: publishableKey,
       // PERF (kunci perbaikan "ngelag setelah idle"): koneksi HTTP keep-alive
       // jadi BASI setelah app idle. Tanpa batas, request berikutnya
       // menggantung sampai TCP timeout OS (~13-36 detik, terukur PerfProbe).

@@ -2,7 +2,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/avatar_service.dart';
-import '../../services/storage_photo_service.dart';
 import 'avatar_provider.dart';
 import 'message_reaction_provider.dart';
 import 'storage_provider.dart';

@@ -141,7 +141,7 @@ class AppText {
   /// kelebihan bobot.
   static FontWeight? _systemWeight(FontWeight w) {
     // Body & teks sedang → biarkan natural (null = regular, ramping ala WA).
-    if (w.index <= FontWeight.w500.index) return null;
+    if (w.value <= FontWeight.w500.value) return null;
     // Judul/tombol tebal → turunkan satu tingkat agar tidak kelebihan bobot.
     return FontWeight.w500;
   }

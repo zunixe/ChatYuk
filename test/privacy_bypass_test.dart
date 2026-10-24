@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:chatyuk/providers/admin_provider.dart';
 import 'package:chatyuk/providers/riverpod/admin_provider.dart';
 import 'package:chatyuk/providers/riverpod/locale_provider.dart';
 import 'package:chatyuk/screens/admin_global_setting/widgets/privacy_bypass_tile.dart';

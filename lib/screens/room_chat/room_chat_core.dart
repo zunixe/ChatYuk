@@ -29,6 +29,19 @@ mixin _RcCoreMx on _RoomChatBase {
   @override
   Future<bool> chatUndeleteMessage(String id) => _chat.undeleteRoomMessage(id);
 
+  /// Admin sungguhan (zunixe@gmail.com) boleh hapus pesan siapa pun di room.
+  /// Server tetap menegakkan gate email admin di RPC — user biasa ditolak.
+  @override
+  bool get chatAdminCanDeleteAny => _auth.isRealAdmin;
+
+  @override
+  Future<bool> chatAdminDeleteAny(String id) =>
+      _chat.adminDeleteRoomMessage(id);
+
+  @override
+  Future<bool> chatAdminUndeleteAny(String id) =>
+      _chat.adminDeleteRoomMessage(id, undelete: true);
+
   @override
   String chatDeletedLabel(S s) => s.msgDeletedRoom;
 

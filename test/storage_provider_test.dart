@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/providers/riverpod/storage_provider.dart';
-import 'package:chatyuk/services/storage_photo_service.dart';
 
 class MockStorageService extends Mock implements StoragePhotoService {}
 

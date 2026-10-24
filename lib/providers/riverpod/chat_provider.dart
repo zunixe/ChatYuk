@@ -5,7 +5,6 @@ import '../../models/user_model.dart';
 import '../../utils.dart' show dlog;
 import '../../utils/mention.dart';
 import '../../services/chat_service.dart';
-import '../../services/chat_stream_session.dart';
 export '../../services/chat_stream_session.dart' show ChatMessageStream;
 export '../../services/chat_service.dart' show PrivateChatInfo;
 import '../../core/cache/chat_poster_cache.dart';
@@ -105,6 +104,11 @@ class ChatNotifier extends Notifier<ChatState> {
 
   Future<bool> deleteRoomMessage(String messageId) async {
     return _service.deleteRoomMessage(messageId);
+  }
+
+  /// ADMIN SAJA — hapus/undo pesan siapa pun di room (RPC security definer).
+  Future<bool> adminDeleteRoomMessage(String messageId, {bool undelete = false}) {
+    return _service.adminDeleteRoomMessage(messageId, undelete: undelete);
   }
 
   Future<bool> deletePrivateMessage(String messageId) async {

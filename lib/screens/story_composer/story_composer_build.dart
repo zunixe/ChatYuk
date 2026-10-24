@@ -104,9 +104,9 @@ mixin _ScBuildMx on _StoryComposerBase {
                           child: Transform(
                             alignment: Alignment.center,
                             transform: Matrix4.identity()
-                              ..translate(_imgOffset.dx, _imgOffset.dy)
+                              ..translateByDouble(_imgOffset.dx, _imgOffset.dy, 0, 1)
                               ..rotateZ(_imgRotation)
-                              ..scale(_imgScale),
+                              ..scaleByDouble(_imgScale, _imgScale, 1, 1),
                             child: Image.memory(
                               _bytes!,
                               // COVER (fill) — foto memenuhi kartu

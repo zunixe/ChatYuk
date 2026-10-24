@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
 import '../../../providers/riverpod/points_provider.dart';
 import 'panel_card.dart';
 import '../../../providers/riverpod/admin_provider.dart';
@@ -214,7 +213,7 @@ class PointsSystemCard extends StatelessWidget {
                 admin.togglePointsSystem(v);
                 ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).refreshEnabled();
               },
-              activeColor: AppTheme.primary,
+              activeThumbColor: AppTheme.primary,
             ),
           ],
         ),
@@ -308,7 +307,7 @@ class PointSettingsCard extends StatelessWidget {
                   onChanged: saving
                       ? null
                       : (v) => onFlagChanged('yukcoin_v2_enabled', v),
-                  activeColor: AppTheme.primary,
+                  activeThumbColor: AppTheme.primary,
                 ),
               ],
             ),
@@ -540,7 +539,7 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
                 Switch(
                   value: _isPublished(it.$1),
                   onChanged: _saving ? null : (v) => _toggle(it.$1, v),
-                  activeColor: AppTheme.primary,
+                  activeThumbColor: AppTheme.primary,
                 ),
               ],
             ),

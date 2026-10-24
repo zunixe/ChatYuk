@@ -145,6 +145,27 @@ mixin ChatServiceRoomMx on ChatBase {
     }
   }
 
+  /// ADMIN SAJA: hapus (soft-delete) pesan SIAPA PUN di room — global maupun
+  /// grup. RLS `messages_update_own` hanya mengizinkan sender_id = auth.uid,
+  /// jadi jalur ini lewat RPC SECURITY DEFINER `admin_delete_room_message`
+  /// yang menegakkan gate email admin (zunixe@gmail.com) di server. User biasa
+  /// yang memanggil RPC ini ditolak ('Unauthorized') → UI tidak menampilkannya.
+  /// [undelete] = true untuk UNDO di snackbar.
+  Future<bool> adminDeleteRoomMessage(String messageId, {bool undelete = false}) async {
+    try {
+      final res = await _sb.rpc(
+        'admin_delete_room_message',
+        params: {'p_message_id': int.tryParse(messageId), 'p_deleted': !undelete},
+      );
+      if (res is Map && res['ok'] == true) return true;
+      dlog('[ChatService] adminDeleteRoomMessage not ok: $messageId -> $res');
+      return false;
+    } catch (e) {
+      dlog('[ChatService] adminDeleteRoomMessage error: $e');
+      return false;
+    }
+  }
+
   /// Batalkan hapus (aksi UNDO di snackbar): kembalikan is_deleted=false.
   /// RLS update milik-sendiri mengizinkan (policy sama seperti delete).
   Future<bool> undeleteRoomMessage(String messageId) async {

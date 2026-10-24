@@ -11,7 +11,6 @@ import '../config/strings_admin.dart';
 import '../config/strings_docs.dart';
 import '../widgets/admin_error_view.dart';
 import '../core/perf/perf_probe.dart';
-import '../providers/admin_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../utils.dart';

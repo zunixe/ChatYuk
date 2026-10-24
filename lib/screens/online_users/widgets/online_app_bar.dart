@@ -107,7 +107,7 @@ class OnlineAppBar extends ConsumerWidget implements PreferredSizeWidget {
           child: SizeTransition(
             sizeFactor: anim,
             axis: Axis.horizontal,
-            axisAlignment: -1,
+            alignment: Alignment.centerLeft,
             child: child,
           ),
         ),

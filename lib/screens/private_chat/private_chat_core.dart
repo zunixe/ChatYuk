@@ -789,7 +789,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                                   // ke 120px: cukup untuk scroll mulus, tapi bubble
                                   // jauh (peta/video) tidak ikut di-mount di frame
                                   // pertama. Terukur raster max ~58ms → turun.
-                                  cacheExtent: 120,
+                                  scrollCacheExtent: const ScrollCacheExtent.pixels(120),
                                   padding: const EdgeInsets.fromLTRB(
                                     10,
                                     12,

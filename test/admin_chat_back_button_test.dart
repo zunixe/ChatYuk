@@ -9,7 +9,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/core/cache/message_cache.dart';
 import 'package:chatyuk/models/message_model.dart';
-import 'package:chatyuk/providers/admin_provider.dart';
 import 'package:chatyuk/providers/riverpod/admin_provider.dart';
 import 'package:chatyuk/screens/admin_chat_view_screen.dart'
     show AdminChatViewScreen, computeMonitorLeftUid, tryClaimChatPush, releaseChatPush;

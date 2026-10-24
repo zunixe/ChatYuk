@@ -365,7 +365,7 @@ Future<void> _notifActionBgHandler(lpn.NotificationResponse response) async {
       } catch (_) {
         await Supabase.initialize(
           url: AppEnv.supabaseUrl,
-          anonKey: AppEnv.supabaseAnonKey,
+          publishableKey: AppEnv.supabaseAnonKey,
         );
       }
       final uid = Supabase.instance.client.auth.currentUser?.id;

@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import '../utils.dart';
 import 'mention_spans.dart';
 import 'chat_video_bubble.dart';

@@ -10,7 +10,6 @@ import 'admin_devices/widgets/user_detail_sheet.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../widgets/admin_error_view.dart';
-import '../providers/admin_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../main.dart' show resumeWarmup;

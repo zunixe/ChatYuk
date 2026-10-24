@@ -206,7 +206,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
             child: SizeTransition(
               sizeFactor: anim,
               axis: Axis.horizontal,
-              axisAlignment: -1,
+              alignment: Alignment.centerLeft,
               child: child,
             ),
           ),

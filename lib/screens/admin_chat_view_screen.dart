@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -12,7 +11,6 @@ import '../core/media/native_image.dart';
 import '../core/nav_guard.dart';
 import '../models/active_call_model.dart';
 import '../models/message_model.dart';
-import '../providers/admin_provider.dart';
 import '../widgets/gender_avatar.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/riverpod/locale_provider.dart';

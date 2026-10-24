@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/admin_provider.dart';
 import '../config/regions.dart';
 import '../config/supabase_config.dart';
 import '../config/theme.dart';

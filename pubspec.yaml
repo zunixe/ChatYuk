@@ -121,6 +121,7 @@ dependencies:
   video_compress: ^3.1.4
   flutter_blurhash: ^0.9.1
   open_filex: ^5.0.0
+  firebase_core: any
 dev_dependencies:
   flutter_test:
     sdk: flutter

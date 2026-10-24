@@ -329,7 +329,7 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
                   color: AppTheme.textSecondary,
                 ),
               ),
-              activeColor: AppTheme.primary,
+              activeThumbColor: AppTheme.primary,
             ),
           ),
           // Slider radius di-delegasikan ke widget ber-state SENDIRI supaya

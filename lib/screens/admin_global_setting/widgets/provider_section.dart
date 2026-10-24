@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
 import '../../../providers/riverpod/connectivity_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart';
@@ -420,15 +419,19 @@ class _ProviderCardState extends ConsumerState<ProviderCard> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         )
-                      : Radio<bool>(
-                          value: true,
+                      // RadioGroup ancestor (API baru): groupValue/onChanged
+                      // pada Radio sendiri sudah deprecated sejak Flutter 3.32.
+                      : RadioGroup<bool>(
                           groupValue: active ? true : null,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
                           onChanged: (_) {
                             if (!active) _activate();
                           },
+                          child: const Radio<bool>(
+                            value: true,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
                         ),
                   Expanded(
                     child: Column(
@@ -501,7 +504,7 @@ class _ProviderCardState extends ConsumerState<ProviderCard> {
                   ),
                   const SizedBox(height: 4),
                   DropdownButtonFormField<String>(
-                    value: _matchedModelId(),
+                    initialValue: _matchedModelId(),
                     style: AppText.body,
                     decoration: InputDecoration(
                       labelText: s.aiProviderModelPreset,

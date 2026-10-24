@@ -48,6 +48,19 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   String chatDeletedLabel(S s);
   Map<String, String> get chatReactionKnownNames;
 
+  /// ADMIN SAJA (zunixe@gmail.com): boleh menghapus pesan SIAPA PUN, bukan
+  /// hanya milik sendiri. Default false → perilaku user biasa. Implementor
+  /// room meng-override dengan `chatAuth.isRealAdmin`.
+  bool get chatAdminCanDeleteAny => false;
+
+  /// Hapus (soft-delete) pesan MILIK ORANG LAIN sebagai admin. Hanya dipanggil
+  /// bila [chatAdminCanDeleteAny] true. Implementor menyediakan jalur RPC
+  /// server yang menegakkan gate email admin.
+  Future<bool> chatAdminDeleteAny(String id) async => false;
+
+  /// UNDO hapus pesan milik orang lain (kebalikan [chatAdminDeleteAny]).
+  Future<bool> chatAdminUndeleteAny(String id) async => false;
+
   /// YukCoin v2 (opsional). Implementor boleh override:
   /// - [chatYukcoinV2Active] true bila fitur berbayar v2 aktif.
   /// - [chatChargeYukcoin] potong YukCoin; return true bila berhasil.
@@ -287,10 +300,15 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   Future<void> deleteSelected() async {
     if (selectedIds.isEmpty) return;
     final auth = chatAuth;
+    final isAdmin = chatAdminCanDeleteAny;
     final mine = selectedMsgs.values
         .where((m) => m.senderId == auth.uid)
         .toList();
-    if (mine.isEmpty) {
+    final others = selectedMsgs.values
+        .where((m) => m.senderId != auth.uid)
+        .toList();
+    // User biasa: hanya pesan sendiri yang bisa dihapus.
+    if (!isAdmin && mine.isEmpty) {
       clearSelection();
       return;
     }
@@ -298,13 +316,19 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     // membangun ulang daftar & state seleksi. Iterasi daftar id lokal ini
     // menjamin SEMUA pesan terpilih benar-benar diproses (dulu ada kasus
     // hanya 1 terhapus).
-    final ids = mine.map((m) => m.id).toList();
+    final mineIds = mine.map((m) => m.id).toList();
+    final otherIds = others.map((m) => m.id).toList();
     // Tutup seleksi DULU supaya UI langsung responsif (ikon hilang seketika).
     clearSelection();
     // Hapus PARALEL (dulu berurutan): server menerima semuanya sekaligus,
     // tidak saling menunggu round-trip.
-    final results = await Future.wait(ids.map(chatDeleteMessage));
-    final failCount = results.where((ok) => !ok).length;
+    final mineResults = await Future.wait(mineIds.map(chatDeleteMessage));
+    // Admin: pesan milik orang lain lewat jalur RPC (gate email admin).
+    final otherResults = isAdmin
+        ? await Future.wait(otherIds.map(chatAdminDeleteAny))
+        : const <bool>[];
+    final failCount =
+        [...mineResults, ...otherResults].where((ok) => !ok).length;
     if (!mounted) return;
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     if (failCount == 0) {
@@ -313,7 +337,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
         chatDeletedLabel(s),
         action: SnackBarAction(
           label: s.btnUndo,
-          onPressed: () => unawaited(_undeleteMany(ids)),
+          onPressed: () => unawaited(_undeleteMany(mineIds, otherIds)),
         ),
       );
     } else {
@@ -322,10 +346,16 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   }
 
   /// Kembalikan pesan yang baru dihapus (aksi UNDO di snackbar).
-  Future<void> _undeleteMany(List<String> ids) async {
-    for (final id in ids) {
+  Future<void> _undeleteMany(List<String> mineIds, [List<String> otherIds = const []]) async {
+    for (final id in mineIds) {
       try {
         await chatUndeleteMessage(id);
+      } catch (_) {}
+      if (!mounted) return;
+    }
+    for (final id in otherIds) {
+      try {
+        await chatAdminUndeleteAny(id);
       } catch (_) {}
       if (!mounted) return;
     }
@@ -534,6 +564,9 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     final single = singleSelected;
     final allMine = selectedMsgs.values.isNotEmpty &&
         selectedMsgs.values.every((m) => m.senderId == auth.uid);
+    // Admin (zunixe) boleh hapus pesan siapa pun → tombol hapus selalu tampil
+    // saat ada seleksi; user biasa hanya bila semua terpilih miliknya.
+    final canDelete = allMine || (chatAdminCanDeleteAny && selectedIds.isNotEmpty);
     final singleStarred = single != null && starredIds.contains(single.id);
     final canEdit = single != null &&
         single.senderId == auth.uid &&
@@ -569,7 +602,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
             singleStarred ? s.menuUnstar : s.menuStar,
             starSelected,
           ),
-        if (allMine) act(Icons.delete_outline, s.btnDelete, deleteSelected),
+        if (canDelete) act(Icons.delete_outline, s.btnDelete, deleteSelected),
         act(Icons.forward, s.menuForward, forwardSelected),
         PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert, color: Colors.white),

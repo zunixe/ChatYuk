@@ -114,7 +114,7 @@ class _QuickSideMenuState extends ConsumerState<QuickSideMenu>
     )..repeat(reverse: true);
   }
 
-  ValueListenable<bool>? _tickerNotifier;
+  ValueListenable<TickerModeData>? _tickerNotifier;
   bool _tickerWasOn = false;
 
   @override
@@ -122,7 +122,8 @@ class _QuickSideMenuState extends ConsumerState<QuickSideMenu>
     super.didChangeDependencies();
     // TickerMode mati saat tab Online tidak aktif → animasi beku. Pantau
     // agar bisa memainkan animasi masuk tiap kali tab Online dibuka lagi.
-    final notifier = TickerMode.getNotifier(context);
+    // API baru: satu notifier memuat (enabled, forceFrames).
+    final notifier = TickerMode.getValuesNotifier(context);
     if (!identical(_tickerNotifier, notifier)) {
       _tickerNotifier?.removeListener(_onTickerChanged);
       _tickerNotifier = notifier;
@@ -138,7 +139,7 @@ class _QuickSideMenuState extends ConsumerState<QuickSideMenu>
   }
 
   void _onTickerChanged() {
-    final on = _tickerNotifier?.value ?? true;
+    final on = _tickerNotifier?.value.enabled ?? true;
     if (!mounted) return;
     if (on && !_tickerWasOn) {
       // Tab Online baru dibuka → set di luar dulu TANPA menunggu frame

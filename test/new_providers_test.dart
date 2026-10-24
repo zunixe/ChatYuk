@@ -8,8 +8,6 @@ import 'package:chatyuk/providers/riverpod/location_provider.dart';
 import 'package:chatyuk/services/avatar_service.dart';
 import 'package:chatyuk/services/contact_service.dart';
 import 'package:chatyuk/services/device_info_service.dart';
-import 'package:chatyuk/services/geo_service.dart';
-import 'package:chatyuk/services/location_service.dart';
 
 class MockAvatarService extends Mock implements AvatarB64Service {}
 class MockContactService extends Mock implements ContactService {}

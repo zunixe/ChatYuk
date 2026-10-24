@@ -7,7 +7,6 @@ import 'package:latlong2/latlong.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
-import '../../../providers/admin_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart';
 import '../../../widgets/detail_row.dart';
