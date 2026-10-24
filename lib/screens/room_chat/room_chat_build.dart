@@ -495,11 +495,21 @@ mixin _RcBuildMx on _RoomChatBase {
     );
   }
 
-  void _onTapUser(MessageModel msg, AuthNotifier auth) {
+  Future<void> _onTapUser(MessageModel msg, AuthNotifier auth) async {
     if (msg.senderId == auth.uid) return;
     if (_sheetOpen) return;
     final container = ProviderScope.containerOf(context, listen: false);
+    final deletedUsers = container.read(deletedUsersProvider.notifier);
     if (container.read(deletedUsersProvider).contains(msg.senderId)) {
+      showChatSnack(context, container.read(localeProvider).s.msgAccountDeleted);
+      return;
+    }
+    // Kasus tap-cepat: bubble lama belum pernah dibangun oleh
+    // DeletedUserBuilder → cek & tunggu hasil batch sebelum lanjut.
+    // Dulu langsung buka sheet → snack generik "User tidak ditemukan".
+    container.read(deletedUsersProvider.notifier).ensureChecked(msg.senderId);
+    if (await deletedUsers.checkedDeletedNow(msg.senderId)) {
+      if (!mounted) return;
       showChatSnack(context, container.read(localeProvider).s.msgAccountDeleted);
       return;
     }

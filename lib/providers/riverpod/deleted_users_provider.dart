@@ -50,6 +50,24 @@ class DeletedUsersNotifier extends Notifier<Set<String>> {
     }
   }
 
+  /// Cek & tunggu hasil untuk SATU uid — dipakai guard tap (mis.
+  /// `_onTapUser`) supaya kasus tap-cepat (bubble lama belum pernah dibangun
+  /// oleh DeletedUserBuilder) tidak lolos guard lalu dapat snack generik
+  /// "User tidak ditemukan". Kosong bila uid sudah pasti aktif.
+  Future<bool> checkedDeletedNow(String uid) async {
+    if (uid.isEmpty) return false;
+    if (state.contains(uid)) return true;
+    final wasChecked = _checked.contains(uid);
+    ensureChecked(uid);
+    if (!wasChecked) {
+      // Tunggu batch selesai (guard timeout ringan 1 detik).
+      for (var i = 0; i < 20 && _queue.contains(uid); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    }
+    return state.contains(uid);
+  }
+
   /// Tandai langsung (mis. hasil `isUserActive` = false).
   void markDeleted(String uid) {
     if (uid.isEmpty || state.contains(uid)) return;

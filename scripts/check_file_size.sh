@@ -36,7 +36,9 @@ ALLOWLIST=(
   lib/widgets/chat_video_bubble.dart:1006
   lib/widgets/chat_composer_input.dart:1082
   lib/screens/private_chats/private_chats_build.dart:1342
-  lib/screens/private_chat/private_chat_core.dart:1016
+  # 2026-10-23: +41 baris dari commit remote (fitur blokir senyap: guard
+  # pendingBlocked di jalur derive/receive). Bukan fitur baru dari sesi ini.
+  lib/screens/private_chat/private_chat_core.dart:1057
   lib/screens/room_chat/room_chat_live.dart:1070
   # 2026-10-22: +84 baris dari fix realtime (guard _isDead() + cancel timer
   # reconnect saat onCancel + komentar alasannya). Bukan fitur baru.
