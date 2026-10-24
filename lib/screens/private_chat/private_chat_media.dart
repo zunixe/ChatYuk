@@ -341,13 +341,11 @@ mixin _PcMediaMx on _PrivateChatBase {
   @override
   void outboxScrollToBottom() => _scrollToBottom();
   Future<void> voiceFinishRecording(String path, int recordedMs) async {
+    final scope = ProviderScope.containerOf(context, listen: false);
     final f = File(path);
     final bytes = await f.readAsBytes();
     final chatId = widget.chatId;
-    final auth = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(authProvider.notifier);
+    final auth = scope.read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -382,10 +380,7 @@ mixin _PcMediaMx on _PrivateChatBase {
       );
       return;
     }
-    final storagePath = await ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(storageProvider).uploadVoice(chatId: chatId, bytes: bytes);
+    final storagePath = await scope.read(storageProvider).uploadVoice(chatId: chatId, bytes: bytes);
     if (storagePath == null || storagePath.isEmpty) {
       if (!outboxIsOnline) {
         final optimisticOffline = MessageModel(
@@ -419,10 +414,7 @@ mixin _PcMediaMx on _PrivateChatBase {
       if (mounted)
         showChatSnack(
           context,
-          ProviderScope.containerOf(
-            context,
-            listen: false,
-          ).read(localeProvider).s.errVoiceUploadFailed,
+          scope.read(localeProvider).s.errVoiceUploadFailed,
         );
       return;
     }
@@ -442,7 +434,7 @@ mixin _PcMediaMx on _PrivateChatBase {
     setState(() => _pending.add(optimistic));
     _scrollToBottom();
     try {
-      await ProviderScope.containerOf(context, listen: false)
+      await scope
           .read(chatRiverpod.chatProvider.notifier)
           .sendPrivateMessage(
             chatId: chatId,
@@ -474,28 +466,17 @@ mixin _PcMediaMx on _PrivateChatBase {
         setState(() => _pending.remove(optimistic));
         showChatSnack(
           context,
-          ProviderScope.containerOf(
-            context,
-            listen: false,
-          ).read(localeProvider).s.errSendFailed,
+          scope.read(localeProvider).s.errSendFailed,
         );
       }
     }
   }
 
   Future<void> _sendGift(String giftId, String name, int coins) async {
-    final s = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(localeProvider).s;
-    final chat = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatRiverpod.chatProvider.notifier);
-    final points = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(pointsProvider.notifier);
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
+    final chat = scope.read(chatRiverpod.chatProvider.notifier);
+    final points = scope.read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final res = await chat.sendGift(widget.chatId, widget.otherUid, giftId);
@@ -513,7 +494,7 @@ mixin _PcMediaMx on _PrivateChatBase {
           : msg.contains('registered')
           ? s.errCoinRegisterOnly
           : s.errSendCoin;
-      showChatSnackVia(messenger, context, show);
+      showChatSnackVia(messenger, mounted ? context : messenger.context, show);
     }
   }
 

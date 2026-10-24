@@ -49,11 +49,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     // Dulu hanya di-refresh saat DIALOG verify dibuka → user yang sudah
     // verified dari Telegram tetap melihat status "belum" lalu ditawari isi
     // nomor lagi.
+    final authNotifier = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
     Future.microtask(() async {
-      final v = await ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(authProvider.notifier).fetchHasPassword();
+      final v = await authNotifier.fetchHasPassword();
       if (mounted) setState(() => _hasPassword = v);
     });
     Future.microtask(() {
@@ -573,18 +574,18 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           child: child!,
         ),
       );
-      if (picked == null || !mounted) return;
+      if (picked == null || !context.mounted) return;
       try {
         await ProviderScope.containerOf(
           context,
           listen: false,
         ).read(authProvider.notifier).updateProfile(birthDate: picked);
-        if (!mounted) return;
+        if (!context.mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.msgBirthDateSaved)));
       } catch (e) {
-        if (!mounted) return;
+        if (!context.mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
@@ -627,7 +628,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         return;
       }
       final ok = await showPhoneVerifyDialog(context, s);
-      if (ok == true && mounted) {
+      if (ok == true && context.mounted) {
         _markOwnVerified();
       }
       return;
@@ -639,24 +640,24 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       currentPhone: existingPhone,
       countryName: auth.profile?.country,
     );
-    if (full == null || !mounted) return;
+    if (full == null || !context.mounted) return;
     try {
       await ProviderScope.containerOf(
         context,
         listen: false,
       ).read(authProvider.notifier).updateProfile(phone: full);
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(s.msgPhoneSaved)));
       // Tawarkan verifikasi (badge emas) via Telegram. Nomor baru = status
       // verified di-reset server-side, jadi selalu tawarkan.
       final ok = await showPhoneVerifyDialog(context, s);
-      if (ok == true && mounted) {
+      if (ok == true && context.mounted) {
         _markOwnVerified();
       }
     } catch (_) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
@@ -811,17 +812,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     // (Sengaja TIDAK memakai _loggingOut: spinner-nya milik tile Keluar dan
     // animasinya membuat pumpAndSettle tak pernah settle di test.)
     setState(() => _leaving = true);
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       if (auth.isAnonymous) {
-        await ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(socialProvider.notifier).clearAnonSocial();
+        await container.read(socialProvider.notifier).clearAnonSocial();
       }
-      await ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(authProvider.notifier).deleteMyAccount();
+      await container.read(authProvider.notifier).deleteMyAccount();
       // Sesi: setelah profil+auth user dihapus server-side, signOut() biasa
       // bisa gagal (token sudah mati). signOut provider tahan-error & paksa
       // buang sesi lokal, tapi tetap dibungkus timeout agar tak menggantung.

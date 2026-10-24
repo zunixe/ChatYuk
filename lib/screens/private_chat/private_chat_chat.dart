@@ -32,6 +32,7 @@ mixin _PcChatMx on _PrivateChatBase {
   @override
   void initState() {
     super.initState();
+    final scope = ProviderScope.containerOf(context, listen: false);
     PerfProbe.routeOpen('private-chat');
     _openedAt = DateTime.now();
     // Ukuran font chat berubah (slider) → rebuild bubble & composer langsung.
@@ -78,14 +79,8 @@ mixin _PcChatMx on _PrivateChatBase {
     // Anti-screenshot dikontrol setting admin global (ScreenSecureService).
     // Privasi view_once tetap terjaga via enterViewOnce/exitViewOnce.
 
-    final chat = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatRiverpod.chatProvider.notifier);
-    final auth = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(authProvider.notifier);
+    final chat = scope.read(chatRiverpod.chatProvider.notifier);
+    final auth = scope.read(authProvider.notifier);
 
     // Prime sinkron supaya akun terhapus langsung tampil banner di frame
     // pertama — tanpa kedip composer "Ketik pesan..." dulu menunggu stream.
@@ -304,10 +299,7 @@ mixin _PcChatMx on _PrivateChatBase {
     // Subscription non-kritis ditunda ke post-frame supaya frame pertama
     // (list pesan) tidak tertahan — ala WhatsApp: pesan tampil dulu,
     // status/typing/centang-2 menyusul di frame berikutnya.
-    _wasBlocked = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid);
+    _wasBlocked = scope.read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid);
 
     /// P1b: banding reaksi (map pesan→emoji→count) — skip rebuild bila emit
     /// realtime tak mengubah isi (heartbeat/re-emit).
@@ -378,7 +370,7 @@ mixin _PcChatMx on _PrivateChatBase {
         if (!mounted) return;
         _openWorkTimer = null;
         // Cache dulu (tampil instan), stream menimpa sesudahnya.
-        ProviderScope.containerOf(context, listen: false)
+        scope
             .read(messageReactionProvider)
             .loadCachedReactions(widget.chatId)
             .then((cached) {
@@ -386,7 +378,7 @@ mixin _PcChatMx on _PrivateChatBase {
               reactions = cached;
               _scheduleRebuild();
             });
-        _reactionsSub = ProviderScope.containerOf(context, listen: false)
+        _reactionsSub = scope
             .read(messageReactionProvider)
             .watchReactions(widget.chatId)
             .listen(
@@ -396,7 +388,7 @@ mixin _PcChatMx on _PrivateChatBase {
                 final changed = !_sameReactions(reactions, m);
                 reactions = m;
                 if (changed) _scheduleRebuild();
-                ProviderScope.containerOf(context, listen: false)
+                scope
                     .read(messageReactionProvider)
                     .saveCachedReactions(widget.chatId, m);
               },
@@ -404,7 +396,7 @@ mixin _PcChatMx on _PrivateChatBase {
                 debugPrint('[NAV] reactions stream error: $e');
               },
             );
-        _starredSub = ProviderScope.containerOf(context, listen: false)
+        _starredSub = scope
             .read(messageReactionProvider)
             .watchStarred(widget.chatId)
             .listen(
@@ -412,7 +404,7 @@ mixin _PcChatMx on _PrivateChatBase {
                 final changed = !setEquals(starredIds, m);
                 starredIds = m;
                 if (changed) _scheduleRebuild();
-                ProviderScope.containerOf(context, listen: false)
+                scope
                     .read(messageReactionProvider)
                     .saveCachedStarred(widget.chatId, m);
               },
@@ -424,7 +416,7 @@ mixin _PcChatMx on _PrivateChatBase {
         // memori kosong di sesi ini), muat dari disk. Jangan timpa bila
         // `starredIds` sudah terisi (stream/prime lebih akurat). Dulu TANPA
         // cache → tiap buka chat bintang "di-load dulu" menunggu round-trip.
-        ProviderScope.containerOf(context, listen: false)
+        scope
             .read(messageReactionProvider)
             .loadCachedStarred(widget.chatId)
             .then((cached) {
@@ -445,10 +437,7 @@ mixin _PcChatMx on _PrivateChatBase {
             _subscribeTyping();
           }
           final otherId = widget.otherUid;
-          ProviderScope.containerOf(
-            context,
-            listen: false,
-          ).read(authProvider.notifier).getOtherProfile(otherId).then((p) {
+          scope.read(authProvider.notifier).getOtherProfile(otherId).then((p) {
             if (!mounted || p == null) return;
             _patchHdr(
               (h) => h.copyWith(

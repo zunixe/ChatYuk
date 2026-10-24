@@ -72,7 +72,7 @@ mixin _PcCoreMx on _PrivateChatBase {
     if (!_bonusToastScheduled) {
       _bonusToastScheduled = true;
       Future.microtask(() {
-        if (!mounted) return;
+        if (!context.mounted) return;
         final pp = ProviderScope.containerOf(
           context,
           listen: false,
@@ -429,7 +429,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                         ).read(socialProvider.notifier);
                         final messenger = ScaffoldMessenger.of(context);
                         social.sendFriendRequest(widget.otherUid).then((res) {
-                          if (!mounted) return;
+                          if (!context.mounted) return;
                           showChatSnackVia(
                             messenger,
                             context,
@@ -448,7 +448,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                         try {
                           await chat.blockUser(uidMe, widget.otherUid);
                           dlog('[BLOCK] ok me=$uidMe other=${widget.otherUid}');
-                          if (!mounted) return;
+                          if (!context.mounted) return;
                           showChatSnackVia(
                             messenger,
                             context,
@@ -456,7 +456,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                           );
                         } catch (e) {
                           dlog('[BLOCK] GAGAL me=$uidMe other=${widget.otherUid} err=$e');
-                          if (!mounted) return;
+                          if (!context.mounted) return;
                           showChatSnackVia(
                             messenger,
                             context,
@@ -472,7 +472,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                         try {
                           await chat.unblockUser(uidMe, widget.otherUid);
                           dlog('[BLOCK] unblock ok me=$uidMe other=${widget.otherUid}');
-                          if (!mounted) return;
+                          if (!context.mounted) return;
                           showChatSnackVia(
                             messenger,
                             context,
@@ -480,7 +480,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                           );
                         } catch (e) {
                           dlog('[BLOCK] unblock GAGAL err=$e');
-                          if (!mounted) return;
+                          if (!context.mounted) return;
                           showChatSnackVia(messenger, context, s.errGeneric);
                         }
                       } else if (val == 'report') {

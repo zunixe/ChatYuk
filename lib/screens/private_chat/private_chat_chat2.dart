@@ -289,11 +289,12 @@ void _sendTypingSignal() {
   Future<void> outboxSendEntry(OutboxEntry e, String imageData) async {
     // Kirim ulang video dari outbox: unggah poster juga (kalau disimpan) agar
     // penerima tetap dapat thumbnail — dulu upload video saja → kotak hitam.
+    final scope = ProviderScope.containerOf(context, listen: false);
     var posterPath = '';
     if (e.videoPosterB64.isNotEmpty &&
         (e.type == 'video' || e.type == 'video_once' || e.type == 'video_once_expired')) {
       try {
-        posterPath = await ProviderScope.containerOf(context, listen: false)
+        posterPath = await scope
                 .read(storageProvider)
                 .uploadChatVideoPoster(
                   chatId: photoUploadChatId,
@@ -302,7 +303,7 @@ void _sendTypingSignal() {
             '';
       } catch (_) {}
     }
-    await ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
+    await scope.read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
       senderId: e.senderId,
       senderName: e.senderName,
@@ -346,7 +347,7 @@ Future<void> _sendCoins(int amount) async {
           : msg.contains('registered')
           ? s.errCoinRegisterOnly
           : s.errSendCoin;
-      showChatSnackVia(messenger, context, show);
+      showChatSnackVia(messenger, mounted ? context : messenger.context, show);
     }
   }
 /// Mulai panggilan audio/video ke lawan bicara.
@@ -356,13 +357,14 @@ Future<void> _sendCoins(int amount) async {
     String callType,
     CallMode mode,
   ) async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    if (ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).inCall) {
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
+    if (scope.read(callProvider.notifier).inCall) {
       showChatSnack(ctx, s.msgCallInProgress);
       return;
     }
     final messenger = ScaffoldMessenger.of(ctx);
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final auth = scope.read(authProvider.notifier);
     final profile = auth.profile;
     // Gate anon & dummy: hanya boleh call bila toggle admin
     // app_settings.call_anon_enabled ON (server RLS juga menegakkan).
@@ -370,7 +372,7 @@ Future<void> _sendCoins(int amount) async {
     final registeredCaller =
         (profile?.isRegistered ?? false) && !auth.dummySessionActive;
     if (!registeredCaller && !auth.callAnonEnabled) {
-      final ls = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+      final ls = scope.read(localeProvider).s;
       showAnonPromptDialog(
         context,
         title: ls.promptCompleteEmailCallTitle,
@@ -382,7 +384,7 @@ Future<void> _sendCoins(int amount) async {
     // Nelp pakai COIN (tanpa gratis). Bila saldo < tarif 1 menit → edukasi +
     // topup, batalkan. Hanya untuk penelepon (isCaller).
     {
-      final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+      final pp = scope.read(pointsProvider.notifier);
       if (pp.enabled && pp.callBillingPublished) {
         final ok = await pp.ensureEnoughForCall(context, callType, s.isId);
         if (!ok) return;
@@ -390,7 +392,7 @@ Future<void> _sendCoins(int amount) async {
     }
     // Privasi panggilan penerima: bila menolak, jangan tembak DB sama sekali.
     // Server RLS tetap penjaga akhir (map error di bawah).
-    final allowed = await ProviderScope.containerOf(context, listen: false)
+    final allowed = await scope
         .read(privacyServiceProvider)
         .canView(widget.otherUid, 'call');
     if (!mounted) return;
@@ -411,12 +413,12 @@ Future<void> _sendCoins(int amount) async {
       return;
     }
     try {
-      final callId = await ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).startCall(
+      final callId = await scope.read(callProvider.notifier).startCall(
         widget.otherUid,
         callType,
       );
       if (!mounted) return;
-      final session = await ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).startSession(
+      final session = await scope.read(callProvider.notifier).startSession(
         callId: callId,
         remoteUid: widget.otherUid,
         remoteName: widget.otherName,
@@ -434,13 +436,13 @@ Future<void> _sendCoins(int amount) async {
       );
       // Tarif per menit untuk banner (server kirim ulang tiap tick).
       // Koin OFF (toggle admin) atau billing belum publish → 0 = banner sembunyi.
-      final pp0 = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+      final pp0 = scope.read(pointsProvider.notifier);
       session.setBillingPerMinute(
         (pp0.enabled && pp0.callBillingPublished)
             ? pp0.callCostPerMin(callType)
             : 0,
       );
-      if (!mounted) return;
+      if (!mounted || !ctx.mounted) return;
       if (mode == CallMode.fullscreen) {
         Navigator.of(ctx).push(
           MaterialPageRoute(
@@ -476,7 +478,7 @@ Future<void> _sendCoins(int amount) async {
           low.contains('timeout');
       showChatSnackVia(
         messenger,
-        ctx,
+        ctx.mounted ? ctx : messenger.context,
         denied
             ? s.msgCallRegisterOnly
             : offline

@@ -66,11 +66,14 @@ void showChatSnackVia(
   Duration duration = const Duration(milliseconds: 2500),
   Color? backgroundColor,
 }) {
+  // `context` bisa sudah dilepas (dipanggil dari `catch` setelah `await`,
+  // user keburu keluar layar) → MediaQuery.viewInsetsOf akan throw. Messenger
+  // hidup lebih lama (di atas Navigator), jadi pakai context-nya sebagai cadangan.
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
       buildChatSnackBar(
-        context,
+        context.mounted ? context : messenger.context,
         message,
         action: action,
         duration: duration,
