@@ -34,7 +34,6 @@ LIMIT=1000
 ALLOWLIST=(
   lib/widgets/post_card.dart:1091
   lib/widgets/chat_video_bubble.dart:1006
-  lib/widgets/chat_composer_input.dart:1082
   lib/screens/private_chats/private_chats_build.dart:1342
   # 2026-10-23: +41 baris dari commit remote (fitur blokir senyap: guard
   # pendingBlocked di jalur derive/receive). Bukan fitur baru dari sesi ini.
