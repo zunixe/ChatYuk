@@ -39,7 +39,11 @@ mixin AdminTimelineMx on AdminBase {
     try {
       final list = await _service.adminTimelineAll(filter: _postFilter);
       if (_disposed) return;
-      _adminPosts = list;
+      // RPC mengembalikan kolom snake_case (author_name, like_count, dst),
+      // tapi PostCard membaca kunci camelCase (authorName, likeCount, …) —
+      // tanpa konversi ini semua kartu jatuh ke fallback 'Anon' dan angka
+      // like/komentar = 0. Samakan bentuknya dengan timeline_provider._mapRow.
+      _adminPosts = list.map(_mapPostRow).toList();
       _postsLoaded = true;
     } catch (e) {
       dlog('[Admin] fetchPosts error: $e');
@@ -48,6 +52,35 @@ mixin AdminTimelineMx on AdminBase {
       _postsLoading = false;
       _notifyPosts();
     }
+  }
+
+  /// Baris RPC snake_case → map camelCase yang dipahami [PostCard]
+  /// (identik dengan timeline_provider._mapRow). `id`/`visibility` dipertahankan
+  /// karena `_visibilityBar`/`setPostVisibility` memakainya.
+  Map<String, dynamic> _mapPostRow(Map<String, dynamic> row) {
+    return {
+      'id': row['id'],
+      'authorId': row['author_id'],
+      'authorName': row['author_name'] ?? 'Anon',
+      'authorGender': row['author_gender'] ?? 'other',
+      'authorAvatar': '',
+      'text': row['text'] ?? '',
+      'imagePath': row['image_path'] ?? '',
+      'images': row['images'] is List ? row['images'] : null,
+      'imageW': (row['image_w'] as num?)?.toInt() ?? 0,
+      'imageH': (row['image_h'] as num?)?.toInt() ?? 0,
+      'imageDims': row['image_dims'] is List ? row['image_dims'] : null,
+      'imageBlurhashes':
+          row['image_blurhashes'] is List ? row['image_blurhashes'] : null,
+      'visibility': row['visibility'] ?? 'public',
+      'likeCount': row['like_count'] ?? 0,
+      'commentCount': row['comment_count'] ?? 0,
+      'shareCount': row['share_count'] ?? 0,
+      'isBoosted': row['is_boosted'] == true,
+      'createdAt': row['created_at'],
+      'isLiked': false,
+      'isFollowing': false,
+    };
   }
 
   /// Ganti filter visibilitas → refetch.

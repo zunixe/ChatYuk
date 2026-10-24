@@ -679,8 +679,70 @@ void main() {
     });
   });
 
-  group('hapus pesan room (admin)', () {
-    test('deleteRoomMessage delegasi ke service', () async {
+  group('timeline admin (nama penulis)', () {
+    test('baris RPC snake_case dipetakan ke camelCase PostCard', () async {
+      when(() => service.adminTimelineAll(
+            filter: any(named: 'filter'),
+            limit: any(named: 'limit'),
+          )).thenAnswer((_) async => [
+            {
+              'id': 'p1',
+              'author_id': 'u1',
+              'author_name': 'angela', // BUKAN 'Anon'
+              'author_gender': 'female',
+              'text': 'hai',
+              'image_path': '',
+              'images': ['posts/x_1.jpg'],
+              'image_w': 1080,
+              'image_h': 1080,
+              'visibility': 'public',
+              'like_count': 3,
+              'comment_count': 2,
+              'share_count': 1,
+              'is_boosted': false,
+              'created_at': '2026-10-26T00:00:00Z',
+            },
+          ]);
+
+      await provider.fetchPosts(force: true);
+
+      final p = provider.adminPosts.single;
+      // Kunci yang dibaca PostCard.
+      expect(p['authorName'], 'angela');
+      expect(p['authorId'], 'u1');
+      expect(p['authorGender'], 'female');
+      expect(p['likeCount'], 3);
+      expect(p['commentCount'], 2);
+      expect(p['shareCount'], 1);
+      expect(p['images'], ['posts/x_1.jpg']);
+      expect(p['imageW'], 1080);
+      expect(p['imageH'], 1080);
+      // Kunci yang dipakai bar visibilitas admin.
+      expect(p['id'], 'p1');
+      expect(p['visibility'], 'public');
+    });
+
+    test('author_name null → fallback Anon', () async {
+      when(() => service.adminTimelineAll(
+            filter: any(named: 'filter'),
+            limit: any(named: 'limit'),
+          )).thenAnswer((_) async => [
+            {
+              'id': 'p2',
+              'author_id': 'u2',
+              'author_name': null,
+              'visibility': 'public',
+              'created_at': '2026-10-26T00:00:00Z',
+            },
+          ]);
+
+      await provider.fetchPosts(force: true);
+
+      expect(provider.adminPosts.single['authorName'], 'Anon');
+    });
+  });
+
+  group('hapus pesan room (admin)', () {    test('deleteRoomMessage delegasi ke service', () async {
       when(() => service.adminDeleteRoomMessage(any()))
           .thenAnswer((_) async => true);
 

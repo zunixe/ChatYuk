@@ -67,6 +67,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/chat/banned_nicknames.dart';
 
 part 'main_notifications.dart';
+part 'main_notifications_bg.dart';
+part 'main_notifications_display.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
