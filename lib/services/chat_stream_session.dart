@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:math' show Random;
-import 'package:flutter/foundation.dart' show ValueNotifier, ValueListenable;
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart' show activeChatId;
 import '../models/message_model.dart';
@@ -11,96 +11,8 @@ import '../core/cache/photo_cache.dart';
 import 'storage_photo_service.dart';
 import 'sticker_fill.dart';
 
-// Concurrency limiter: max N operasi paralel, sisanya antri.
-class _Semaphore {
-  final int max;
-  int _count = 0;
-  final _waiters = <Completer<void>>[];
-  _Semaphore(this.max);
-  Future<void> acquire() async {
-    if (_count < max) {
-      _count++;
-      return;
-    }
-    final c = Completer<void>();
-    _waiters.add(c);
-    await c.future;
-  }
-
-  void release() {
-    _count--;
-    if (_waiters.isNotEmpty) {
-      _waiters.removeAt(0).complete();
-      _count++;
-    }
-  }
-
-  Future<T> run<T>(Future<T> Function() fn) async {
-    await acquire();
-    try {
-      return await fn();
-    } finally {
-      release();
-    }
-  }
-}
-
-// Topik kanal realtime stream pesan (satu chat/room). SATU sumber untuk
-// SUBSCRIBER (`ChatStreamSession`) dan PENGIRIM broadcast (mis.
-// `view_once_seen` di ChatService) — topik harus PERSIS sama; dulu pengirim
-// memakai `private_<chatId>` sementara subscriber di `msg-<cacheKey>-<n>`
-// (sufiks percobaan reconnect) → broadcast tidak pernah bertemu (bug
-// "foto sekali-lihat tidak kadaluarsa realtime di pengirim", 2026-10-20).
-String chatStreamTopic(String cacheKey) => 'msg-$cacheKey';
-
-/// Topik broadcast `view_once_seen` untuk satu chat/room.
-String viewOnceSeenTopic({required bool isRoom, required String id}) =>
-    chatStreamTopic('${isRoom ? 'room' : 'private'}_$id');
-
-// Handle stream chat — expose stream + aksi loadOlder untuk pagination.
-class ChatMessageStream {
-  final Stream<List<MessageModel>> stream;
-  final Future<void> Function() loadOlder;
-  final Future<void> Function(String messageId) fetchImage;
-
-  /// Fetch ulang pesan terbaru dari server — jaring pengaman kalau event
-  /// Realtime miss (channel drop) supaya bubble pending tidak nyangkut.
-  final Future<void> Function() reload;
-
-  /// A1: revisi isi (naik tiap isi pesan berubah) — kunci cache stabil untuk
-  /// `_deriveItems` (hindari recompute O(N) tiap emit stream).
-  final ValueListenable<int> revision;
-
-  /// Tandai pesan terhapus / batal hapus SEKETIKA di sesi + cache lokal
-  /// (tanpa menunggu gema realtime). Dulu: hapus lalu langsung tutup chat →
-  /// gema realtime tak sempat → cache tetap berisi pesan → buka lagi,
-  /// pesan terhapus SEMPAT MUNCUL lalu hilang (kedip).
-  final void Function(String messageId, bool deleted) markDeleted;
-  const ChatMessageStream({
-    required this.stream,
-    required this.loadOlder,
-    required this.fetchImage,
-    required this.reload,
-    required this.revision,
-    required this.markDeleted,
-  });
-}
-
-/// Tanda tangan ISI list pesan untuk memutuskan perlu tulis cache atau tidak.
-///
-/// Dulu `'jumlah:idTerakhir'` — hapus/edit pesan TIDAK mengubahnya, sehingga
-/// status terhapus/teks editan TIDAK PERNAH disimpan ke cache → buka chat
-/// lagi menampilkan isi lama dulu (pesan terhapus "sempat muncul"). Sekarang
-/// mencakup id + status hapus + edit + teks tiap pesan (O(n), n ≈ ratusan,
-/// dipanggil ter-debounce 2s). Murni & testable.
-String messageCacheSignature(List<MessageModel> msgs) {
-  if (msgs.isEmpty) return '';
-  var h = 17;
-  for (final m in msgs) {
-    h = Object.hash(h, m.id, m.isDeleted, m.edited, m.text, m.imageData.length);
-  }
-  return '${msgs.length}:${msgs.last.id}:$h';
-}
+export 'chat_stream_types.dart';
+import 'chat_stream_types.dart';
 
 /// Sesi stream pesan satu chat (room / private). Isi lengkap closure
 /// `_cachedMessagesStream` lama dipindahkan ke sini; `ChatService` hanya
@@ -128,7 +40,7 @@ class ChatStreamSession {
   // sederhana) supaya session tidak bergantung balik ke ChatService.
   final bool Function(MessageModel m) _needsPhotoFill;
   final Future<void> Function(String cacheKey, MessageModel msg)
-      _downloadVoiceToCache;
+  _downloadVoiceToCache;
   final Future<void> Function(String path) _prefetchVoiceBytes;
 
   ChatStreamSession({
@@ -136,21 +48,23 @@ class ChatStreamSession {
     required this.cacheKey,
     required bool Function(MessageModel m) needsPhotoFill,
     required Future<void> Function(String cacheKey, MessageModel msg)
-        downloadVoiceToCache,
+    downloadVoiceToCache,
     required Future<void> Function(String path) prefetchVoiceBytes,
-  })  : _sb = sb,
-        isPrivate = cacheKey.startsWith('private_'),
-        table = cacheKey.startsWith('private_') ? 'private_messages' : 'messages',
-        filterKey = cacheKey.startsWith('private_') ? 'chat_id' : 'room_id',
-        filterVal = cacheKey.split('_').skip(1).join('_'),
-        _needsPhotoFill = needsPhotoFill,
-        _downloadVoiceToCache = downloadVoiceToCache,
-        _prefetchVoiceBytes = prefetchVoiceBytes;
+  }) : _sb = sb,
+       isPrivate = cacheKey.startsWith('private_'),
+       table = cacheKey.startsWith('private_')
+           ? 'private_messages'
+           : 'messages',
+       filterKey = cacheKey.startsWith('private_') ? 'chat_id' : 'room_id',
+       filterVal = cacheKey.split('_').skip(1).join('_'),
+       _needsPhotoFill = needsPhotoFill,
+       _downloadVoiceToCache = downloadVoiceToCache,
+       _prefetchVoiceBytes = prefetchVoiceBytes;
 
   // Cache cutoff delete per chat (TTL 60 dtk) — hindari query private_chats
   // berulang tiap reload. Di-invalidasi saat ada event realtime pada chat.
   static final Map<String, ({DateTime? ts, DateTime fetchedAt})>
-      _hiddenCutoffCache = {};
+  _hiddenCutoffCache = {};
 
   /// Terapkan satu payload UPDATE realtime ke list pesan.
   /// Return list BARU bila cocok, null bila perlu refetch (id tak dikenal
@@ -305,7 +219,9 @@ class ChatStreamSession {
     // tambah `replied_to_meta`. Dulu room TIDAK mengambilnya, akibatnya
     // thumbnail kutipan media hilang setiap keluar-masuk room (paritas
     // private: `privateCols` + `replyCols`).
-    final cols = isPrivate ? '$privateCols,$replyCols' : '$roomCols,replied_to_meta';
+    final cols = isPrivate
+        ? '$privateCols,$replyCols'
+        : '$roomCols,replied_to_meta';
 
     // Sync foto otomatis: server → file lokal terenkripsi. Download lazy
     // (paralel) hanya untuk pesan yang fotonya belum ada di lokal.
@@ -315,7 +231,7 @@ class ChatStreamSession {
 
     // Batasi load foto lokal paralel — 100 foto decrypt sekaligus bikin
     // buka chat lambat. Max 4 parallel, sisanya antri.
-    final _photoLoadGate = _Semaphore(4);
+    final _photoLoadGate = ChatSemaphore(4);
 
     Future<void> _drainPhotoQueue() async {
       while (photoQueue.isNotEmpty && downloading < maxConcurrentPhotos) {
@@ -364,7 +280,9 @@ class ChatStreamSession {
             for (var j = 0; j < chunk.length; j++) {
               final m = chunk[j];
               final data = results[j];
-              dlog('[PHOTO-DBG] drain ${m.id} srcLen=${(byId[m.id] ?? '').length} dlLen=${data.length}');
+              dlog(
+                '[PHOTO-DBG] drain ${m.id} srcLen=${(byId[m.id] ?? '').length} dlLen=${data.length}',
+              );
               if (data.isEmpty) continue;
               if (_isDead()) return;
               // save() menyimpan full-res + membuat thumbnail (dikembalikan).
@@ -373,11 +291,7 @@ class ChatStreamSession {
               // saja, jangan tulis ulang + compute ulang.
               final thumb = cacheHitIds.contains(m.id)
                   ? await PhotoCache.instance.loadThumb(cacheKey, m.id)
-                  : await PhotoCache.instance.save(
-                      cacheKey,
-                      m.id,
-                      data,
-                    );
+                  : await PhotoCache.instance.save(cacheKey, m.id, data);
               if (_isDead()) return;
               final idx = _current.indexWhere((x) => x.id == m.id);
               if (idx >= 0 && _needsPhotoFill(_current[idx])) {
@@ -421,13 +335,16 @@ class ChatStreamSession {
       // Voice: prefetch audio TERBARU di background (lazy) supaya tap play
       // langsung dari disk. Dibatasi 10 terbaru agar hemat kuota; voice lama
       // tetap on-demand saat di-tap (dengan spinner di bubble).
-      final voices = models
-          .where((m) =>
-              m.type == 'voice' &&
-              m.imageData.isNotEmpty &&
-              StoragePhotoService.instance.isVoicePath(m.imageData))
-          .toList()
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      final voices =
+          models
+              .where(
+                (m) =>
+                    m.type == 'voice' &&
+                    m.imageData.isNotEmpty &&
+                    StoragePhotoService.instance.isVoicePath(m.imageData),
+              )
+              .toList()
+            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
       if (voices.isNotEmpty) {
         unawaited(() async {
           for (final m in voices.take(10)) {
@@ -443,9 +360,22 @@ class ChatStreamSession {
       }).toList();
       // STIKER: path cuma di `image_data` (tak ikut cols) → isi batch.
       // Tanpa ini bubble kosong usai reload ("muncul lalu ilang").
-      final stickers = [for (final m in models) if (m.type == 'sticker' && m.imageData.isEmpty) m];
+      final stickers = [
+        for (final m in models)
+          if (m.type == 'sticker' && m.imageData.isEmpty) m,
+      ];
       if (stickers.isNotEmpty) {
-        unawaited(fillStickerPaths(sb: _sb, table: table, stickers: stickers, currentGetter: () => _current, isClosed: () => _isDead(), emit: _emit, scheduleCacheSave: scheduleCacheSave));
+        unawaited(
+          fillStickerPaths(
+            sb: _sb,
+            table: table,
+            stickers: stickers,
+            currentGetter: () => _current,
+            isClosed: () => _isDead(),
+            emit: _emit,
+            scheduleCacheSave: scheduleCacheSave,
+          ),
+        );
       }
       if (photos.isEmpty) return;
       // LAZY PENUH: hanya decrypt upfront untuk foto terbaru yang terlihat
@@ -523,7 +453,9 @@ class ChatStreamSession {
           .toList();
       for (final m in list) {
         if (m.type == 'image' || m.type == 'view_once' || m.type == 'voice') {
-          dlog('[PHOTO-DBG] fetchServer ${m.id} type=${m.type} imgLen=${m.imageData.length} head=${m.imageData.isEmpty ? '' : m.imageData.substring(0, m.imageData.length > 30 ? 30 : m.imageData.length)}');
+          dlog(
+            '[PHOTO-DBG] fetchServer ${m.id} type=${m.type} imgLen=${m.imageData.length} head=${m.imageData.isEmpty ? '' : m.imageData.substring(0, m.imageData.length > 30 ? 30 : m.imageData.length)}',
+          );
         }
       }
       return list;
@@ -657,7 +589,8 @@ class ChatStreamSession {
         _trim();
         if (_current.isNotEmpty) {
           final first = _current.first.timestamp;
-          _oldestFetchedTs = _oldestFetchedTs == null || first.isBefore(_oldestFetchedTs!)
+          _oldestFetchedTs =
+              _oldestFetchedTs == null || first.isBefore(_oldestFetchedTs!)
               ? first
               : _oldestFetchedTs;
         }
@@ -726,215 +659,241 @@ class ChatStreamSession {
     /// Pasang SELURUH handler realtime ke [ch]. Dipanggil untuk channel awal &
     /// tiap channel BARU saat reconnect (Supabase melarang `subscribe` 2x pada
     /// instance yang sama — bug terukur "tried to subscribe multiple times").
-    void attach(RealtimeChannel ch) {
-    // INSERT: append langsung dari payload — tidak perlu round-trip ke server
-    ch.onPostgresChanges(
-      event: PostgresChangeEvent.insert,
-      schema: 'public',
-      table: table,
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: filterKey,
-        value: filterVal,
-      ),
-      callback: (payload) {
-        _hiddenCutoffCache.remove(filterVal);
-        if (_isDead()) return;
-        try {
-          final row = payload.newRecord;
-          if (row[filterKey]?.toString() != filterVal) return;
-          final msg = MessageModel.fromMap('${row['id']}', snakeToCamel(row));
-          if (_current.any((m) => m.id == msg.id)) return; // dedupe
-          if (_hiddenCutoff != null && !msg.timestamp.isAfter(_hiddenCutoff!))
-            return;
-          // PENTING (perf): JANGAN `await` unduh/thumbnail di jalur realtime —
-          // dulu pesan foto menunggu unduh full-res selesai SEBELUM ditampilkan
-          // (dan event berikutnya ikut ngantre), jadi pesan masuk terasa
-          // "lambat banget". Sekarang pesan DI-EMIT DULU (placeholder
-          // spinner), lalu foto diisi di latar oleh queuePhotoDownload —
-          // persis pola video (poster diurus ChatVideoBubble).
-          // VOICE: unduh audio di latar (tanpa thumbnail).
-          final needsPhotoFill = (msg.type == 'image' ||
-                  msg.type == 'view_once' ||
-                  msg.type == 'view_once_expired') &&
-              msg.imageData.isNotEmpty &&
-              _needsPhotoFill(msg);
-          if (needsPhotoFill) {
-            queuePhotoDownload(msg);
-          } else if (msg.type == 'voice' && msg.imageData.isNotEmpty) {
-            unawaited(_downloadVoiceToCache(cacheKey, msg));
-          }
-          // Sisipkan di posisi kronologis yang benar (ascending by timestamp),
-          // bukan selalu di akhir — pesan realtime bisa tiba tidak urut
-          // (mis. pesan riwayat call datang SETELAH user kirim chat baru).
-          // In-place insert (dulu spread-copy seluruh list per pesan = O(N²)
-          // saat burst).
-          var insertAt = _current.length;
-          for (var i = _current.length - 1; i >= 0; i--) {
-            if (_current[i].timestamp.isAfter(msg.timestamp)) {
-              insertAt = i;
-            } else {
-              break;
-            }
-          }
-          if (insertAt >= _current.length) {
-            _current.add(msg);
-          } else {
-            _current.insert(insertAt, msg);
-          }
-          _trim();
-          lastRealtime = DateTime.now();
-          dlog(
-            '[DEBUG-READ] realtime INSERT table=$table msg=${msg.id} filter=$filterVal',
-          );
-          if (msg.type == 'image' ||
+    /// Masukkan satu pesan BARU (sumber tepercaya: payload postgres INSERT
+    /// yang sudah lewat RLS, atau baris hasil fetch by id) ke list sesi.
+    void ingestIncoming(MessageModel msg) {
+      if (_current.any((m) => m.id == msg.id)) return; // dedupe
+      if (_hiddenCutoff != null && !msg.timestamp.isAfter(_hiddenCutoff!))
+        return;
+      // PENTING (perf): JANGAN `await` unduh/thumbnail di jalur realtime —
+      // dulu pesan foto menunggu unduh full-res selesai SEBELUM ditampilkan
+      // (dan event berikutnya ikut ngantre), jadi pesan masuk terasa
+      // "lambat banget". Sekarang pesan DI-EMIT DULU (placeholder
+      // spinner), lalu foto diisi di latar oleh queuePhotoDownload —
+      // persis pola video (poster diurus ChatVideoBubble).
+      // VOICE: unduh audio di latar (tanpa thumbnail).
+      final needsPhotoFill =
+          (msg.type == 'image' ||
               msg.type == 'view_once' ||
-              msg.type == 'view_once_expired' ||
-              msg.type == 'video' ||
-              msg.type == 'video_once' ||
-              msg.type == 'video_once_expired') {
-            dlog('[PHOTO-DBG] rt-insert ${msg.id} type=${msg.type} imgLen=${msg.imageData.length} head=${msg.imageData.isEmpty ? '' : msg.imageData.substring(0, msg.imageData.length > 30 ? 30 : msg.imageData.length)}');
-          }
-          _emit();
-          scheduleCacheSave();
-        } catch (_) {
-          scheduleReload();
-        }
-      },
-    );
-    // UPDATE: parse payload untuk update partial (jangan refetch full)
-    // Filter WAJIB sama dengan INSERT/DELETE: tanpa filter, realtime UPDATE
-    // bisa tidak terkirim untuk baris ini (gejala: view-once tidak berubah
-    // jadi "kadaluarsa" di pengirim sampai chat dibuka ulang).
-    ch.onPostgresChanges(
-      event: PostgresChangeEvent.update,
-      schema: 'public',
-      table: table,
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: filterKey,
-        value: filterVal,
-      ),
-      callback: (payload) {
-        _hiddenCutoffCache.remove(filterVal);
-        if (_isDead()) return;
-        lastRealtime = DateTime.now();
-        try {
-          dlog('[RT-UPDATE] $filterVal id=${payload.newRecord['id']} '
-              'type=${payload.newRecord['type']}');
-          final next = ChatStreamSession.applyUpdateRecord(
-            _current,
-            payload.newRecord,
-          );
-          if (next == null) {
-            scheduleReload();
-            return;
-          }
-          _current = next;
-          _emit();
-          scheduleCacheSave();
-        } catch (_) {
-          scheduleReload();
-        }
-      },
-    );
-    ch.onPostgresChanges(
-      event: PostgresChangeEvent.delete,
-      schema: 'public',
-      table: table,
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: filterKey,
-        value: filterVal,
-      ),
-      callback: (_) {
-        _hiddenCutoffCache.remove(filterVal);
-        if (_isDead()) return;
-        lastRealtime = DateTime.now();
-        scheduleReload();
-      },
-    );
-    ch.onBroadcast(event: 'new_message', callback: (payload, [ref]) async {
-      _hiddenCutoffCache.remove(filterVal);
-      lastRealtime = DateTime.now();
-      if (_isDead()) return;
-      try {
-        final data = payload;
-        if (data['chat_id']?.toString() != filterVal && data['room_id']?.toString() != filterVal) return;
-        final msg = MessageModel.fromMap(data['id']?.toString() ?? 'bc-${DateTime.now().microsecondsSinceEpoch}', snakeToCamel(data));
-        if (_current.any((m) => m.id == msg.id)) return;
-        // P1a (2026-10-11): EMIT DULU (placeholder), foto di latar — JANGAN
-        // tunggu download+save SEBELUM emit (dulu event broadcast tertahan
-        // saat foto besar → pesan masuk terasa lambat + event berikut mengantre).
-        // Sama seperti jalur INSERT postgres di atas.
-        final bcIsVideo = msg.type == 'video' ||
-            msg.type == 'video_once' ||
-            msg.type == 'video_once_expired';
-        // File/dokumen: path BUKAN foto → jangan diunduh sebagai foto.
-        final bcNeedsPhoto = msg.imageData.isNotEmpty &&
-            msg.type != 'voice' &&
-            msg.type != 'file' &&
-            !bcIsVideo;
-        // Sisipkan kronologis
-        var idx = _current.indexWhere((m) => m.timestamp.isAfter(msg.timestamp));
-        if (idx < 0) { _current.add(msg); } else { _current.insert(idx, msg); }
-        _trim();
-        _emit();
-        scheduleCacheSave();
-        // Foto/voice di latar SETELAH emit.
-        if (bcNeedsPhoto) {
-          queuePhotoDownload(msg);
-        } else if (msg.type == 'voice' && msg.imageData.isNotEmpty) {
-          unawaited(_downloadVoiceToCache(cacheKey, msg));
-        }
-      } catch (_) {}
-    });
-
-    // PENANDA "SUDAH DILIHAT" (realtime): penerima mengirim broadcast
-    // `view_once_seen` (topik dari `viewOnceSeenTopic` — SAMA dengan kanal
-    // ini) setelah membuka foto sekali-lihat → pengirim langsung mengunci
-    // kartunya (tanpa menunggu refetch/event UPDATE postgres yang bisa telat
-    // di MIUI/Doze).
-    ch.onBroadcast(event: 'view_once_seen', callback: (payload, [ref]) {
-      if (_isDead()) return;
-      try {
-        final mid = payload['message_id']?.toString() ?? '';
-        final newType = payload['type']?.toString() ?? 'view_once_expired';
-        dlog('[VO-SEEN] recv id=$mid type=$newType filter=$filterVal');
-        if (mid.isEmpty) return;
-        final idx = _current.indexWhere((m) => m.id == mid);
-        if (idx < 0) return;
-        if (_current[idx].type == newType) return;
-        _current = List<MessageModel>.of(_current)
-          ..[idx] = _current[idx].copyWith(type: newType);
-        _emit();
-        scheduleCacheSave();
-      } catch (_) {}
-    });
-
-    ch.subscribe((status, err) {
-      // ABAIKAN callback dari kanal yang SUDAH DIGANTI (di-teardown sengaja
-      // oleh reconnect/resume). removeChannel memicu status `closed` di
-      // instance lama — tanpa guard ini tiap reconnect menjadwalkan
-      // reconnect berikutnya → loop buat-buang kanal tiap ~2 dtk.
-      // Sesi DITUTUP → abaikan semua status (termasuk `closed` dari
-      // removeChannel di onCancel) supaya tak ada reconnect/channel yatim.
-      if (_isDead() || !identical(ch, channel)) return;
-      if (err != null) dlog('[ChatStream] realtime error: $err');
-      // REALTIME RESILIENT: channel mati (mis. 1002 saat network blip) →
-      // reconnect via channel BARU (bukan subscribe ulang instance).
-      if (status == RealtimeSubscribeStatus.channelError ||
-          status == RealtimeSubscribeStatus.timedOut ||
-          status == RealtimeSubscribeStatus.closed) {
-        _subscribedNow = false;
-        requestReconnect();
-      } else if (status == RealtimeSubscribeStatus.subscribed) {
-        _reconnectAttempt = 0; // sukses → reset backoff
-        _subscribedNow = true;
-        lastRealtime = DateTime.now();
-        dlog('[ChatStream] subscribed topic=$channelName');
+              msg.type == 'view_once_expired') &&
+          msg.imageData.isNotEmpty &&
+          _needsPhotoFill(msg);
+      if (needsPhotoFill) {
+        queuePhotoDownload(msg);
+      } else if (msg.type == 'voice' && msg.imageData.isNotEmpty) {
+        unawaited(_downloadVoiceToCache(cacheKey, msg));
       }
-    });
+      // Sisipkan di posisi kronologis yang benar (ascending by timestamp),
+      // bukan selalu di akhir — pesan realtime bisa tiba tidak urut
+      // (mis. pesan riwayat call datang SETELAH user kirim chat baru).
+      // In-place insert (dulu spread-copy seluruh list per pesan = O(N²)
+      // saat burst).
+      var insertAt = _current.length;
+      for (var i = _current.length - 1; i >= 0; i--) {
+        if (_current[i].timestamp.isAfter(msg.timestamp)) {
+          insertAt = i;
+        } else {
+          break;
+        }
+      }
+      if (insertAt >= _current.length) {
+        _current.add(msg);
+      } else {
+        _current.insert(insertAt, msg);
+      }
+      _trim();
+      lastRealtime = DateTime.now();
+      dlog(
+        '[DEBUG-READ] realtime INSERT table=$table msg=${msg.id} filter=$filterVal',
+      );
+      if (msg.type == 'image' ||
+          msg.type == 'view_once' ||
+          msg.type == 'view_once_expired' ||
+          msg.type == 'video' ||
+          msg.type == 'video_once' ||
+          msg.type == 'video_once_expired') {
+        dlog(
+          '[PHOTO-DBG] rt-insert ${msg.id} type=${msg.type} imgLen=${msg.imageData.length} head=${msg.imageData.isEmpty ? '' : msg.imageData.substring(0, msg.imageData.length > 30 ? 30 : msg.imageData.length)}',
+        );
+      }
+      _emit();
+      scheduleCacheSave();
+    }
+
+    /// Broadcast `new_message` = SINYAL saja (REVIEW_2026-10-24 SEC-01):
+    /// channel broadcast publik bisa dikirimi siapa pun yang tahu topiknya,
+    /// jadi isi payload TIDAK dipercaya. Ambil baris aslinya by id lewat
+    /// PostgREST (tunduk RLS peserta) — pesan palsu tak punya baris → diabaikan.
+    Future<void> ingestBroadcastSignal(Map<String, dynamic> data) async {
+      final id = data['id']?.toString() ?? '';
+      if (id.isEmpty) {
+        // Klien lama mengirim payload tanpa id → anggap sinyal "ada pesan".
+        scheduleReload();
+        return;
+      }
+      if (_current.any((m) => m.id == id)) return;
+      final row = await _sb
+          .from(table)
+          .select(cols)
+          .eq('id', id)
+          .eq(filterKey, filterVal)
+          .maybeSingle();
+      if (row == null || _isDead()) return;
+      ingestIncoming(MessageModel.fromMap('${row['id']}', snakeToCamel(row)));
+    }
+
+    /// Pasang SELURUH handler realtime ke [ch]. Dipanggil untuk channel awal &
+    /// tiap channel BARU saat reconnect (Supabase melarang `subscribe` 2x pada
+    /// instance yang sama — bug terukur "tried to subscribe multiple times").
+    void attach(RealtimeChannel ch) {
+      // INSERT: append langsung dari payload — tidak perlu round-trip ke server
+      ch.onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: table,
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: filterKey,
+          value: filterVal,
+        ),
+        callback: (payload) {
+          _hiddenCutoffCache.remove(filterVal);
+          if (_isDead()) return;
+          try {
+            final row = payload.newRecord;
+            if (row[filterKey]?.toString() != filterVal) return;
+            ingestIncoming(
+              MessageModel.fromMap('${row['id']}', snakeToCamel(row)),
+            );
+          } catch (_) {
+            scheduleReload();
+          }
+        },
+      );
+      // UPDATE: parse payload untuk update partial (jangan refetch full)
+      // Filter WAJIB sama dengan INSERT/DELETE: tanpa filter, realtime UPDATE
+      // bisa tidak terkirim untuk baris ini (gejala: view-once tidak berubah
+      // jadi "kadaluarsa" di pengirim sampai chat dibuka ulang).
+      ch.onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: table,
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: filterKey,
+          value: filterVal,
+        ),
+        callback: (payload) {
+          _hiddenCutoffCache.remove(filterVal);
+          if (_isDead()) return;
+          lastRealtime = DateTime.now();
+          try {
+            dlog(
+              '[RT-UPDATE] $filterVal id=${payload.newRecord['id']} '
+              'type=${payload.newRecord['type']}',
+            );
+            final next = ChatStreamSession.applyUpdateRecord(
+              _current,
+              payload.newRecord,
+            );
+            if (next == null) {
+              scheduleReload();
+              return;
+            }
+            _current = next;
+            _emit();
+            scheduleCacheSave();
+          } catch (_) {
+            scheduleReload();
+          }
+        },
+      );
+      ch.onPostgresChanges(
+        event: PostgresChangeEvent.delete,
+        schema: 'public',
+        table: table,
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: filterKey,
+          value: filterVal,
+        ),
+        callback: (_) {
+          _hiddenCutoffCache.remove(filterVal);
+          if (_isDead()) return;
+          lastRealtime = DateTime.now();
+          scheduleReload();
+        },
+      );
+      // `new_message` = event klien LAMA (payload berisi isi pesan, tak
+      // dipercaya) → hanya dipakai sebagai sinyal; `new_message_id` = baru.
+      for (final ev in const ['new_message', chatNewMessageSignalEvent]) {
+        ch.onBroadcast(
+          event: ev,
+          callback: (payload, [ref]) async {
+            _hiddenCutoffCache.remove(filterVal);
+            lastRealtime = DateTime.now();
+            if (_isDead()) return;
+            try {
+              if (payload['chat_id']?.toString() != filterVal &&
+                  payload['room_id']?.toString() != filterVal) {
+                return;
+              }
+              await ingestBroadcastSignal(payload);
+            } catch (e) {
+              dlog('[Chat] broadcast $ev gagal diproses: $e');
+            }
+          },
+        );
+      }
+
+      // PENANDA "SUDAH DILIHAT" (realtime): penerima mengirim broadcast
+      // `view_once_seen` (topik dari `viewOnceSeenTopic` — SAMA dengan kanal
+      // ini) setelah membuka foto sekali-lihat → pengirim langsung mengunci
+      // kartunya (tanpa menunggu refetch/event UPDATE postgres yang bisa telat
+      // di MIUI/Doze).
+      ch.onBroadcast(
+        event: 'view_once_seen',
+        callback: (payload, [ref]) {
+          if (_isDead()) return;
+          try {
+            final mid = payload['message_id']?.toString() ?? '';
+            final newType = payload['type']?.toString() ?? 'view_once_expired';
+            dlog('[VO-SEEN] recv id=$mid type=$newType filter=$filterVal');
+            if (mid.isEmpty) return;
+            final idx = _current.indexWhere((m) => m.id == mid);
+            if (idx < 0) return;
+            if (_current[idx].type == newType) return;
+            _current = List<MessageModel>.of(_current)
+              ..[idx] = _current[idx].copyWith(type: newType);
+            _emit();
+            scheduleCacheSave();
+          } catch (_) {}
+        },
+      );
+
+      ch.subscribe((status, err) {
+        // ABAIKAN callback dari kanal yang SUDAH DIGANTI (di-teardown sengaja
+        // oleh reconnect/resume). removeChannel memicu status `closed` di
+        // instance lama — tanpa guard ini tiap reconnect menjadwalkan
+        // reconnect berikutnya → loop buat-buang kanal tiap ~2 dtk.
+        // Sesi DITUTUP → abaikan semua status (termasuk `closed` dari
+        // removeChannel di onCancel) supaya tak ada reconnect/channel yatim.
+        if (_isDead() || !identical(ch, channel)) return;
+        if (err != null) dlog('[ChatStream] realtime error: $err');
+        // REALTIME RESILIENT: channel mati (mis. 1002 saat network blip) →
+        // reconnect via channel BARU (bukan subscribe ulang instance).
+        if (status == RealtimeSubscribeStatus.channelError ||
+            status == RealtimeSubscribeStatus.timedOut ||
+            status == RealtimeSubscribeStatus.closed) {
+          _subscribedNow = false;
+          requestReconnect();
+        } else if (status == RealtimeSubscribeStatus.subscribed) {
+          _reconnectAttempt = 0; // sukses → reset backoff
+          _subscribedNow = true;
+          lastRealtime = DateTime.now();
+          dlog('[ChatStream] subscribed topic=$channelName');
+        }
+      });
     } // attach: handler + subscribe terpasang ke ch.
 
     void openChannel() {
@@ -955,6 +914,7 @@ class ChatStreamSession {
         await _sb.removeChannel(old);
       } catch (_) {}
     }
+
     openChannel();
 
     // State reconnect realtime (backoff). Lihat _scheduleChannelReconnect.
@@ -970,13 +930,13 @@ class ChatStreamSession {
     void _scheduleChannelReconnect() {
       if (_isDead() || _reconnecting) return;
       _reconnecting = true;
-      final base = _reconnectDelays[_reconnectAttempt.clamp(
-        0,
-        _reconnectDelays.length - 1,
-      )];
+      final base =
+          _reconnectDelays[_reconnectAttempt.clamp(
+            0,
+            _reconnectDelays.length - 1,
+          )];
       if (_reconnectAttempt < _reconnectDelays.length - 1) _reconnectAttempt++;
-      final ms =
-          (base * 1000 * (0.75 + _rng.nextDouble() * 0.5)).round();
+      final ms = (base * 1000 * (0.75 + _rng.nextDouble() * 0.5)).round();
       dlog('[ChatStream] reconnect dalam ${ms}ms (attempt=$_reconnectAttempt)');
       _reconnectTimer?.cancel();
       _reconnectTimer = Timer(Duration(milliseconds: ms), () async {
@@ -1033,8 +993,10 @@ class ChatStreamSession {
       if (now == _fgWas) return;
       _fgWas = now;
       if (!now || _isDead()) return;
-      dlog('[ChatStream] resume filter=$filterVal '
-          'subscribed=$_subscribedNow');
+      dlog(
+        '[ChatStream] resume filter=$filterVal '
+        'subscribed=$_subscribedNow',
+      );
       unawaited(reload());
       // SELALU kanal baru: socket bisa "zombie" (status masih subscribed tapi
       // mati diam-diam karena freeze MIUI) — tanpa join ulang, event
@@ -1055,31 +1017,33 @@ class ChatStreamSession {
     // periodic vs ±3 di WhatsApp yang push-only). 20s = 3×/menit: masih
     // terasa responsif sebagai cadangan, beban turun ~60%.
     Timer? pollTimer;
-    void startPoll() => pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-      // BATERAI (P2): JANGAN poll saat app di-background (layar mati/tidak
-      // dilihat). Dulu timer hidup terus → wake + query DB saat diam.
-      // Pesan saat background tetap andal via FCM; sinkron saat resume.
-      if (!AppForeground.now) return;
-      // P1c (2026-10-18): JANGAN poll saat layar chat ini TIDAK terlihat.
-      // Timer hidup selama sesi chat terbuka; kalau user sudah kembali ke
-      // daftar chat / tab lain (layar di bawah tumpukan), polling hanya
-      // membuang I/O. Gate sama seperti daftar chat (chat_service_private_
-      // chatlist). Saat layar chat dibuka lagi, stream memicu reload sendiri.
-      // Layar chat ini tidak terlihat (user sudah kembali ke daftar chat /
-      // tab lain, tetapi sesi masih hidup di bawah tumpukan) → jangan poll.
-      if (activeChatId.value != filterVal) return;
-      // Realtime sehat (<25s ada event) → tak perlu fetch. Dulu 6s: terlalu
-      // ketat sehingga sepi wajar pun dianggap "realtime mati" lalu memicu
-      // query berulang saat chat memang sepi.
-      if (DateTime.now().difference(lastRealtime).inSeconds < 25) return;
-      reload();
-    });
+    void startPoll() => pollTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) {
+        // BATERAI (P2): JANGAN poll saat app di-background (layar mati/tidak
+        // dilihat). Dulu timer hidup terus → wake + query DB saat diam.
+        // Pesan saat background tetap andal via FCM; sinkron saat resume.
+        if (!AppForeground.now) return;
+        // P1c (2026-10-18): JANGAN poll saat layar chat ini TIDAK terlihat.
+        // Timer hidup selama sesi chat terbuka; kalau user sudah kembali ke
+        // daftar chat / tab lain (layar di bawah tumpukan), polling hanya
+        // membuang I/O. Gate sama seperti daftar chat (chat_service_private_
+        // chatlist). Saat layar chat dibuka lagi, stream memicu reload sendiri.
+        // Layar chat ini tidak terlihat (user sudah kembali ke daftar chat /
+        // tab lain, tetapi sesi masih hidup di bawah tumpukan) → jangan poll.
+        if (activeChatId.value != filterVal) return;
+        // Realtime sehat (<25s ada event) → tak perlu fetch. Dulu 6s: terlalu
+        // ketat sehingga sepi wajar pun dianggap "realtime mati" lalu memicu
+        // query berulang saat chat memang sepi.
+        if (DateTime.now().difference(lastRealtime).inSeconds < 25) return;
+        reload();
+      },
+    );
     startPoll();
 
     // Load pesan lebih lama (pagination): ambil 100 pesan SEBELUM pesan tertua.
     Future<void> loadOlder() async {
-      if (_loadingOlder || !_hasMore || _current.isEmpty || _isDead())
-        return;
+      if (_loadingOlder || !_hasMore || _current.isEmpty || _isDead()) return;
       // Batas keras riwayat di memori tercapai → berhenti memuat (bounded).
       // `_hasMore` dibiarkan: riwayat di server memang masih ada.
       if (_current.length >= maxHistory) return;
@@ -1117,14 +1081,28 @@ class ChatStreamSession {
             _current = [...newMsgs, ..._current];
             if (_current.length > windowCap) windowCap = _current.length;
             // Stiker lama: isi path (halaman lama tak lewat loadPhotosAsync).
-            final oldSk = [for (final m in newMsgs) if (m.type == 'sticker' && m.imageData.isEmpty) m];
+            final oldSk = [
+              for (final m in newMsgs)
+                if (m.type == 'sticker' && m.imageData.isEmpty) m,
+            ];
             if (oldSk.isNotEmpty) {
-              unawaited(fillStickerPaths(sb: _sb, table: table, stickers: oldSk, currentGetter: () => _current, isClosed: () => _isDead(), emit: _emit, scheduleCacheSave: scheduleCacheSave));
+              unawaited(
+                fillStickerPaths(
+                  sb: _sb,
+                  table: table,
+                  stickers: oldSk,
+                  currentGetter: () => _current,
+                  isClosed: () => _isDead(),
+                  emit: _emit,
+                  scheduleCacheSave: scheduleCacheSave,
+                ),
+              );
             }
             // Majukan kursor ke pesan terlama batch ini (lebih tua dari
             // kursor lama) agar paginasi berikutnya lanjut ke belakang.
             final first = newMsgs.first.timestamp;
-            _oldestFetchedTs = _oldestFetchedTs == null || first.isBefore(_oldestFetchedTs!)
+            _oldestFetchedTs =
+                _oldestFetchedTs == null || first.isBefore(_oldestFetchedTs!)
                 ? first
                 : _oldestFetchedTs;
             _emit();
@@ -1286,9 +1264,9 @@ class ChatStreamSession {
       saveDebounce?.cancel();
       final win = cacheWindow();
       lastSavedSig = messageCacheSignature(win);
-      unawaited(MessageCache.instance
-          .saveMessages(cacheKey, win)
-          .catchError((_) {}));
+      unawaited(
+        MessageCache.instance.saveMessages(cacheKey, win).catchError((_) {}),
+      );
     }
 
     return ChatMessageStream(

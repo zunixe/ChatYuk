@@ -59,7 +59,10 @@ mixin ChatServicePrivateMx on ChatBase {
   /// Perbarui payload lokasi LIVE (koordinat bergerak) TANPA menandai
   /// "edited" — hanya kolom `text` (payload JSON) yang diganti. Dipanggil
   /// berkala oleh pengirim selama lokasi live aktif.
-  Future<bool> updateLocationMessage(String messageId, String newPayload) async {
+  Future<bool> updateLocationMessage(
+    String messageId,
+    String newPayload,
+  ) async {
     try {
       await _sb
           .from('private_messages')
@@ -187,16 +190,20 @@ mixin ChatServicePrivateMx on ChatBase {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+
     /// Metadata kutipan (jenis media, dimensi, path video) — JSON
     /// `replied_to_meta`. Lihat `core/chat/reply_meta.dart`.
     Map<String, dynamic>? repliedToMeta,
     bool isForwarded = false,
     List<Mention> mentions = const [],
     String videoPoster = '',
+
     /// Bundle multi-foto: semua pesan batch berbagi id yang sama.
     String? albumId,
+
     /// Definisi poll (type 'poll'): {"q","o","m"}.
     Map<String, dynamic>? poll,
+
     /// Kontak dibagikan (type 'contact'): {"t":"user","u":uid} atau
     /// {"t":"phone","n":nama,"p":[nomor…]}.
     Map<String, dynamic>? contact,
@@ -250,54 +257,58 @@ mixin ChatServicePrivateMx on ChatBase {
       await unhideChat(senderId, chatId);
     }
 
-    final inserted = await _sb.from('private_messages').insert({
-      'chat_id': chatId,
-      'sender_id': senderId,
-      'sender_name': senderName,
-      'sender_gender': senderGender,
-      'text': text,
-      'type': type,
-      'image_data': type == 'voice' ? '' : imageData,
-      if (albumId != null && albumId.isNotEmpty) 'album_id': albumId,
-      if (type == 'voice') 'voice_path': imageData,
-      if (type == 'voice' && durationMs != null) 'duration_ms': durationMs,
-      // Durasi view-once (detik; 0 = sampai ditutup). Voice pakai ms.
-      if (type == 'view_once' && durationMs != null)
-        'duration_ms': durationMs,
-      if (type == 'image' && imageData.isNotEmpty) 'image_path': imageData,
-      // FILE: image_path = path storage, duration_ms = ukuran (byte).
-      if (type == 'file' && imageData.isNotEmpty) 'image_path': imageData,
-      if (type == 'file' && durationMs != null) 'duration_ms': durationMs,
-      if (type == 'poll' && poll != null) 'poll': poll,
-      if (type == 'contact' && contact != null) 'contact': contact,
-      // VIDEO: duration_ms = PANJANG video (bukan timer), image_path =
-      // path storage .mp4. Ketiga type video diperlakukan sama.
-      if ((type == 'video' ||
-              type == 'video_once' ||
-              type == 'video_once_expired') &&
-          durationMs != null)
-        'duration_ms': durationMs,
-      if ((type == 'video' ||
-              type == 'video_once' ||
-              type == 'video_once_expired') &&
-          imageData.isNotEmpty)
-        'image_path': imageData,
-      // Poster/thumbnail video (JPEG kecil, bucket chat-photos) — penerima
-      // pakai ini untuk preview kartu TANPA unduh video penuh (ala WhatsApp).
-      if ((type == 'video' ||
-              type == 'video_once' ||
-              type == 'video_once_expired') &&
-          videoPoster.isNotEmpty)
-        'video_poster': videoPoster,
-      if (repliedToId != null) 'replied_to_id': repliedToId,
-      if (repliedToText != null) 'replied_to_text': repliedToText,
-      if (repliedToSenderName != null)
-        'replied_to_sender_name': repliedToSenderName,
-      if (repliedToMeta != null && repliedToMeta.isNotEmpty)
-        'replied_to_meta': repliedToMeta,
-      if (isForwarded) 'is_forwarded': true,
-      if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
-    }).select('id').maybeSingle();
+    final inserted = await _sb
+        .from('private_messages')
+        .insert({
+          'chat_id': chatId,
+          'sender_id': senderId,
+          'sender_name': senderName,
+          'sender_gender': senderGender,
+          'text': text,
+          'type': type,
+          'image_data': type == 'voice' ? '' : imageData,
+          if (albumId != null && albumId.isNotEmpty) 'album_id': albumId,
+          if (type == 'voice') 'voice_path': imageData,
+          if (type == 'voice' && durationMs != null) 'duration_ms': durationMs,
+          // Durasi view-once (detik; 0 = sampai ditutup). Voice pakai ms.
+          if (type == 'view_once' && durationMs != null)
+            'duration_ms': durationMs,
+          if (type == 'image' && imageData.isNotEmpty) 'image_path': imageData,
+          // FILE: image_path = path storage, duration_ms = ukuran (byte).
+          if (type == 'file' && imageData.isNotEmpty) 'image_path': imageData,
+          if (type == 'file' && durationMs != null) 'duration_ms': durationMs,
+          if (type == 'poll' && poll != null) 'poll': poll,
+          if (type == 'contact' && contact != null) 'contact': contact,
+          // VIDEO: duration_ms = PANJANG video (bukan timer), image_path =
+          // path storage .mp4. Ketiga type video diperlakukan sama.
+          if ((type == 'video' ||
+                  type == 'video_once' ||
+                  type == 'video_once_expired') &&
+              durationMs != null)
+            'duration_ms': durationMs,
+          if ((type == 'video' ||
+                  type == 'video_once' ||
+                  type == 'video_once_expired') &&
+              imageData.isNotEmpty)
+            'image_path': imageData,
+          // Poster/thumbnail video (JPEG kecil, bucket chat-photos) — penerima
+          // pakai ini untuk preview kartu TANPA unduh video penuh (ala WhatsApp).
+          if ((type == 'video' ||
+                  type == 'video_once' ||
+                  type == 'video_once_expired') &&
+              videoPoster.isNotEmpty)
+            'video_poster': videoPoster,
+          if (repliedToId != null) 'replied_to_id': repliedToId,
+          if (repliedToText != null) 'replied_to_text': repliedToText,
+          if (repliedToSenderName != null)
+            'replied_to_sender_name': repliedToSenderName,
+          if (repliedToMeta != null && repliedToMeta.isNotEmpty)
+            'replied_to_meta': repliedToMeta,
+          if (isForwarded) 'is_forwarded': true,
+          if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
+        })
+        .select('id')
+        .maybeSingle();
     // Pemicu AI LANGSUNG (tanpa nunggu antrean pg_net trigger yang lambat —
     // terbukti delay ~1 menit): panggil edge function fire-and-forget.
     // Trigger DB tetap jadi backup bila ini gagal; claim cegah balasan dobel.
@@ -308,22 +319,22 @@ mixin ChatServicePrivateMx on ChatBase {
     // Broadcast untuk skala (tanpa postgres realtime) — fire-and-forget.
     // Channel REUSE per chat (putIfAbsent) — dulu: channel baru per pesan
     // menumpuk di memori + traffic realtime makin berat di chat panjang.
-    try {
-      await _sendBroadcastOnce(chatId, 'new_message', {
-        'chat_id': chatId,
-        'sender_id': senderId,
-        'sender_name': senderName,
-        'sender_gender': senderGender,
-        'text': text,
-        'type': type,
-      'image_data': (type == 'voice' || type == 'location') ? '' : imageData,
-        'voice_path': type == 'voice' ? imageData : '',
-        'duration_ms': durationMs ?? 0,
-        if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
-        if (type == 'poll' && poll != null) 'poll': poll,
-        if (type == 'contact' && contact != null) 'contact': contact,
-      });
-    } catch (_) {}
+    // Payload = SINYAL saja (id), bukan isi pesan: channel broadcast publik
+    // bisa disadap/dipalsukan (REVIEW_2026-10-24 SEC-01). Penerima mengambil
+    // baris asli by id lewat RLS (`ChatStreamSession.ingestBroadcastSignal`).
+    // Event BARU `new_message_id`: klien lama hanya mendengar `new_message`
+    // (yang memakai payload sebagai isi) → mereka mengabaikan sinyal ini dan
+    // tetap menerima pesan lewat postgres INSERT, tanpa bubble kosong.
+    if (insertedId != null) {
+      try {
+        await _sendBroadcastOnce(chatId, chatNewMessageSignalEvent, {
+          'chat_id': chatId,
+          'id': insertedId,
+        });
+      } catch (e) {
+        dlog('[Chat] broadcast new_message gagal: $e');
+      }
+    }
     return insertedId?.toString();
   }
 
@@ -437,5 +448,4 @@ mixin ChatServicePrivateMx on ChatBase {
       _privateBroadcastRefs[chatId] = n;
     }
   }
-
 }

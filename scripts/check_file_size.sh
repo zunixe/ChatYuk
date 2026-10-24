@@ -42,7 +42,7 @@ ALLOWLIST=(
   lib/screens/room_chat/room_chat_live.dart:1070
   # 2026-10-22: +84 baris dari fix realtime (guard _isDead() + cancel timer
   # reconnect saat onCancel + komentar alasannya). Bukan fitur baru.
-  lib/services/chat_stream_session.dart:1303
+  lib/services/chat_stream_session.dart:1282
   lib/main_notifications.dart:1010
 )
 
