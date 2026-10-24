@@ -113,16 +113,16 @@ mixin _UiBuildMx on _UserInfoBase {  Widget build(BuildContext context) {
       body: s.blockConfirmBody,
       confirmLabel: s.btnBlock,
     );
-    if (!ok || !mounted) return;
+    if (!ok || !context.mounted) return;
     final myUid = ref.read(authProvider.notifier).uid;
     if (myUid == null) return;
     try {
       await ref.read(chatProvider.notifier).blockUser(myUid, widget.userId);
       dlog('[BLOCK] ok (profil) me=$myUid other=${widget.userId}');
-      if (mounted) showProfileToast(context, s.blockSuccess);
+      if (context.mounted) showProfileToast(context, s.blockSuccess);
     } catch (e) {
       dlog('[BLOCK] GAGAL (profil) me=$myUid other=${widget.userId} err=$e');
-      if (mounted) {
+      if (context.mounted) {
         showProfileToast(
           context,
           s.blockFailed(offline: ChatNotifier.isNetworkError(e)),

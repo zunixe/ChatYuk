@@ -1,3 +1,36 @@
+## 2026-10-24 — refund_chat_point: anti-replay + jendela + kill-switch (SUDAH APPLY)
+
+**Review `docs/REVIEW_2026-10-24.md` SEC-02 (P0).** Dua rancangan sempat dibuat
+terpisah untuk bug yang sama (`20261024100000` oleh sesi lain, `20261024140000`
+yang sempat live) — DIGABUNG menjadi satu: `20261024160000_refund_chat_point_hardened.sql`
+(APPLIED via Management API, versi tercatat).
+
+Celah yang ditutup: `refund_chat_point` (20260819000000) me-refund baris
+`spend_chat` TERAKHIR berulang tanpa penanda → via REST
+`/rest/v1/rpc/refund_chat_point` saldo YukCoin bisa naik tanpa batas
+(kerugian finansial; top-up Play Billing jadi tak bernilai).
+
+Proteksi sekarang (keempatnya terverifikasi ada di `pg_get_functiondef` live):
+1. `points_enabled` kill-switch — bila poin nonaktif tidak ada debit, refund
+   tidak menulis apa pun (hanya `wallet_sync_points`).
+2. Jendela 10 menit — hanya kegagalan kirim yang wajar.
+3. `metadata.refund_of` = id baris spend; spend yang sudah direfund dilewati.
+4. `pg_advisory_xact_lock(user)` + UNIQUE INDEX parsial
+   `coin_ledger_refund_once(user_id, refund_of)` → anti-race panggilan paralel.
+
+**Uji (transaksi ROLLBACK, live):** refund 1×/2×/3× → saldo tetap `33` dan
+baris `refund_of` tetap `1`. Kill-switch: saat `points_enabled=false` →
+0 baris `spend_refund` baru. Data historis: 0 baris `spend_refund` sebelum
+migrasi (aman untuk unique index).
+
+**SAFE:** hanya `create or replace` body fungsi (bukan FROZEN) + 1 index baru;
+kontrak RPC & grant tidak berubah.
+
+**Catatan test:** `supabase/tests/refund_chat_point_test.sql` kini menyalakan
+`points_enabled` di dalam transaksi (di-rollback) — tanpa itu guard
+kill-switch menahannya dan 6 assert gagal. `points_test.sql` +4 assert
+(penanda refund_of, kill-switch, jendela, refund 3× → 1 baris).
+
 ## 2026-10-22 (lanjutan 2) — Status blokir dua arah untuk klien
 
 **Masalah:** trigger `enforce_chat_block` sudah menolak INSERT dua arah, TAPI

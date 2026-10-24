@@ -622,14 +622,14 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // SQLite / Firebase) tidak boleh menahan first-frame selamanya → gejala
   // "stuck di logo". Yang timeout dilewati + dicatat ke logcat ([BOOT]).
   Future<void> guard(String name, Future<void> Function() fn, int secs) async {
-    debugPrint('[BOOT] start $name');
+    dlog('[BOOT] start $name');
     try {
       await fn().timeout(Duration(seconds: secs));
-      debugPrint('[BOOT] done $name');
+      dlog('[BOOT] done $name');
     } on TimeoutException {
-      debugPrint('[BOOT] TIMEOUT $name (${secs}s) — dilewati, app tetap jalan');
+      dlog('[BOOT] TIMEOUT $name (${secs}s) — dilewati, app tetap jalan');
     } catch (e) {
-      debugPrint('[BOOT] error $name: $e');
+      dlog('[BOOT] error $name: $e');
     }
   }
 
@@ -688,7 +688,7 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
       }
     }, 25),
   ]);
-  debugPrint('[BOOT] all init done — lanjut runApp');
+  dlog('[BOOT] all init done — lanjut runApp');
   // Topup YukCoin (Google Play Billing) — hanya aktif di build play.
   try {
     await TopupService.instance.init();
@@ -837,7 +837,7 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // setPreferredOrientations tanpa QA landscape (kamera, call, story).
   // Probe frame (no-op bila PERF_PROBE off) — ukur build/raster per frame.
   PerfProbe.hookFrameTimings();
-  debugPrint('[BOOT] runApp');
+  dlog('[BOOT] runApp');
   // ProviderScope (Riverpod) membungkus root — berdampingan dengan
   // MultiProvider yang ada selama migrasi Provider -> Riverpod.
   // `_rootContainer` disimpan agar kode NON-WIDGET (mis. bootstrap update)

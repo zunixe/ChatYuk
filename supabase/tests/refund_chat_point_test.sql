@@ -4,6 +4,10 @@
 begin;
 select supabase_tests.begin_tests();
 
+-- Kill-switch: refund hanya berlaku saat poin AKTIF (20261024160000).
+-- Transaksi ini di-rollback, jadi tidak mengubah setting produksi.
+update public.app_settings set points_enabled = true where id = 'global';
+
 select supabase_tests.mk_dummy('d0c1e000-0000-4000-8000-0000000000c1'::uuid, '[TEST] RefundA', 'online');
 
 -- Saldo awal 10, lalu spend 2 (text) sekarang.

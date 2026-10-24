@@ -123,7 +123,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _register() async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
     final email = widget.prefillEmail ?? _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
     final confirm = _confirmCtrl.text;
@@ -174,7 +175,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
     if (isBannedNickname(nickname) &&
-        !ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isRealAdmin) {
+        !scope.read(authProvider.notifier).isRealAdmin) {
       if (profileOnly) {
         _popupError(s.errNicknameBanned);
       } else {
@@ -191,7 +192,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     setState(() {
       _nicknameError = null;
     });
-    final available = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).isNicknameAvailable(
+    final available = await scope.read(authProvider.notifier).isNicknameAvailable(
       nickname,
     );
     if (!available) {
@@ -204,7 +205,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     try {
       if (profileOnly) {
         // E2: Mode profile only — user sudah login, langsung registerProfile
-        await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).registerProfile(
+        await scope.read(authProvider.notifier).registerProfile(
           nickname: nickname,
           gender: _gender,
           age: _age,
@@ -219,7 +220,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       }
 
       // Mode full: sign up → (bila perlu) verifikasi OTP → registerProfile
-      final autoLogin = await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signUpWithEmail(
+      final autoLogin = await scope.read(authProvider.notifier).signUpWithEmail(
         email: email,
         password: password,
         nickname: nickname,
@@ -257,7 +258,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         // "sudah terdaftar" tanpa jalan masuk kode → pengguna buntu
         // (dianggap "kode tidak valid").
         try {
-          await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).resendVerificationEmail(email);
+          await scope.read(authProvider.notifier).resendVerificationEmail(email);
           if (mounted) _snack(s.msgEmailAlreadyRegisteredResend);
           if (!mounted) return;
           final verified = await _showOtpDialog(
@@ -285,8 +286,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           // Session hilang saat mode profileOnly — coba login anon lalu ulangi
           if (profileOnly) {
             try {
-              await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signInAnonymously();
-              await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).registerProfile(
+              await scope.read(authProvider.notifier).signInAnonymously();
+              await scope.read(authProvider.notifier).registerProfile(
                 nickname: nickname,
                 gender: _gender,
                 age: _age,
@@ -327,7 +328,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     } finally {
       // Catat identitas perangkat + install ID untuk pelacakan admin.
       unawaited(
-        ProviderScope.containerOf(context, listen: false).read(deviceInfoProvider).syncToServer(ipAddress: _ipAddress),
+        scope.read(deviceInfoProvider).syncToServer(ipAddress: _ipAddress),
       );
       if (mounted) setState(() => _loading = false);
     }
@@ -355,7 +356,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     String country,
     String city,
   ) async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
     final ctrl = TextEditingController();
     var resendCooldown = false;
     return await showDialog<bool>(
@@ -396,7 +398,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       : () async {
                           setInner(() => resendCooldown = true);
                           try {
-                            await ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).resendEmailOtp(
+                            await scope.read(authProvider.notifier).resendEmailOtp(
                               email,
                             );
                             if (ctx.mounted) {
@@ -424,7 +426,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ).showSnackBar(SnackBar(content: Text(s.errInvalidCode)));
                       return;
                     }
-                    final ok = await ProviderScope.containerOf(context, listen: false)
+                    final ok = await scope
                         .read(authProvider.notifier)
                         .verifyEmailAndRegister(
                           email: email,
@@ -443,7 +445,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       // dipakai / salah) — dulu selalu "kode tidak valid" generik
                       // sehingga pengguna tak tahu harus kirim ulang kode.
                       final raw =
-                          ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).lastOtpError ?? '';
+                          scope.read(authProvider.notifier).lastOtpError ?? '';
                       final lower = raw.toLowerCase();
                       final msg = lower.contains('expired') ||
                               lower.contains('expir')

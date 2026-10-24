@@ -239,6 +239,6 @@ class DeviceInfoService {
     // Terlihat juga di RILIS (print → logcat) — kegagalan senyap membuat
     // device tak terdeteksi di admin tanpa jejak yang bisa didiagnosis.
     // ignore: avoid_print
-    print('[DEVICE] syncToServer FAIL id=$id uid=${user.id}: $lastErr');
+    dlog('[DEVICE] syncToServer FAIL id=$id uid=${user.id}: $lastErr');
   }
 }

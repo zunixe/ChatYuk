@@ -638,6 +638,8 @@ mixin SScreenMx {
       ? 'User ini diblokir, tidak bisa kirim pesan'
       : 'This user is blocked, cannot send message';
   String get labelYou => isId ? 'Kamu' : 'You';
+  String get snackUserIdCopied =>
+      isId ? 'User ID disalin' : 'User ID copied';
   String get msgBlockedByOther => isId
       ? 'Kamu diblokir oleh pengguna ini'
       : 'You have been blocked by this user';

@@ -7,6 +7,7 @@ import '../core/cache/media_disk_cache.dart';
 import '../models/message_model.dart';
 import '../providers/riverpod/service_locator.dart';
 import '../core/perf/media_probe.dart';
+import '../../utils.dart';
 
 /// Prefetch file voice TERBARU di background sekali per buka chat — supaya
 /// tap play terasa instan seperti foto (yang auto-load dari disk).
@@ -122,18 +123,18 @@ class _VoiceBubbleState extends State<VoiceBubble> {
     // frame/dispatcher (back mati). Cukup log; UI dibiarkan apa adanya.
     _posSub = p.onPositionChanged.listen(
       (pos) => setState(() => _pos = pos),
-      onError: (e) => debugPrint('[VOICE] position stream error: $e'),
+      onError: (e) => dlog('[VOICE] position stream error: $e'),
     );
     _durSub = p.onDurationChanged.listen(
       (d) => setState(() => _dur = d),
-      onError: (e) => debugPrint('[VOICE] duration stream error: $e'),
+      onError: (e) => dlog('[VOICE] duration stream error: $e'),
     );
     _completeSub = p.onPlayerComplete.listen(
       (_) => setState(() {
         _playing = false;
         _pos = Duration.zero;
       }),
-      onError: (e) => debugPrint('[VOICE] complete stream error: $e'),
+      onError: (e) => dlog('[VOICE] complete stream error: $e'),
     );
     return p;
   }
@@ -148,7 +149,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
       (p) {
         if (p != _player && _playing) setState(() => _playing = false);
       },
-      onError: (e) => debugPrint('[VOICE] manager stream error: $e'),
+      onError: (e) => dlog('[VOICE] manager stream error: $e'),
     );
   }
 

@@ -75,7 +75,7 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
           status == 'missed') _close();
     }, onError: (e) {
       // OFFLINE: stream status call error → jangan tak tertangkap.
-      debugPrint('[NAV] call status stream error: $e');
+      dlog('[NAV] call status stream error: $e');
     });
     if (widget.autoAccept) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

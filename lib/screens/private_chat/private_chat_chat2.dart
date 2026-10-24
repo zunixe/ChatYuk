@@ -259,7 +259,7 @@ void _subscribeTyping() {
           });
         }, onError: (e) {
           // OFFLINE: stream typing error → jangan tak tertangkap.
-          debugPrint('[NAV] typing stream error private-chat: $e');
+          dlog('[NAV] typing stream error private-chat: $e');
         });
   }
 void _sendTypingSignal() {
@@ -463,7 +463,7 @@ Future<void> _sendCoins(int amount) async {
     } catch (e) {
       // Jangan telan error mentah-mentah: tulis ke logcat (dlog di-strip di
       // release) + petakan ke pesan yang menjelaskan penyebab (RLS/jaringan).
-      debugPrint('[CALL-START] _startCall gagal ($callType): $e');
+      dlog('[CALL-START] _startCall gagal ($callType): $e');
       final low = e.toString().toLowerCase();
       final denied = low.contains('policy') ||
           low.contains('permission denied') ||

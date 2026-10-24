@@ -513,14 +513,9 @@ mixin _RcBuildMx on _RoomChatBase {
       showChatSnack(context, container.read(localeProvider).s.msgAccountDeleted);
       return;
     }
-    if (ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatRiverpod.chatProvider.notifier).isBlocked(msg.senderId)) {
-      final s = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(localeProvider).s;
+    if (!mounted) return;
+    if (container.read(chatRiverpod.chatProvider.notifier).isBlocked(msg.senderId)) {
+      final s = container.read(localeProvider).s;
       showChatSnack(context, s.msgBlocked);
       return;
     }

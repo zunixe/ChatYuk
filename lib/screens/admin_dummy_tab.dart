@@ -361,9 +361,9 @@ class _AdminDummyTabState extends ConsumerState<AdminDummyTab>
     } catch (e, st) {
       // print (bukan dlog) — muncul di logcat release untuk diagnosis.
       // ignore: avoid_print
-      print('[DUMMY] save error: $e');
+      dlog('[DUMMY] save error: $e');
       // ignore: avoid_print
-      print('[DUMMY] stack: ${st.toString().split('\n').take(6).join('\n')}');
+      dlog('[DUMMY] stack: ${st.toString().split('\n').take(6).join('\n')}');
       final msg = '$e'.replaceFirst('Exception: ', '');
       _toast(
         s,

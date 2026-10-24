@@ -285,7 +285,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
             setState(() => _unreadMap = map);
           }, onError: (e) {
             // OFFLINE: stream chat-list error → jangan tak tertangkap.
-            debugPrint('[NAV] unread stream error online: $e');
+            dlog('[NAV] unread stream error online: $e');
           });
     }
   }

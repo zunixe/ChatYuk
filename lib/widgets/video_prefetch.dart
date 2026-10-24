@@ -12,6 +12,7 @@ import '../core/cache/media_disk_cache.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/video_file_cache.dart';
 import '../models/message_model.dart';
+import '../../utils.dart';
 
 /// Prefetch video chat lintas-instance: POSTER ke [MediaDiskCache] +
 /// VIDEO ke [VideoFileCache] (persisten, seperti voice).
@@ -236,7 +237,7 @@ class VideoPrefetch {  VideoPrefetch._();
       // di dalam dan frame.image TIDAK ditahan setelahnya).
       unawaited(_persistBitmap(videoPath, frame.image));
     } catch (e) {
-      if (kDebugMode) debugPrint('[VideoPrefetch] decode poster err: $e');
+      if (kDebugMode) dlog('[VideoPrefetch] decode poster err: $e');
     }
   }
 
@@ -554,7 +555,7 @@ class VideoPrefetch {  VideoPrefetch._();
       // baru masuk → kuota + bandwidth terkuras otomatis.
       return;
     } catch (e) {
-      if (kDebugMode) debugPrint('[VideoPrefetch] warmOne error: $e');
+      if (kDebugMode) dlog('[VideoPrefetch] warmOne error: $e');
     }
   }
 

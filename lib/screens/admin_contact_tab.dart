@@ -244,7 +244,7 @@ class _AdminContactTabState extends ConsumerState<AdminContactTab> {
                       ],
                       if (createdAt != null)
                         Text(
-                          formatTime(createdAt),
+                          formatTime(createdAt, isId: s.isId),
                           style: AppText.micro.copyWith(
                             color: AppTheme.textSecondary,
                           ),

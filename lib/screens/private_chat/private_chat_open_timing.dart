@@ -57,7 +57,7 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
       _msgsRevision = handle.revision.value;
       if (!_msgsStreamCtrl.isClosed) _msgsStreamCtrl.add(msgs);
     }, onError: (e) {
-      debugPrint('[NAV] msgs stream error: $e');
+      dlog('[NAV] msgs stream error: $e');
     });
     // PUSH SNAPSHOT AWAL (fix "pesan baru tidak muncul sampai keluar-masuk
     // chat"): stream hanya mengirim EMIT BERIKUTNYA. Bila sesi ini sudah punya

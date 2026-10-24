@@ -10,11 +10,11 @@ mixin _ScBuildMx on _StoryComposerBase {
       // Back (sistem/gesture) → konfirmasi dulu, jangan langsung keluar.
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        debugPrint('[NAV] back veto story-composer publishing=$_publishing');
+        dlog('[NAV] back veto story-composer publishing=$_publishing');
         try {
           _confirmExit();
         } catch (e) {
-          debugPrint('[NAV] back handler error story-composer: $e');
+          dlog('[NAV] back handler error story-composer: $e');
         }
       },
       child: Scaffold(

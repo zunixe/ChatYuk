@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../utils.dart';
 
 /// Cache ASPEK (w/h) foto chat per messageId — persisten lintas sesi.
 ///
@@ -38,7 +39,7 @@ class PhotoAspectCache {
         if (d != null && d > 0) _aspect['$k'] = d;
       });
     } catch (e) {
-      debugPrint('[PhotoAspectCache] prewarm error: $e');
+      dlog('[PhotoAspectCache] prewarm error: $e');
     }
   }
 
@@ -75,7 +76,7 @@ class PhotoAspectCache {
       _prefs ??= await SharedPreferences.getInstance();
       await _prefs!.setString(_prefKey, jsonEncode(_aspect));
     } catch (e) {
-      debugPrint('[PhotoAspectCache] save error: $e');
+      dlog('[PhotoAspectCache] save error: $e');
     }
   }
 

@@ -10,6 +10,7 @@ import '../../core/media/chat_photo_helper.dart';
 import '../../models/message_model.dart';
 import '../video_prefetch.dart';
 import 'image_decode_core.dart';
+import '../../utils.dart';
 
 /// Pre-decode FOTO/THUMB chat ke [decodedImageCache] SEBELUM layar chat tampil.
 ///
@@ -56,7 +57,7 @@ class PhotoPrefetch {
       if (msgs.isEmpty) return;
       await _warmMessages(chatKey, msgs);
     } catch (err) {
-      if (kDebugMode) debugPrint('[PhotoPrefetch] error: $err');
+      if (kDebugMode) dlog('[PhotoPrefetch] error: $err');
     }
   }
 
@@ -134,7 +135,7 @@ class PhotoPrefetch {
         n++;
       }
     } catch (err) {
-      if (kDebugMode) debugPrint('[PhotoPrefetch] error: $err');
+      if (kDebugMode) dlog('[PhotoPrefetch] error: $err');
     }
   }
 

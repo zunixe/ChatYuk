@@ -146,7 +146,7 @@ class _AdminRoomViewScreenState extends ConsumerState<AdminRoomViewScreen>
       );
     }
     _channel!.subscribe((status, err) {
-      if (err != null) debugPrint('[ADMIN] room-monitor realtime error: $err');
+      if (err != null) dlog('[ADMIN] room-monitor realtime error: $err');
     });
   }
 

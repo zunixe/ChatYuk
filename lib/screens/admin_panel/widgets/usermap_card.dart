@@ -89,7 +89,7 @@ class AdminUserMapCardState extends ConsumerState<AdminUserMapCard> {
         callback: _onProfileChange,
       )
       ..subscribe((status, err) {
-        if (err != null) debugPrint('[ADMIN] usermap realtime error: $err');
+        if (err != null) dlog('[ADMIN] usermap realtime error: $err');
         if (!mounted) return;
         setState(() {
           _live = status == RealtimeSubscribeStatus.subscribed;

@@ -129,7 +129,7 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
         ),
       );
     } catch (err) {
-      debugPrint('[CALL-HISTORY] openChat gagal: $err');
+      dlog('[CALL-HISTORY] openChat gagal: $err');
     } finally {
       releaseNav(navKey);
     }
@@ -231,7 +231,7 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
       }
       // Video: overlay muncul otomatis dari provider.activeSession.
     } catch (err) {
-      debugPrint('[CALL-HISTORY] redial gagal: $err');
+      dlog('[CALL-HISTORY] redial gagal: $err');
       showChatSnack(context, s.msgCallError);
     }
   }

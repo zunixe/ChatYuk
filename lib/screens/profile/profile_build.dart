@@ -305,19 +305,11 @@ mixin _ProfileBuildMx on _ProfileBase {
   }
 
   Future<void> _editSubscriptionPrice(BuildContext context) async {
-    final s = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(localeProvider).s;
-    final social = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(socialProvider.notifier);
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
+    final social = scope.read(socialProvider.notifier);
     final current =
-        ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(authProvider.notifier).profile?.subscriptionPrice ??
+        scope.read(authProvider.notifier).profile?.subscriptionPrice ??
         0;
     final ctrl = TextEditingController(text: current > 0 ? '$current' : '');
     final int? price;
@@ -386,16 +378,13 @@ mixin _ProfileBuildMx on _ProfileBase {
     } finally {
       disposeAfterDialogFrame([ctrl]);
     }
-    if (price == null || !mounted) return;
+    if (price == null || !context.mounted) return;
     final ok = await social.setSubscriptionPrice(price);
-    if (!mounted) return;
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(ok ? s.msgProfileSaved : s.errGeneric)),
     );
     if (ok)
-      await ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(authProvider.notifier).reloadProfile();
+      await scope.read(authProvider.notifier).reloadProfile();
   }
 }

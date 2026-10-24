@@ -218,11 +218,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       canPop: !_backMinimizes || _minimizing,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        debugPrint('[NAV] back veto call-screen minimizing=$_minimizing');
+        dlog('[NAV] back veto call-screen minimizing=$_minimizing');
         try {
           _minimize();
         } catch (e) {
-          debugPrint('[NAV] back handler error call-screen: $e');
+          dlog('[NAV] back handler error call-screen: $e');
         }
       },
       child: Scaffold(

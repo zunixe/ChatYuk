@@ -521,7 +521,7 @@ mixin _AcDataMx on _AdminBase {
     _channel!.subscribe((status, err) {
       // Realtime error (mis. offline) → catat; timer _pollTimer 5 dtk tetap
       // jadi fallback sehingga monitor tidak mati diam-diam.
-      if (err != null) debugPrint('[ADMIN] chat-monitor realtime error: $err');
+      if (err != null) dlog('[ADMIN] chat-monitor realtime error: $err');
     });
   }
 

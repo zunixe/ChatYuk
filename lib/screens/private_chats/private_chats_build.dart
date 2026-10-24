@@ -125,7 +125,7 @@ mixin _PcBuildMx on _PcBase {
           return;
         }
         _backGuard.reset();
-        debugPrint(
+        dlog(
           '[NAV] back veto private-chats selection=${_selected.length}',
         );
         NavJournal.log(
@@ -134,7 +134,7 @@ mixin _PcBuildMx on _PcBase {
           _clearSelection();
         } catch (e) {
           // Handler melempar + route masih ada & tertahan → escape sekali.
-          debugPrint('[NAV] back handler error private-chats: $e');
+          dlog('[NAV] back handler error private-chats: $e');
           if (!mounted) return;
           NavJournal.log('back private-chats ESCAPE error (paksa pop)');
           _backEscape = true;

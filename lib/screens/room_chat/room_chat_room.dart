@@ -216,14 +216,9 @@ mixin _RcRoomMx on _RoomChatBase {
   }
 
   Future<void> _openRoomGiftPanel() async {
-    final s = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(localeProvider).s;
-    final auth = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(authProvider.notifier);
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
+    final auth = scope.read(authProvider.notifier);
     if (!auth.canUsePaid) {
       showChatSnack(
         context,
@@ -257,7 +252,7 @@ mixin _RcRoomMx on _RoomChatBase {
       final msg = e.toString();
       showChatSnackVia(
         messenger,
-        context,
+        mounted ? context : messenger.context,
         msg.contains('Not enough')
             ? s.giftInsufficient
             : msg.contains('registered')
@@ -328,17 +323,12 @@ mixin _RcRoomMx on _RoomChatBase {
 
   Future<void> _startBroadcastSession() async {
     // cap 4
+    final scope = ProviderScope.containerOf(context, listen: false);
     try {
-      final cnt = await ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(roomProvider.notifier).broadcastCount(widget.room.id);
+      final cnt = await scope.read(roomProvider.notifier).broadcastCount(widget.room.id);
       if (cnt >= 4) {
         if (!mounted) return;
-        final s = ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(localeProvider).s;
+        final s = scope.read(localeProvider).s;
         showChatSnack(
           context,
           s.roomBroadcastFull,
@@ -349,16 +339,13 @@ mixin _RcRoomMx on _RoomChatBase {
     } catch (_) {}
     unawaited(_broadcastSession?.stop());
     _broadcastSession = null;
-    final session = ProviderScope.containerOf(context, listen: false)
+    final session = scope
         .read(roomProvider.notifier)
         .createBroadcastSession(
           roomId: widget.room.id,
           isBroadcaster: true,
           onEnded: () {
-            ProviderScope.containerOf(
-              context,
-              listen: false,
-            ).read(callProvider.notifier).notifStopLive();
+            scope.read(callProvider.notifier).notifStopLive();
             if (mounted) {
               setState(() {
                 _broadcastSession = null;
@@ -372,21 +359,15 @@ mixin _RcRoomMx on _RoomChatBase {
       await session.start();
       if (!mounted) return;
       // Foreground service: broadcast tetap hidup saat app di-background
-      ProviderScope.containerOf(context, listen: false)
+      scope
           .read(callProvider.notifier)
           .notifStartLive(
-            text: ProviderScope.containerOf(
-              context,
-              listen: false,
-            ).read(localeProvider).s.broadcastLiveNotif,
+            text: scope.read(localeProvider).s.broadcastLiveNotif,
           );
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().contains('Broadcast full')
-          ? ProviderScope.containerOf(
-              context,
-              listen: false,
-            ).read(localeProvider).s.roomBroadcastFull
+          ? scope.read(localeProvider).s.roomBroadcastFull
           : '$e';
       showChatSnack(context, msg);
       _broadcastSession = null;
@@ -558,7 +539,7 @@ mixin _RcRoomMx on _RoomChatBase {
     if (!mounted) return;
     final key = _msgKeys[id];
     final ctx = key?.currentContext;
-    if (ctx == null) return;
+    if (ctx == null || !ctx.mounted) return;
     setState(() => _highlightId = id);
     await Scrollable.ensureVisible(
       ctx,

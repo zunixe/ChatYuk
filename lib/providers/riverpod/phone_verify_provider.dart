@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/phone_verify_service.dart';
+import '../../utils.dart';
 
 /// Status verifikasi nomor HP diri sendiri.
 class PhoneVerifyState {
@@ -79,7 +79,7 @@ class PhoneVerifyNotifier extends Notifier<PhoneVerifyState> {
           mode: LaunchMode.externalApplication,
         );
       } catch (e) {
-        debugPrint('[PhoneVerify] launch error: $e');
+        dlog('[PhoneVerify] launch error: $e');
       }
     }
     _startPolling();

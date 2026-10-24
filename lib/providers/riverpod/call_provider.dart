@@ -47,7 +47,7 @@ class RouteTracker extends NavigatorObserver {
     final n = route.settings.name;
     if (n != null && n.isNotEmpty) active.add(n);
     order.add(_label(route));
-    debugPrint('[NAV] push ${_label(route)} stack=${active.toList()}');
+    dlog('[NAV] push ${_label(route)} stack=${active.toList()}');
     NavJournal.log('push ${_label(route)} depth=${order.length}');
   }
 
@@ -58,7 +58,7 @@ class RouteTracker extends NavigatorObserver {
     // Buang kemunculan TERAKHIR (LIFO) — duplikat nama tetap seimbang.
     final i = order.lastIndexOf(label);
     if (i >= 0) order.removeAt(i);
-    debugPrint('[NAV] pop ${_label(route)} stack=${active.toList()}');
+    dlog('[NAV] pop ${_label(route)} stack=${active.toList()}');
     NavJournal.log('pop ${_label(route)} depth=${order.length}');
   }
 
@@ -78,7 +78,7 @@ class RouteTracker extends NavigatorObserver {
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
     if (oldRoute != null) _remove(oldRoute);
     if (newRoute != null) _add(newRoute);
-    debugPrint(
+    dlog(
         '[NAV] replace ${_label(oldRoute)} -> ${_label(newRoute)} stack=${active.toList()}');
     NavJournal.log(
         'replace ${_label(oldRoute)} -> ${_label(newRoute)} depth=${order.length}');

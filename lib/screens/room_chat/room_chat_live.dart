@@ -338,14 +338,9 @@ mixin _RcLiveMx on _RoomChatBase {
   }
 
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
-    final auth = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(authProvider.notifier);
-    final chat = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatRiverpod.chatProvider.notifier);
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final auth = scope.read(authProvider.notifier);
+    final chat = scope.read(chatRiverpod.chatProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -389,7 +384,7 @@ mixin _RcLiveMx on _RoomChatBase {
         return;
       }
       final storagePath =
-          await ProviderScope.containerOf(context, listen: false)
+          await scope
               .read(storageProvider)
               .uploadVoice(chatId: 'room_${widget.room.id}', bytes: bytes);
       if (storagePath == null || storagePath.isEmpty) {
@@ -400,10 +395,7 @@ mixin _RcLiveMx on _RoomChatBase {
         if (mounted) {
           showChatSnack(
             context,
-            ProviderScope.containerOf(
-              context,
-              listen: false,
-            ).read(localeProvider).s.errVoiceUploadFailed,
+            scope.read(localeProvider).s.errVoiceUploadFailed,
           );
         }
         return;
@@ -451,10 +443,7 @@ mixin _RcLiveMx on _RoomChatBase {
       if (mounted) {
         showChatSnack(
           context,
-          ProviderScope.containerOf(
-            context,
-            listen: false,
-          ).read(localeProvider).s.errSendFailed,
+          scope.read(localeProvider).s.errSendFailed,
         );
       }
     }
@@ -502,7 +491,7 @@ mixin _RcLiveMx on _RoomChatBase {
         // bila basi yang SAMA berulang (macet beneran).
         if (!inSelection && !_showAttachRow) {
           if (_backGuard.shouldEscape('rc:clean')) {
-            debugPrint('[NAV] back escape room-chat (macet, paksa pop)');
+            dlog('[NAV] back escape room-chat (macet, paksa pop)');
             NavJournal.log('back room-chat ESCAPE macet (paksa pop)');
             _backEscape = true;
             BackVetoGuard.safePop(context);
@@ -512,7 +501,7 @@ mixin _RcLiveMx on _RoomChatBase {
           return;
         }
         _backGuard.reset();
-        debugPrint(
+        dlog(
           '[NAV] back veto room-chat attach=$_showAttachRow '
           'selection=${selectedIds.length}',
         );
@@ -529,7 +518,7 @@ mixin _RcLiveMx on _RoomChatBase {
           }
         } catch (e) {
           // Handler melempar + route masih ada & tertahan → escape sekali.
-          debugPrint('[NAV] back handler error room-chat: $e');
+          dlog('[NAV] back handler error room-chat: $e');
           if (!mounted) return;
           NavJournal.log('back room-chat ESCAPE error (paksa pop)');
           _backEscape = true;

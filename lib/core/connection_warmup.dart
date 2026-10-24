@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import '../utils.dart';
 
 /// Tunggu koneksi Supabase "hangat" sebelum dipakai.
 ///
@@ -68,10 +69,10 @@ class ConnectionWarmup {
       // Buang body — kita hanya butuh handshake + respons header.
       await res.drain<void>();
       _lastWarmAt = DateTime.now();
-      if (kDebugMode) debugPrint('[WARMUP] koneksi siap (${res.statusCode})');
+      if (kDebugMode) dlog('[WARMUP] koneksi siap (${res.statusCode})');
     } catch (e) {
       // Gagal = tetap jalan lambat seperti sebelumnya; bukan error fatal.
-      if (kDebugMode) debugPrint('[WARMUP] gagal: $e');
+      if (kDebugMode) dlog('[WARMUP] gagal: $e');
     } finally {
       _inFlight = false;
     }

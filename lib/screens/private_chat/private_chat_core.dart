@@ -104,7 +104,7 @@ mixin _PcCoreMx on _PrivateChatBase {
         // Escape hanya bila basi yang SAMA berulang (macet beneran).
         if (!_searching && !inSelection && !_showAttachRow) {
           if (_backGuard.shouldEscape('pc:clean')) {
-            debugPrint('[NAV] back escape private-chat (macet, paksa pop)');
+            dlog('[NAV] back escape private-chat (macet, paksa pop)');
             NavJournal.log('back private-chat ESCAPE macet (paksa pop)');
             _backEscape = true;
             BackVetoGuard.safePop(context);
@@ -115,7 +115,7 @@ mixin _PcCoreMx on _PrivateChatBase {
         }
         _backGuard.reset();
         // Jejak diagnosa "back mati": catat kenapa back di-veto.
-        debugPrint(
+        dlog(
           '[NAV] back veto private-chat attach=$_showAttachRow '
           'searching=$_searching selection=${selectedIds.length}',
         );
@@ -136,7 +136,7 @@ mixin _PcCoreMx on _PrivateChatBase {
         } catch (e) {
           // Handler melempar + route masih ada & tertahan → escape sekali.
           // Route sudah unmount → tak ada yang perlu dilakukan.
-          debugPrint('[NAV] back handler error private-chat: $e');
+          dlog('[NAV] back handler error private-chat: $e');
           if (!mounted) return;
           NavJournal.log('back private-chat ESCAPE error (paksa pop)');
           _backEscape = true;

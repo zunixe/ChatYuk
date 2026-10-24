@@ -254,7 +254,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                       await Clipboard.setData(ClipboardData(text: id));
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('User ID disalin')),
+                        SnackBar(content: Text(s.snackUserIdCopied)),
                       );
                     },
                   ),

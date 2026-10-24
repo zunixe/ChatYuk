@@ -202,10 +202,8 @@ mixin _ProfilePhotosMx on _ProfileBase {
   }
 
   Future<void> _pickAndUpload(ImageSource source) async {
-    final s = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(localeProvider).s;
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
     final picker = ImagePicker();
     final XFile? picked;
     try {
@@ -270,28 +268,19 @@ mixin _ProfilePhotosMx on _ProfileBase {
 
     setState(() => _uploading = true);
     try {
-      await ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(authProvider.notifier).updateAvatar(base64);
+      await scope.read(authProvider.notifier).updateAvatar(base64);
       if (mounted) {
         final uid =
-            ProviderScope.containerOf(
-              context,
-              listen: false,
-            ).read(authProvider.notifier).profile?.uid ??
+            scope.read(authProvider.notifier).profile?.uid ??
             '';
         if (uid.isNotEmpty) {
           try {
-            ProviderScope.containerOf(context, listen: false)
+            scope
                 .read(onlineUsersProvider.notifier)
                 .updateAvatarForUid(uid, base64);
           } catch (_) {}
           try {
-            ProviderScope.containerOf(
-              context,
-              listen: false,
-            ).read(timelineProvider.notifier).refreshAvatarForUid(uid, base64);
+            scope.read(timelineProvider.notifier).refreshAvatarForUid(uid, base64);
           } catch (_) {}
         }
       }
@@ -458,14 +447,9 @@ mixin _ProfilePhotosMx on _ProfileBase {
   }
 
   Future<void> _editProfile() async {
-    final s = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(localeProvider).s;
-    final auth = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(authProvider.notifier);
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
+    final auth = scope.read(authProvider.notifier);
     final profile = auth.profile;
     if (profile == null) return;
     final currentNick = profile.nickname;
@@ -641,10 +625,7 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                     return;
                                   }
                                   if (isBannedNickname(nick) &&
-                                      !ProviderScope.containerOf(
-                                            context,
-                                            listen: false,
-                                          )
+                                      !scope
                                           .read(authProvider.notifier)
                                           .isRealAdmin) {
                                     setSheet(() => error = s.errNicknameBanned);
@@ -652,10 +633,7 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                     return;
                                   }
                                   final available =
-                                      await ProviderScope.containerOf(
-                                            context,
-                                            listen: false,
-                                          )
+                                      await scope
                                           .read(authProvider.notifier)
                                           .isNicknameAvailable(nick);
                                   if (!available) {
@@ -666,10 +644,7 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                 }
                                 setSheet(() => loading = true);
                                 try {
-                                  await ProviderScope.containerOf(
-                                        context,
-                                        listen: false,
-                                      )
+                                  await scope
                                       .read(authProvider.notifier)
                                       .updateProfile(
                                         nickname: nickChanged ? nick : null,

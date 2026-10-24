@@ -420,7 +420,7 @@ mixin _PcBuildMx on _PrivateChatBase {
           },
           onError: (e) {
             // OFFLINE: stream status realtime error → jangan tak tertangkap.
-            debugPrint('[NAV] status stream error private-chat: $e');
+            dlog('[NAV] status stream error private-chat: $e');
           },
         );
   }

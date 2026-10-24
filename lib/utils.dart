@@ -101,7 +101,7 @@ String formatBubbleTime(DateTime dt) {
 
 /// Format jam pesan — h:mm AM/PM.
 /// Kalau pesan > hari ini, tampilkan tanggal juga.
-String formatTime(DateTime dt) {
+String formatTime(DateTime dt, {bool isId = false}) {
   final now = DateTime.now();
   final local = dt.toLocal();
   final todayStart = DateTime(now.year, now.month, now.day);
@@ -111,7 +111,9 @@ String formatTime(DateTime dt) {
   if (diff == 0) {
     return DateFormat('h:mm a').format(local);
   } else if (diff == 1) {
-    return 'Yesterday ${DateFormat('h:mm a').format(local)}';
+    // Bilingual (aturan AGENTS.md): jangan hardcode 'Yesterday'.
+    return '${isId ? 'Kemarin' : 'Yesterday'} '
+        '${DateFormat('h:mm a').format(local)}';
   } else if (diff < 7) {
     return DateFormat('EEE h:mm a').format(local);
   } else {

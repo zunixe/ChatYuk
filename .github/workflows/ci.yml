@@ -26,6 +26,24 @@ jobs:
       - name: Guard boundary screen (larangan import services/)
         run: bash scripts/check_screen_boundary.sh
 
+      # SEC-04 (review 2026-10-24): log tidak boleh lolos ke build rilis.
+      # `print`/`debugPrint` menyusun string & menulis logcat di release
+      # (bisa dibaca app lain di perangkat lama/rooted) — pakai `dlog` dari
+      # lib/utils.dart yang di-gate kDebugMode (di-tree-shake di rilis).
+      # Dikecualikan: lib/utils.dart (definisi dlog) dan perf_probe.dart
+      # (pengukuran release memang wajib `print` saat PERF_PROBE).
+      - name: Guard log rilis (print/debugPrint dilarang)
+        run: |
+          hits=$(grep -rnE '^[[:space:]]*(print|debugPrint)\(' lib --include='*.dart' \
+                 | grep -v '^lib/utils.dart:' \
+                 | grep -v '^lib/core/perf/perf_probe.dart:' || true)
+          if [ -n "$hits" ]; then
+            echo "DILARANG print/debugPrint di lib/ (pakai dlog):"
+            echo "$hits"
+            exit 1
+          fi
+          echo "OK: tidak ada print/debugPrint di lib/"
+
       # Guard ukuran file (ratchet): file lib/*.dart > 1000 baris wajib
       # terdaftar di allowlist & hanya boleh menyusut. Cegah "file raksasa"
       # tumbuh lagi. Setiap refactor yang memecah file → hapus entri allowlist.

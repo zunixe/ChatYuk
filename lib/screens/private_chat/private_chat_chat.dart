@@ -292,7 +292,7 @@ mixin _PcChatMx on _PrivateChatBase {
       onError: (e) {
         // OFFLINE: stream pesan bisa error (realtime putus). TANPA onError,
         // error tak tertangkap ini merusak frame/dispatcher → back mati.
-        debugPrint('[NAV] msgs stream error private-chat: $e');
+        dlog('[NAV] msgs stream error private-chat: $e');
       },
     );
 
@@ -351,7 +351,7 @@ mixin _PcChatMx on _PrivateChatBase {
       },
       onError: (e) {
         // OFFLINE: chat-info stream error → jangan biarkan tak tertangkap.
-        debugPrint('[NAV] chatInfo stream error private-chat: $e');
+        dlog('[NAV] chatInfo stream error private-chat: $e');
       },
     );
 
@@ -393,7 +393,7 @@ mixin _PcChatMx on _PrivateChatBase {
                     .saveCachedReactions(widget.chatId, m);
               },
               onError: (e) {
-                debugPrint('[NAV] reactions stream error: $e');
+                dlog('[NAV] reactions stream error: $e');
               },
             );
         _starredSub = scope
@@ -409,7 +409,7 @@ mixin _PcChatMx on _PrivateChatBase {
                     .saveCachedStarred(widget.chatId, m);
               },
               onError: (e) {
-                debugPrint('[NAV] starred stream error: $e');
+                dlog('[NAV] starred stream error: $e');
               },
             );
         // Fallback async: bila prime sinkron (initState) belum terisi (cache

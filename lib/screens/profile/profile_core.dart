@@ -5,25 +5,18 @@ part of '../profile_screen.dart';
 mixin _ProfileCoreMx on _ProfileBase {
   void initState() {
     super.initState();
+    final scope = ProviderScope.containerOf(context, listen: false);
     _loadPhotos();
     _hashtags = List.of(
-      ProviderScope.containerOf(
-            context,
-            listen: false,
-          ).read(authProvider.notifier).profile?.hashtags ??
-          const [],
+      scope.read(authProvider.notifier).profile?.hashtags ?? const [],
     );
     // Onboarding + daily login toast
     Future.microtask(() {
-      final pp = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(pointsProvider.notifier);
-      final s = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(localeProvider).s;
-      pp.refreshEnabled().then((_) => pp.showOnboardingIfNeeded(context, s));
+      final pp = scope.read(pointsProvider.notifier);
+      final s = scope.read(localeProvider).s;
+      pp.refreshEnabled().then((_) {
+        if (mounted) pp.showOnboardingIfNeeded(context, s);
+      });
     });
   }
 

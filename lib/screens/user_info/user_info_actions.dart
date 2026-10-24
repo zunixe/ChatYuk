@@ -6,20 +6,12 @@ part of '../user_info_screen.dart';
 
 mixin _UiActionsMx on _UserInfoBase {
   Future<void> _startCall(BuildContext ctx, String callType) async {
-    final s = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(localeProvider).s;
-    final auth = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(authProvider.notifier);
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
+    final auth = scope.read(authProvider.notifier);
     final profile = auth.profile;
     final name = _profile?.nickname ?? widget.fallbackName;
-    if (ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(callProvider.notifier).inCall) {
+    if (scope.read(callProvider.notifier).inCall) {
       ScaffoldMessenger.of(
         ctx,
       ).showSnackBar(SnackBar(content: Text(s.msgCallInProgress)));
@@ -28,10 +20,7 @@ mixin _UiActionsMx on _UserInfoBase {
     final messenger = ScaffoldMessenger.of(ctx);
     // Nelp pakai COIN (tanpa gratis). Saldo < tarif 1 menit → edukasi + topup.
     {
-      final pp = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(pointsProvider.notifier);
+      final pp = scope.read(pointsProvider.notifier);
       if (pp.enabled && pp.callBillingPublished) {
         final ok = await pp.ensureEnoughForCall(context, callType, s.isId);
         if (!ok) return;
@@ -39,11 +28,8 @@ mixin _UiActionsMx on _UserInfoBase {
     }
     // Privasi panggilan penerima: bila menolak, jangan tembak DB sama sekali.
     // Server RLS tetap penjaga akhir.
-    final allowed = await ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(privacyServiceProvider).canView(widget.userId, 'call');
-    if (!mounted) return;
+    final allowed = await scope.read(privacyServiceProvider).canView(widget.userId, 'call');
+    if (!mounted || !ctx.mounted) return;
     if (!allowed) {
       ScaffoldMessenger.of(
         ctx,
@@ -54,7 +40,7 @@ mixin _UiActionsMx on _UserInfoBase {
     // pertama (izin belum ada) langsung gagal senyap (CallPhase.error).
     final perm = await ensureCallPermissions(video: callType == 'video');
     if (perm != CallPermissionResult.granted) {
-      if (!mounted) return;
+      if (!mounted || !ctx.mounted) return;
       showCallPermissionDialog(
         context,
         video: callType == 'video',
@@ -64,7 +50,7 @@ mixin _UiActionsMx on _UserInfoBase {
     }
     try {
       // Chat dibuat/diambil dulu supaya overlay & banner punya rumah.
-      final chatId = await ProviderScope.containerOf(context, listen: false)
+      final chatId = await scope
           .read(chatProvider.notifier)
           .startPrivateChat(
             myUid: auth.uid!,
@@ -73,14 +59,11 @@ mixin _UiActionsMx on _UserInfoBase {
             otherName: name,
             myGender: profile?.gender ?? '',
           );
-      if (!mounted) return;
-      final session = await ProviderScope.containerOf(context, listen: false)
+      if (!mounted || !ctx.mounted) return;
+      final session = await scope
           .read(callProvider.notifier)
           .startSession(
-            callId: await ProviderScope.containerOf(
-              context,
-              listen: false,
-            ).read(callProvider.notifier).startCall(widget.userId, callType),
+            callId: await scope.read(callProvider.notifier).startCall(widget.userId, callType),
             remoteUid: widget.userId,
             remoteName: name,
             callType: callType,
@@ -95,16 +78,13 @@ mixin _UiActionsMx on _UserInfoBase {
             notifDesc: s.callNotifActiveAudio,
             chatId: chatId,
           );
-      final pp0 = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(pointsProvider.notifier);
+      final pp0 = scope.read(pointsProvider.notifier);
       session.setBillingPerMinute(
         (pp0.enabled && pp0.callBillingPublished)
             ? pp0.callCostPerMin(callType)
             : 0,
       );
-      if (!mounted) return;
+      if (!mounted || !ctx.mounted) return;
       final navKey = navKeyChat(chatId);
       if (!tryClaimNav(navKey)) return;
       if (callType == 'video') {
@@ -138,7 +118,7 @@ mixin _UiActionsMx on _UserInfoBase {
     } catch (e) {
       // Jangan telan error mentah-mentah: tulis ke logcat (dlog di-strip di
       // release) + petakan ke pesan yang menjelaskan penyebab (RLS/jaringan).
-      debugPrint('[CALL-START] _startCall gagal ($callType): $e');
+      dlog('[CALL-START] _startCall gagal ($callType): $e');
       final low = e.toString().toLowerCase();
       final denied =
           low.contains('policy') ||
@@ -262,7 +242,7 @@ mixin _UiActionsMx on _UserInfoBase {
           },
           onError: (e) {
             // OFFLINE: stream status error → jangan tak tertangkap.
-            debugPrint('[NAV] status stream error user-info: $e');
+            dlog('[NAV] status stream error user-info: $e');
           },
         );
   }

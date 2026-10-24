@@ -590,6 +590,7 @@ mixin _RcCoreMx on _RoomChatBase {
   @override
   void initState() {
     super.initState();
+    final scope = ProviderScope.containerOf(context, listen: false);
     _openedAt = DateTime.now();
     // FRAME PERTAMA: pakai status broadcast terakhir (cache sesi) → tombol
     // kamera & banner "Mulai Broadcast" langsung tampil sejak frame 1,
@@ -603,14 +604,8 @@ mixin _RcCoreMx on _RoomChatBase {
     WidgetsBinding.instance.addObserver(this);
     // Ukuran font chat berubah (slider) → rebuild bubble & composer room.
     ChatTextScale.notifier.addListener(_onFontScaleChanged);
-    _auth = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(authProvider.notifier);
-    _chat = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatRiverpod.chatProvider.notifier);
+    _auth = scope.read(authProvider.notifier);
+    _chat = scope.read(chatRiverpod.chatProvider.notifier);
     // DEFER seperti private chat — hindari setState-during-build glitch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) activeChatId.value = widget.room.id;
@@ -619,25 +614,16 @@ mixin _RcCoreMx on _RoomChatBase {
     // supaya badge unread hilang walau pemanggil (explore/grup/notif) lupa.
     // Aman dipanggil berulang (RPC idempoten, provider pakai _readRoomIds).
     unawaited(
-      ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(roomProvider.notifier).markRoomRead(widget.room.id),
+      scope.read(roomProvider.notifier).markRoomRead(widget.room.id),
     );
     // Poll room: realtime suara per room (tertunda di controller).
-    _roomPollCtl = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(roomPollProvider);
+    _roomPollCtl = scope.read(roomPollProvider);
     _roomPollCtl?.attachRoom(widget.room.id);
     final msgsHandle = _chat.getRoomMessages(widget.room.id);
     _msgsHandle = msgsHandle;
     _msgsStream = msgsHandle.stream;
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
-    _pointsProv = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(pointsProvider.notifier);
+    _pointsProv = scope.read(pointsProvider.notifier);
     _msgsSub = _msgsStream.listen(_onMessagesForGift);
     // Kandidat mention room global butuh daftar user online walau strip
     // horizontal sedang disembunyikan — simpan snapshot di _lastRoomUsers.
@@ -648,7 +634,7 @@ mixin _RcCoreMx on _RoomChatBase {
       onError: (e) {
         // OFFLINE: stream user room (.stream() mentah) bisa error — tanpa
         // onError, error tak tertangkap merusak frame/dispatcher (back mati).
-        debugPrint('[NAV] room users stream error: $e');
+        dlog('[NAV] room users stream error: $e');
       },
     );
     if (isPrivateRoom) {
@@ -659,7 +645,7 @@ mixin _RcCoreMx on _RoomChatBase {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Cache dulu (tampil instan), stream menimpa sesudahnya.
-      ProviderScope.containerOf(context, listen: false)
+      scope
           .read(messageReactionProvider)
           .loadCachedReactions(widget.room.id)
           .then((cached) {
@@ -667,23 +653,23 @@ mixin _RcCoreMx on _RoomChatBase {
             reactions = cached;
             _scheduleRebuild();
           });
-      _reactionsSub = ProviderScope.containerOf(context, listen: false)
+      _reactionsSub = scope
           .read(messageReactionProvider)
           .watchReactions(widget.room.id)
           .listen(
             (m) {
               reactions = m;
               _scheduleRebuild();
-              ProviderScope.containerOf(context, listen: false)
+              scope
                   .read(messageReactionProvider)
                   .saveCachedReactions(widget.room.id, m);
             },
             onError: (e) {
               // OFFLINE: reactions (.stream() mentah) error → jangan tak tertangkap.
-              debugPrint('[NAV] room reactions stream error: $e');
+              dlog('[NAV] room reactions stream error: $e');
             },
           );
-      _starredSub = ProviderScope.containerOf(context, listen: false)
+      _starredSub = scope
           .read(messageReactionProvider)
           .watchStarred(widget.room.id)
           .listen(
@@ -692,7 +678,7 @@ mixin _RcCoreMx on _RoomChatBase {
               _scheduleRebuild();
             },
             onError: (e) {
-              debugPrint('[NAV] room starred stream error: $e');
+              dlog('[NAV] room starred stream error: $e');
             },
           );
     });
@@ -724,41 +710,27 @@ mixin _RcCoreMx on _RoomChatBase {
   }
 
   Future<void> _initPrivate() async {
+    final scope = ProviderScope.containerOf(context, listen: false);
     dlog('[BDBG] initPrivate start room=${widget.room.id} uid=${_auth.uid}');
     try {
-      _myRole = await ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(roomProvider.notifier).myRole(widget.room.id);
+      _myRole = await scope.read(roomProvider.notifier).myRole(widget.room.id);
       dlog('[BDBG] myRole=$_myRole isPrivate=${widget.room.isPrivate}');
       // Anggota untuk kandidat mention grup (termasuk yang offline).
       try {
-        _roomMembers = await ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(roomProvider.notifier).listMembers(widget.room.id);
+        _roomMembers = await scope.read(roomProvider.notifier).listMembers(widget.room.id);
       } catch (_) {}
       if (canModerate) {
         try {
-          final req = await ProviderScope.containerOf(
-            context,
-            listen: false,
-          ).read(roomProvider.notifier).listJoinRequests(widget.room.id);
+          final req = await scope.read(roomProvider.notifier).listJoinRequests(widget.room.id);
           _pendingCount = req.length;
         } catch (_) {}
       }
       await _refreshLiveUid();
       try {
-        _muted = await ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(notificationPrefsProvider).isChatMuted(widget.room.id);
+        _muted = await scope.read(notificationPrefsProvider).isChatMuted(widget.room.id);
       } catch (_) {}
       try {
-        final granted = await ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(roomProvider.notifier).myBroadcastGranted(widget.room.id);
+        final granted = await scope.read(roomProvider.notifier).myBroadcastGranted(widget.room.id);
         _isGrantedBroadcast = granted || _liveUid == _auth.uid;
         dlog('[BDBG] init granted=$_isGrantedBroadcast live=$_liveUid');
         // Cache untuk buka berikutnya → kontrol broadcast tampil frame 1.
@@ -828,7 +800,7 @@ mixin _RcCoreMx on _RoomChatBase {
         },
       );
       ch.subscribe((status, err) {
-        if (err != null) debugPrint('[ROOM] live realtime error: $err');
+        if (err != null) dlog('[ROOM] live realtime error: $err');
       });
       _roomLiveChannel = ch;
     } catch (_) {}
