@@ -169,6 +169,16 @@ mixin _AdminOpsMx on _AdminBase {
     ).timeout(_openTimeout);
   }
 
+  /// Hapus/undo (soft-delete) SATU pesan room siapa pun (admin only).
+  /// Return true bila baris berubah.
+  Future<bool> adminDeleteRoomMessage(dynamic messageId, {bool undelete = false}) async {
+    final res = await _rpc(
+      'admin_delete_room_message',
+      params: {'p_message_id': int.tryParse('$messageId'), 'p_deleted': !undelete},
+    ).timeout(_openTimeout);
+    return res is Map && res['ok'] == true;
+  }
+
   // ── Popup update aplikasi (app_settings) ──
   /// Baca konfigurasi update. Return null bila gagal.
   Future<Map<String, dynamic>?> getUpdateConfig() async {

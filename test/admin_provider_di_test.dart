@@ -678,4 +678,47 @@ void main() {
       expect(provider.revChats, chatsBefore);
     });
   });
+
+  group('hapus pesan room (admin)', () {
+    test('deleteRoomMessage delegasi ke service', () async {
+      when(() => service.adminDeleteRoomMessage(any()))
+          .thenAnswer((_) async => true);
+
+      final ok = await provider.deleteRoomMessage('42');
+
+      expect(ok, isTrue);
+      verify(() => service.adminDeleteRoomMessage('42')).called(1);
+    });
+
+    test('undeleteRoomMessage kirim undelete + segarkan pesan room', () async {
+      when(() => service.adminDeleteRoomMessage(any(), undelete: any(named: 'undelete')))
+          .thenAnswer((_) async => true);
+      when(() => service.getRoomMessagesPage(any(),
+              limit: any(named: 'limit'), offset: any(named: 'offset')))
+          .thenAnswer((_) async => {
+                'total': 1,
+                'items': [
+                  {
+                    'id': 43,
+                    'sender_id': 'u1',
+                    'sender_name': 'Anon',
+                    'sender_gender': 'other',
+                    'text': 'hai',
+                    'type': 'text',
+                    'is_deleted': false,
+                    'created_at': '2026-10-25T00:00:00Z',
+                  },
+                ],
+              });
+      final revBefore = provider.revRooms;
+
+      final ok = await provider.undeleteRoomMessage('room1', '43');
+
+      expect(ok, isTrue);
+      verify(() => service.adminDeleteRoomMessage('43', undelete: true))
+          .called(1);
+      // Cache pesan room disegarkan (flag is_deleted terbarui) setelah undo.
+      expect(provider.revRooms, greaterThan(revBefore));
+    });
+  });
 }

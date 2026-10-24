@@ -162,6 +162,65 @@ class _AdminRoomViewScreenState extends ConsumerState<AdminRoomViewScreen>
     }
   }
 
+  /// Admin: hapus (soft-delete) SATU pesan siapa pun di room ini. Gate email
+  /// admin ditegakkan ulang di server (RPC admin_delete_room_message).
+  /// Snackbar menawarkan UNDO (kembalikan is_deleted=false).
+  Future<void> _confirmDeleteMessage(S s, MessageModel m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.adminRoomDelete),
+        content: Text('${m.senderName}: ${m.type == 'text' ? m.text : '[media]'}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              s.adminRoomDelete,
+              style: const TextStyle(color: AppTheme.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final admin = ProviderScope.containerOf(context, listen: false)
+        .read(adminProvider);
+    try {
+      final done = await admin.deleteRoomMessage(m.id);
+      if (!mounted) return;
+      if (!done) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(s.adminRoomDeleteFailed)),
+        );
+        return;
+      }
+      await admin.refreshRoomMessages(widget.roomId);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(s.msgDeletedRoom),
+          action: SnackBarAction(
+            label: s.btnUndo,
+            onPressed: () async {
+              await admin.undeleteRoomMessage(widget.roomId, m.id);
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      dlog('[ADMIN] deleteRoomMessage error: $e');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(s.adminRoomDeleteFailed)),
+      );
+    }
+  }
+
   Future<void> _confirmDeleteRoom(S s) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -340,17 +399,23 @@ class _AdminRoomViewScreenState extends ConsumerState<AdminRoomViewScreen>
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: [
                           Flexible(
-                            child: RoomMessageBubble(
-                              msg: m,
-                              isMe: false, // admin = pengamat → semua kiri
-                              color: Color(
-                                userColorPalette[
-                                    colorHashForUid(m.senderId) %
-                                        userColorPalette.length],
+                            child: GestureDetector(
+                              // Admin boleh hapus/undo pesan siapa pun di room.
+                              onLongPress: m.isDeleted
+                                  ? null
+                                  : () => _confirmDeleteMessage(s, m),
+                              child: RoomMessageBubble(
+                                msg: m,
+                                isMe: false, // admin = pengamat → semua kiri
+                                color: Color(
+                                  userColorPalette[
+                                      colorHashForUid(m.senderId) %
+                                          userColorPalette.length],
+                                ),
+                                roomId: widget.roomId,
+                                onTapUser: () {},
+                                deletedIds: deletedIds,
                               ),
-                              roomId: widget.roomId,
-                              onTapUser: () {},
-                              deletedIds: deletedIds,
                             ),
                           ),
                         ],

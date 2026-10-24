@@ -2,6 +2,14 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-25 — Admin hapus pesan room siapa pun
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261025120000_admin_delete_room_message.sql`.
+  RPC `admin_delete_room_message(bigint,boolean)` (SECURITY DEFINER, gate email
+  `zunixe@gmail.com`) untuk soft-delete pesan room apa pun (global & grup).
+- **Verifikasi:** `scripts/run_sql_tests.sh admin_delete_room_message_test.sql` 4/4;
+  prod: `prosecdef=true`, `anon` tidak boleh EXECUTE.
+
 ## 2026-10-24 — refund_chat_point idempoten (SEC-02)
 
 - **Status:** SUDAH TERAPPLIED via Management API — `20261024100000_refund_chat_point_idempotent.sql`.

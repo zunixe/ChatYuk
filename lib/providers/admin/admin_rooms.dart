@@ -269,6 +269,19 @@ mixin AdminRoomsMx on AdminBase {
   Future<String> fetchRoomMessageImage(int messageId) =>
       _service.fetchRoomMessageImage(messageId);
 
+  /// Admin: hapus (soft-delete) SATU pesan room siapa pun. Return true bila
+  /// berhasil. Cache pesan room dibiarkan — pemanggil memanggil
+  /// [refreshRoomMessages] untuk menyegarkan flag is_deleted.
+  Future<bool> deleteRoomMessage(String messageId) =>
+      _service.adminDeleteRoomMessage(messageId);
+
+  /// Admin: UNDO hapus pesan (kembalikan is_deleted=false).
+  Future<bool> undeleteRoomMessage(String roomId, String messageId) async {
+    final ok = await _service.adminDeleteRoomMessage(messageId, undelete: true);
+    if (ok) await refreshRoomMessages(roomId);
+    return ok;
+  }
+
   /// Hapus room (admin — bisa hapus room APA PUN termasuk tanpa owner).
   /// Buang dari list lokal + bersihkan cache pesan/anggota room tsb.
   Future<void> deleteRoom(String roomId) async {
