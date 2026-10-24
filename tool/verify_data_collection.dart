@@ -1,7 +1,7 @@
 // Verifikasi pengumpulan data untuk Play Console Data Safety
 import 'package:flutter/services.dart';
-import 'lib/providers/riverpod/auth_provider.dart';
-import 'lib/services/avatar_service.dart';
+import '../lib/providers/riverpod/auth_provider.dart';
+import '../lib/services/avatar_service.dart';
 
 void main() async {
   print('=== Verifikasi Pengumpulan Data ChatYuk ===');

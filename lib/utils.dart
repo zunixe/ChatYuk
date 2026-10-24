@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
+import 'core/chat/banned_nicknames.dart';
+
 /// Log debug — di-strip total dari build release (kDebugMode=false →
 /// compiler tree-shake pemanggilan). debugPrint di 150+ call site
 /// sebelumnya tetap menyusun string + menulis log di produksi.
@@ -43,18 +45,15 @@ bool isValidEmail(String email) {
 
 /// Normalisasi nickname untuk cek larangan: lowercase + buang
 /// spasi/underscore/dash supaya ZAINI-HAFID, ZAINI_HAFID, ZAINIHAFID sama.
-String normalizeNicknameForBan(String nickname) {
-  final lower = nickname.trim().toLowerCase();
-  return lower.replaceAll(RegExp(r'[\s_\-]+'), '');
-}
+String normalizeNicknameForBan(String nickname) => normalizeForBan(nickname);
 
 /// True bila nickname mengandung kata terlarang (substring, case-insensitive).
-/// Daftar blokir: zaini, hafid — mencakup ZAINIHAFID dan kombinasinya.
-bool isBannedNickname(String nickname) {
-  final flat = normalizeNicknameForBan(nickname);
-  if (flat.isEmpty) return false;
-  return flat.contains('zaini') || flat.contains('hafid');
-}
+///
+/// Daftar kata TIDAK lagi hardcode di sini (REVIEW_2026-10-24 BUG-05): dibaca
+/// dari `app_settings.banned_nicknames` saat startup lewat
+/// [BannedNicknames], dengan fallback bawaan bila gagal dimuat.
+bool isBannedNickname(String nickname) =>
+    BannedNicknames.matches(normalizeForBan(nickname));
 
 /// Validasi nickname — boleh huruf Unicode, angka, spasi, underscore, dash.
 bool isValidNickname(String nickname) {

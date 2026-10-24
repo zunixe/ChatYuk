@@ -15,6 +15,91 @@ export const MAX_HTML_BYTES = 512 * 1024;
 const UA =
   'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36';
 
+// ── SSRF guard (REVIEW_2026-10-24 SEC-03) ───────────────────────────────────
+// Sebelumnya: validasi hanya `^https?://` + panjang, redirect diikuti bebas.
+// Akibatnya user login bisa menyuruh server fetch URL internal
+// (169.254.169.254 metadata, host privat, redirect ke IP privat) lalu membaca
+// og:*/<title> hasilnya — server jadi proxy pemindai jaringan internal.
+//
+// Guard ini menolak: hostname internal, IP literal privat/loopback/link-local,
+// dan hasil resolusi DNS yang mengarah ke rentang privat. Redirect diikuti
+// MANUAL maksimal [MAX_REDIRECTS] hop dengan validasi ulang tiap hop.
+const MAX_REDIRECTS = 3;
+
+function isPrivateIpv4(ip: string): boolean {
+  const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const a = Number(m[1]), b = Number(m[2]);
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;            // link-local + cloud metadata
+  if (a === 172 && b >= 16 && b <= 31) return true;   // privat
+  if (a === 192 && b === 168) return true;            // privat
+  if (a === 100 && b >= 64 && b <= 127) return true;  // CGNAT
+  if (a >= 224) return true;                          // multicast/reserved
+  return false;
+}
+
+export function isBlockedIp(ip: string): boolean {
+  const l = ip.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (isPrivateIpv4(l)) return true;
+  if (l === '::1' || l === '::') return true;
+  if (l.startsWith('fc') || l.startsWith('fd')) return true;  // unique local
+  if (l.startsWith('fe80')) return true;                      // link-local
+  if (l.startsWith('::ffff:')) return isBlockedIp(l.slice(7)); // IPv4-mapped
+  return false;
+}
+
+const BLOCKED_HOSTS = new Set([
+  'localhost', 'localhost.localdomain', 'metadata', 'metadata.google.internal',
+  'instance-data', 'kubernetes', 'kubernetes.default',
+]);
+
+export function isBlockedHostname(host: string): boolean {
+  const h = host.trim().toLowerCase().replace(/\.$/, '');
+  if (!h) return true;
+  if (BLOCKED_HOSTS.has(h)) return true;
+  if (h.endsWith('.localhost') || h.endsWith('.internal') || h.endsWith('.local')) return true;
+  // IP literal (v4) atau IPv6 dalam bracket.
+  if (isPrivateIpv4(h)) return true;
+  if (h.includes(':') && isBlockedIp(h)) return true;
+  return false;
+}
+
+/// Resolve DNS dan tolak bila ADA record yang mengarah ke IP privat.
+/// Bila resolver tidak tersedia, tetap izinkan (fail-open) — guard hostname
+/// literal di atas sudah menutup kasus paling umum, dan runtime Deno Deploy
+/// tidak berada di jaringan privat pengguna.
+async function resolvesToPrivate(host: string): Promise<boolean> {
+  try {
+    const deno = (globalThis as unknown as {
+      Deno?: { resolveDns?: (n: string, t: string) => Promise<string[]> };
+    }).Deno;
+    if (!deno?.resolveDns) return false;
+    const [v4, v6] = await Promise.all([
+      deno.resolveDns(host, 'A').catch(() => [] as string[]),
+      deno.resolveDns(host, 'AAAA').catch(() => [] as string[]),
+    ]);
+    return [...v4, ...v6].some((ip) => isBlockedIp(ip));
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Validasi URL tujuan fetch: skema, hostname, dan hasil DNS.
+export async function assertSafeUrl(raw: string): Promise<URL | null> {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch (_) {
+    return null;
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  if (u.username || u.password) return null; // kredensial di URL = mencurigakan
+  if (isBlockedHostname(u.hostname)) return null;
+  if (await resolvesToPrivate(u.hostname)) return null;
+  return u;
+}
+
 /// Parse og:* / <title> dari HTML.
 export function parsePreview(url: string, html: string): PreviewData {
   const metaProp = (prop: string): string => {
@@ -79,15 +164,51 @@ export async function fetchPreview(
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.val;
   let val: PreviewData | null = null;
   try {
+    // SSRF: validasi URL awal (hostname + DNS privat).
+    if (!(await assertSafeUrl(url))) {
+      _cache.set(url, { at: Date.now(), val: null });
+      return null;
+    }
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    const res = await fetch(url, {
-      redirect: 'follow',
-      signal: ctrl.signal,
-      headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9,id;q=0.8' },
-    });
+    // Redirect diikuti MANUAL: tiap hop divalidasi ulang, maks MAX_REDIRECTS.
+    // `redirect: 'follow'` dulu bisa dibelokkan ke IP privat/metadata.
+    let target = url;
+    let res: Response | null = null;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      res = await fetch(target, {
+        redirect: 'manual',
+        signal: ctrl.signal,
+        headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9,id;q=0.8' },
+      });
+      const isRedirect = res.status >= 300 && res.status < 400;
+      if (!isRedirect) break;
+      const loc = res.headers.get('location');
+      if (!loc) break;
+      let next: URL;
+      try {
+        next = new URL(loc, target);
+      } catch (_) {
+        res = null;
+        break;
+      }
+      if (!(await assertSafeUrl(next.toString()))) {
+        res = null;
+        break;
+      }
+      target = next.toString();
+      if (hop === MAX_REDIRECTS) {
+        res = null; // terlalu banyak redirect
+      }
+    }
     clearTimeout(t);
-    if (res.ok) {
+    if (res && res.ok) {
+      // Batasi ke HTML saja (cegah menarik biner besar / JSON internal).
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (ct && !ct.includes('text/html') && !ct.includes('application/xhtml')) {
+        _cache.set(url, { at: Date.now(), val: null });
+        return null;
+      }
       const reader = res.body?.getReader();
       let html = '';
       if (reader) {

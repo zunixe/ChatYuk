@@ -64,6 +64,7 @@ import 'widgets/voice_bubble.dart';
 import 'widgets/chat_route.dart';
 import 'widgets/video_prefetch.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'core/chat/banned_nicknames.dart';
 
 part 'main_notifications.dart';
 
@@ -826,6 +827,13 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   await guard('notifications', _initNotificationsFast, 15);
   await guard('chatbg', warmChatBackground, 10);
   await guard('theme', AppTheme.init, 15);
+  // Daftar kata terlarang nickname dari server (BUG-05). Non-kritis: bila
+  // gagal, `BannedNicknames` memakai daftar bawaan yang sama.
+  await guard(
+    'bannedNicknames',
+    () => BannedNicknames.loadFromServer(Supabase.instance.client),
+    5,
+  );
   // Jaring aman edge-to-edge Android 15: pastikan mode default (edgeToEdge)
   // selalu aktif di start. Bila proses di-kill saat Story composer terbuka
   // (mode manual menyembunyikan nav bar), state bisa tertinggal untuk frame

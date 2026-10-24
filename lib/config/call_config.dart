@@ -1,14 +1,18 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'env.dart';
 import 'supabase_config.dart';
 import '../core/perf/perf_probe.dart';
 
 /// Konfigurasi ICE untuk WebRTC call.
 /// TURN credentials di-fetch dari Supabase Edge Function (Cloudflare TURN).
 class CallConfig {
-  static const String _turnFunctionUrl =
-      'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/turn-credentials';
+  // Ikuti AppEnv (SEC-05, review 2026-10-24): dulu hardcode URL PROD, jadi
+  // build APP_ENV=dev tetap memanggil edge function prod dengan JWT dev →
+  // 401 lalu jatuh ke openrelay tanpa penjelasan.
+  static String get _turnFunctionUrl =>
+      '${AppEnv.supabaseUrl}/functions/v1/turn-credentials';
 
   static const List<Map<String, dynamic>> _fallbackIceServers = [
     {'urls': 'stun:stun.l.google.com:19302'},
