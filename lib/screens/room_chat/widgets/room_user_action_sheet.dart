@@ -6,6 +6,7 @@ import '../../../core/nav_guard.dart';
 import '../../../models/message_model.dart';
 import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/chat_provider.dart';
+import '../../../providers/riverpod/deleted_users_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart' show dlog;
 import '../../../widgets/chat_info_snack.dart';
@@ -118,6 +119,9 @@ void showRoomUserActionSheet(
               final active = await chat.isUserActive(msg.senderId);
               if (!context.mounted) return;
               if (!active) {
+                ProviderScope.containerOf(context, listen: false)
+                    .read(deletedUsersProvider.notifier)
+                    .markDeleted(msg.senderId);
                 showChatSnack(context, locale.s.errUserNotFound);
                 return;
               }

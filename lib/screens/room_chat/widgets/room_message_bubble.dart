@@ -19,6 +19,7 @@ import '../../../widgets/message/view_once_image.dart';
 import '../../../widgets/message/message_text_with_time.dart';
 import '../../../widgets/person_avatar.dart';
 import '../../../widgets/contact_bubble.dart';
+import '../../../widgets/deleted_user_builder.dart';
 import '../../../widgets/poll/poll_bubble.dart';
 import '../../../widgets/reply_quote.dart';
 import '../../../widgets/verified_badge.dart';
@@ -528,12 +529,18 @@ class RoomMessageBubble extends StatelessWidget {
           GestureDetector(
             onTap: onTapUser,
             // PersonAvatar = standar yang sama persis dengan Pengguna Online
-            // (foto + latar tint + ring warna gender).
-            child: PersonAvatar(
+            // (foto + latar tint + ring warna gender). Akun dihapus → redup.
+            child: DeletedUserBuilder(
               uid: msg.senderId,
-              name: msg.senderName,
-              gender: msg.senderGender,
-              size: 32,
+              builder: (_, deleted) => Opacity(
+                opacity: deleted ? 0.45 : 1,
+                child: PersonAvatar(
+                  uid: msg.senderId,
+                  name: msg.senderName,
+                  gender: msg.senderGender,
+                  size: 32,
+                ),
+              ),
             ),
           ),
           SizedBox(width: 8),
@@ -543,16 +550,33 @@ class RoomMessageBubble extends StatelessWidget {
               children: [
                 GestureDetector(
                   onTap: onTapUser,
-                  child: Row(
+                  child: DeletedUserBuilder(
+                    uid: msg.senderId,
+                    builder: (context, deleted) => Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         msg.senderName,
                         style: AppText.chatName.copyWith(
-                          color: color,
+                          color: deleted ? AppTheme.textSecondary : color,
                           letterSpacing: 0,
                         ),
                       ),
+                      // Akun sudah dihapus: pesan lama tetap tampil, tapi
+                      // profil tidak ada lagi (ala WhatsApp "akun dihapus").
+                      if (deleted) ...[
+                        SizedBox(width: 6),
+                        Text(
+                          ProviderScope.containerOf(context, listen: false)
+                              .read(localeProvider)
+                              .s
+                              .labelAccountDeleted,
+                          style: AppText.caption.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ] else ...[
                       // Ikon gender setelah nama — sama seperti daftar Online
                       // (biru = laki-laki, merah muda = perempuan).
                       if (msg.senderGender == 'male' ||
@@ -575,7 +599,9 @@ class RoomMessageBubble extends StatelessWidget {
                           size: 14,
                         ),
                       ],
+                      ],
                     ],
+                  ),
                   ),
                 ),
                 SizedBox(height: 2),

@@ -162,6 +162,19 @@ mixin ChatServicePrivateMx on ChatBase {
     }
   }
 
+  /// Dari [uids], kembalikan yang profilnya SUDAH TIDAK ADA (akun dihapus).
+  /// null bila query gagal — pemanggil TIDAK boleh menganggap semua terhapus.
+  Future<Set<String>?> missingProfileUids(List<String> uids) async {
+    if (uids.isEmpty) return <String>{};
+    try {
+      final rows = await _sb.from('profiles').select('id').inFilter('id', uids);
+      final present = {for (final r in rows) r['id'] as String};
+      return uids.where((u) => !present.contains(u)).toSet();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<String?> sendPrivateMessage({
     required String chatId,
     required String senderId,

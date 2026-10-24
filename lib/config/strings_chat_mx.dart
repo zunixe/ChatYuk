@@ -434,5 +434,11 @@ mixin SChatMx {
       ? 'Tunggu giliran atau angkat tangan'
       : 'Wait your turn or raise hand';
 
+  String get labelAccountDeleted =>
+      isId ? 'Akun dihapus' : 'Deleted account';
+  String get msgAccountDeleted => isId
+      ? 'Akun ini sudah dihapus'
+      : 'This account has been deleted';
+
   // ── Voice stage global room (audio-only, max 6 mic) ──
 }

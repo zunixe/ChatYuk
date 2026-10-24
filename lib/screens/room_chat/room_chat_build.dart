@@ -498,6 +498,11 @@ mixin _RcBuildMx on _RoomChatBase {
   void _onTapUser(MessageModel msg, AuthNotifier auth) {
     if (msg.senderId == auth.uid) return;
     if (_sheetOpen) return;
+    final container = ProviderScope.containerOf(context, listen: false);
+    if (container.read(deletedUsersProvider).contains(msg.senderId)) {
+      showChatSnack(context, container.read(localeProvider).s.msgAccountDeleted);
+      return;
+    }
     if (ProviderScope.containerOf(
       context,
       listen: false,
