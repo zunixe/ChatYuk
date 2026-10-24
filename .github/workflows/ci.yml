@@ -88,8 +88,10 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
-      - name: Analyze (gagal saat error/warning, info dilewati)
-        run: flutter analyze --no-pub --no-fatal-infos
+      # REVIEW_2026-10-24 TEST-04: info kini 0 (ARCH-03 selesai) → --fatal-infos
+      # diaktifkan supaya deprecated API / import mati tidak menumpuk lagi.
+      - name: Analyze (gagal juga saat info)
+        run: flutter analyze --no-pub --fatal-infos
 
       - name: Test
         run: flutter test --coverage --no-pub
