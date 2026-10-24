@@ -39,6 +39,7 @@ import 'online_users/widgets/avatar_zoom.dart';
 part 'private_chats/private_chats_select.dart';
 part 'private_chats/private_chats_filter.dart';
 part 'private_chats/private_chats_build.dart';
+part 'private_chats/private_chats_groups.dart';
 
 const int _pageSize = 20;
 
@@ -124,7 +125,16 @@ abstract class _PcBase extends ConsumerState<PrivateChatsScreen> {
     // ignore: unused_element_parameter
     bool notify = true,
   });
+
+  // Implementasi di `private_chats_groups.dart` (_PcGroupsMx). Dideklarasikan
+  // di base agar `_PcBuildMx` (dipasang SEBELUM _PcGroupsMx pada `with`) bisa
+  // memanggilnya — anggota mixin berikutnya tidak terlihat dari mixin
+  // sebelumnya.
+  void _showAvatarZoomFor(String uid, String name, String gender);
+  String _chatSubtitle(PrivateChatInfo chat, String myUid, S s);
+  String _formatTime(DateTime dt, S s);
+  Widget _groupRow(RoomModel g, S s);
 }
 
 class _PrivateChatsScreenState extends _PcBase
-    with _PcSelectMx, _PcFilterMx, _PcBuildMx {}
+    with _PcSelectMx, _PcFilterMx, _PcBuildMx, _PcGroupsMx {}

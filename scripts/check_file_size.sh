@@ -34,9 +34,12 @@ LIMIT=1000
 ALLOWLIST=(
   lib/widgets/post_card.dart:1091
   lib/widgets/chat_video_bubble.dart:1006
-  lib/screens/private_chats/private_chats_build.dart:1342
   # 2026-10-23: +41 baris dari commit remote (fitur blokir senyap: guard
   # pendingBlocked di jalur derive/receive). Bukan fitur baru dari sesi ini.
+  # 2026-10-24: sebagian dipecah (baris grup + avatar zoom -> _PcGroupsMx,
+  # 1342 -> 1048). Sisa = satu widget tree `build()` — pecah lanjutan
+  # butuh refactor subtree (risiko regresi tinggi), dicatat di REVIEW R-11.
+  lib/screens/private_chats/private_chats_build.dart:1048
   lib/screens/private_chat/private_chat_core.dart:1057
   lib/screens/room_chat/room_chat_live.dart:1070
   # 2026-10-22: +84 baris dari fix realtime (guard _isDead() + cancel timer
