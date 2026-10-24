@@ -492,8 +492,9 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
   Future<void> _toggle(String feature, bool v) async {
     setState(() => _saving = true);
     try {
-      final res = await ProviderScope.containerOf(context, listen: false).read(adminProvider).setFeatureFlag(feature, v);
-      final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+      final scope = ProviderScope.containerOf(context, listen: false);
+      final res = await scope.read(adminProvider).setFeatureFlag(feature, v);
+      final pp = scope.read(pointsProvider.notifier);
       await pp.refreshMeteredPricing();
       if (mounted) {
         setState(() => _flags = res);

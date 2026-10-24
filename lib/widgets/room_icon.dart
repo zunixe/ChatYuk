@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../core/cache/photo_cache.dart';
+import '../providers/riverpod/service_locator.dart';
 import '../providers/riverpod/storage_provider.dart';
 
 /// Ikon room: prioritas (1) foto upload-an (`room-icons/...` di rooms.icon),
@@ -93,8 +93,12 @@ class _UploadedIconState extends State<_UploadedIcon> {
   @override
   void initState() {
     super.initState();
+    // Tangkap provider SEBELUM await (context tidak boleh dipakai lintas await).
+    _storage = safeStorage(context);
     _future = _fetch();
   }
+
+  late final StorageNotifier _storage;
 
   Future<String?> _fetch() async {
     final key = widget.roomId.isNotEmpty ? widget.roomId : widget.path;
@@ -104,8 +108,7 @@ class _UploadedIconState extends State<_UploadedIcon> {
       if (cached != null && cached.isNotEmpty) return cached;
     } catch (_) {}
     try {
-      final data =
-          await ProviderScope.containerOf(context, listen: false).read(storageProvider).download(widget.path);
+      final data = await _storage.download(widget.path);
       if (data == null || data.isEmpty) return null;
       await PhotoCache.instance.save('roomicon', key, data);
       return await PhotoCache.instance.loadThumb('roomicon', key) ?? data;

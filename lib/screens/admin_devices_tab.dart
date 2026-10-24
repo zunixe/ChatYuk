@@ -52,7 +52,8 @@ class _AdminDevicesTabState extends ConsumerState<AdminDevicesTab>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    Future.microtask(() => ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchDevices());
+    final scope = ProviderScope.containerOf(context, listen: false);
+    Future.microtask(() => scope.read(adminProvider).fetchDevices());
     // 30 dtk (dulu 15). Polling hanya refresh halaman-1 diam-diam; kalau
     // user sudah load-more, LEWATI agar tidak reset paginasi + lompat scroll.
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {

@@ -172,6 +172,8 @@ class _VoiceBubbleState extends State<VoiceBubble> {
     } else {
       // Tap ganda saat unduh + path kosong — abaikan (anti double-download).
       if (_loading || widget.path.isEmpty) return;
+      // Tangkap SEBELUM await: context bisa ter-unmount saat unduh selesai.
+      final storage = safeStorage(context);
       final player = _ensurePlayer();
       try {
         // DISK FIRST (instan): kalau voice SUDAH ada di disk, play LANGSUNG
@@ -188,7 +190,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
         }
         // Cache miss → tampilkan spinner selama unduh.
         setState(() => _loading = true);
-        final bytes = await safeStorage(context).downloadBytes(widget.path);
+        final bytes = await storage.downloadBytes(widget.path);
         if (bytes == null || bytes.isEmpty) return;
         await MediaDiskCache.instance.write(widget.path, bytes);
         final f2 = await MediaDiskCache.instance.fileFor(widget.path);

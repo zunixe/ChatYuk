@@ -45,7 +45,8 @@ class _AdminDeletedTabState extends ConsumerState<AdminDeletedTab>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    Future.microtask(() => ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchDeleted());
+    final scope = ProviderScope.containerOf(context, listen: false);
+    Future.microtask(() => scope.read(adminProvider).fetchDeleted());
     _startRefreshTimer();
     _pagination = ScrollPagination(
       controller: _scrollCtrl,

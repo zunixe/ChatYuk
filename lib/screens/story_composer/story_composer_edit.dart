@@ -33,6 +33,9 @@ mixin _ScEditMx on _StoryComposerBase {
     if (uid == null || _bytes == null) return;
     setState(() => _publishing = true);
     try {
+      // Tangkap provider SEBELUM await (_renderTransformed/processStory bisa
+      // lama; widget bisa unmount saat itu).
+      final scope = ProviderScope.containerOf(context, listen: false);
       // Bake transformasi (zoom/rotasi/geser) + teks ke gambar final.
       final transformed =
           _imgScale != 1.0 || _imgRotation != 0 || _imgOffset != Offset.zero
@@ -40,12 +43,11 @@ mixin _ScEditMx on _StoryComposerBase {
           : _bytes!;
       final b64 = await NativeImage.processStory(transformed);
       if (b64 == null || b64.isEmpty) throw Exception('compress_failed');
-      final path = await ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(storageProvider).uploadStoryImage(uid: uid, base64: b64);
+      final path = await scope
+          .read(storageProvider)
+          .uploadStoryImage(uid: uid, base64: b64);
       if (path == null || path.isEmpty) throw Exception('upload_failed');
-      final ok = await ProviderScope.containerOf(context, listen: false)
+      final ok = await scope
           .read(storyProvider.notifier)
           .publish(
             imagePath: path,

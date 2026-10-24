@@ -312,10 +312,10 @@ Future<void> showCreateExploreRoomDialog(
                                   );
                                 }
                               }
-                              await ProviderScope.containerOf(
-                                    ctx,
-                                    listen: false,
-                                  )
+                              if (!ctx.mounted) return;
+                              final scope =
+                                  ProviderScope.containerOf(ctx, listen: false);
+                              await scope
                                   .read(roomProvider.notifier)
                                   .createGlobalRoom(
                                     name: name,

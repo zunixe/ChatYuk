@@ -310,6 +310,8 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   /// miss lalu simpan (seperti voice) → sekali dibuka, cold start berikutnya
   /// langsung kebuka tanpa unduh ulang.
   Future<File?> _ensureLocalFile() async {
+    // Tangkap SEBELUM await: context bisa ter-unmount saat decode/IO selesai.
+    final storage = safeStorage(context);
     // Base64 (bubble sendiri, belum ter-upload) → tulis ke temp.
     if (!_isPath) {
       try {
@@ -334,9 +336,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     // video besar akan meng-evict LRU = "cold start reload lagi").
     final hit = await VideoFileCache.instance.fileFor(widget.videoData);
     if (hit != null) return hit; // pernah dibuka → play instan.
-    final bytes = await safeStorage(context).downloadBytes(
-      widget.videoData,
-    );
+    final bytes = await storage.downloadBytes(widget.videoData);
     if (bytes == null || bytes.isEmpty) return null;
     return VideoFileCache.instance.put(widget.videoData, bytes);
   }
@@ -499,6 +499,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
 
   Future<void> _generatePoster() async {
     if (!mounted) return;
+    final storage = safeStorage(context);
     // Bubble sendiri (belum ter-upload): videoData base64 → tulis ke file
     // dulu, lalu ambil poster frame-nya. Tanpa ini bubble hanya kotak hitam
     // (di latar gelap terlihat seperti "video hilang").
@@ -509,9 +510,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
           if (mounted) setState(() => _loading = false);
           return;
         }
-        final thumb = await safeStorage(context).storyVideoPoster(
-          file.path,
-        );
+        final thumb = await storage.storyVideoPoster(file.path);
         if (!mounted) return;
         setState(() {
           _poster = thumb;
@@ -536,9 +535,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         }
         return;
       }
-      final thumb = await safeStorage(context).storyVideoPoster(
-        file.path,
-      );
+      final thumb = await storage.storyVideoPoster(file.path);
       if (!mounted) return;
       setState(() {
         _poster = thumb;

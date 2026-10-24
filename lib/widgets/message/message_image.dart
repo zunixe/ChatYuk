@@ -342,6 +342,8 @@ class _MessageImageState extends State<MessageImage> {
   }
 
   Future<void> _decode(int key, int gen) async {
+    // Tangkap SEBELUM await: context bisa ter-unmount saat decode/unduh.
+    final storage = safeStorage(context);
     var data = widget.imageData;
     // LAZY PENUH: imageData kosong tapi file lokal ada (foto lama yang tidak
     // ikut bulk-decrypt saat buka chat) → pulihkan thumb dari disk. Tanpa ini
@@ -407,7 +409,7 @@ class _MessageImageState extends State<MessageImage> {
           }
         }
       } catch (_) {}
-      data = await safeStorage(context).download(data) ?? '';
+      data = await storage.download(data) ?? '';
     }
     if (!mounted || gen != _gen) return;
     if (data.isEmpty) {

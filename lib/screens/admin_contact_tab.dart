@@ -22,9 +22,10 @@ class _AdminContactTabState extends ConsumerState<AdminContactTab> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchContactMessages(),
-    );
+    // Container ditangkap di initState (context valid) → microtask tidak
+    // menyentuh context setelah frame.
+    final scope = ProviderScope.containerOf(context, listen: false);
+    Future.microtask(() => scope.read(adminProvider).fetchContactMessages());
     _scrollCtrl.addListener(_onScroll);
   }
 
@@ -44,7 +45,9 @@ class _AdminContactTabState extends ConsumerState<AdminContactTab> {
   }
 
   Future<void> _confirmDelete(Map<String, dynamic> msg) async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    // Container ditangkap SEBELUM await showDialog (context bisa unmount).
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -63,7 +66,7 @@ class _AdminContactTabState extends ConsumerState<AdminContactTab> {
       ),
     );
     if (ok == true) {
-      ProviderScope.containerOf(context, listen: false).read(adminProvider).deleteContactMessage(msg['id'] as String);
+      scope.read(adminProvider).deleteContactMessage(msg['id'] as String);
     }
   }
 

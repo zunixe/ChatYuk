@@ -585,7 +585,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       return;
     }
 
-    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+    // Container ditangkap SEBELUM await: `context` bisa sudah tidak ter-mount
+    // saat upload selesai (user keluar layar) → "deactivated widget" crash.
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final pp = scope.read(pointsProvider.notifier);
     // Biaya kirim video = sama dengan foto (kind 'image').
     final r = await pp.deductBeforeSend('image');
     if (r < 0) {
@@ -621,7 +624,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     // terlalu besar untuk disimpan di antrean lokal).
     String? uploadedVideoPath;
     try {
-      final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).uploadChatVideo(
+      final path = await scope.read(storageProvider).uploadChatVideo(
         chatId: photoUploadChatId,
         bytes: bytes,
       );
@@ -660,7 +663,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       // untuk disertakan di baris pesan, tapi null = lanjut tanpa poster.
       String posterPath = '';
       if (posterBytes != null && posterBytes.isNotEmpty) {
-        posterPath = await ProviderScope.containerOf(context, listen: false)
+        posterPath = await scope
                 .read(storageProvider)
                 .uploadChatVideoPoster(chatId: photoUploadChatId, bytes: posterBytes) ??
             '';
@@ -807,7 +810,11 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     MessageModel? reply,
     String? albumId,
   }) async {
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    // Container ditangkap SEBELUM await apa pun: `context` bisa sudah
+    // ter-unmount saat upload selesai (user keluar layar) → crash
+    // "deactivated widget's ancestor".
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final auth = scope.read(authProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -852,7 +859,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       return;
     }
 
-    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+    final pp = scope.read(pointsProvider.notifier);
     final r = await pp.deductBeforeSend(effKind);
     if (r < 0) {
       if (r == -2) {
@@ -884,7 +891,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     }
 
     try {
-      final path = await ProviderScope.containerOf(context, listen: false).read(storageProvider).upload(
+      final path = await scope.read(storageProvider).upload(
         chatId: photoUploadChatId,
         base64: base64,
       );

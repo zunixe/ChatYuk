@@ -473,10 +473,10 @@ mixin _PcBuildMx on _PcBase {
                                             )
                                             .then((_) => true)
                                             .catchError((_) => false);
-                                    if (ok && mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
+                                    if (ok && mounted && context.mounted) {
+                                      final messenger =
+                                          ScaffoldMessenger.of(context);
+                                      messenger.showSnackBar(
                                         SnackBar(
                                           content: Text(
                                             isPinned

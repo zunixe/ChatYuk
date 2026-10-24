@@ -83,13 +83,12 @@ mixin _StoryNavMx on _StoryBase {
   Future<Uint8List?> _bytes(String path) async {
     final cached = _slideBytesCache[path];
     if (cached != null) return cached;
+    // Tangkap provider SEBELUM await (context bisa unmount saat unduh).
+    final storage = ProviderScope.containerOf(context, listen: false)
+        .read(storageProvider);
     // Legacy: row lama berisi base64 langsung (bukan path storage).
     // Tanpa cabang ini slide lama gagal total (return null → kotak retry).
-    if (path.isNotEmpty &&
-        !ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(storageProvider).isPath(path)) {
+    if (path.isNotEmpty && !storage.isPath(path)) {
       try {
         final legacy = base64Decode(path);
         if (legacy.isNotEmpty) {
@@ -104,8 +103,7 @@ mixin _StoryNavMx on _StoryBase {
       b ??= await MediaDiskCache.instance.read(path);
       // Timeout WAJIB: tanpa ini satu unduhan yang menggantung menahan
       // `_loading` (spinner) selamanya di jalur pemanggil.
-      b ??= await ProviderScope.containerOf(context, listen: false)
-          .read(storageProvider)
+      b ??= await storage
           .downloadBytes(path)
           .timeout(const Duration(seconds: 8));
       if (b != null && b.isNotEmpty) {

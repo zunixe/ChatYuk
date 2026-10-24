@@ -179,8 +179,10 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
       return;
     }
     final otherName = _nameFor(e.otherUid, s);
+    // Tangkap SEBELUM await startPrivateChat/startSession (context bisa unmount).
+    final scope = ProviderScope.containerOf(context, listen: false);
     try {
-      final chatId = await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).startPrivateChat(
+      final chatId = await scope.read(chatProvider.notifier).startPrivateChat(
         myUid: auth.uid!,
         otherUid: e.otherUid,
         myName: profile?.nickname ?? '',
@@ -205,7 +207,7 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
         chatId: chatId,
       );
       // Banner tarif: 0 = sembunyi saat koin OFF / billing belum publish.
-      final pp0 = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+      final pp0 = scope.read(pointsProvider.notifier);
       session.setBillingPerMinute(
         (pp0.enabled && pp0.callBillingPublished)
             ? pp0.callCostPerMin(callType)

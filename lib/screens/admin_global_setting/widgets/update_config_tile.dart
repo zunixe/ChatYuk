@@ -40,8 +40,10 @@ class _UpdateConfigTileState extends ConsumerState<UpdateConfigTile> {
   }
 
   Future<void> _load() async {
-    final cfg = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getUpdateConfig();
-    final lastPush = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getUpdatePushAt();
+    // Tangkap SEBELUM await (context tak boleh dipakai lintas await).
+    final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+    final cfg = await admin.getUpdateConfig();
+    final lastPush = await admin.getUpdatePushAt();
     if (!mounted) return;
     setState(() {
       _enabled = cfg?['update_enabled'] == true;
@@ -110,8 +112,9 @@ class _UpdateConfigTileState extends ConsumerState<UpdateConfigTile> {
     if (ok != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await ProviderScope.containerOf(context, listen: false).read(adminProvider).pushUpdate();
-      final at = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getUpdatePushAt();
+      final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+      await admin.pushUpdate();
+      final at = await admin.getUpdatePushAt();
       if (!mounted) return;
       setState(() => _lastPushAt = at ?? DateTime.now());
       ScaffoldMessenger.of(context).showSnackBar(

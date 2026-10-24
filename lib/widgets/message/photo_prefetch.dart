@@ -35,11 +35,14 @@ class PhotoPrefetch {
   /// supaya frame pertama chat sudah terisi gambar (nol 'ngeload'). Bounded &
   /// tidak melempar; pemanggil boleh beri timeout.
   static Future<void> precacheAll(BuildContext context, String chatKey) async {
+    // Muat VideoPrefetch dulu; setelah await, `context` tak boleh dipakai lagi
+    // untuk precacheThumbs → jalankan keduanya SEBELUM await pertama.
+    final thumbs = PhotoPrefetch.precacheThumbs(context, chatKey);
     try {
       await VideoPrefetch.precachePosters(context, chatKey);
     } catch (_) {}
     try {
-      await PhotoPrefetch.precacheThumbs(context, chatKey);
+      await thumbs;
     } catch (_) {}
   }
 

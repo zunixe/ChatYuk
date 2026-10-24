@@ -18,6 +18,14 @@ analyzer:
     - linux/**
 include: package:flutter_lints/flutter.yaml
 
+  # REVIEW_2026-10-24 BUG-01: dinaikkan ke ERROR setelah 104 pelanggaran
+  # dibersihkan (2026-10-24). Ini sumber crash nyata "Looking up a deactivated
+  # widget's ancestor" saat user keluar layar ketika RPC/upload masih jalan.
+  # JANGAN diturunkan lagi — perbaiki dengan menangkap provider/Navigator/
+  # ScaffoldMessenger SEBELUM await, atau guard `if (!mounted) return;`.
+  errors:
+    use_build_context_synchronously: error
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

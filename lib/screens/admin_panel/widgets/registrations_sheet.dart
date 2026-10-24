@@ -23,9 +23,8 @@ class AdminRegistrationsSheetState extends ConsumerState<AdminRegistrationsSheet
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ProviderScope.containerOf(context, listen: false).read(adminProvider).fetchRegistrations(),
-    );
+    final scope = ProviderScope.containerOf(context, listen: false);
+    Future.microtask(() => scope.read(adminProvider).fetchRegistrations());
   }
 
   @override

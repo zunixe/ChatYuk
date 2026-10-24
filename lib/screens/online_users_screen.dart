@@ -400,6 +400,8 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
   /// Zoom foto profil user lain: pakai bytes cache global kalau ada (b64
   /// langsung / path dari disk), else download path → tampilkan dialog.
   Future<void> _zoomUserAvatar(UserModel user, Color color) async {
+    // Tangkap provider SEBELUM await disk/download.
+    final storage = ProviderScope.containerOf(context, listen: false).read(storageProvider);
     Uint8List? bytes = ua.cachedUserAvatarBytes(user.uid);
     final src = user.avatar;
     if (bytes == null && src.isNotEmpty && !src.startsWith('avatars/')) {
@@ -412,7 +414,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
         bytes =
             MediaDiskCache.instance.readSync(src) ??
             await MediaDiskCache.instance.read(src) ??
-            await ProviderScope.containerOf(context, listen: false).read(storageProvider).downloadBytes(src);
+            await storage.downloadBytes(src);
       } catch (_) {}
     }
     if (!mounted) return;

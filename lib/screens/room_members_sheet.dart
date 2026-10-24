@@ -53,14 +53,17 @@ class _RoomMembersSheetState extends ConsumerState<RoomMembersSheet> {
   }
 
   Future<void> _load() async {
+    // Tangkap provider SEBELUM await (context bisa unmount saat RPC jalan).
+    final rooms = ProviderScope.containerOf(context, listen: false)
+        .read(roomProvider.notifier);
     try {
-      final members = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).listMembers(widget.roomId);
+      final members = await rooms.listMembers(widget.roomId);
       final pending = canModerate
-          ? await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier)
+          ? await rooms
               .listJoinRequests(widget.roomId)
               .then((rows) => rows) // RPC guard admin di server
           : <Map<String, dynamic>>[];
-      final room = await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchRoomById(widget.roomId);
+      final room = await rooms.fetchRoomById(widget.roomId);
       if (!mounted) return;
       setState(() {
         _members = members;

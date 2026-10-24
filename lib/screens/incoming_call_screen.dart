@@ -169,11 +169,13 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
     // (RLS dsb), pakai id deterministik — jangan jatuh ke fullscreen.
     var effMode = mode;
     var chatId = widget.chatId;
-    final auth0 = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    // Tangkap container SEBELUM await startPrivateChat (context bisa unmount).
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final auth0 = scope.read(authProvider.notifier);
     final profile0 = auth0.profile;
     if (widget.callType == 'video' && chatId.isEmpty && auth0.uid != null) {
       try {
-        chatId = await ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).startPrivateChat(
+        chatId = await scope.read(chatProvider.notifier).startPrivateChat(
           myUid: auth0.uid!,
           otherUid: widget.callerUid,
           myName: profile0?.nickname ?? '',
@@ -182,7 +184,7 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
         );
       } catch (_) {}
       if (chatId.isEmpty) {
-        chatId = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier).privateChatId(auth0.uid!, widget.callerUid);
+        chatId = scope.read(chatProvider.notifier).privateChatId(auth0.uid!, widget.callerUid);
       }
       if (!mounted) {
         _busy = false;

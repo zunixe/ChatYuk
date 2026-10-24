@@ -487,6 +487,8 @@ class _AdminDummyTabState extends ConsumerState<AdminDummyTab>
   }
 
   Future<void> _chatAs(Map<String, dynamic> item, S s) async {
+    // Tangkap SEBELUM await showDialog.
+    final scope = ProviderScope.containerOf(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -510,7 +512,7 @@ class _AdminDummyTabState extends ConsumerState<AdminDummyTab>
       ),
     );
     if (confirmed != true) return;
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final auth = scope.read(authProvider.notifier);
     try {
       await auth.becomeDummy(item['uid'] as String);
       if (!mounted) return;

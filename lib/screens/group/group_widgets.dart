@@ -137,11 +137,14 @@ class GroupCard extends ConsumerWidget {
       disposeAfterDialogFrame([pwCtrl]);
     }
     if (confirmed != true) return;
+    // Dialog sudah ditutup via await → pastikan widget masih ter-mount
+    // sebelum memakai context (ScaffoldMessenger/dialog poin).
+    if (!context.mounted) return;
 
     if (points.enabled &&
         points.points < joinPaid &&
         points.points < joinBonus) {
-      if (context.mounted) points.showOutOfPointsDialog(context, s.isId);
+      points.showOutOfPointsDialog(context, s.isId);
       return;
     }
     final messenger = ScaffoldMessenger.of(context);

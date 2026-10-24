@@ -137,6 +137,9 @@ class _StickerBubbleState extends State<StickerBubble> {
   }
 
   Future<void> _fetch() async {
+    // Tangkap provider SEBELUM await (context tak boleh dipakai lintas await).
+    final storage = rv.ProviderScope.containerOf(context, listen: false)
+        .read(storageProvider);
     try {
       Uint8List? bytes;
       if (_isPath) {
@@ -146,10 +149,7 @@ class _StickerBubbleState extends State<StickerBubble> {
           var f = await VideoFileCache.instance.fileFor(widget.data);
           if (f == null) {
             dlog('[STICKER] fetch download ${widget.data}');
-            final dl = await rv.ProviderScope.containerOf(context,
-                    listen: false)
-                .read(storageProvider)
-                .downloadBytes(widget.data);
+            final dl = await storage.downloadBytes(widget.data);
             if (dl != null && dl.isNotEmpty) {
               f = await VideoFileCache.instance.put(widget.data, dl);
             }

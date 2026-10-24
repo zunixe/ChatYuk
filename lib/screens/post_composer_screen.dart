@@ -298,7 +298,11 @@ class _PostComposerScreenState extends ConsumerState<PostComposerScreen> {
           return;
         }
       }
-      await ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier).createPost(
+      // Upload foto di atas banyak await → pastikan widget masih ter-mount
+      // sebelum memakai context (container) lagi.
+      if (!mounted) return;
+      final scope = ProviderScope.containerOf(context, listen: false);
+      await scope.read(timelineProvider.notifier).createPost(
         text: text,
         imagePaths: paths,
         imageDims: [for (final d in _imageDims) {'w': d.w, 'h': d.h}],

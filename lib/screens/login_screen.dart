@@ -286,11 +286,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   // Country/city ikut di-update agar sesuai lokasi login saat ini
   // (misal default Afghanistan saat daftar, dikoreksi ke lokasi asli).
   Future<void> _recordIpToServer() async {
+    // Tangkap SEMUA provider SEBELUM await deteksi IP: setelah itu widget
+    // bisa sudah unmount (login selesai) sehingga context tidak sah.
+    final scope = ProviderScope.containerOf(context, listen: false);
     try {
-      final geo = ProviderScope.containerOf(context, listen: false).read(locationProvider).geo;
+      final geo = scope.read(locationProvider).geo;
       final info = await geo.detect();
       if (info != null && info.ipAddress.isNotEmpty && mounted) {
-        final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+        final auth = scope.read(authProvider.notifier);
         await auth.updateIpAddress(info.ipAddress);
         // Update country/city jika deteksi valid dan berbeda dari profile
         final profile = auth.profile;
@@ -302,13 +305,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Perbarui koordinat (minta izin GPS sekali kalau belum pernah;
       // ditolak → perkiraan IP). Jalan INDEPENDEN dari deteksi IP —
       // GPS jangan sampai terlewat gara-gara provider IP lagi down.
-      final loc = ProviderScope.containerOf(context, listen: false).read(locationProvider).location;
+      final loc = scope.read(locationProvider).location;
       await loc.requestPermission();
       await loc.updateMyLocation();
       // Catat identitas perangkat (brand/model/OS) + install ID ke server
       // untuk pelacakan admin — pakai IP yang barusan terdeteksi.
-      await ProviderScope.containerOf(context, listen: false).read(deviceInfoProvider)
-          .syncToServer(ipAddress: info?.ipAddress ?? '');
+      await scope.read(deviceInfoProvider).syncToServer(ipAddress: info?.ipAddress ?? '');
     } catch (_) {
       // gagal — abaikan, jangan ganggu alur login
     }

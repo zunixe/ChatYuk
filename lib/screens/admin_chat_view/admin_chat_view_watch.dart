@@ -29,14 +29,12 @@ mixin _AcWatchMx on _AdminBase {
     if (call == null) return;
     if (_watch != null && _watch!.call.id == call.id) return;
     _startingWatch = true;
+    // `admin` sudah ditangkap di awal fungsi (sebelum await pertama).
     final old = _watch;
     _watch = null;
     old?.removeListener(_onWatchChanged);
     await old?.stop();
-    final ws = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(adminProvider).createWatchSession(call);
+    final ws = admin.createWatchSession(call);
     ws.addListener(_onWatchChanged);
     try {
       await ws.start();

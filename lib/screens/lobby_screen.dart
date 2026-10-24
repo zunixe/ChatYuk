@@ -61,10 +61,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         ? saved
         : profileCountry;
     if (!mounted) return;
-    await ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).setCountry(target);
+    final scope = ProviderScope.containerOf(context, listen: false);
+    await scope.read(roomProvider.notifier).setCountry(target);
     // Muat harga room (dual pricing) dari server.
-    ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).refreshRoomPricing();
-    if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).fetchExplore();
+    scope.read(pointsProvider.notifier).refreshRoomPricing();
+    if (mounted) scope.read(roomProvider.notifier).fetchExplore();
   }
 
   Future<void> _onCountryChanged(String country) async {
