@@ -179,7 +179,7 @@ mixin AuthServiceProfileMx on AuthBase {
       if (raw is Map && raw.isNotEmpty) {
         await MessageCache.instance.saveRawObj(key, Map<String, dynamic>.from(raw));
       }
-    } catch (_) {}
+    } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
   }
 
   /// Resolve PATH avatar → base64 (RAM → disk → network). Dipanggil UI
@@ -336,7 +336,7 @@ mixin AuthServiceProfileMx on AuthBase {
         oldAvatar != path) {
       try {
         await _sb.storage.from('chat-photos').remove([oldAvatar]);
-      } catch (_) {}
+      } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
     }
     await _sb.from('profiles').update({'avatar': path}).eq('id', id);
     // TULIS KE DISK — bytes WebP/JPEG asli, load berikutnya dari lokal.
@@ -346,7 +346,7 @@ mixin AuthServiceProfileMx on AuthBase {
           path,
           Uint8List.fromList(base64Decode(base64)),
         );
-      } catch (_) {}
+      } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
     }
     return path;
   }
@@ -371,7 +371,7 @@ mixin AuthServiceProfileMx on AuthBase {
         'update_device_fcm_token',
         params: {'p_install_id': installId, 'p_token': t},
       );
-    } catch (_) {}
+    } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
   }
 
   /// Logout: lepas token FCM device INI dari akun yang sedang keluar.
@@ -611,7 +611,7 @@ mixin AuthServiceProfileMx on AuthBase {
           StoragePhotoService.instance.isGalleryPath(photo)) {
         await StoragePhotoService.instance.delete(photo);
       }
-    } catch (_) {}
+    } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
     await _sb.from('user_photos').delete().eq('id', photoId);
     invalidateGallery(); // foto berubah -> buang cache (uid tak diketahui di sini)
   }

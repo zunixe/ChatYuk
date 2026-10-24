@@ -66,7 +66,7 @@ mixin _CallSessionWatchMx on _CallBase {
       if (old != null) {
         try {
           await old.close();
-        } catch (_) {}
+        } catch (_) {} // cleanup best-effort
       }
       _watchPendingCands.remove(watcher);
       final pc = await createPeerConnection(await CallConfig.getPeerConfig());
@@ -103,7 +103,7 @@ mixin _CallSessionWatchMx on _CallBase {
       _watchPcCreatedAt.remove(watcher);
       try {
         await broken?.close();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
   }
 
@@ -154,7 +154,7 @@ mixin _CallSessionWatchMx on _CallBase {
               (c['sdpMLineIndex'] as num?)?.toInt(),
             ),
           );
-        } catch (_) {}
+        } catch (e) { dlog('[CALL-WATCH]: $e'); }
       }
       _watchPendingCands.remove(watcher);
     } catch (e) {

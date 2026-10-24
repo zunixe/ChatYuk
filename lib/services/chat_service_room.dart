@@ -250,7 +250,7 @@ mixin ChatServiceRoomMx on ChatBase {
       if (ch != null) {
         try {
           await _sb.removeChannel(ch);
-        } catch (_) {}
+        } catch (_) {} // cleanup best-effort
       }
     }
   }
@@ -293,7 +293,7 @@ mixin ChatServiceRoomMx on ChatBase {
           'type': newType,
           'is_room': isRoom,
         }, isRoom: isRoom);
-      } catch (_) {}
+      } catch (e) { dlog('[CHAT-ROOM]: $e'); }
     }
   }
 

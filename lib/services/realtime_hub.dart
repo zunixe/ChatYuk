@@ -94,7 +94,7 @@ class RealtimeHub {
         await _onlineChannel!.untrack();
         await _sb.removeChannel(_onlineChannel!);
       }
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
     _onlineChannel = null;
     _trackedUid = null;
   }
@@ -151,7 +151,7 @@ class RealtimeHub {
       try {
         await ch.untrack();
         await _sb.removeChannel(ch);
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
   }
 
@@ -166,7 +166,7 @@ class RealtimeHub {
         try {
           await ch.untrack();
           await _sb.removeChannel(ch);
-        } catch (_) {}
+        } catch (_) {} // cleanup best-effort
       }
     }
   }

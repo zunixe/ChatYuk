@@ -90,7 +90,7 @@ class WatchSession extends ChangeNotifier {
     for (final p in participants) {
       try {
         await p.renderer.initialize();
-      } catch (_) {}
+      } catch (e) { dlog('[ADMIN-CALL]: $e'); }
     }
     // Renderer + stream khusus audio MIX kedua peserta (lihat [_mixedAudioStream]).
     try {
@@ -132,7 +132,7 @@ class WatchSession extends ChangeNotifier {
           status = st;
           notifyListeners();
         }
-      } catch (_) {}
+      } catch (e) { dlog('[ADMIN-CALL]: $e'); }
     });
   }
 
@@ -215,7 +215,7 @@ class WatchSession extends ChangeNotifier {
       if (old != null) {
         try {
           await old.close();
-        } catch (_) {}
+        } catch (_) {} // cleanup best-effort
       }
       _pendingCands.remove(p.uid);
       final pc = await createPeerConnection(await CallConfig.getPeerConfig());
@@ -305,7 +305,7 @@ class WatchSession extends ChangeNotifier {
               (c['sdpMLineIndex'] as num?)?.toInt(),
             ),
           );
-        } catch (_) {}
+        } catch (e) { dlog('[ADMIN-CALL]: $e'); }
       }
       _pendingCands.remove(p.uid);
       final answer = await pc.createAnswer();
@@ -353,7 +353,7 @@ class WatchSession extends ChangeNotifier {
           (c['sdpMLineIndex'] as num?)?.toInt(),
         ),
       );
-    } catch (_) {}
+    } catch (e) { dlog('[ADMIN-CALL]: $e'); }
   }
 
   void _handleState(Map<String, dynamic> msg) {
@@ -486,7 +486,7 @@ class WatchSession extends ChangeNotifier {
     if (_recording) {
       try {
         await stopRecording();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
       // Beri waktu encoder menutup file sebelum renderer dibuang.
       await Future.delayed(const Duration(milliseconds: 600));
     }
@@ -494,24 +494,24 @@ class WatchSession extends ChangeNotifier {
     for (final p in participants) {
       try {
         p.renderer.srcObject = null;
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
       try {
         await p.pc?.close();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
       p.pc = null;
       try {
         await p.renderer.dispose();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
     // Lepas stream + renderer audio mix.
     try {
       _audioRenderer?.srcObject = null;
       await _audioRenderer?.dispose();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
     _audioRenderer = null;
     try {
       await _mixedAudioStream?.dispose();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
     _mixedAudioStream = null;
     _pendingCands.clear();
   }

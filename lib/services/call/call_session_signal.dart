@@ -110,7 +110,7 @@ mixin _CallSessionSignalMx on _CallBase {
                   (cand['sdpMLineIndex'] as num?)?.toInt(),
                 ),
               );
-            } catch (_) {}
+            } catch (e) { dlog('[CALL-SIGNAL]: $e'); }
           }
           _pendingCandidates.clear();
           final answer = await _pc!.createAnswer();
@@ -148,7 +148,7 @@ mixin _CallSessionSignalMx on _CallBase {
                   (cand['sdpMLineIndex'] as num?)?.toInt(),
                 ),
               );
-            } catch (_) {}
+            } catch (e) { dlog('[CALL-SIGNAL]: $e'); }
           }
           _pendingCandidates.clear();
           await _syncAll();

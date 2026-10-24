@@ -417,7 +417,7 @@ class LocationService {
         'acc': acc,
         'at': DateTime.now().toIso8601String(),
       });
-    } catch (_) {}
+    } catch (e) { dlog('[LOC]: $e'); }
   }
 
   /// Stream posisi berjenjang: cache → last-known OS → GPS presisi.

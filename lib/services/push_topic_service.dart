@@ -2,6 +2,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils.dart';
 
 /// Helper subscribe/unsubscribe FCM Topic untuk fan-out 1→N ringan.
 /// Dipakai online, timeline, room. Cache subs di prefs biar tidak re-subscribe.
@@ -36,7 +37,7 @@ class PushTopicService {
     try {
       await FirebaseMessaging.instance.subscribeToTopic(topic);
       await prefs.setBool('$_prefPrefix$topic', true);
-    } catch (_) {}
+    } catch (e) { dlog('[PUSH-TOPIC]: $e'); }
   }
 
   Future<void> unsubscribe(String topic) async {
@@ -44,7 +45,7 @@ class PushTopicService {
       await FirebaseMessaging.instance.unsubscribeFromTopic(topic);
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('$_prefPrefix$topic');
-    } catch (_) {}
+    } catch (e) { dlog('[PUSH-TOPIC]: $e'); }
   }
 
   Future<void> subscribeOnline(String uid) => subscribe('online-$uid');

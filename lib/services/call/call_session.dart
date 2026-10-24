@@ -305,7 +305,7 @@ class CallSession extends _CallBase
           );
           return;
         }
-      } catch (_) {}
+      } catch (e) { dlog('[CALL] cek status awal callee gagal: $e'); }
     }
 
     if (isCaller) {
@@ -362,7 +362,7 @@ class CallSession extends _CallBase
           _finish(CallEndReason.canceled);
           return;
         }
-      } catch (_) {}
+      } catch (e) { dlog('[CALL] poll status callee gagal: $e'); }
     }
   }
 
@@ -385,12 +385,12 @@ class CallSession extends _CallBase
     _pc = null;
     try {
       await old?.close();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
     // Lepas stream lokal lama agar kamera/mik tidak bocor (setup ulang
     // di bawah membuka track baru; izin sudah ada jadi cepat).
     try {
       await _localStream?.dispose();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
     _localStream = null;
     await _signalSub?.cancel();
     _signalSub = null;
@@ -471,7 +471,7 @@ class CallSession extends _CallBase
           return;
         }
       }
-    } catch (_) {}
+    } catch (e) { dlog('[CALL] fallback cek status gagal: $e'); }
     if (_closed) return;
     // Safety-net fase: kadang callback onConnectionState/onIceConnectionState
     // tidak dipanggil di sebagian device sehingga UI nyangkut "Menghubungkan"
@@ -498,7 +498,7 @@ class CallSession extends _CallBase
         final payload = (row['payload'] as Map?)?.cast<String, dynamic>() ?? {};
         await _onSignal({'id': id, 'type': type, ...payload});
       }
-    } catch (_) {}
+    } catch (e) { dlog('[CALL] catch-up sinyal gagal: $e'); }
   }
 
   // ── Kontrol ──
@@ -523,7 +523,7 @@ class CallSession extends _CallBase
         'camera',
         payload: {'enabled': _cameraOn},
       );
-    } catch (_) {}
+    } catch (e) { dlog('[CALL] kirim sinyal camera gagal: $e'); }
   }
 
   Future<void> switchCamera() async {
@@ -539,7 +539,7 @@ class CallSession extends _CallBase
     _speakerOn = callType == 'video';
     try {
       await Helper.setSpeakerphoneOn(_speakerOn);
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
   }
 
   Future<void> toggleSpeaker() async {
@@ -646,7 +646,7 @@ class CallSession extends _CallBase
     for (final pc in _watchPcs.values) {
       try {
         await pc.close();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
     }
     _watchPcs.clear();
     _watchPendingCands.clear();
@@ -662,17 +662,17 @@ class CallSession extends _CallBase
     _service.releaseCallStatus(callId);
     try {
       await _pc?.close();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
     _pc = null;
     try {
       await _localStream?.dispose();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
     _localStream = null;
     try {
       await localRenderer.dispose();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
     try {
       await remoteRenderer.dispose();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
   }
 }

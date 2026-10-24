@@ -42,7 +42,7 @@ mixin _CallSessionMediaMx on _CallBase {
             break;
           }
         }
-      } catch (_) {}
+      } catch (e) { dlog('[CALL-MEDIA]: $e'); }
 
       _pc = await createPeerConnection(peerConfig);
       _pc!.onTrack = (event) async {
@@ -59,7 +59,7 @@ mixin _CallSessionMediaMx on _CallBase {
         if (event.streams.isEmpty) {
           try {
             await stream.addTrack(event.track);
-          } catch (_) {}
+          } catch (e) { dlog('[CALL-MEDIA]: $e'); }
         }
         _remoteStream = stream;
         remoteRenderer.srcObject = stream;
@@ -130,7 +130,7 @@ mixin _CallSessionMediaMx on _CallBase {
                 try {
                   await _service.sendSignal(callId, 'bye');
                   await _service.updateStatus(callId, 'ended');
-                } catch (_) {}
+                } catch (e) { dlog('[CALL-MEDIA]: $e'); }
                 _finish(
                   _phase == CallPhase.inCall
                       ? CallEndReason.ended
@@ -183,7 +183,7 @@ mixin _CallSessionMediaMx on _CallBase {
         try {
           await _service.sendSignal(callId, 'bye');
           await _service.updateStatus(callId, 'ended');
-        } catch (_) {}
+        } catch (e) { dlog('[CALL-MEDIA]: $e'); }
         _finish(CallEndReason.error);
       });
       _pc!.onIceConnectionState = (state) {
@@ -242,7 +242,7 @@ mixin _CallSessionMediaMx on _CallBase {
       // Best-effort: platform tak mendukung → pakai default.
       try {
         await _preferOpusCodec();
-      } catch (_) {}
+      } catch (e) { dlog('[CALL-MEDIA]: $e'); }
       // Proses sinyal yang diterima sebelum screen terbuka (dari IncomingCallScreen).
       if (pendingSignals.isNotEmpty) {
         for (final msg in pendingSignals) {
@@ -310,9 +310,9 @@ mixin _CallSessionMediaMx on _CallBase {
               sdpFmtpLine: 'minptime=10;useinbandfec=1',
             ),
           ]);
-        } catch (_) {}
+        } catch (e) { dlog('[CALL-MEDIA]: $e'); }
       }
-    } catch (_) {}
+    } catch (e) { dlog('[CALL-MEDIA]: $e'); }
   }
 
   /// Sampling RTT audio (getStats inbound-rtp) 3× tiap 5 dtk setelah connect.
@@ -334,7 +334,7 @@ mixin _CallSessionMediaMx on _CallBase {
             worst = worst == null || rtt > worst ? rtt : worst;
           }
         }
-      } catch (_) {}
+      } catch (e) { dlog('[CALL-MEDIA]: $e'); }
     }
     if (worst != null) {
       final ms = (worst * 1000).round();

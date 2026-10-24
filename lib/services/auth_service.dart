@@ -86,7 +86,7 @@ abstract class AuthBase {
     final googleSignIn = GoogleSignIn(serverClientId: webClientId);
     try {
       await googleSignIn.signOut();
-    } catch (_) {}
+    } catch (e) { dlog('[AUTH]: $e'); }
     final googleUser = await googleSignIn.signIn();
     if (googleUser == null) return null;
     final googleEmail = googleUser.email;
@@ -107,7 +107,7 @@ abstract class AuthBase {
           '[GOOGLE] idToken payload aud check: ${payload.substring(0, payload.length > 500 ? 500 : payload.length)}',
         );
       }
-    } catch (_) {}
+    } catch (e) { dlog('[AUTH]: $e'); }
     AuthResponse response;
     try {
       response = await _sb.auth.signInWithIdToken(
@@ -179,7 +179,7 @@ abstract class AuthBase {
           path,
           Uint8List.fromList(base64Decode(b64)),
         );
-      } catch (_) {}
+      } catch (e) { dlog('[AUTH]: $e'); }
     }
     return b64;
   }

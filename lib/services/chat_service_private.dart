@@ -381,7 +381,7 @@ mixin ChatServicePrivateMx on ChatBase {
               }
             }
           }
-        } catch (_) {}
+        } catch (e) { dlog('[CHAT-PVT]: $e'); }
       }
       // Fallback 2: chat_id 1-1 selalu format "uid1_uid2".
       if (other == null) {
@@ -402,7 +402,7 @@ mixin ChatServicePrivateMx on ChatBase {
           'dummy_uid': other,
         },
       );
-    } catch (_) {}
+    } catch (e) { dlog('[CHAT-PVT]: $e'); }
   }
 
   RealtimeChannel _privateBroadcastChannel(String chatId) {

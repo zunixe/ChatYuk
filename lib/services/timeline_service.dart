@@ -229,7 +229,7 @@ class TimelineService {
     return () {
       try {
         _sb.removeChannel(channel);
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     };
   }
 

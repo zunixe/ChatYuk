@@ -77,7 +77,7 @@ class DeviceInfoService {
         final idfv = (i.identifierForVendor ?? '').trim();
         if (idfv.isNotEmpty) return 'ios-$idfv';
       }
-    } catch (_) {}
+    } catch (e) { dlog('[DEVICE]: $e'); }
     // 4. Fallback: UUID per-install di secure storage.
     try {
       final existing = await _storage.read(key: _kInstallId);
@@ -202,7 +202,7 @@ class DeviceInfoService {
           .eq('id', user.id)
           .maybeSingle();
       nickname = '${row?['nickname'] ?? ''}';
-    } catch (_) {}
+    } catch (e) { dlog('[DEVICE]: $e'); }
     final params = <String, dynamic>{
       'p_install_id': id,
       'p_brand': info.brand,

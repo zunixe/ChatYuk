@@ -189,7 +189,7 @@ class StoryService {
       for (final id in storyIds) {
         try {
           await _sb.rpc('mark_story_seen', params: {'p_story_id': id});
-        } catch (_) {}
+        } catch (e) { dlog('[STORY]: $e'); }
       }
     }
   }

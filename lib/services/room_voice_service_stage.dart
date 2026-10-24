@@ -24,7 +24,7 @@ mixin _VoiceStageMx on _VoiceBase {
         for (final r in stats as List? ?? const []) {
           try {
             byId['${(r as dynamic).id}'] = r;
-          } catch (_) {}
+          } catch (e) { dlog('[VOICE-STAGE]: $e'); }
         }
         String? pairDesc;
         for (final r in byId.values) {
@@ -54,7 +54,7 @@ mixin _VoiceStageMx on _VoiceBase {
                 '${cand(vals(loc))}>${cand(vals(rem))}'
                 ' ${v['state'] ?? ''}';
             if (nominated) break;
-          } catch (_) {}
+          } catch (e) { dlog('[VOICE-STAGE]: $e'); }
         }
         if (pairDesc != null) info['pair'] = pairDesc;
         for (final r in byId.values) {
@@ -77,9 +77,9 @@ mixin _VoiceStageMx on _VoiceBase {
                     : (level > micLevel ? level : micLevel);
               }
             }
-          } catch (_) {}
+          } catch (e) { dlog('[VOICE-STAGE]: $e'); }
         }
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-STAGE]: $e'); }
       peers[key] = info;
     }
     return {
@@ -109,7 +109,7 @@ mixin _VoiceStageMx on _VoiceBase {
     if (_closed || _joined) return;
     try {
       await WakelockPlus.enable();
-    } catch (_) {}
+    } catch (e) { dlog('[VOICE-STAGE]: $e'); }
     _signalSub = _onSignalStream().listen(
       _onSignal,
       onError: (e) => dlog('[RoomVoice] signal stream error: $e'),
@@ -232,7 +232,7 @@ mixin _VoiceStageMx on _VoiceBase {
         dlog('[VOICE] getUserMedia audio failed: $e2');
         try {
           await _sb.rpc('room_voice_leave', params: {'p_room_id': roomId});
-        } catch (_) {}
+        } catch (e) { dlog('[VOICE-STAGE]: $e'); }
         return false;
       }
     }
@@ -246,7 +246,7 @@ mixin _VoiceStageMx on _VoiceBase {
           break;
         }
       }
-    } catch (_) {}
+    } catch (e) { dlog('[VOICE-STAGE]: $e'); }
     _onStage = true;
     _muted = false;
     _speakers.add(myUid);
@@ -255,10 +255,10 @@ mixin _VoiceStageMx on _VoiceBase {
     for (final t in _localStream?.getAudioTracks() ?? const []) {
       try {
         t.enabled = true;
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-STAGE]: $e'); }
       try {
         await Helper.setMicrophoneMute(false, t);
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-STAGE]: $e'); }
     }
     // Audio route: speakerphone WAJIB agar suara lawan terdengar kencang
     // (default earpiece/volume rendah = "mic hijau tapi bisu"). Best-effort:
@@ -271,7 +271,7 @@ mixin _VoiceStageMx on _VoiceBase {
       if (_closed || !_onStage) return;
       try {
         await _sb.rpc('room_voice_heartbeat', params: {'p_room_id': roomId});
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-STAGE]: $e'); }
     });
     // Umumkan ke pendengar: balas dengan v_join terarah → ku-offer.
     // Sertakan generasi sesi supaya v_bye basi sesi lama tak membunuh peer baru.
@@ -361,7 +361,7 @@ mixin _VoiceStageMx on _VoiceBase {
     _hbTimer = null;
     try {
       await _sb.rpc('room_voice_leave', params: {'p_room_id': roomId});
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
     if (announce) {
       await _sendSignal(type: 'v_bye', payload: {'sess': sessId});
     }
@@ -376,13 +376,13 @@ mixin _VoiceStageMx on _VoiceBase {
     for (final t in _localStream?.getAudioTracks() ?? const []) {
       try {
         await Helper.setMicrophoneMute(true, t);
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
       try {
         t.enabled = false;
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-STAGE]: $e'); }
       try {
         t.stop();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
     _localStream = null;
     notifyListeners();
@@ -392,7 +392,7 @@ mixin _VoiceStageMx on _VoiceBase {
   Future<void> _setSpeakerphone(bool on) async {
     try {
       await Helper.setSpeakerphoneOn(on);
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
   }
 
   /// Paksa codec Opus untuk transceiver audio (latency rendah + FEC).

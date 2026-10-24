@@ -73,7 +73,7 @@ class _ResilientSubscription<T> implements StreamSubscription<T> {
     _attempt = 0; // reset backoff — kita baru bangun, coba segera.
     try {
       _onRecovered?.call();
-    } catch (_) {}
+    } catch (e) { dlog('[RT]: $e'); }
     _subscribe();
   }
 
@@ -114,7 +114,7 @@ class _ResilientSubscription<T> implements StreamSubscription<T> {
     _current = null;
     try {
       _onError?.call(e);
-    } catch (_) {}
+    } catch (e) { dlog('[RT]: $e'); }
     if (_cancelled || _isDisposed()) {
       _cancelCompleter?.complete();
       return;
@@ -143,7 +143,7 @@ class _ResilientSubscription<T> implements StreamSubscription<T> {
       }
       try {
         _onRecovered?.call();
-      } catch (_) {}
+      } catch (e) { dlog('[RT]: $e'); }
       _reconnecting = false;
       _subscribe();
     });

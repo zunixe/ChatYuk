@@ -309,12 +309,12 @@ class CallService {
     _statusStreams.remove(callId);
     try {
       c?.close();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
     final ch = _statusChannels.remove(callId);
     if (ch != null) {
       try {
         _sb.removeChannel(ch);
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
   }
 
@@ -377,7 +377,7 @@ class CallService {
       for (final row in rows) {
         _emitSignal(row, controller);
       }
-    } catch (_) {}
+    } catch (e) { dlog('[CALL-SVC]: $e'); }
   }
 
   void _emitSignal(

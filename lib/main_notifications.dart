@@ -92,7 +92,7 @@ Future<void> _refreshNotifSummary(S s) async {
     } else {
       await localNotifications.cancel(id: _summaryNotifId);
     }
-  } catch (_) {}
+  } catch (e) { dlog('[NOTIF]: $e'); }
 }
 
 /// Hapus thread + notif shade + segarkan ringkasan untuk satu chat.
@@ -104,7 +104,7 @@ Future<void> _clearChatNotif(String chatKey, {bool cancelShade = true}) async {
       await localNotifications.cancel(id: notifIdForKey(chatKey));
     }
     await _refreshNotifSummary(AppLocale.s);
-  } catch (_) {}
+  } catch (e) { dlog('[NOTIF]: $e'); }
 }
 
 /// Unduh gambar untuk BigPicture notifikasi (avatar ATAU gambar preview link).
@@ -135,10 +135,10 @@ Future<String?> _notifImageFile(String url, {String tag = 'img'}) async {
         for (final old in files.take(files.length - _notifMediaKeep)) {
           try {
             old.deleteSync();
-          } catch (_) {}
+          } catch (e) { dlog('[NOTIF]: $e'); }
         }
       }
-    } catch (_) {}
+    } catch (e) { dlog('[NOTIF]: $e'); }
     return f.path;
   } catch (_) {
     return null;
@@ -206,7 +206,7 @@ Future<void> _reshowChatNotif(String chatKey) async {
       payload: jsonEncode(data),
     );
     await _refreshNotifSummary(s);
-  } catch (_) {}
+  } catch (e) { dlog('[NOTIF]: $e'); }
 }
 
 /// Aksi notif foreground: Balas inline / Tandai dibaca.
@@ -220,7 +220,7 @@ Future<void> _handleNotifAction(lpn.NotificationResponse response) async {
       if (p != null && p.isNotEmpty) {
         data = Map<String, dynamic>.from(jsonDecode(p) as Map);
       }
-    } catch (_) {}
+    } catch (e) { dlog('[NOTIF]: $e'); }
     if (data == null) return;
     final info = notifThreadOf(data);
     if (info == null) return;
@@ -256,7 +256,7 @@ Future<void> _handleNotifAction(lpn.NotificationResponse response) async {
     }
     _appendNotifThread(info.key, me.name, short);
     await _reshowChatNotif(info.key);
-  } catch (_) {}
+  } catch (e) { dlog('[NOTIF]: $e'); }
 }
 
 /// Simpan aksi notif untuk dikerjakan saat app hidup (dipakai jalur
@@ -270,13 +270,13 @@ Future<void> _stashPendingNotifAction(Map<String, dynamic> job) async {
       if (raw != null && raw.isNotEmpty) {
         list = List.from(jsonDecode(raw) as List);
       }
-    } catch (_) {}
+    } catch (e) { dlog('[NOTIF]: $e'); }
     list.add(job);
     while (list.length > 10) {
       list.removeAt(0);
     }
     await prefs.setString(_pendingNotifActionsKey, jsonEncode(list));
-  } catch (_) {}
+  } catch (e) { dlog('[NOTIF]: $e'); }
 }
 
 /// Kerjakan aksi notif tertunda (Balas/Tandai) sekali sesi pulih.
@@ -328,9 +328,9 @@ Future<void> _consumePendingNotifActions() async {
           }
           await _clearChatNotif(chatKey);
         }
-      } catch (_) {}
+      } catch (e) { dlog('[NOTIF]: $e'); }
     }
-  } catch (_) {}
+  } catch (e) { dlog('[NOTIF]: $e'); }
 }
 
 /// Tap aksi notif saat app mati: coba kerjakan langsung (sesi Supabase
@@ -346,7 +346,7 @@ Future<void> _notifActionBgHandler(lpn.NotificationResponse response) async {
       if (p != null && p.isEmpty == false) {
         data = Map<String, dynamic>.from(jsonDecode(p) as Map);
       }
-    } catch (_) {}
+    } catch (e) { dlog('[NOTIF]: $e'); }
     if (data == null) return;
     final type = data['type'];
     final isRoom = type == 'room';
@@ -382,7 +382,7 @@ Future<void> _notifActionBgHandler(lpn.NotificationResponse response) async {
         final n = '${m?['nickname'] ?? ''}'.trim();
         if (n.isNotEmpty) name = n;
         gender = '${m?['gender'] ?? ''}';
-      } catch (_) {}
+      } catch (e) { dlog('[NOTIF]: $e'); }
       final chat = ChatService();
       if (action == 'mark_read') {
         await chat.markAsRead(chatKey, uid);
@@ -425,7 +425,7 @@ Future<void> _notifActionBgHandler(lpn.NotificationResponse response) async {
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
     }
-  } catch (_) {}
+  } catch (e) { dlog('[NOTIF]: $e'); }
 }
 
 @pragma('vm:entry-point')
@@ -785,7 +785,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
         if (prov.activeSession != null) {
           await prov.clearSession();
         }
-      } catch (_) {}
+      } catch (e) { dlog('[NOTIF]: $e'); }
     }
     String _pick(Map d, List<String> keys, String fallback) {
       for (final k in keys) {
@@ -814,7 +814,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
           await file.writeAsBytes(resp.bodyBytes);
           bigPicPath = file.path;
         }
-      } catch (_) {}
+      } catch (e) { dlog('[NOTIF]: $e'); }
     }
     await localNotifications.show(
       id: notifIdForKey(key),

@@ -144,6 +144,6 @@ class PollService {
   Future<void> unsubscribe(RealtimeChannel ch) async {
     try {
       await _sb.removeChannel(ch);
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
   }
 }

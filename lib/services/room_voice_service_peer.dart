@@ -9,7 +9,7 @@ mixin _VoicePeerMx on _VoiceBase {
       for (final t in _localStream?.getAudioTracks() ?? const []) {
         t.enabled = false;
       }
-    } catch (_) {}
+    } catch (e) { dlog('[VOICE-PEER]: $e'); }
     _muted = true;
     await stopSpeaking(announce: false);
     await _sendSignal(type: 'v_mute', payload: {'muted': true});
@@ -38,7 +38,7 @@ mixin _VoicePeerMx on _VoiceBase {
       ids.remove(myUid);
       if (_onStage) ids.add(myUid);
       _applySpeakers(ids);
-    } catch (_) {}
+    } catch (e) { dlog('[VOICE-PEER]: $e'); }
   }
 
   void _applySpeakers(Iterable<String> ids) {
@@ -109,7 +109,7 @@ mixin _VoicePeerMx on _VoiceBase {
         }
         try {
           await old.close();
-        } catch (_) {}
+        } catch (_) {} // cleanup best-effort
         _peers.remove(peerUid);
         _pcIds.remove(peerUid);
         _pendingCands.remove(peerUid);
@@ -248,7 +248,7 @@ mixin _VoicePeerMx on _VoiceBase {
         }
         try {
           await pc.close();
-        } catch (_) {}
+        } catch (_) {} // cleanup best-effort
         _peers.remove(key);
       }
       pc = await createPeerConnection(
@@ -320,7 +320,7 @@ mixin _VoicePeerMx on _VoiceBase {
           stream = await createLocalMediaStream('remote-$from');
           try {
             await stream.addTrack(event.track);
-          } catch (_) {}
+          } catch (e) { dlog('[VOICE-PEER]: $e'); }
         }
         if (!_closed) {
           _remoteStreams[from] = stream;
@@ -354,7 +354,7 @@ mixin _VoicePeerMx on _VoiceBase {
               (c['sdpMLineIndex'] as num?)?.toInt(),
             ),
           );
-        } catch (_) {}
+        } catch (e) { dlog('[VOICE-PEER]: $e'); }
       }
       _pendingCands.remove(dnPcId);
       // Opus low-latency + FEC untuk audio jawaban (setelah setRemoteDescription
@@ -407,7 +407,7 @@ mixin _VoicePeerMx on _VoiceBase {
               (c['sdpMLineIndex'] as num?)?.toInt(),
             ),
           );
-        } catch (_) {}
+        } catch (e) { dlog('[VOICE-PEER]: $e'); }
       }
       if (upPcId.isNotEmpty) _pendingCands.remove(upPcId);
     } catch (e) {
@@ -459,7 +459,7 @@ mixin _VoicePeerMx on _VoiceBase {
           (c['sdpMLineIndex'] as num?)?.toInt(),
         ),
       );
-    } catch (_) {}
+    } catch (e) { dlog('[VOICE-PEER]: $e'); }
   }
 
   /// Fallback relay-only → semua kandidat (host/srflx/relay) UNTUK SATU PEER.
@@ -478,7 +478,7 @@ mixin _VoicePeerMx on _VoiceBase {
       final pc = _peers.remove(k);
       try {
         await pc?.close();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
       _pendingCands.remove(k);
       _pcIds.remove(k);
       _offerSentAt.remove(k);
@@ -509,7 +509,7 @@ mixin _VoicePeerMx on _VoiceBase {
       final pc = _peers.remove(k);
       try {
         await pc?.close();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
       _pendingCands.remove(k);
       _pcIds.remove(k);
       _offerSentAt.remove(k);
@@ -547,7 +547,7 @@ mixin _VoicePeerMx on _VoiceBase {
           if (level > 0.02) next.add(uid);
           break;
         }
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-PEER]: $e'); }
     }
     if (next.length != _speakingNow.length || !next.containsAll(_speakingNow)) {
       _speakingNow

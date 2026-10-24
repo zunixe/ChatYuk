@@ -25,7 +25,7 @@ mixin ChatServicePresenceMx on ChatBase {
       } else {
         _invisibleUidCache = null;
       }
-    } catch (_) {}
+    } catch (e) { dlog('[PRESENCE]: $e'); }
     return _invisibleUidCache;
   }
 
@@ -42,7 +42,7 @@ mixin ChatServicePresenceMx on ChatBase {
           .timeout(const Duration(seconds: 2));
       final c = (row?['country'] as String?)?.trim();
       if (c != null && c.isNotEmpty) _ownCountryCache = c;
-    } catch (_) {}
+    } catch (e) { dlog('[PRESENCE]: $e'); }
     return _ownCountryCache;
   }
 
@@ -264,7 +264,7 @@ mixin ChatServicePresenceMx on ChatBase {
                     }
                   }
                   pendingFast.add(u);
-                } catch (_) {}
+                } catch (e) { dlog('[PRESENCE]: $e'); }
               }
               if (pendingFast.isNotEmpty) {
                 // Urutan SAMA dengan RPC (last_seen desc) — emission awal dan
@@ -306,7 +306,7 @@ mixin ChatServicePresenceMx on ChatBase {
                 }
               }
             }
-          } catch (_) {}
+          } catch (e) { dlog('[PRESENCE]: $e'); }
         }
         // Coba RPC ringan dulu (1 RTT, server-side, tanpa IN 500).
         // K6 skala: global limit 200 + merge shard country sendiri
@@ -360,7 +360,7 @@ mixin ChatServicePresenceMx on ChatBase {
               if (rpcRows.isNotEmpty) usedRpc = true;
             }
           }
-        } catch (_) {}
+        } catch (e) { dlog('[PRESENCE]: $e'); }
         List<dynamic> rows;
         if (usedRpc) {
           // ── PRESENCE CROSS-REFERENCE ────────────────────────────────────
@@ -467,7 +467,7 @@ mixin ChatServicePresenceMx on ChatBase {
           if (rows.isNotEmpty) {
             MessageCache.instance.saveRawList('online_users', rows);
           }
-        } catch (_) {}
+        } catch (e) { dlog('[PRESENCE]: $e'); }
         if (!controller.isClosed) controller.add(List.unmodifiable(cached));
         // Background download avatar batch 20 (index Map O(1)).
         const avatarBatch = 20;

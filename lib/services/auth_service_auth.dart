@@ -231,7 +231,7 @@ mixin AuthServiceAuthMx on AuthBase {
         _hasPasswordFetched = true;
         return res;
       }
-    } catch (_) {}
+    } catch (e) { dlog('[AUTH]: $e'); }
     final fallback = hasPassword;
     _cachedHasPassword = fallback;
     _hasPasswordFetched = true;
@@ -313,7 +313,7 @@ mixin AuthServiceAuthMx on AuthBase {
     // (AdminGate.onSignOut) — di build rilis hook ini tidak pernah terisi.
     try {
       await AdminGate.onSignOut?.call();
-    } catch (_) {}
+    } catch (e) { dlog('[AUTH]: $e'); }
     try {
       // Teardown total realtime: cegah socket/channel lama nyangkut saat
       // login ulang di proses yang sama (race disconnect/connect di

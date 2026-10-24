@@ -867,7 +867,7 @@ class ChatStreamSession {
               ..[idx] = _current[idx].copyWith(type: newType);
             _emit();
             scheduleCacheSave();
-          } catch (_) {}
+          } catch (e) { dlog('[RT]: $e'); }
         },
       );
 
@@ -912,7 +912,7 @@ class ChatStreamSession {
       if (old == null) return;
       try {
         await _sb.removeChannel(old);
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
 
     openChannel();
@@ -1234,7 +1234,7 @@ class ChatStreamSession {
         if (ch != null) {
           try {
             unawaited(_sb.removeChannel(ch).catchError((_) => 'error'));
-          } catch (_) {}
+          } catch (_) {} // cleanup best-effort
         }
         // P0b DIBATALKAN: JANGAN `controller.close()` di sini — stream ini
         // `broadcast` & bisa di-subscribe ULANG (`handle.stream.first` → cancel

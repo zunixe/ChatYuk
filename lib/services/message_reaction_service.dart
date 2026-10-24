@@ -202,7 +202,7 @@ class MessageReactionService {
       await MessageCache.instance.saveRawObj(reactionCacheKey(chatId), {
         for (final e in m.entries) e.key: Map<String, dynamic>.from(e.value),
       });
-    } catch (_) {}
+    } catch (e) { dlog('[REACTION]: $e'); }
   }
 
   Future<bool> isStarred({
@@ -327,7 +327,7 @@ class MessageReactionService {
   Future<void> preloadCachedStarred(String chatId) async {
     try {
       await MessageCache.instance.preloadRawObj(starredCacheKey(chatId));
-    } catch (_) {}
+    } catch (e) { dlog('[REACTION]: $e'); }
   }
 
   /// Preload SEMUA cache starred (semua chat) ke memori saat bootstrap —
@@ -335,7 +335,7 @@ class MessageReactionService {
   Future<void> preloadAllStarred() async {
     try {
       await MessageCache.instance.preloadObjPrefix('starred:');
-    } catch (_) {}
+    } catch (e) { dlog('[REACTION]: $e'); }
   }
 
   /// Simpan tiap emission stream. Dibungkus `{'ids': [...]}` supaya kondisi
@@ -347,6 +347,6 @@ class MessageReactionService {
       await MessageCache.instance.saveRawObj(starredCacheKey(chatId), {
         'ids': ids.where((e) => e.isNotEmpty).toList(),
       });
-    } catch (_) {}
+    } catch (e) { dlog('[REACTION]: $e'); }
   }
 }

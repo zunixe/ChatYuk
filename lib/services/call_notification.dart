@@ -1,4 +1,5 @@
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import '../utils.dart';
 
 /// Notifikasi "panggilan aktif" berbasis FOREGROUND SERVICE (gaya WhatsApp):
 /// - Proses app tidak dibunuh OS saat app di-swipe dari recents → WebRTC
@@ -92,12 +93,12 @@ class CallNotification {
   static Future<void> stopLive() async {
     try {
       await FlutterForegroundTask.stopService();
-    } catch (_) {}
+    } catch (e) { dlog('[CALL-NOTIF]: $e'); }
   }
 
   static Future<void> cancel() async {
     try {
       await FlutterForegroundTask.stopService();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
   }
 }

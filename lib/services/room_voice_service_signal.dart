@@ -19,9 +19,9 @@ mixin _VoiceSignalMx on _VoiceBase {
               sdpFmtpLine: 'minptime=10;useinbandfec=1',
             ),
           ]);
-        } catch (_) {}
+        } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
       }
-    } catch (_) {}
+    } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
   }
 
   // ── Mute/unmute mic sendiri (tetap di stage, tanpa renegosiasi). ──
@@ -36,10 +36,10 @@ mixin _VoiceSignalMx on _VoiceBase {
     for (final t in _localStream?.getAudioTracks() ?? const []) {
       try {
         t.enabled = !value;
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
       try {
         await Helper.setMicrophoneMute(value, t);
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
     }
     await _sendSignal(type: 'v_mute', payload: {'muted': value});
     notifyListeners();
@@ -51,7 +51,7 @@ mixin _VoiceSignalMx on _VoiceBase {
     _closed = true;
     try {
       await WakelockPlus.disable();
-    } catch (_) {}
+    } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
     // Kembalikan route audio ke default (lepas speakerphone paksa).
     await _setSpeakerphone(false);
     _hbTimer?.cancel();
@@ -64,7 +64,7 @@ mixin _VoiceSignalMx on _VoiceBase {
       if (ch == null) continue;
       try {
         _sb.removeChannel(ch);
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
     _signalChannel = null;
     _speakersChannel = null;
@@ -72,7 +72,7 @@ mixin _VoiceSignalMx on _VoiceBase {
       _onStage = false;
       try {
         await _sb.rpc('room_voice_leave', params: {'p_room_id': roomId});
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
       await _sendSignal(type: 'v_bye', payload: {'sess': sessId});
     }
     _uplinkOk.clear();
@@ -84,19 +84,19 @@ mixin _VoiceSignalMx on _VoiceBase {
     for (final t in _localStream?.getAudioTracks() ?? const []) {
       try {
         await Helper.setMicrophoneMute(true, t);
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
       try {
         t.enabled = false;
-      } catch (_) {}
+      } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
       try {
         t.stop();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
     _localStream = null;
     for (final pc in _peers.values) {
       try {
         await pc.close();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
     _peers.clear();
     _remoteStreams.clear();
@@ -144,7 +144,7 @@ mixin _VoiceSignalMx on _VoiceBase {
     controller.onCancel = () {
       try {
         _sb.removeChannel(channel);
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     };
     return controller.stream;
   }
@@ -189,7 +189,7 @@ mixin _VoiceSignalMx on _VoiceBase {
         _lastSignalId = max(_lastSignalId, ((m['id'] ?? 0) as num).toInt());
         _onSignal(m);
       }
-    } catch (_) {}
+    } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
   }
 
   Future<void> _fastForwardSignals() async {
@@ -202,7 +202,7 @@ mixin _VoiceSignalMx on _VoiceBase {
           .limit(1)
           .maybeSingle();
       _lastSignalId = (((row as Map?) ?? const {})['id'] as num?)?.toInt() ?? 0;
-    } catch (_) {}
+    } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
   }
 
   void _onSignal(Map<String, dynamic> sig) {

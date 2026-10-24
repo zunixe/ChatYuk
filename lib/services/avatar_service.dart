@@ -172,7 +172,7 @@ class AvatarB64Service {
         }
         return b64;
       }
-    } catch (_) {}
+    } catch (e) { dlog('[AVATAR]: $e'); }
     // Dedup: caller kedua menunggu job yang sama (bukan '' instan).
     final job = _uidJobs[uid];
     if (job != null) return job;
@@ -213,7 +213,7 @@ class AvatarB64Service {
             'avatars/$uid.jpg',
             Uint8List.fromList(base64Decode(avatar)),
           );
-        } catch (_) {}
+        } catch (e) { dlog('[AVATAR]: $e'); }
       }
       return avatar;
     } catch (e) {
@@ -345,7 +345,7 @@ class AvatarB64Service {
           path,
           Uint8List.fromList(base64Decode(base64)),
         );
-      } catch (_) {}
+      } catch (e) { dlog('[AVATAR]: $e'); }
     }
   }
 
@@ -359,7 +359,7 @@ class AvatarB64Service {
           path,
           Uint8List.fromList(base64Decode(base64)),
         );
-      } catch (_) {}
+      } catch (e) { dlog('[AVATAR]: $e'); }
       // Avatar → isi juga cache uid supaya pemanggil by-uid (daftar chat)
       // dapat foto yang sama tanpa fetch ulang.
       final uid = uidFromAvatarPath(path);
@@ -378,7 +378,7 @@ class AvatarB64Service {
     // boot sehingga avatar gagal padahal filenya ada di disk.
     try {
       await MediaDiskCache.instance.waitReady();
-    } catch (_) {}
+    } catch (e) { dlog('[AVATAR]: $e'); }
     final disk = await MediaDiskCache.instance.read(path);
     if (disk != null && disk.isNotEmpty) {
       return base64Encode(disk);
@@ -390,7 +390,7 @@ class AvatarB64Service {
           path,
           Uint8List.fromList(base64Decode(b64)),
         );
-      } catch (_) {}
+      } catch (e) { dlog('[AVATAR]: $e'); }
     }
     return b64;
   }
@@ -405,7 +405,7 @@ class AvatarB64Service {
           path,
           Uint8List.fromList(base64Decode(b64)),
         );
-      } catch (_) {}
+      } catch (e) { dlog('[AVATAR]: $e'); }
     }
     return b64;
   }
@@ -486,7 +486,7 @@ class AvatarB64Service {
                 canonical,
                 Uint8List.fromList(base64Decode(b64)),
               );
-            } catch (_) {}
+            } catch (e) { dlog('[AVATAR]: $e'); }
           }
         }
       }

@@ -132,7 +132,7 @@ class RoomBroadcastSession extends ChangeNotifier {
         if (_closed) return;
         try {
           await _sb.rpc('touch_broadcast', params: {'p_room_id': roomId});
-        } catch (_) {}
+        } catch (e) { dlog('[BROADCAST]: $e'); }
       });
       // Recovery watchdog: dua kasus deadlock dijahit di sini —
       // (a) pc benar-benar gagal (Failed/Disconnected/Closed-stale)
@@ -229,7 +229,7 @@ class RoomBroadcastSession extends ChangeNotifier {
               await requestStream();
             }
           }
-        } catch (_) {}
+        } catch (e) { dlog('[BROADCAST]: $e'); }
       });
       // Watchdog lama digabung ke _rejoinTimer di atas (hemat 1 timer + 1 RPC
       // per 10 dtk). Field _watchdog dipertahankan null agar stop() aman.
@@ -345,7 +345,7 @@ class RoomBroadcastSession extends ChangeNotifier {
       if (old != null) {
         try {
           await old.close();
-        } catch (_) {}
+        } catch (_) {} // cleanup best-effort
       }
       _peers.remove(viewerUid);
       _pcIds.remove(viewerUid);
@@ -431,7 +431,7 @@ class RoomBroadcastSession extends ChangeNotifier {
             c['sdpMid'],
             (c['sdpMLineIndex'] as num?)?.toInt(),
           ));
-        } catch (_) {}
+        } catch (e) { dlog('[BROADCAST]: $e'); }
       }
       _pendingCands.remove(from);
     } catch (e) {
@@ -469,18 +469,18 @@ class RoomBroadcastSession extends ChangeNotifier {
         c['sdpMid'],
         (c['sdpMLineIndex'] as num?)?.toInt(),
       ));
-    } catch (_) {}
+    } catch (e) { dlog('[BROADCAST]: $e'); }
   }
 
   void _dropPeer(String uid) {
     final pc = _peers.remove(uid);
     try {
       pc?.close();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
     final rr = remoteRenderers.remove(uid);
     try {
       rr?.dispose();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
     _pendingCands.remove(uid);
     _pcIds.remove(uid);
     _offerSentAt.remove(uid);
@@ -514,7 +514,7 @@ class RoomBroadcastSession extends ChangeNotifier {
           break;
         }
       }
-    } catch (_) {}
+    } catch (e) { dlog('[BROADCAST]: $e'); }
   }
 
   void _renegotiateBitrateAll() {
@@ -563,7 +563,7 @@ class RoomBroadcastSession extends ChangeNotifier {
       if (pc != null) {
         try {
           await pc.close();
-        } catch (_) {}
+        } catch (_) {} // cleanup best-effort
         _peers.remove(broadcasterUid);
       }
       pc = await createPeerConnection(await CallConfig.getPeerConfig());
@@ -622,7 +622,7 @@ class RoomBroadcastSession extends ChangeNotifier {
             c['sdpMid'],
             (c['sdpMLineIndex'] as num?)?.toInt(),
           ));
-        } catch (_) {}
+        } catch (e) { dlog('[BROADCAST]: $e'); }
       }
       _pendingCands.remove(broadcasterUid);
       final answer = await pc.createAnswer();
@@ -657,7 +657,7 @@ class RoomBroadcastSession extends ChangeNotifier {
       await _prv.sendSignal(roomId, type: 'b_bye');
       try {
         await _prv.stopBroadcastV2(roomId);
-      } catch (_) {}
+      } catch (e) { dlog('[BROADCAST]: $e'); }
     } else {
       // Viewer juga beri tahu broadcaster agar pc basi di-drop — tanpa ini
       // re-join (keluar-masuk room) diabaikan selamanya → video blank.
@@ -666,21 +666,21 @@ class RoomBroadcastSession extends ChangeNotifier {
     for (final pc in _peers.values) {
       try {
         await pc.close();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
     _peers.clear();
     for (final r in remoteRenderers.values) {
       try {
         await r.dispose();
-      } catch (_) {}
+      } catch (_) {} // cleanup best-effort
     }
     remoteRenderers.clear();
     try {
       await localRenderer.dispose();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
     try {
       await remoteRenderer.dispose();
-    } catch (_) {}
+    } catch (_) {} // cleanup best-effort
     onEnded?.call();
     notifyListeners();
   }
@@ -693,7 +693,7 @@ class RoomBroadcastSession extends ChangeNotifier {
         _lastSignalId = max(_lastSignalId, ((r['id'] ?? 0) as num).toInt());
         _onSignal(r);
       }
-    } catch (_) {}
+    } catch (e) { dlog('[BROADCAST]: $e'); }
   }
 
   /// Cursor maju ke id signal TERBESAR saat session dimulai — offer/answer
@@ -711,7 +711,7 @@ class RoomBroadcastSession extends ChangeNotifier {
           .maybeSingle();
       _lastSignalId = ((row?['id'] ?? 0) as num).toInt();
       dlog('[BROADCAST] signal cursor fast-forward to $_lastSignalId');
-    } catch (_) {}
+    } catch (e) { dlog('[BROADCAST]: $e'); }
   }
 
   @override

@@ -219,7 +219,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
           () => _prefetchInflight--,
         ),
       );
-    } catch (_) {}
+    } catch (e) { dlog('[CHAT-LIST]: $e'); }
   }
 
   Future<void> _fetchAndCachePhoto(String chatId) async {
@@ -244,7 +244,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
       final b64 = await StoragePhotoService.instance.download(data);
       if (b64 == null || b64.isEmpty) return;
       await PhotoCache.instance.save('private_$chatId', id, b64);
-    } catch (_) {}
+    } catch (e) { dlog('[CHAT-LIST]: $e'); }
   }
 
   void _removeLocalChat(String myUid, String chatId) {
