@@ -77,7 +77,10 @@ jobs:
         run: flutter test --coverage --no-pub
 
       - name: Coverage gate (ratchet anti-regresi)
-        # Ratchet dinaikkan 2026-09-20 setelah menambah test mixin/SQL/auth/
+        # Ratchet dinaikkan lagi 2026-10-24 (REVIEW_2026-10-24 TEST-01). Terukur:
+        #   providers 46.8% · services 26.4% · models 82.3% · mixins 33.4% ·
+        #   core 71.9% · widgets 47.8%
+        # Riwayat: ratchet dinaikkan 2026-09-20 setelah menambah test mixin/SQL/auth/
         # io-service. Angka = sedikit di bawah hasil ukur nyata (margin anti
         # fluktuasi), bukan target akhir. Terukur saat itu:
         #   providers 26.3% · services 16.3% · models 78.2% · mixins 15.5%
@@ -100,7 +103,7 @@ jobs:
                   except Exception:
                       continue
                   key = 'other'
-                  for d in ('lib/providers/', 'lib/services/', 'lib/models/', 'lib/mixins/'):
+                  for d in ('lib/providers/', 'lib/services/', 'lib/models/', 'lib/mixins/', 'lib/core/', 'lib/widgets/'):
                       if cur and cur.endswith('.dart') and d in cur.replace('\\', '/'):
                           key = d; break
                   f, h = stats.get(key, (0, 0))
@@ -108,10 +111,12 @@ jobs:
               elif line == 'end_of_record':
                   cur = None
           minimum = {
-              'lib/providers/': 25.0,
-              'lib/services/': 15.0,
-              'lib/models/': 75.0,
-              'lib/mixins/': 14.0,
+              'lib/providers/': 44.0,
+              'lib/services/': 24.0,
+              'lib/models/': 80.0,
+              'lib/mixins/': 31.0,
+              'lib/core/': 68.0,
+              'lib/widgets/': 45.0,
           }
           ok = True
           for d, floor in minimum.items():
