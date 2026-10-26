@@ -32,6 +32,7 @@ import '../core/cache/message_cache.dart';
 import '../core/nav_journal.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/admin_gate.dart';
+import 'moderation_screen.dart';
 import '../utils.dart';
 import '../main.dart';
 import 'room_members_sheet.dart';
@@ -126,6 +127,9 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   /// base agar bisa dipanggil dari mixin yang dipasang lebih dulu.
   Future<void> _refreshMediaGate();
   bool _mediaGateAllows();
+
+  /// Negara yang SAYA moderasi (untuk menu "Moderasi room ini").
+  List<String> _myModeratedCountries = const [];
   // ── Optimistic + antrean offline (centang-1 → centang-2 saat online) ──
   final List<MessageModel> _pending = [];
   final Set<String> _queuedIds = {};

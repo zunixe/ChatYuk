@@ -361,6 +361,14 @@ class ChatNotifier extends Notifier<ChatState> {
     );
   }
 
+  Future<Map<String, dynamic>> reportRoomMessage(
+    String messageId, {
+    required String reasonCode,
+    String note = '',
+  }) =>
+      _service.reportRoomMessage(messageId,
+          reasonCode: reasonCode, note: note);
+
   Future<void> loadBlockedUids(String myUid) async {
     if (_loadingBlockedUids != null) {
       await _loadingBlockedUids;
@@ -394,6 +402,64 @@ class ChatNotifier extends Notifier<ChatState> {
   /// Boleh kirim media di room ini? (gate trust room publik)
   Future<bool?> canSendRoomMedia(String roomId) =>
       _service.canSendRoomMedia(roomId);
+
+  Future<Map<String, dynamic>?> roomMediaGateState(String roomId) =>
+      _service.roomMediaGateState(roomId);
+
+  Future<String> checkContentSafety(String storagePath) =>
+      _service.checkContentSafety(storagePath);
+
+  Future<Map<String, dynamic>?> moderatorConsole(String country) =>
+      _service.moderatorConsole(country);
+
+  Future<Map<String, dynamic>> decideModeratorApplication(
+    int id, {
+    required bool approve,
+    String note = '',
+  }) =>
+      _service.decideModeratorApplication(id, approve: approve, note: note);
+
+  Future<Map<String, dynamic>> decideCountryPermit(
+    String uid,
+    String country, {
+    required bool approve,
+    String note = '',
+  }) =>
+      _service.decideCountryPermit(uid, country,
+          approve: approve, note: note);
+
+  Future<Map<String, dynamic>> moderatorHideMessage(
+    String messageId, {
+    required bool hide,
+  }) =>
+      _service.moderatorHideMessage(messageId, hide: hide);
+
+  Future<Map<String, dynamic>> resolveMessageReports(
+    String messageId, {
+    String action = 'actioned',
+  }) =>
+      _service.resolveMessageReports(messageId, action: action);
+
+  Future<Map<String, dynamic>> applyCountryModerator(
+    String country, {
+    String reason = '',
+  }) =>
+      _service.applyCountryModerator(country, reason: reason);
+
+  Future<List<String>> moderatorUids(List<String> uids) =>
+      _service.moderatorUids(uids);
+
+  Future<Map<String, dynamic>> setHomeCountry(String country) =>
+      _service.setHomeCountry(country);
+
+  Future<Map<String, dynamic>?> myModerationState() =>
+      _service.myModerationState();
+
+  Future<Map<String, dynamic>> requestCountryPermit(
+    String country, {
+    String reason = '',
+  }) =>
+      _service.requestCountryPermit(country, reason: reason);
 
   /// Status blokir DUA ARAH (saya↔dia). Lihat
   /// `ChatService.getChatBlockState` — RLS `blocks` membuat klien tak bisa

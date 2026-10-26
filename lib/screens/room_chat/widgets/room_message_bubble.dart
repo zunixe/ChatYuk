@@ -22,6 +22,7 @@ import '../../../widgets/contact_bubble.dart';
 import '../../../widgets/deleted_user_builder.dart';
 import '../../../widgets/poll/poll_bubble.dart';
 import '../../../widgets/reply_quote.dart';
+import '../../../widgets/moderator_badge.dart';
 import '../../../widgets/verified_badge.dart';
 import '../../../widgets/voice_bubble.dart';
 import '../../../widgets/sticker_bubble.dart';
@@ -598,6 +599,9 @@ class RoomMessageBubble extends StatelessWidget {
                           uid: msg.senderId,
                           size: 14,
                         ),
+                        const SizedBox(width: 3),
+                        // Badge moderator negara (perisai).
+                        ModeratorBadgeForUid(uid: msg.senderId, size: 14),
                       ],
                       ],
                     ],

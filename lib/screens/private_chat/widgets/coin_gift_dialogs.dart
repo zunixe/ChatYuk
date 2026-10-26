@@ -21,53 +21,122 @@ void showReportUserDialog(
   BuildContext context, {
   required String reportedId,
   required String reportedName,
+  /// Bila diisi → laporan menunjuk PESAN (bukan hanya user). Server
+  /// menyembunyikan pesan otomatis setelah >=3 pelapor berbeda.
+  String? messageId,
 }) {
   String reason = '';
+  String reasonCode = 'other';
   final s = ProviderScope.containerOf(
     context,
     listen: false,
   ).read(localeProvider).s;
+
+  // Pilihan alasan (bilingual) — kode dikirim ke server, label ke user.
+  final codes = <String>[
+    'porn',
+    'violence',
+    'spam',
+    'scam',
+    'other',
+  ];
+  String labelOf(String code) {
+    switch (code) {
+      case 'porn':
+        return s.reportReasonPorn;
+      case 'violence':
+        return s.reportReasonViolence;
+      case 'spam':
+        return s.reportReasonSpam;
+      case 'scam':
+        return s.reportReasonScam;
+      default:
+        return s.reportReasonOther;
+    }
+  }
+
   showDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: AppTheme.bgCard,
-      title: Text(
-        '${s.btnReport} $reportedName',
-        style: TextStyle(color: AppTheme.textPrimary),
-      ),
-      content: TextField(
-        style: TextStyle(color: AppTheme.textPrimary),
-        decoration: InputDecoration(hintText: s.reportHint),
-        onChanged: (v) => reason = v,
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: Text(s.btnCancel),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocal) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(
+          '${s.btnReport} $reportedName',
+          style: TextStyle(color: AppTheme.textPrimary),
         ),
-        TextButton(
-          onPressed: () {
-            ProviderScope.containerOf(context, listen: false)
-                .read(chatProvider.notifier)
-                .reportUser(
-                  reporterId: ProviderScope.containerOf(
-                    context,
-                    listen: false,
-                  ).read(authProvider.notifier).uid!,
-                  reportedId: reportedId,
-                  reason: reason,
-                );
-            Navigator.of(ctx).pop();
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(s.reportSuccess)));
-          },
-          child: Text(
-            s.btnReport,
-            style: const TextStyle(color: AppTheme.danger),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final code in codes)
+                  ChoiceChip(
+                    label: Text(labelOf(code)),
+                    selected: reasonCode == code,
+                    onSelected: (_) => setLocal(() => reasonCode = code),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              style: TextStyle(color: AppTheme.textPrimary),
+              decoration: InputDecoration(hintText: s.reportHint),
+              onChanged: (v) => reason = v,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(s.btnCancel),
           ),
-        ),
-      ],
+          TextButton(
+            onPressed: () async {
+              final container = ProviderScope.containerOf(
+                context,
+                listen: false,
+              );
+              final router = Navigator.of(ctx);
+              final messenger = ScaffoldMessenger.of(context);
+              if (messageId != null) {
+                final res = await container
+                    .read(chatProvider.notifier)
+                    .reportRoomMessage(
+                      messageId,
+                      reasonCode: reasonCode,
+                      note: reason,
+                    );
+                router.pop();
+                messenger.showSnackBar(SnackBar(
+                  content: Text(
+                    res['auto_hidden'] == true
+                        ? s.reportHiddenNow
+                        : s.reportSuccess,
+                  ),
+                ));
+                return;
+              }
+              final uid = container.read(authProvider.notifier).uid;
+              if (uid != null) {
+                await container.read(chatProvider.notifier).reportUser(
+                      reporterId: uid,
+                      reportedId: reportedId,
+                      reason: reason,
+                    );
+              }
+              router.pop();
+              messenger.showSnackBar(SnackBar(content: Text(s.reportSuccess)));
+            },
+            child: Text(
+              s.btnReport,
+              style: const TextStyle(color: AppTheme.danger),
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }

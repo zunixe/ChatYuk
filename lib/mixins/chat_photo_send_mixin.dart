@@ -120,6 +120,24 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// room meng-override jadi true.
   bool get videoSendEnabled => false;
 
+  /// Hook NSFW sebelum kirim; false = batal (alasan sudah ditampilkan).
+  Future<bool> contentSafetyAllowsMedia(String storagePath) async => true;
+  Future<bool> _passesSafety(
+    String storagePath,
+    PointsNotifier pp,
+    String pointsKind,
+    String pendingId, {
+    bool clearTimer = false,
+  }) async {
+    if (await contentSafetyAllowsMedia(storagePath)) return true;
+    safeUnawaited(pp.refundChatPoint(pointsKind));
+    if (mounted) {
+      setState(() => outboxPending.removeWhere((m) => m.id == pendingId));
+    }
+    if (clearTimer) photoClearViewTimer();
+    return false;
+  }
+
   /// Video dikirim sebagai "sekali lihat"? (private: toggle di preview).
   /// Room: false. Berbeda dari foto — video TIDAK punya timer detik karena
   /// `duration_ms` sudah dipakai untuk panjang video (playback).
@@ -642,6 +660,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         return;
       }
       uploadedVideoPath = path;
+      if (!await _passesSafety(path, pp, 'image', pendingVideo.id)) return;
       // "Sekali lihat" video ditandai lewat TYPE (video_once) — bukan
       // durationMs yang sudah dipakai untuk panjang video. Nilai `isOnce`
       // ditangkap pemanggil SEBELUM preview dibersihkan.
@@ -908,6 +927,8 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         photoClearViewTimer();
         return;
       }
+      if (!await _passesSafety(path, pp, effKind, pendingPhoto.id,
+          clearTimer: true)) return;
       // Isi path == base64 yang baru di-upload → daftarkan decode-nya supaya
       // bubble versi server langsung tampil (tidak download + kotak dulu).
       warmPhotoCacheForPath(path, base64);

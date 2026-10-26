@@ -318,8 +318,7 @@ mixin _PcBuildMx on _PcBase {
                           hint: searching ? '' : emptyHint,
                         );
                       }
-                      // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus.
-                      // Paginasi lewat notifier: scroll tidak rebuild AppBar dkk.
+                      // Semua chat tampil; paginasi via notifier (tanpa rebuild AppBar).
                       final page = _pageNotifier.value;
                       final paged = entries.take(page * _pageSize).toList();
                       final hasMore = paged.length < entries.length;

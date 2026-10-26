@@ -135,18 +135,197 @@ mixin ChatServiceRoomMx on ChatBase {
   /// Trigger `enforce_room_media_gate` tetap jadi penjaga terakhir.
   /// null = gagal RPC (jangan blokir UI; server yang menolak).
   Future<bool?> canSendRoomMedia(String roomId) async {
-    final uid = _sb.auth.currentUser?.id;
-    if (uid == null) return false;
+    final st = await roomMediaGateState(roomId);
+    if (st == null) return null;
+    return st['allowed'] == true;
+  }
+
+  /// Status gate media + ALASAN (untuk UI: ajukan izin vs aktivitas kurang).
+  /// null = RPC gagal (jangan blokir UI).
+  Future<Map<String, dynamic>?> roomMediaGateState(String roomId) async {
+    if (_sb.auth.currentUser?.id == null) return null;
     try {
       final res = await _sb.rpc(
-        'can_send_room_media',
-        params: {'p_room': roomId, 'p_uid': uid},
+        'room_media_gate_state',
+        params: {'p_room': roomId},
       );
-      if (res is bool) return res;
-      return null;
+      return res is Map ? Map<String, dynamic>.from(res) : null;
     } catch (e) {
-      dlog('[ChatService] canSendRoomMedia error: $e');
+      dlog('[ChatService] roomMediaGateState error: $e');
       return null;
+    }
+  }
+
+  /// Klasifikasi NSFW via Edge Function `content-safety`.
+  /// Return 'allow' | 'review' | 'reject' (default 'allow' bila gagal —
+  /// jangan blokir user sah karena layanan bermasalah).
+  Future<String> checkContentSafety(String storagePath) async {
+    try {
+      final res = await _sb.functions.invoke(
+        'content-safety',
+        body: {'storage_path': storagePath},
+      );
+      final data = res.data;
+      if (data is Map) {
+        final v = '${data['verdict'] ?? 'allow'}';
+        if (v == 'reject' || v == 'review' || v == 'allow') return v;
+      }
+      return 'allow';
+    } catch (e) {
+      dlog('[ChatService] checkContentSafety error: $e');
+      return 'allow';
+    }
+  }
+
+  // ── Moderasi (RPC daftar & aksi) ──────────────────────────────────────
+  Future<Map<String, dynamic>?> moderatorConsole(String country) async {
+    try {
+      final res = await _sb.rpc('moderator_console',
+          params: {'p_country': country});
+      return res is Map ? Map<String, dynamic>.from(res) : null;
+    } catch (e) {
+      dlog('[ChatService] moderatorConsole error: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> decideModeratorApplication(
+    int id, {
+    required bool approve,
+    String note = '',
+  }) async {
+    try {
+      final res = await _sb.rpc('decide_moderator_application', params: {
+        'p_application_id': id,
+        'p_approve': approve,
+        'p_note': note,
+      });
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] decideModeratorApplication error: $e');
+      return {'ok': false};
+    }
+  }
+
+  Future<Map<String, dynamic>> decideCountryPermit(
+    String uid,
+    String country, {
+    required bool approve,
+    String note = '',
+  }) async {
+    try {
+      final res = await _sb.rpc('decide_country_permit', params: {
+        'p_uid': uid,
+        'p_country': country,
+        'p_approve': approve,
+        'p_note': note,
+      });
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] decideCountryPermit error: $e');
+      return {'ok': false};
+    }
+  }
+
+  Future<Map<String, dynamic>> moderatorHideMessage(
+    String messageId, {
+    required bool hide,
+  }) async {
+    try {
+      final res = await _sb.rpc('moderator_hide_message', params: {
+        'p_message_id': messageId,
+        'p_hide': hide,
+      });
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] moderatorHideMessage error: $e');
+      return {'ok': false};
+    }
+  }
+
+  Future<Map<String, dynamic>> resolveMessageReports(
+    String messageId, {
+    String action = 'actioned',
+  }) async {
+    try {
+      final res = await _sb.rpc('resolve_message_reports', params: {
+        'p_message_id': messageId,
+        'p_action': action,
+      });
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] resolveMessageReports error: $e');
+      return {'ok': false};
+    }
+  }
+
+  Future<Map<String, dynamic>> applyCountryModerator(
+    String country, {
+    String reason = '',
+  }) async {
+    try {
+      final res = await _sb.rpc('apply_country_moderator', params: {
+        'p_country': country,
+        'p_reason': reason,
+      });
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] applyCountryModerator error: $e');
+      return {'ok': false};
+    }
+  }
+
+  Future<List<String>> moderatorUids(List<String> uids) async {
+    try {
+      final res = await _sb.rpc('moderator_uids', params: {'p_uids': uids});
+      if (res is List) {
+        return [
+          for (final r in res)
+            if (r is Map) '${r['uid']}',
+        ];
+      }
+      return const [];
+    } catch (e) {
+      dlog('[ChatService] moderatorUids error: $e');
+      return const [];
+    }
+  }
+
+  Future<Map<String, dynamic>> setHomeCountry(String country) async {
+    try {
+      final res = await _sb.rpc('set_home_country',
+          params: {'p_country': country});
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] setHomeCountry error: $e');
+      return {'ok': false};
+    }
+  }
+
+  Future<Map<String, dynamic>?> myModerationState() async {
+    try {
+      final res = await _sb.rpc('my_moderation_state');
+      return res is Map ? Map<String, dynamic>.from(res) : null;
+    } catch (e) {
+      dlog('[ChatService] myModerationState error: $e');
+      return null;
+    }
+  }
+
+  /// Ajukan izin kirim media ke negara room (lintas negara).
+  Future<Map<String, dynamic>> requestCountryPermit(
+    String country, {
+    String reason = '',
+  }) async {
+    try {
+      final res = await _sb.rpc(
+        'request_country_permit',
+        params: {'p_country': country, 'p_reason': reason},
+      );
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] requestCountryPermit error: $e');
+      return {'ok': false};
     }
   }
 

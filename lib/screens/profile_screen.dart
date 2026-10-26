@@ -39,6 +39,8 @@ import 'subscriptions_screen.dart';
 import '../core/perf/perf_probe.dart';
 import 'package:share_plus/share_plus.dart';
 import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/chat_provider.dart';
+import 'moderation_screen.dart';
 
 part 'profile/profile_core.dart';
 part 'profile/profile_photos.dart';
@@ -147,6 +149,7 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
     bool v2, {
     bool isAnon,
   });
+  Widget _moderationSection(BuildContext context, S s);
   Widget _footer(BuildContext context, S s);
   Future<void> _editProfile();
   Future<void> _saveAbout();

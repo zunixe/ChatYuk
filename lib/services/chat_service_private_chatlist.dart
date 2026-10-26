@@ -825,6 +825,30 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     });
   }
 
+  /// Lapor PESAN (bukan hanya user): satu laporan per pesan per pelapor;
+  /// >=3 pelapor berbeda → pesan otomatis disembunyikan (server).
+  /// Return {ok, reporters, auto_hidden}.
+  Future<Map<String, dynamic>> reportRoomMessage(
+    String messageId, {
+    required String reasonCode,
+    String note = '',
+  }) async {
+    try {
+      final res = await _sb.rpc(
+        'report_room_message',
+        params: {
+          'p_message_id': messageId,
+          'p_reason_code': reasonCode,
+          'p_note': note,
+        },
+      );
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] reportRoomMessage error: $e');
+      return {'ok': false};
+    }
+  }
+
   Future<bool> isUserBlocked(String myUid, String otherUid) async {
     final res = await _sb
         .from('blocks')

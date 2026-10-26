@@ -795,6 +795,24 @@ mixin _RcCoreMx on _RoomChatBase {
     setState(() {});
     // Cek gate media room publik (tombol foto/video) tanpa menahan frame.
     unawaited(_refreshMediaGate());
+    // Peran moderasi saya (untuk menu "Moderasi room ini").
+    unawaited(_loadMyModerationState());
+  }
+
+  Future<void> _loadMyModerationState() async {
+    try {
+      final res = await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(chat_riverpod.chatProvider.notifier).myModerationState();
+      if (!mounted || res == null) return;
+      final list = res['moderates'];
+      if (list is List) {
+        setState(() {
+          _myModeratedCountries = [for (final c in list) '$c'];
+        });
+      }
+    } catch (_) {}
   }
 
 

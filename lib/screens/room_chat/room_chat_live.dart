@@ -457,8 +457,7 @@ mixin _RcLiveMx on _RoomChatBase {
   void _toggleAttachRow() {
     if (!_showAttachRow) {
       FocusScope.of(context).unfocus();
-      // Cek ulang gate media saat panel dibuka (syarat bisa terpenuhi
-      // setelah user aktif) — implementasi di room_chat_media_gate.dart.
+      // Cek ulang gate media (lihat room_chat_media_gate.dart).
       unawaited(_refreshMediaGate());
     }
     setState(() => _showAttachRow = !_showAttachRow);

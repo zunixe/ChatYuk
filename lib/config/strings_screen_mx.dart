@@ -640,6 +640,71 @@ mixin SScreenMx {
   String get roomMediaBlocked => isId
       ? 'Akun baru belum bisa kirim foto/video di room publik. Aktiflah 3 hari dan kirim 20 pesan di room publik dulu.'
       : 'New accounts cannot send photos/videos in public rooms yet. Be active for 3 days and send 20 messages in public rooms first.';
+  /// Izin lintas negara (kirim media di room negara lain).
+  String roomMediaNeedsPermit(String country) => isId
+      ? 'Room ini untuk $country. Ajukan izin ke moderator untuk bisa kirim foto/video.'
+      : 'This room is for $country. Request permission from a moderator to send photos/videos.';
+  String get roomMediaPermitPending => isId
+      ? 'Permintaan izin sedang ditinjau moderator.'
+      : 'Your permission request is awaiting moderator review.';
+  String get roomMediaPermitRequested => isId
+      ? 'Permintaan izin terkirim.'
+      : 'Permission request sent.';
+  String get roomMediaPermitRequest => isId
+      ? 'Ajukan izin'
+      : 'Request permission';
+  String roomMediaNotEnough(int need, int have) => isId
+      ? 'Kirim $need pesan di room publik dulu (saat ini $have).'
+      : 'Send $need messages in public rooms first (currently $have).';
+  // Alasan laporan (kode: porn/violence/spam/scam/other).
+  // ── Konsol moderasi ──
+  String get moderationTitle => isId ? 'Moderasi' : 'Moderation';
+  String get moderationReports => isId ? 'Laporan' : 'Reports';
+  String get moderationPermits => isId ? 'Izin' : 'Permits';
+  String get moderationApplications => isId ? 'Lamaran' : 'Applications';
+  String get moderationEmpty => isId
+      ? 'Tidak ada yang menunggu tinjauan.'
+      : 'Nothing awaiting review.';
+  String get moderationRoom => isId ? 'Room' : 'Room';
+  String get moderationHide => isId ? 'Sembunyikan' : 'Hide';
+  String get moderationIgnore => isId ? 'Abaikan' : 'Dismiss';
+  String get moderationApprove => isId ? 'Setujui' : 'Approve';
+  String get moderationReject => isId ? 'Tolak' : 'Reject';
+  String get moderationPermitRequest => isId
+      ? 'Meminta izin kirim media di negara ini'
+      : 'Requesting permission to send media in this country';
+  String get moderationUpdated => isId ? 'Diperbarui' : 'Updated';
+  String get moderationCountryTitle => isId ? 'Negara asal' : 'Home country';
+  String get moderationCountryHint => isId
+      ? 'Negara ini dipakai untuk aturan kirim media di room publik. Bisa diubah 1× per 30 hari.'
+      : 'Used for public-room media rules. Can be changed once per 30 days.';
+  String get moderationCountrySaved => isId ? 'Negara asal disimpan' : 'Home country saved';
+  String get moderationCountryCooldown => isId
+      ? 'Negara asal hanya bisa diubah 1× per 30 hari.'
+      : 'Home country can only be changed once per 30 days.';
+  String get moderationApplyHint => isId
+      ? 'Bantu jaga room publik negara Anda (syarat: 30 hari & 100 pesan).'
+      : 'Help keep your country\'s public rooms clean (needs 30 days & 100 messages).';
+  String get moderationOpenConsole => isId ? 'Buka konsol moderasi' : 'Open moderation console';
+  String get moderationMenu => isId ? 'Moderasi room ini' : 'Moderate this room';
+  String get moderationApply => isId ? 'Ajukan jadi Moderator' : 'Apply as Moderator';
+  String get moderationApplySent => isId
+      ? 'Lamaran terkirim. Menunggu tinjauan.'
+      : 'Application sent. Awaiting review.';
+  String get moderationApplyPending => isId
+      ? 'Lamaran sedang ditinjau.'
+      : 'Application under review.';
+  String get roomMediaNsfwRejected => isId
+      ? 'Gambar/video ini tidak diizinkan di room publik.'
+      : 'This image/video is not allowed in public rooms.';
+  String get reportReasonPorn => isId ? 'Pornografi' : 'Pornography';
+  String get reportReasonViolence => isId ? 'Kekerasan' : 'Violence';
+  String get reportReasonSpam => isId ? 'Spam' : 'Spam';
+  String get reportReasonScam => isId ? 'Penipuan' : 'Scam';
+  String get reportReasonOther => isId ? 'Lainnya' : 'Other';
+  String get reportHiddenNow => isId
+      ? 'Pesan disembunyikan (>=3 laporan).'
+      : 'Message hidden (3+ reports).';
   String get msgBlocked => isId
       ? 'User ini diblokir, tidak bisa kirim pesan'
       : 'This user is blocked, cannot send message';

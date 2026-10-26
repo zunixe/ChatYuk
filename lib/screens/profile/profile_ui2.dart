@@ -587,6 +587,126 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
+  // ── Moderasi konten room publik ──────────────────────────────────────────
+
+  /// Kartu "Moderasi": pilih NEGARA ASAL, ajukan jadi moderator, buka konsol.
+  Widget _moderationSection(BuildContext context, S s) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        _sectionTitle(s.moderationTitle),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.public_rounded),
+                  title: Text(s.moderationCountryTitle),
+                  subtitle: Text(s.moderationCountryHint),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => _pickHomeCountry(context, s),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.shield_outlined),
+                  title: Text(s.moderationApply),
+                  subtitle: Text(s.moderationApplyHint),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () async {
+                    final res = await ProviderScope.containerOf(
+                      context,
+                      listen: false,
+                    ).read(chatProvider.notifier).applyCountryModerator(
+                          _homeCountry ?? '',
+                          reason: '',
+                        );
+                    if (!context.mounted) return;
+                    final msg = res['already_moderator'] == true ||
+                            res['already_pending'] == true
+                        ? s.moderationApplyPending
+                        : (res['ok'] == true
+                            ? s.moderationApplySent
+                            : s.errGeneric);
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text(msg)));
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.fact_check_outlined),
+                  title: Text(s.moderationOpenConsole),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () {
+                    final c = _homeCountry ?? '';
+                    if (c.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(s.moderationCountryHint)),
+                      );
+                      return;
+                    }
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ModerationScreen(country: c),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String? _homeCountry;
+
+  Future<void> _pickHomeCountry(BuildContext context, S s) async {
+    final countries = getNegaraKeys()..sort();
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.moderationCountryTitle),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 420,
+          child: ListView.builder(
+            itemCount: countries.length,
+            itemBuilder: (_, i) => ListTile(
+              dense: true,
+              title: Text(countries[i]),
+              onTap: () => Navigator.pop(ctx, countries[i]),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.btnCancel),
+          ),
+        ],
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    final res = await ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chatProvider.notifier).setHomeCountry(picked);
+    if (!context.mounted) return;
+    if (res['ok'] == true) {
+      _homeCountry = picked;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(s.moderationCountrySaved)));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.moderationCountryCooldown)),
+      );
+    }
+  }
+
   /// [9] FOOTER — Donasi + versi aplikasi.
   @override
   Widget _footer(BuildContext context, S s) {

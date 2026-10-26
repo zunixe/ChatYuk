@@ -1,3 +1,63 @@
+## 2026-10-26 (lanjutan) — Izin lintas negara, laporan ber-alasan, NSFW, konsol moderator
+
+Semua **SUDAH APPLY** via Management API (versi tercatat di
+`supabase_migrations.schema_migrations`).
+
+### 1. `20261026160000_country_send_permits.sql`
+- Tabel `country_send_permits(uid, country, status, ...)` — satu baris per
+  (user, negara), status `pending/approved/rejected/revoked`.
+- RPC `request_country_permit`, `decide_country_permit` (moderator negara /
+  admin), `revoke_country_permit` (melanggar).
+- `can_send_room_media` DIPERLUAS: `home_country` beda dengan negara room →
+  wajib izin `approved` (selain trust gate).
+- **Uji ROLLBACK:** room negara sendiri = true; negara lain tanpa izin =
+  false; dengan izin = true.
+
+### 2. `20261026161000_room_media_gate_state.sql`
+- RPC `room_media_gate_state(room)` → `{allowed, reason, room_country,
+  home_country, permit_status, min_days, min_msgs, have_msgs}`. Dipakai klien
+  untuk menampilkan alasan + tombol "Ajukan izin".
+
+### 3. `20261026170000_report_reason_codes_autohide.sql`
+- `reports` + `message_id`, `room_id`, `reason_code`
+  (`porn/violence/spam/scam/other`), `status`, `actioned_by/at`;
+  unique parsial `(reporter_id, message_id)`.
+- RPC `report_room_message` → **≥3 pelapor berbeda** menyembunyikan pesan
+  otomatis (`is_deleted=true`) + `admin_alerts`; `resolve_message_reports`
+  untuk menandai selesai/abaikan.
+- **Uji ROLLBACK:** 3 pelapor → `auto_hidden=true`, pesan ter-hide.
+
+### 4. `20261026180000_moderator_console_rpc.sql`
+- `moderator_console(country)` → daftar lamaran, permohonan izin, laporan
+  terbuka, moderator aktif (guard moderator negara/admin).
+- `moderator_uids(uids)` → badge perisai publik (hanya uid+country).
+- `my_moderation_state()` → negara yang saya moderasi + lamaran pending.
+
+### 5. `20261026190000_set_home_country.sql`
+- RPC `set_home_country` — boleh diubah manual, **maks 1× / 30 hari**
+  (mencegah ganti negara untuk mengakali izin).
+
+### Klien
+- `ChatService`: `checkContentSafety`, `roomMediaGateState`,
+  `requestCountryPermit`, `moderatorConsole`, `decideModeratorApplication`,
+  `decideCountryPermit`, `moderatorHideMessage`, `resolveMessageReports`,
+  `applyCountryModerator`, `moderatorUids`, `myModerationState`,
+  `setHomeCountry`.
+- `room_chat_media_gate.dart`: gate tombol media + dialog "Ajukan izin".
+- `contentSafetyAllowsMedia` hook di jalur kirim foto/video (room publik saja).
+- `moderation_screen.dart`: konsol 3 tab (Laporan / Izin / Lamaran).
+- `ModeratorBadgeForUid` + `moderatorUidsProvider` (badge perisai di bubble).
+- Profil → "Moderasi": pilih negara asal, ajukan moderator, buka konsol.
+- Dialog lapor kini ber-alasan (`porn/violence/spam/scam/other`) dan mengirim
+  `message_id` (auto-hide server).
+- Edge Function `content-safety`: klasifikasi via provider vision aktif
+  (`ai_provider_config`), ambang `nsfw_reject_threshold=0.75` /
+  `nsfw_review_threshold=0.50`; gagal → fail-open + `admin_alerts`.
+  Helper murni di `_shared/content_safety.ts` + test Deno 6/6.
+
+**Verifikasi:** `flutter analyze` 0/0/0; `flutter test` 2372 lulus;
+`run_sql_tests` semua lolos; `check_migrations --all` OK.
+
 ## 2026-10-26 — Moderasi media room publik: trust gate, rate limit, moderator negara (SUDAH APPLY)
 
 **Latar (permintaan user):** di global room ada yang mengirim foto/video porn.

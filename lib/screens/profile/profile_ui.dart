@@ -167,6 +167,8 @@ mixin _ProfileUiMx on _ProfileBase {
                 yukcoinV2Active,
                 isAnon: isAnon,
               ),
+            // Moderasi konten room publik (negara asal + lamaran moderator).
+            if (!isAnon) _moderationSection(context, s),
             _friendRequestBanner(context, s),
             _photosSection(context, s),
             if (!isAnon)

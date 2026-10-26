@@ -477,6 +477,13 @@ mixin _RcBuildMx on _RoomChatBase {
             ],
           ),
         ] else ...[
+          // Moderator negara / admin: buka konsol moderasi room ini.
+          if (_canModerateThisRoom())
+            tightIcon(
+              tooltip: s.moderationMenu,
+              icon: const Icon(Icons.shield_rounded),
+              onPressed: _openModerationConsole,
+            ),
           // Mic voice stage (global room): status sesuai sesi.
           VoiceMicButton(
             session: _voiceSession,
@@ -493,6 +500,26 @@ mixin _RcBuildMx on _RoomChatBase {
           ),
         ],
       ],
+    );
+  }
+
+  /// Moderator negara room ini (atau admin) → boleh buka konsol.
+  bool _canModerateThisRoom() {
+    if (AdminGate.isRealAdmin(
+      ProviderScope.containerOf(context, listen: false)
+          .read(authProvider)
+          .userEmail,
+    )) {
+      return true;
+    }
+    return _myModeratedCountries.contains(widget.room.country);
+  }
+
+  void _openModerationConsole() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ModerationScreen(country: widget.room.country),
+      ),
     );
   }
 
@@ -526,15 +553,20 @@ mixin _RcBuildMx on _RoomChatBase {
       msg: msg,
       auth: auth,
       onSheetClosed: () => _sheetOpen = false,
-      onReport: _showReportDialog,
+      onReport: (id, name) => _showReportDialog(id, name, msg.id),
     );
   }
 
-  void _showReportDialog(String reportedId, String reportedName) {
+  void _showReportDialog(
+    String reportedId,
+    String reportedName, [
+    String? messageId,
+  ]) {
     showReportUserDialog(
       context,
       reportedId: reportedId,
       reportedName: reportedName,
+      messageId: messageId,
     );
   }
 }
