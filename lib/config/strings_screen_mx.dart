@@ -698,6 +698,9 @@ mixin SScreenMx {
   String get moderationCandidatesHint => isId
       ? 'Pilih kontributor yang sudah aktif di room publik negara ini.'
       : 'Pick a contributor already active in this country\'s public rooms.';
+  String moderationApplyNotYet(int have, int need) => isId
+      ? 'Belum memenuhi syarat: $have/$need pesan di room publik negara ini'
+      : 'Not eligible yet: $have/$need messages in this country\'s public rooms';
   String moderationApplyNeedDays(int d) => isId
       ? 'Akun harus berumur minimal $d hari'
       : 'Account must be at least $d days old';

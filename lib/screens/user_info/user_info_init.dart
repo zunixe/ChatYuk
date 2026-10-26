@@ -87,6 +87,7 @@ mixin _UiInitMx on _UserInfoBase {
       if (!mounted) return;
       setState(() {
         _following = st['following'] == true;
+        _followsMe = st['follows_me'] == true;
         _friend = st['friend'] == true;
         _friendRequestSent = st['friend_request_sent'] == true;
         _subscribed = st['subscribed'] == true;
@@ -135,13 +136,22 @@ mixin _UiInitMx on _UserInfoBase {
       // sinkron dengan server (tidak menampilkan tombol yang menyesatkan).
       if (ok) {
         _following = !_following;
-        if (!_following) _friend = false;
+        // Teman = saling follow: follow balik langsung berteman.
+        _friend = _following && social.isFriend(widget.userId);
+        if (_friend) _friendRequestSent = false;
       }
       _busySocial = false;
     });
     if (ok) {
+      final name = _profile?.nickname ?? widget.fallbackName;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_following ? s.btnFollow : s.btnUnfollow)),
+        SnackBar(
+          content: Text(
+            _friend
+                ? s.snackNowFriends(name)
+                : (_following ? s.snackNowFollowing(name) : s.snackUnfollowed(name)),
+          ),
+        ),
       );
     }
   }
@@ -181,7 +191,13 @@ mixin _UiInitMx on _UserInfoBase {
     final status = await social.sendFriendRequest(widget.userId);
     if (!mounted) return;
     setState(() {
+      // Request kini sekaligus mengikuti; 'friends' = dia sudah mengikuti saya.
+      if (status == 'pending' || status == 'friends') _following = true;
       if (status == 'pending') _friendRequestSent = true;
+      if (status == 'friends') {
+        _friend = true;
+        _friendRequestSent = false;
+      }
       _busySocial = false;
     });
     // Pesan akurat: 'friends' (sudah teman), 'pending' (terkirim),

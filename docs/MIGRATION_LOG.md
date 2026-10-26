@@ -1,3 +1,24 @@
+## 2026-10-27 (lanjutan 2) — Admin tidak perlu "melamar" jadi moderator
+
+Laporan user: "di chatyuk admin ajukan jadi moderator gagal".
+
+**Akar masalah (bukan bug):** akun admin punya `home_country = Armenia`,
+sementara pesan publiknya 29 di Indonesia + 1 Hong Kong, **0 di Armenia** →
+`apply_country_moderator` benar menolak dengan `not_enough_messages`
+(need 50, have 0). Untuk user biasa aturan ini memang disengaja, tetapi
+ADMIN tidak seharusnya diminta melamar — wewenang angkat sudah dimilikinya.
+
+### `20261027124000_admin_self_appoint_moderator.sql` (APPLIED)
+- `apply_country_moderator`: bila pemanggil admin → **langsung diangkat**
+  (insert `country_moderators` + audit `moderator_actions`), tanpa syarat
+  umur/pesan. User biasa tetap kena syarat ≥7 hari & ≥50 pesan.
+- Respons penolakan menyertakan angka: `need`, `have`, dan (untuk
+  `account_too_new`) `have_days`.
+
+### Data live
+- Akun `ChatYuk Admin` diangkat moderator **Armenia** (negara asal) dan
+  **Indonesia** (negara aktif) agar konsolnya bisa langsung dipakai.
+
 ## 2026-10-27 (lanjutan) — Negara asal tidak bisa diakali + konsol moderasi hidup
 
 Laporan user: (1) "dimoderasi negara asal masih bisa dirubah walau belum 30

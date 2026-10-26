@@ -74,6 +74,7 @@ mixin _UiBuildMx on _UserInfoBase {  @override
               isFriend: _friend,
               isFriendRequestSent: _friendRequestSent,
               isFollowing: _following,
+              followsMe: _followsMe,
               isSubscribed: _subscribed,
               isSelf: isSelf,
               canCall:

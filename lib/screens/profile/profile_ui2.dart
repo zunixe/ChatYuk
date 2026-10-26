@@ -629,7 +629,11 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                 ListTile(
                   leading: const Icon(Icons.shield_outlined),
                   title: Text(s.moderationApply),
-                  subtitle: Text(s.moderationApplyHint),
+                  subtitle: Text(
+                    // Admin langsung diangkat (tanpa syarat kontribusi);
+                    // user biasa melihat syaratnya di hint.
+                    s.moderationApplyHint,
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () async {
                     final res = await ProviderScope.containerOf(
@@ -707,9 +711,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
       final list = res['moderates'];
       final isMod = list is List && list.isNotEmpty;
       final isAdmin = ref.read(authProvider.notifier).isRealAdmin;
-      if (isMod != _canOpenConsole || isAdmin != _canOpenConsole) {
-        setState(() => _canOpenConsole = isMod || isAdmin);
-      }
+      setState(() => _canOpenConsole = isMod || isAdmin);
     } catch (_) {}
   }
 

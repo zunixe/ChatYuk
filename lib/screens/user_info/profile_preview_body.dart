@@ -30,6 +30,7 @@ class _PProfileBody extends StatefulWidget {
   final bool isFriend;
   final bool isFriendRequestSent;
   final bool isFollowing;
+  final bool followsMe;
   final bool isSubscribed;
   final bool isSelf;
   final bool canCall;
@@ -74,6 +75,7 @@ class _PProfileBody extends StatefulWidget {
     required this.isFriend,
     required this.isFriendRequestSent,
     required this.isFollowing,
+    this.followsMe = false,
     required this.isSubscribed,
     required this.isSelf,
     required this.canCall,
@@ -105,7 +107,6 @@ class _PProfileBodyState extends State<_PProfileBody> {
 
   final ScrollController _scroll = ScrollController();
   final PageController _pages = PageController();
-  late bool _friend = widget.isFriend;
   bool _collapsed = false;
   int _photo = 0;
 
@@ -151,48 +152,42 @@ class _PProfileBodyState extends State<_PProfileBody> {
     );
   }
 
+  // Status teman/permintaan milik parent (sumber: server). Parent yang
+  // menampilkan konfirmasi + snackbar — JANGAN menandai "teman" di sini saat
+  // request baru terkirim (teman = saling follow, menunggu follow balik).
   Future<void> _friendAction() async {
-    if (!_friend) {
+    if (!widget.isFriend) {
       if (widget.isFriendRequestSent) {
         await widget.onCancelFriendRequest();
-        if (!mounted) return;
-        setState(() => _friend = false);
-        showProfileToast(context, 'Permintaan dibatalkan');
-        return;
+      } else {
+        await widget.onAddFriend();
       }
-      await widget.onAddFriend();
-      if (!mounted) return;
-      setState(() => _friend = true);
-      showProfileToast(context, 'Permintaan pertemanan terkirim');
       return;
     }
     await showPSheet(context, [
       PSheetAction(
         icon: Icons.person_remove_outlined,
-        label: 'Putus pertemanan',
+        label: (widget.s as S).btnUnfriend,
         destructive: true,
-        onTap: _unfriend,
+        onTap: widget.onUnfriend,
       ),
     ]);
   }
 
-  Future<void> _unfriend() async {
-    final ok = await confirmPUnfriend(context, name: widget.name);
-    if (!ok) return;
-    await widget.onUnfriend();
-    if (!mounted) return;
-    setState(() => _friend = false);
-    showProfileToast(context, 'Pertemanan diputus');
-  }
-
   void _openMore() {
+    final s = widget.s as S;
+    final followBack = widget.followsMe && !widget.isFollowing;
     showPSheet(context, [
       if (!widget.isSelf)
         PSheetAction(
           icon: widget.isFollowing
               ? Icons.person_remove_alt_1_outlined
               : Icons.person_add_alt_1_outlined,
-          label: widget.isFollowing ? 'Berhenti mengikuti' : 'Ikuti',
+          label: widget.isFollowing
+              ? s.btnUnfollow
+              : (followBack
+                    ? '${s.btnFollowBack} · ${s.hintFollowBackFriend}'
+                    : s.btnFollow),
           onTap: widget.onToggleFollow,
         ),
       if (!widget.isSelf && !widget.isSubscribed)
@@ -203,7 +198,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
         ),
       PSheetAction(
         icon: Icons.help_outline_rounded,
-        label: 'Ikuti vs Teman',
+        label: s.menuFollowVsFriend,
         onTap: widget.onFollowInfo,
       ),
       PSheetAction(
@@ -329,7 +324,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
             right: 0,
             bottom: 0,
             child: PBottomActions(
-              isFriend: _friend,
+              isFriend: widget.isFriend,
               isRequestSent: widget.isFriendRequestSent,
               onFriend: _friendAction,
               onMessage: widget.onMessage,
@@ -569,6 +564,47 @@ class _PProfileBodyState extends State<_PProfileBody> {
             ],
           ),
         ),
+        // Teman = saling follow: dia sudah mengikuti saya → ajak follow balik.
+        if (!widget.isSelf && widget.followsMe && !widget.isFollowing)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Material(
+              color: PColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: widget.onToggleFollow,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.person_add_alt_1_rounded,
+                        size: 18,
+                        color: PColors.online,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          (widget.s as S).hintFollowBackFriend,
+                          style: AppText.bodySmall.copyWith(
+                            color: PColors.text,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        (widget.s as S).btnFollowBack,
+                        style: AppText.label.copyWith(color: PColors.online),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (widget.bio != null && widget.bio!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),

@@ -88,6 +88,8 @@ abstract class _UserInfoBase extends ConsumerState<UserInfoScreen> {
 
   // Status sosial terhadap user ini.
   bool _following = false;
+  // Dia sudah mengikuti saya → follow balik = teman.
+  bool _followsMe = false;
   bool _friend = false;
   bool _friendRequestSent = false;
   bool _subscribed = false;
