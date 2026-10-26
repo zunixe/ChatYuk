@@ -188,5 +188,33 @@ update public.app_settings
    set invisible_enabled = false, invisible_admin_uid = null
  where id = 'global';
 
+-- ── 3c) JALUR BOCOR: nearby_users (20261027123000) ───────────────────────
+-- nearby_users memakai filter presence yang sama dgn get_online_users; tanpa
+-- klausa ghost, user ghost tetap terlihat di daftar Nearby.
+-- Butuh lat/lon agar masuk kandidat radius.
+update public.profiles
+   set lat = -6.2000, lon = 106.8166, country = 'Indonesia'
+ where id in ('d0c1e000-0000-4000-8000-0000000000c1'::uuid,
+              'd0c1e000-0000-4000-8000-0000000000c2'::uuid);
+
+-- Ghost aktif lagi untuk GhostUser.
+insert into public.ghost_mode_active(user_id, expires_at)
+values ('d0c1e000-0000-4000-8000-0000000000c2'::uuid, now() + interval '1 day')
+on conflict (user_id) do update set expires_at = excluded.expires_at;
+
+update public.profiles
+   set status = 'online', last_seen = now()
+ where id = 'd0c1e000-0000-4000-8000-0000000000c2'::uuid;
+
+select supabase_tests.check(
+  'nearby_users: definisi memeriksa ghost_mode_active',
+  position('ghost_mode_active' in
+    pg_get_functiondef('public.nearby_users(double precision,integer,integer)'::regprocedure)) > 0
+);
+
+-- Bersihkan ghost agar sisa test tidak terpengaruh.
+delete from public.ghost_mode_active
+ where user_id = 'd0c1e000-0000-4000-8000-0000000000c2'::uuid;
+
 select supabase_tests.report() as result;
 rollback;

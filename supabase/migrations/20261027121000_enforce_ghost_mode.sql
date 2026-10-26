@@ -91,23 +91,27 @@ begin
     order by p.last_seen desc
     limit p_limit
   ),
+  -- Foto: mitra chat private (1 query utk semua kandidat, bukan per-row).
   chat_partners as (
     select distinct c2.uid
     from public.private_chats c
     cross join lateral unnest(c.participants) as c2(uid)
     where c.participants @> array[v_me]::uuid[]
   ),
+  -- Foto: anggota room/grup sama (1 query).
   room_mates as (
     select distinct b.user_id as uid
     from public.room_members a
     join public.room_members b on b.room_id = a.room_id
     where a.user_id = v_me
   ),
+  -- Exclusions per (owner, field) untuk semua kandidat (1 query).
   excl as (
     select e.owner_id, e.field
     from public.profile_privacy_exclusions e
     where e.excluded_uid = v_me
   ),
+  -- Status friend (mutual follow) untuk semua kandidat (1 query).
   friends as (
     select f1.followee_id as uid
     from public.follows f1
@@ -136,24 +140,28 @@ begin
   flags as (
     select
       r.*,
+      -- presence
       (v_bypass or r.presence_vis = 'everyone'
         or (r.presence_vis in ('friends','friends_except') and r.is_friend
             and (r.presence_vis = 'friends' or not r.excl_presence))
         or (r.presence_vis = 'everyone_except' and not r.excl_presence)
         or (r.presence_vis = 'only' and r.excl_presence)
       ) as presence_ok,
+      -- last_seen
       (v_bypass or r.seen_vis = 'everyone'
         or (r.seen_vis in ('friends','friends_except') and r.is_friend
             and (r.seen_vis = 'friends' or not r.excl_seen))
         or (r.seen_vis = 'everyone_except' and not r.excl_seen)
         or (r.seen_vis = 'only' and r.excl_seen)
       ) as seen_ok,
+      -- about
       (v_bypass or r.about_vis = 'everyone'
         or (r.about_vis in ('friends','friends_except') and r.is_friend
             and (r.about_vis = 'friends' or not r.excl_about))
         or (r.about_vis = 'everyone_except' and not r.excl_about)
         or (r.about_vis = 'only' and r.excl_about)
       ) as about_ok,
+      -- photo: mitra chat/room SELALU boleh; selain itu aturan visibilitas.
       (v_bypass or r.photo_partner or r.photo_vis = 'everyone'
         or (r.photo_vis in ('friends','friends_except') and r.is_friend
             and (r.photo_vis = 'friends' or not r.excl_photo))
@@ -173,6 +181,7 @@ begin
   ) order by f.last_seen desc), '[]'::jsonb)
   into rows
   from flags f
+  -- Filter presence SAMA seperti sebelumnya (hormati privasi presence).
   where f.presence_ok;
 
   return rows;
@@ -207,10 +216,9 @@ begin
     'is_registered', p.is_registered,
     'avatar',    case when public.privacy_can_view(p.id, 'profile_photo', me)
                       then p.avatar else '' end,
-    -- Ghost mode membeli privasi PRESENCE saja: user lain melihat 'offline'.
-    -- Pemilik sendiri tetap melihat status aslinya (me = p.id di bawah).
+    -- Ghost mode = privasi PRESENCE: orang lain melihat 'offline'.
+    -- (Baris milik sendiri tidak pernah masuk sini — `p.id <> me` di WHERE.)
     'status',    case
-                   when p.id = me then p.status
                    when exists (select 1 from public.ghost_mode_active g
                                  where g.user_id = p.id and g.expires_at > now())
                      then 'offline'

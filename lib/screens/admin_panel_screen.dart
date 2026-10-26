@@ -83,6 +83,11 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
   // tidak mem-fetch apa pun sebelum tab-nya benar-benar dibuka.
   final Set<int> _visitedTabs = {0};
 
+  /// Daftar user Ghost Mode — dimuat SEKALI (bukan di dalam `build`, karena
+  /// `FutureBuilder(future: ...di-build-di-sini)` akan memanggil RPC setiap
+  /// rebuild → spam request. Di-refresh saat sheet dibuka.
+  Future<List<Map<String, dynamic>>>? _ghostFuture;
+
   // Pengaturan nominal poin (diambil dari server, diedit admin).
   final Map<String, TextEditingController> _pointCtrls = {};
   final _shareUrlCtrl = TextEditingController();
@@ -183,6 +188,9 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
       _notifyTimer?.cancel();
       _notifyTimer = null;
     } else if (state == AppLifecycleState.resumed) {
+      // Data ghost bisa basi setelah app lama di background → muat ulang
+      // saat kartu dibangun berikutnya.
+      _ghostFuture = null;
       if (mounted && _statsTimer == null) {
         // Warm-up koneksi dulu (koneksi basi setelah idle) supaya RPC admin
         // tak menggantung ~13 dtk. Fire-and-forget, lalu refetch.
@@ -760,10 +768,9 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: FutureBuilder<List<Map<String, dynamic>>>(
-                              future: ProviderScope.containerOf(
-                                context,
-                                listen: false,
-                              ).read(adminProvider).fetchGhostUsers(),
+                              future: _ghostFuture ??= ref
+                                  .read(adminProvider)
+                                  .fetchGhostUsers(),
                               builder: (context, snap) => Text(
                                 snap.hasData
                                     ? '${snap.data!.length}'
@@ -789,12 +796,10 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
                 ),
               ),
             ),
+            // Baris ini hanya 1 kartu → lebarkan 2 slot sisa supaya grid
+            // tetap 3 kolom (lebar kartu konsisten dgn baris di atas).
             const SizedBox(width: 8),
-            // Ruang kosong 2 slot supaya lebar kartu ghost sama dengan yang
-            // lain (grid tetap 3 kolom).
-            const Expanded(child: SizedBox.shrink()),
-            const SizedBox(width: 8),
-            const Expanded(child: SizedBox.shrink()),
+            const Spacer(flex: 2),
           ],
         ),
       ],
@@ -803,9 +808,9 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
 
   /// Daftar user yang sedang Ghost Mode (invisible berbayar).
   Future<void> _showGhostUsers() async {
-    final admin = ProviderScope.containerOf(context, listen: false).read(
-      adminProvider,
-    );
+    // Refresh data setiap sheet dibuka (kartu ikut ter-update), sekali saja.
+    final future = ref.read(adminProvider).fetchGhostUsers();
+    setState(() => _ghostFuture = future);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -814,7 +819,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => FutureBuilder<List<Map<String, dynamic>>>(
-        future: admin.fetchGhostUsers(),
+        future: future,
         builder: (c, snap) {
           if (!snap.hasData) {
             return const SizedBox(

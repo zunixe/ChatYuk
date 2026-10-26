@@ -47,16 +47,9 @@ declare
   r public.profiles%rowtype;
   me uuid := auth.uid();
   v_is_me boolean := (p_user = auth.uid());
-  v_ghost boolean;
 begin
   select * into r from public.profiles where id = p_user;
   if r.id is null then return '{}'::jsonb; end if;
-
-  -- Ghost mode membeli privasi PRESENCE. Pemilik tetap melihat status aslinya.
-  v_ghost := (not v_is_me) and exists (
-    select 1 from public.ghost_mode_active g
-    where g.user_id = r.id and g.expires_at > now()
-  );
 
   return jsonb_build_object(
     'id', r.id,
@@ -65,10 +58,10 @@ begin
     'age', r.age,
     'country', r.country,
     'city', r.city,
-    'status', case
-                when v_ghost then 'offline'
-                when public.privacy_can_view(r.id, 'presence', me) then r.status
-                else 'offline' end,
+    -- Trigger trg_enforce_ghost_mode sudah memaksa profiles.status='offline'
+    -- selama ghost aktif, jadi cukup aturan privacy biasa di sini.
+    'status', case when public.privacy_can_view(r.id, 'presence', me)
+                   then r.status else 'offline' end,
     'avatar', case when public.privacy_can_view(r.id, 'profile_photo', me) then r.avatar else '' end,
     'is_registered', r.is_registered,
     'needs_onboarding', coalesce(r.needs_onboarding, false),
