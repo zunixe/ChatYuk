@@ -29,6 +29,7 @@ void main() {
     'story',
     'timeline',
     'docs',
+    'moderation',
     'marketing',
   ];
 
