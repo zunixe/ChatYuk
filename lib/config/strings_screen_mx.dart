@@ -698,6 +698,12 @@ mixin SScreenMx {
   String get moderationCandidatesHint => isId
       ? 'Pilih kontributor yang sudah aktif di room publik negara ini.'
       : 'Pick a contributor already active in this country\'s public rooms.';
+  String moderationApplyNeedDays(int d) => isId
+      ? 'Akun harus berumur minimal $d hari'
+      : 'Account must be at least $d days old';
+  String moderationApplyNeedMsgs(int need, int have) => isId
+      ? 'Butuh minimal $need pesan di room publik negara ini (kamu: $have)'
+      : 'Need at least $need messages in this country\'s public rooms (yours: $have)';
   String get moderationReviews => isId ? 'Tinjauan' : 'Review';
   String get moderationUnhide => isId ? 'Tampilkan lagi' : 'Unhide';
   String get moderationOpenRoom => isId ? 'Buka room' : 'Open room';

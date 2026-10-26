@@ -1,3 +1,41 @@
+## 2026-10-27 (lanjutan) — Negara asal tidak bisa diakali + konsol moderasi hidup
+
+Laporan user: (1) "dimoderasi negara asal masih bisa dirubah walau belum 30
+hari", (2) "ajukan jadi moderator gagal", (3) "buka konsol moderasi gagal",
+(4) "di user ko ada moderasi juga?".
+
+### `20261027110000_guard_home_country.sql` (APPLIED)
+- **Celah:** policy `profiles_update_own` hanya `auth.uid() = id` — tanpa
+  guard kolom. Klien bisa `update profiles set home_country='XX'` langsung,
+  melewati cooldown 30 hari (dan izin lintas negara).
+- Trigger `guard_home_country_trg` (BEFORE UPDATE OF home_country,
+  home_country_changed_at): perubahan hanya diterima bila datang dari RPC
+  `set_home_country` (menandai `chatyuk.home_country_ok`) atau admin;
+  selain itu **nilai lama dipertahankan** (tanpa error, agar update kolom
+  lain tetap jalan). `home_country_changed_at` ikut dikunci → cooldown tidak
+  bisa di-reset.
+- `profile_public` kini mengembalikan `home_country` +
+  `home_country_changed_at` **hanya untuk profil DIRI SENDIRI** (dibutuhkan
+  UI; sebelumnya tidak pernah dikirim sehingga `_homeCountry` selalu null).
+
+### Perbaikan klien
+- `UserModel.homeCountry` + dibaca dari `profile_public`.
+- `_moderationSection` mengisi `_homeCountry` dari profil → "Ajukan jadi
+  moderator" & "Buka konsol" tidak lagi mengirim string kosong (dulu SELALU
+  gagal karena `country_required` / toast hint).
+- Pesan gagal lamaran kini spesifik: `account_too_new` (butuh 7 hari) dan
+  `not_enough_messages` (butuh 50 pesan, dengan jumlah milik user).
+- "Buka konsol moderasi" **disembunyikan** untuk user non-moderator/non-admin
+  (`myModerationState` + `isRealAdmin`), subtitle negara asal menampilkan
+  nilai aktif.
+
+### Test
+- `room_media_gate_test` 15 → **20 assert**: home_country tak bisa diubah via
+  UPDATE langsung, cooldown tak bisa direset, RPC menolak <30 hari.
+- Verifikasi manual (ROLLBACK di live): rpc1 ok, rpc2 ditolak `cooldown`,
+  update langsung diabaikan, reset cooldown diabaikan, `profile_public` self
+  mengembalikan `home_country`.
+
 ## 2026-10-27 — Menutup celah moderasi (Fase A+B)
 
 Temuan audit: fitur moderasi belum berjalan penuh. Lima migrasi + perbaikan

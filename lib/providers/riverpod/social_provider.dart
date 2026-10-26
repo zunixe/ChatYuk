@@ -356,6 +356,10 @@ class SocialNotifier extends Notifier<SocialState> {
       if (res['ok'] == true) {
         _service.invalidateSocialStatus(targetUid.isNotEmpty ? targetUid : null);
         if (targetUid.isNotEmpty) _pendingFriendRequests.remove(targetUid);
+        // Follow buatan request ikut ditarik server → selaraskan set lokal.
+        try {
+          await _refreshSelfSetsNow();
+        } catch (_) {}
         _emit();
         return true;
       }
@@ -381,6 +385,11 @@ class SocialNotifier extends Notifier<SocialState> {
       if (res['ok'] == true) {
         _service.invalidateSocialStatus(targetUid);
         _following.add(targetUid);
+        // Teman = saling follow: follow balik langsung menjadikan teman.
+        if (res['friend'] == true) {
+          _friends.add(targetUid);
+          _pendingFriendRequests.remove(targetUid);
+        }
         onFollowGraphChanged?.call();
         _emit();
         return true;
@@ -416,6 +425,7 @@ class SocialNotifier extends Notifier<SocialState> {
       final res = await _service.sendFriendRequest(targetUid);
       if (res['already_friends'] == true) {
         _service.invalidateSocialStatus(targetUid);
+        _following.add(targetUid);
         _friends.add(targetUid);
         _pendingFriendRequests.remove(targetUid);
         _emit();
@@ -423,6 +433,8 @@ class SocialNotifier extends Notifier<SocialState> {
       }
       if (res['ok'] == true) {
         _service.invalidateSocialStatus(targetUid);
+        // Tambah Teman = ikuti + ajak follow balik (server sudah follow).
+        _following.add(targetUid);
         _pendingFriendRequests.add(targetUid);
         _emit();
         return 'pending';

@@ -59,6 +59,12 @@ mixin SSocialMx {
       isId ? '$followers Pengikut · $friends Teman' : '$followers Followers · $friends Friends';
   String get btnFollow => isId ? 'Ikuti' : 'Follow';
   String get btnUnfollow => isId ? 'Berhenti Ikuti' : 'Unfollow';
+  // Teman = saling follow: dia sudah mengikuti saya, saya belum.
+  String get btnFollowBack => isId ? 'Ikuti Balik' : 'Follow Back';
+  String get hintFollowBackFriend => isId
+      ? 'Ikuti balik untuk jadi teman'
+      : 'Follow back to become friends';
+  String get menuFollowVsFriend => isId ? 'Ikuti vs Teman' : 'Follow vs Friends';
   // Snackbar konfirmasi follow (jelas + nama, bukan cuma kata tombol).
   String snackNowFollowing(String name) =>
       isId ? 'Mengikuti $name' : 'Following $name';
@@ -160,24 +166,24 @@ mixin SSocialMx {
   String get menuAddFriend => isId ? 'Tambah Teman' : 'Add Friend';
   // ── Penjelasan beda Follow vs Teman ──
   String get hintFollowVsFriend => isId
-      ? 'Ikuti = lihat postingan mereka. Tambah Teman = lihat status, foto & story (butuh persetujuan).'
-      : 'Follow = see their posts. Add Friend = see status, photo & story (needs approval).';
+      ? 'Ikuti = lihat postingan mereka. Saling mengikuti = Teman (bisa lihat status, foto & story).'
+      : 'Follow = see their posts. Following each other = Friends (see status, photo & story).';
   String get hintFriendMutual => isId
-      ? 'Berteman otomatis saling mengikuti.'
-      : 'Becoming friends means you follow each other automatically.';
+      ? 'Teman = kalian saling mengikuti.'
+      : 'Friends = you follow each other.';
   String get sheetFollowVsFriendTitle =>
       isId ? 'Ikuti atau Berteman?' : 'Follow or Add Friend?';
   String get sheetFollowLabel => isId ? 'Ikuti (Follow)' : 'Follow';
   String get sheetFollowDesc => isId
-      ? 'Lihat postingan mereka di Feed "Mengikuti". Tanpa perlu persetujuan, cukup satu tap.'
-      : 'See their posts in your "Following" feed. No approval needed, just one tap.';
+      ? 'Lihat postingan mereka di Feed "Mengikuti". Cukup satu tap. Kalau dia mengikuti balik, kalian otomatis berteman.'
+      : 'See their posts in your "Following" feed. Just one tap. If they follow you back, you become friends automatically.';
   String get sheetFriendLabel => isId ? 'Tambah Teman (Friend)' : 'Add Friend';
   String get sheetFriendDesc => isId
-      ? 'Lihat status online, foto profil, tentang, dan story mereka. Perlu disetujui. Berteman otomatis saling mengikuti.'
-      : 'See their online status, profile photo, about, and story. Needs their approval. Becoming friends means you follow each other automatically.';
+      ? 'Kamu langsung mengikuti dia + mengajak dia mengikuti balik. Begitu saling mengikuti, kalian berteman dan bisa melihat status online, foto profil, tentang, dan story.'
+      : 'You follow them and ask them to follow back. Once you follow each other, you are friends and can see online status, profile photo, about, and story.';
   String get friendRequestSentMutual => isId
-      ? 'Permintaan teman terkirim — berteman otomatis saling mengikuti.'
-      : 'Friend request sent — becoming friends means you follow each other.';
+      ? 'Kamu mengikuti dia & permintaan teman terkirim. Jadi teman saat dia mengikuti balik.'
+      : 'You follow them & a friend request was sent. You become friends when they follow back.';
   // ── Putus teman / batalkan permintaan ──
   String get btnUnfriend => isId ? 'Putus Teman' : 'Unfriend';
   String get btnCancelRequest => isId ? 'Batalkan' : 'Cancel';

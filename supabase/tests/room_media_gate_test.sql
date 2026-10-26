@@ -75,9 +75,13 @@ begin
   -- Sejak 2026-10-27 `home_country` WAJIB terisi (trigger insert) supaya
   -- aturan lintas negara berlaku untuk user baru. Samakan negara asal akun
   -- uji dengan negara room agar yang diuji murni trust gate, bukan izin.
+  -- `home_country` dijaga trigger (tak bisa diubah lewat UPDATE biasa) →
+  -- fixture WAJIB menandai dirinya sebagai trusted seperti RPC resmi.
+  perform set_config('chatyuk.home_country_ok', '1', true);
   update public.profiles
      set home_country = (select country from public.rooms where id = v_room)
    where id in (v_new, v_old);
+  perform set_config('chatyuk.home_country_ok', '', true);
 
   perform supabase_tests.check('akun baru DITOLAK kirim media di room publik',
     public.can_send_room_media(v_room, v_new) = false);
@@ -87,12 +91,14 @@ begin
     (select home_country from public.profiles where id = v_new) is not null);
 
   -- Beda negara asal & room → butuh izin (bukan lolos begitu saja).
+  perform set_config('chatyuk.home_country_ok', '1', true);
   update public.profiles set home_country = 'ZZ' where id = v_old;
   perform supabase_tests.check('beda negara asal -> butuh izin',
     public.can_send_room_media(v_room, v_old) = false);
   update public.profiles
      set home_country = (select country from public.rooms where id = v_room)
    where id = v_old;
+  perform set_config('chatyuk.home_country_ok', '', true);
 
   -- Beri akun lama 20 pesan teks di room publik.
   for i in 1..20 loop
@@ -123,6 +129,44 @@ begin
     public.room_media_rate_ok(v_room, v_old) = false);
 end
 $t$;
+
+-- ── Negara asal: TIDAK bisa diubah paksa lewat UPDATE langsung ────────────
+do $hc$
+declare
+  v_uid  uuid := 'd0c1e000-0000-4000-8000-0000000000b1';
+  v_prev text;
+begin
+  perform supabase_tests.mk_dummy(v_uid, '[TEST] HomeCountry', 'offline');
+  perform set_config('chatyuk.home_country_ok', '1', true);
+  update public.profiles
+     set home_country = 'Indonesia', home_country_changed_at = now()
+   where id = v_uid;
+  perform set_config('chatyuk.home_country_ok', '', true);
+  v_prev := (select home_country from public.profiles where id = v_uid);
+
+  -- (a) UPDATE langsung oleh user (bukan lewat RPC) harus DIABAIKAN.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
+  update public.profiles set home_country = 'Thailand' where id = v_uid;
+  perform supabase_tests.check('home_country tak bisa diubah lewat UPDATE langsung',
+    (select home_country from public.profiles where id = v_uid) = v_prev);
+
+  -- (b) Reset cooldown lewat UPDATE langsung juga harus DIABAIKAN.
+  update public.profiles
+     set home_country_changed_at = now() - interval '90 days'
+   where id = v_uid;
+  perform supabase_tests.check('home_country_changed_at tak bisa direset langsung',
+    (select home_country_changed_at from public.profiles where id = v_uid)
+      > now() - interval '2 days');
+
+  -- (c) RPC resmi DALAM masa cooldown tetap menolak.
+  perform supabase_tests.check('RPC set_home_country tolak perubahan <30 hari',
+    (public.set_home_country('Thailand')->>'ok') = 'false');
+
+  perform set_config('request.jwt.claims', '', true);
+end
+$hc$;
+
 
 -- ── Moderator mengangkat rekan + admin melihat lintas negara ──────────────
 select supabase_tests.check('RPC moderator_set_colleague ada',

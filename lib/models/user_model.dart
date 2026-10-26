@@ -6,6 +6,10 @@ class UserModel {
   final String gender;
   final int age;
   final String country;
+  /// Negara ASAL (stabil, hanya berubah lewat `set_home_country`) — dipakai
+  /// aturan izin kirim media lintas negara & lamaran moderator. Diisi hanya
+  /// untuk profil DIRI SENDIRI (server mengosongkan untuk user lain).
+  final String homeCountry;
   final String city;
   final String ipAddress;
   final String status;
@@ -41,6 +45,7 @@ class UserModel {
     required this.gender,
     required this.age,
     required this.country,
+    this.homeCountry = '',
     required this.city,
     required this.ipAddress,
     required this.status,
@@ -71,6 +76,7 @@ class UserModel {
       gender: map['gender'] ?? 'male',
       age: map['age'] ?? 0,
       country: map['country'] ?? 'Indonesia',
+      homeCountry: map['homeCountry'] ?? '',
       city: map['city'] ?? 'Jakarta',
       ipAddress: map['ipAddress'] ?? '',
       status: map['status'] ?? (map['online'] == true ? 'online' : 'offline'),

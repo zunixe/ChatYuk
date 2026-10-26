@@ -590,8 +590,19 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   // ── Moderasi konten room publik ──────────────────────────────────────────
 
   /// Kartu "Moderasi": pilih NEGARA ASAL, ajukan jadi moderator, buka konsol.
+  ///
+  /// Negara asal dibaca dari PROFIL (`homeCountry`), bukan hanya dari pilihan
+  /// sesi — dulu `_homeCountry` selalu null sehingga "Ajukan jadi moderator"
+  /// dan "Buka konsol" mengirim string kosong dan SELALU gagal.
   @override
   Widget _moderationSection(BuildContext context, S s) {
+    _homeCountry ??= ref.watch(authProvider).profile?.homeCountry;
+    if (!_modRoleLoaded) {
+      _modRoleLoaded = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_loadModerationRole());
+      });
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -606,7 +617,11 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                 ListTile(
                   leading: const Icon(Icons.public_rounded),
                   title: Text(s.moderationCountryTitle),
-                  subtitle: Text(s.moderationCountryHint),
+                  subtitle: Text(
+                    (_homeCountry ?? '').isEmpty
+                        ? s.moderationCountryHint
+                        : '${_homeCountry!} · ${s.moderationCountryHint}',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => _pickHomeCountry(context, s),
                 ),
@@ -625,20 +640,33 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                           reason: '',
                         );
                     if (!context.mounted) return;
-                    final msg = res['already_moderator'] == true ||
-                            res['already_pending'] == true
-                        ? s.moderationApplyPending
-                        : (res['ok'] == true
-                            ? s.moderationApplySent
-                            : s.errGeneric);
+                    final msg = switch (res['error']) {
+                      'account_too_new' => s.moderationApplyNeedDays(
+                          (res['min_days'] as num?)?.toInt() ?? 7,
+                        ),
+                      'not_enough_messages' => s.moderationApplyNeedMsgs(
+                          (res['need'] as num?)?.toInt() ?? 50,
+                          (res['have'] as num?)?.toInt() ?? 0,
+                        ),
+                      _ => res['already_moderator'] == true ||
+                              res['already_pending'] == true
+                          ? s.moderationApplyPending
+                          : (res['ok'] == true
+                              ? s.moderationApplySent
+                              : s.errGeneric),
+                    };
                     ScaffoldMessenger.of(context)
                         .showSnackBar(SnackBar(content: Text(msg)));
                   },
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.fact_check_outlined),
-                  title: Text(s.moderationOpenConsole),
+                // Konsol hanya untuk MODERATOR/ADMIN — user biasa yang
+                // menekannya dulu selalu "gagal" (RPC forbidden), jadi
+                // tombolnya disembunyikan.
+                if (_canOpenConsole) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.fact_check_outlined),
+                    title: Text(s.moderationOpenConsole),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () {
                     final c = _homeCountry ?? '';
@@ -648,13 +676,14 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                       );
                       return;
                     }
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ModerationScreen(country: c),
-                      ),
-                    );
-                  },
-                ),
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ModerationScreen(country: c),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ],
             ),
           ),
@@ -664,6 +693,25 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   }
 
   String? _homeCountry;
+
+  /// True bila user ini moderator negara (atau admin) → boleh buka konsol.
+  bool _canOpenConsole = false;
+  bool _modRoleLoaded = false;
+
+  Future<void> _loadModerationRole() async {
+    try {
+      final res = await ref
+          .read(chatProvider.notifier)
+          .myModerationState();
+      if (!mounted || res == null) return;
+      final list = res['moderates'];
+      final isMod = list is List && list.isNotEmpty;
+      final isAdmin = ref.read(authProvider.notifier).isRealAdmin;
+      if (isMod != _canOpenConsole || isAdmin != _canOpenConsole) {
+        setState(() => _canOpenConsole = isMod || isAdmin);
+      }
+    } catch (_) {}
+  }
 
   Future<void> _pickHomeCountry(BuildContext context, S s) async {
     final countries = getNegaraKeys()..sort();
