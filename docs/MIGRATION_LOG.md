@@ -1,3 +1,31 @@
+## 2026-10-27 — Admin lihat lintas negara + moderator boleh angkat rekan
+
+Dua pertanyaan user: (1) "kalau ada yang lintas negara admin taunya dimana?",
+(2) "kalau moderator pilih orangnya jadi moderator gimana?".
+
+### `20261026200000_admin_moderation_overview.sql` (APPLIED)
+- RPC `admin_moderation_overview()` — **khusus admin**, mengembalikan SEMUA
+  yang menunggu tinjauan lintas negara: `permits` (permohonan izin kirim media
+  lintas negara), `applications` (lamaran moderator), `reports` (pesan
+  terlapor), masing-masing membawa `country`.
+- Klien: tab admin baru **"Moderasi"** (`lib/screens/admin_moderation_tab.dart`)
+  → daftar gabungan per negara; tap → buka konsol moderasi negara itu.
+
+### `20261026201000_moderator_colleagues.sql` (APPLIED)
+- `country_moderators.source` kini menerima nilai `'moderator'` (angkatan oleh
+  moderator, bukan hanya admin).
+- RPC `moderator_candidates(country)` — daftar kontributor (≥50 pesan di room
+  publik negara itu), urut kontribusi, tanpa moderator yang sudah ada.
+- RPC `moderator_set_colleague(country, uid, grant)` — guard: admin ATAU
+  moderator negara tsb; **tidak bisa lintas negara**, **tidak bisa diri
+  sendiri**; tercatat di `moderator_actions`.
+- Klien: tombol "Angkat moderator" (ikon orang+) di AppBar konsol moderasi →
+  bottom sheet kandidat → angkat.
+
+**Uji (ROLLBACK):** kandidat terdeteksi (55 pesan → 1 kandidat); angkat
+berhasil (`is_country_moderator=true`); percobaan lintas negara **DITOLAK**.
+pgTAP `room_media_gate_test` 15/15.
+
 ## 2026-10-26 (lanjutan) — Izin lintas negara, laporan ber-alasan, NSFW, konsol moderator
 
 Semua **SUDAH APPLY** via Management API (versi tercatat di

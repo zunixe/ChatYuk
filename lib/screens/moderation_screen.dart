@@ -103,7 +103,16 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
     final s = _s;
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
-      appBar: AppBar(title: Text('${s.moderationTitle} · ${widget.country}')),
+      appBar: AppBar(
+        title: Text('${s.moderationTitle} · ${widget.country}'),
+        actions: [
+          IconButton(
+            tooltip: s.moderationAddModerator,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+            onPressed: _openCandidates,
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _data == null
@@ -299,6 +308,68 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
         );
       },
     );
+  }
+
+  /// Angkat moderator dari KONTRIBUTOR negara ini (>=50 pesan).
+  Future<void> _openCandidates() async {
+    final s = _s;
+    final list = await ref
+        .read(chatProvider.notifier)
+        .moderatorCandidates(widget.country);
+    if (!mounted) return;
+    if (list.isEmpty) {
+      showChatSnack(context, s.moderationCandidatesEmpty);
+      return;
+    }
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Text(
+                s.moderationCandidatesHint,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: list.length,
+                itemBuilder: (_, i) {
+                  final c = list[i];
+                  return ListTile(
+                    leading: const Icon(Icons.person_outline_rounded),
+                    title: Text('${c['nickname'] ?? c['uid']}'),
+                    subtitle: Text('${c['messages'] ?? 0} pesan'),
+                    onTap: () => Navigator.pop(ctx, c),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final uid = '${picked['uid'] ?? ''}';
+    if (uid.isEmpty) return;
+    final res = await ref.read(chatProvider.notifier).moderatorSetColleague(
+          widget.country,
+          uid,
+          grant: true,
+        );
+    if (!mounted) return;
+    showChatSnack(
+      context,
+      res['ok'] == true ? s.moderationAppointed : s.errGeneric,
+    );
+    await _load();
   }
 
   String _reasonLabel(S s, String code) {

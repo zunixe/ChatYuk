@@ -105,5 +105,20 @@ begin
 end
 $t$;
 
+-- ── Moderator mengangkat rekan + admin melihat lintas negara ──────────────
+select supabase_tests.check('RPC moderator_set_colleague ada',
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+           where n.nspname='public' and p.proname='moderator_set_colleague'));
+select supabase_tests.check('RPC moderator_candidates ada',
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+           where n.nspname='public' and p.proname='moderator_candidates'));
+select supabase_tests.check('RPC admin_moderation_overview ada',
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+           where n.nspname='public' and p.proname='admin_moderation_overview'));
+select supabase_tests.check('country_moderators.source menerima moderator',
+  exists (select 1 from pg_constraint con join pg_class c on c.oid=con.conrelid
+           where c.relname='country_moderators' and con.conname='country_moderators_source_check'
+             and pg_get_constraintdef(con.oid) like '%moderator%'));
+
 select supabase_tests.report() as result;
 rollback;

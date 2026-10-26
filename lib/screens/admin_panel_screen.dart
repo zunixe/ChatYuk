@@ -38,6 +38,7 @@ import '../providers/riverpod/theme_provider.dart';
 import '../widgets/app_gesture.dart';
 import '../main.dart' show localNotifications, resumeWarmup;
 import '../providers/riverpod/admin_provider.dart';
+import 'admin_moderation_tab.dart';
 
 class AdminPanelScreen extends ConsumerStatefulWidget {
   const AdminPanelScreen({super.key});
@@ -64,6 +65,7 @@ enum _AdminTab {
   story,
   timeline,
   docs,
+  moderation,
   marketing,
 }
 
@@ -422,6 +424,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
         _AdminTab.story => s.adminStoryTab,
         _AdminTab.timeline => s.adminTimelineTab,
         _AdminTab.docs => s.adminDocsTab,
+        _AdminTab.moderation => s.adminModerationTab,
         _AdminTab.marketing => s.adminMarketingTab,
       };
 
@@ -451,6 +454,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
         _AdminTab.story => const AdminStoryTab(),
         _AdminTab.timeline => const AdminTimelineTab(),
         _AdminTab.docs => const AdminDocsTab(),
+        _AdminTab.moderation => const AdminModerationTab(),
         _AdminTab.marketing => const AdminMarketingTab(),
       };
 

@@ -452,6 +452,19 @@ class ChatNotifier extends Notifier<ChatState> {
   Future<Map<String, dynamic>> setHomeCountry(String country) =>
       _service.setHomeCountry(country);
 
+  Future<Map<String, dynamic>?> adminModerationOverview() =>
+      _service.adminModerationOverview();
+
+  Future<List<Map<String, dynamic>>> moderatorCandidates(String country) =>
+      _service.moderatorCandidates(country);
+
+  Future<Map<String, dynamic>> moderatorSetColleague(
+    String country,
+    String uid, {
+    required bool grant,
+  }) =>
+      _service.moderatorSetColleague(country, uid, grant: grant);
+
   Future<Map<String, dynamic>?> myModerationState() =>
       _service.myModerationState();
 

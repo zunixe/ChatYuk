@@ -302,6 +302,51 @@ mixin ChatServiceRoomMx on ChatBase {
     }
   }
 
+  Future<Map<String, dynamic>?> adminModerationOverview() async {
+    try {
+      final res = await _sb.rpc('admin_moderation_overview');
+      return res is Map ? Map<String, dynamic>.from(res) : null;
+    } catch (e) {
+      dlog('[ChatService] adminModerationOverview error: $e');
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> moderatorCandidates(String country) async {
+    try {
+      final res = await _sb.rpc('moderator_candidates',
+          params: {'p_country': country});
+      if (res is List) {
+        return [
+          for (final r in res)
+            if (r is Map) Map<String, dynamic>.from(r),
+        ];
+      }
+      return const [];
+    } catch (e) {
+      dlog('[ChatService] moderatorCandidates error: $e');
+      return const [];
+    }
+  }
+
+  Future<Map<String, dynamic>> moderatorSetColleague(
+    String country,
+    String uid, {
+    required bool grant,
+  }) async {
+    try {
+      final res = await _sb.rpc('moderator_set_colleague', params: {
+        'p_country': country,
+        'p_uid': uid,
+        'p_grant': grant,
+      });
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] moderatorSetColleague error: $e');
+      return {'ok': false};
+    }
+  }
+
   Future<Map<String, dynamic>?> myModerationState() async {
     try {
       final res = await _sb.rpc('my_moderation_state');

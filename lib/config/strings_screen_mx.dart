@@ -658,6 +658,7 @@ mixin SScreenMx {
       : 'Send $need messages in public rooms first (currently $have).';
   // Alasan laporan (kode: porn/violence/spam/scam/other).
   // ── Konsol moderasi ──
+  String get adminModerationTab => isId ? 'Moderasi' : 'Moderation';
   String get moderationTitle => isId ? 'Moderasi' : 'Moderation';
   String get moderationReports => isId ? 'Laporan' : 'Reports';
   String get moderationPermits => isId ? 'Izin' : 'Permits';
@@ -686,6 +687,17 @@ mixin SScreenMx {
       ? 'Bantu jaga room publik negara Anda (syarat: 30 hari & 100 pesan).'
       : 'Help keep your country\'s public rooms clean (needs 30 days & 100 messages).';
   String get moderationOpenConsole => isId ? 'Buka konsol moderasi' : 'Open moderation console';
+  String get moderationAddModerator =>
+      isId ? 'Angkat moderator' : 'Appoint moderator';
+  String get moderationCandidatesEmpty => isId
+      ? 'Belum ada kandidat (butuh >=50 pesan di room publik negara ini).'
+      : 'No candidates yet (needs >=50 messages in this country\'s public rooms).';
+  String get moderationAppointed => isId
+      ? 'Moderator ditambahkan'
+      : 'Moderator appointed';
+  String get moderationCandidatesHint => isId
+      ? 'Pilih kontributor yang sudah aktif di room publik negara ini.'
+      : 'Pick a contributor already active in this country\'s public rooms.';
   String get moderationMenu => isId ? 'Moderasi room ini' : 'Moderate this room';
   String get moderationApply => isId ? 'Ajukan jadi Moderator' : 'Apply as Moderator';
   String get moderationApplySent => isId
