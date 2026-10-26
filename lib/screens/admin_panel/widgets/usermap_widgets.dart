@@ -9,7 +9,7 @@ import '../../../config/strings_admin.dart';
 import '../../../providers/riverpod/locale_provider.dart';
 
 class UserMapLegend extends StatelessWidget {
-  const UserMapLegend({required this.s});
+  const UserMapLegend({super.key, required this.s});
   final S s;
 
   @override
@@ -92,7 +92,7 @@ class UserMapLegend extends StatelessWidget {
 /// posisi peta inline saat dibuka supaya transisi terasa mulus. Data user
 /// dioper sebagai snapshot; sumber tetap kartu (realtime berjalan di sana).
 class UserMapFullscreenPage extends ConsumerStatefulWidget {
-  const UserMapFullscreenPage({
+  const UserMapFullscreenPage({super.key, 
     required this.users,
     required this.resolving,
     required this.noLoc,
@@ -176,7 +176,7 @@ class UserMapFullscreenState extends ConsumerState<UserMapFullscreenPage> {
 
 /// Badge kecil di atas peta (tanpa lokasi / hint). Dipakai mode layar penuh.
 class UserMapBadge extends StatelessWidget {
-  const UserMapBadge({required this.text});
+  const UserMapBadge({super.key, required this.text});
   final String text;
 
   @override

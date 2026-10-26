@@ -8,6 +8,7 @@ mixin _PcGroupsMx on _PcBase {
   /// Tap AVATAR kartu → zoom foto (pola sama menu "Pengguna Online"), BUKAN
   /// buka chat/profil. Foto diambil dari cache avatar (RAM→disk, sinkron);
   /// bila kosong → dialog lingkaran inisial.
+  @override
   void _showAvatarZoomFor(
     String uid,
     String name,
@@ -25,6 +26,7 @@ mixin _PcGroupsMx on _PcBase {
     );
   }
 
+  @override
   String _chatSubtitle(PrivateChatInfo chat, String myUid, S s) {
     final otherUid = chat.participants.firstWhere(
       (p) => p != myUid,
@@ -49,6 +51,7 @@ mixin _PcGroupsMx on _PcBase {
     return parts.join(' · ');
   }
 
+  @override
   String _formatTime(DateTime dt, S s) {
     return formatRelativeTime(dt, isId: s.isId);
   }
@@ -57,6 +60,7 @@ mixin _PcGroupsMx on _PcBase {
   /// Baris GRUP di daftar Pesan. Geser KANAN = sematkan/lepas sematan,
   /// geser KIRI = hapus (pemilik) atau keluar (anggota) — pola sama seperti
   /// baris chat private.
+  @override
   Widget _groupRow(RoomModel g, S s) {
     final unread = g.unread;
     final isPinned = GroupPinStore.isPinned(g.id);

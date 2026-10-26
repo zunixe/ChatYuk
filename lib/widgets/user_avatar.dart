@@ -337,7 +337,7 @@ class _UserAvatarState extends State<UserAvatar> {
       image: p,
       fit: BoxFit.cover,
       gaplessPlayback: true,
-      errorBuilder: (_, __, ___) => Center(
+      errorBuilder: (_, _, _) => Center(
         child: Text(
           widget.initial,
           style: TextStyle(

@@ -216,7 +216,7 @@ Widget stickerWidget(Uint8List bytes, String src, double size) {
       width: size,
       height: size,
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => SizedBox(width: size, height: size),
+      errorBuilder: (_, _, _) => SizedBox(width: size, height: size),
     );
   }
   // .webm & selainnya → Image.memory (webm akan gagal decode → placeholder
@@ -227,7 +227,7 @@ Widget stickerWidget(Uint8List bytes, String src, double size) {
     height: size,
     fit: BoxFit.contain,
     gaplessPlayback: true,
-    errorBuilder: (_, __, ___) => SizedBox(width: size, height: size),
+    errorBuilder: (_, _, _) => SizedBox(width: size, height: size),
   );
 }
 

@@ -4,6 +4,7 @@ part of '../user_info_screen.dart';
 // base tampak 'unused' walau dipanggil lintas-mixin. Aman diabaikan.
 
 mixin _UiActionsMx on _UserInfoBase {
+  @override
   Future<void> _startCall(BuildContext ctx, String callType) async {
     final scope = ProviderScope.containerOf(context, listen: false);
     final s = scope.read(localeProvider).s;
@@ -148,6 +149,7 @@ mixin _UiActionsMx on _UserInfoBase {
 
   /// Buka chat pribadi dengan user yang sedang dilihat.
   /// Buat/ambil chatId dulu, lalu push PrivateChatScreen.
+  @override
   Future<void> _startChat() async {
     final s = ProviderScope.containerOf(
       context,
@@ -223,6 +225,7 @@ mixin _UiActionsMx on _UserInfoBase {
 
   /// Subscribe status dengan seed dari profil yang baru di-fetch,
   /// supaya dot status benar sejak frame pertama tanpa query tambahan.
+  @override
   void _subscribeStatus(UserModel? fresh) {
     _statusSub?.cancel();
     final known = fresh == null
@@ -246,6 +249,7 @@ mixin _UiActionsMx on _UserInfoBase {
         );
   }
 
+  @override
   Future<void> _load() async {
     // INSTAN dari cache SQLite (memori) → info teman/pengikut tampil di frame
     // pertama, tanpa "keload dulu". Refresh server menyusul.
@@ -301,6 +305,7 @@ mixin _UiActionsMx on _UserInfoBase {
   /// Dulu sekali gagal = inisial permanen sampai layar dibuka ulang; kalau
   /// kebetulan decoding/network sedang sibuk saat masuk, foto tampak
   /// "hilang" padahal ada di server.
+  @override
   Future<void> _loadAvatar(String path) async {
     _avatarPath = path;
     for (var attempt = 0; attempt < 2; attempt++) {
@@ -339,6 +344,7 @@ mixin _UiActionsMx on _UserInfoBase {
 
   /// Bytes avatar ter-decode, cache per-string — decode SEKALI saat b64
   /// berubah, bukan tiap build. Mengembalikan null bila tidak ada/gagal.
+  @override
   Uint8List? _decodedAvatarBytes() {
     if (_avatarB64.isEmpty) {
       _avatarB64Cached = '';
@@ -357,6 +363,7 @@ mixin _UiActionsMx on _UserInfoBase {
   }
 
   /// Ambil bytes galeri dari cache (decode sekali per photo-id).
+  @override
   Uint8List? _galleryBytesOf(UserPhoto photo) {
     final hit = _galleryBytes[photo.id];
     if (hit != null) return hit;
@@ -380,6 +387,7 @@ mixin _UiActionsMx on _UserInfoBase {
     }
   }
 
+  @override
   void _retryLoad() {
     setState(() {
       _loading = true;
@@ -391,6 +399,7 @@ mixin _UiActionsMx on _UserInfoBase {
     _loadSocial();
   }
 
+  @override
   Future<void> _loadPhotos() async {
     try {
       final photos = await ProviderScope.containerOf(context, listen: false)
@@ -405,6 +414,7 @@ mixin _UiActionsMx on _UserInfoBase {
     } catch (_) {}
   }
 
+  @override
   void _showPhotoViewer(List<UserPhoto> photos, int index) {
     // Hanya foto terbuka yang bisa dilihat penuh.
     final unlockedPhotos = photos.where((p) => p.unlocked).toList();

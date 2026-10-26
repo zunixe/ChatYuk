@@ -2,6 +2,7 @@ part of '../story_composer_screen.dart';
 
 
 mixin _ScBuildMx on _StoryComposerBase {
+  @override
   Widget build(BuildContext context) {
     final s = ref.watch(localeProvider).s;
     return PopScope(
@@ -632,6 +633,7 @@ mixin _ScBuildMx on _StoryComposerBase {
     );
   }
 
+  @override
   Widget _visibilitySelector(S s) {
     final isAnon = ProviderScope.containerOf(
       context,

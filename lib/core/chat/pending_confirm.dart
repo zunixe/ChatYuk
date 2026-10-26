@@ -63,7 +63,7 @@ int consumeConfirmedPoll({
   );
 }
 
-/// Dedupe bubble KONTAK pending vs gema server (teks '📇 <nama>'), id server
+/// Dedupe bubble KONTAK pending vs gema server (teks '📇 `<nama>`'), id server
 /// sekali pakai, FIFO — sama seperti poll/file.
 int consumeConfirmedContact({
   required MessageModel server,

@@ -205,7 +205,7 @@ Widget _sectionTitle(String text, {Widget? trailing}) {
               ),
             ),
           ),
-          if (trailing != null) trailing,
+          ?trailing,
         ],
       ),
     ),
@@ -252,6 +252,7 @@ Widget _statusPill(bool online) {
 /// TIDAK lagi dipakai untuk render halaman, hanya sebagai penyedia helper.
 mixin _ProfileUiSectionsMx on _ProfileBase {
   /// Banner peringatan sesi ANON (fitur lama, tetap ditampilkan).
+  @override
   Widget _anonBanner(BuildContext context, S s) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -323,6 +324,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
   /// [2] BAGIAN ATAS: avatar 84 + 3 statistik sejajar, lalu nama/status/info,
   /// lalu baris TENTANG (label + nilai + pensil edit) — satu-satunya tampilan
   /// & editor about (bio lama dihapus supaya tidak dobel).
+  @override
   Widget _topSection(
     BuildContext context,
     S s,
@@ -626,6 +628,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
   }
 
   /// [3] HASHTAG: chip + hapus, plus chip "+ Tambah hashtag" inline.
+  @override
   Widget _hashtagSection(BuildContext context, S s) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -754,6 +757,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
   }
 
   /// [4] TOMBOL AKSI: Edit Profil | Bagikan Profil | 40x40 ikon mata.
+  @override
   Widget _actionButtons(BuildContext context, S s, UserModel? profile) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -835,9 +839,10 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
   }
 
   /// [5] BANNER PERMINTAAN TEMAN.
+  @override
   Widget _friendRequestBanner(BuildContext context, S s) {
     return rv.Consumer(
-      builder: (ctx, ref2, __) {
+      builder: (ctx, ref2, _) {
         final n = ref2.watch(
           socialProvider.select((p) => p.friendRequestCount),
         );

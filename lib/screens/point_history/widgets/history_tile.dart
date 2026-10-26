@@ -7,7 +7,7 @@ import '../../../config/theme.dart';
 class HistoryTile extends StatelessWidget {
   final Map<String, dynamic> entry;
   final S s;
-  const HistoryTile({required this.entry, required this.s});
+  const HistoryTile({super.key, required this.entry, required this.s});
 
   @override
   Widget build(BuildContext context) {
@@ -83,14 +83,16 @@ class HistoryTile extends StatelessWidget {
       case 'spend_chat':
         final t = '${metadata['msg_type'] ?? ref}';
         if (t == 'image') return s.pointHistoryDeductImage;
-        if (t == 'view_once' || t == 'view_once_expired')
+        if (t == 'view_once' || t == 'view_once_expired') {
           return s.pointHistoryDeductViewOnce;
+        }
         return s.pointHistoryDeductText;
       case 'deduct':
         final t = '${metadata['msg_type']}';
         if (t == 'image') return s.pointHistoryDeductImage;
-        if (t == 'view_once' || t == 'view_once_expired')
+        if (t == 'view_once' || t == 'view_once_expired') {
           return s.pointHistoryDeductViewOnce;
+        }
         return s.pointHistoryDeductText;
       case 'daily_login':
         return s.pointHistoryDailyLogin;

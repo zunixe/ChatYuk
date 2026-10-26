@@ -35,6 +35,7 @@ mixin _ScMediaMx on _StoryComposerBase {
 
   /// Publish video: potong per 15 dtk (maks 2 segmen) → tiap segmen jadi
   /// satu story. Poster 1 frame jadi thumbnail tray.
+  @override
   Future<void> _publishVideo() async {
     if (_publishing) return;
     final s = ProviderScope.containerOf(
@@ -146,6 +147,7 @@ mixin _ScMediaMx on _StoryComposerBase {
   }
 
   /// Body video: preview loop + kontrol play/pause (ketuk) & tahan-lihat.
+  @override
   Widget _videoBody(S s) {
     final ctrl = _videoCtrl;
     final ready = _videoReady && ctrl != null && ctrl.value.isInitialized;
@@ -258,11 +260,13 @@ mixin _ScMediaMx on _StoryComposerBase {
     );
   }
 
+  @override
   Color get _textColor =>
       _colorIndex >= 0 && _colorIndex < StoryText.palette.length
       ? StoryText.palette[_colorIndex]
       : StoryText.palette.first;
 
+  @override
   bool get _hasText => _textCtrl.text.trim().isNotEmpty;
 
   @override
@@ -345,6 +349,7 @@ mixin _ScMediaMx on _StoryComposerBase {
   /// PERF: dulu `toByteData(png)` — PNG encode besar & lambat. Sekarang ambil
   /// pixel mentah (rawRgba, tanpa kompresi), lalu encode JPEG di isolate
   /// terpisah (`compute`) supaya tidak jank UI dan hasil jauh lebih kecil.
+  @override
   Future<Uint8List> _renderTransformed(Uint8List src) async {
     final codec = await ui.instantiateImageCodec(src, targetWidth: 1080);
     final frame = await codec.getNextFrame();

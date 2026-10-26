@@ -2,7 +2,8 @@ part of '../private_chat_screen.dart';
 
 
 mixin _PcChat2Mx on _PrivateChatBase {
-void _onSearchChanged(String v) {
+@override
+  void _onSearchChanged(String v) {
     setState(() {
       _searchQuery = v;
       _matchIndex = 0;
@@ -14,6 +15,7 @@ void _onSearchChanged(String v) {
   }
 /// Pindah ke hasil berikut/sebelumnya (dir +1 = lebih lama, -1 = lebih
   /// baru), bungkus melingkar ala WhatsApp.
+  @override
   void _gotoMatch(int dir) {
     if (_matchIds.isEmpty) return;
     setState(() {
@@ -28,7 +30,7 @@ void _onSearchChanged(String v) {
 @override
   String get chatId => widget.chatId;
 @override
-  chatRiverpod.ChatNotifier get chatProvider => ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
+  chat_riverpod.ChatNotifier get chatProvider => ProviderScope.containerOf(context, listen: false).read(chat_riverpod.chatProvider.notifier);
 @override
   void chatFocusComposer() => _inputFocus.requestFocus();
 @override
@@ -37,6 +39,7 @@ void _onSearchChanged(String v) {
   String chatDeletedLabel(S s) => s.messageDeleted;
 /// Kirim pembaruan koordinat lokasi live tiap 30 detik sampai kedaluwarsa.
   /// Berhenti otomatis saat waktu habis; update gagal diabaikan (best-effort).
+  @override
   void _startLiveLocationUpdates(String messageId, ChatLocation initial) {
     _liveTimer?.cancel();
     final lp = ProviderScope.containerOf(context, listen: false).read(locationProvider);
@@ -55,7 +58,7 @@ void _onSearchChanged(String v) {
       if (!mounted) return;
       final updated = initial.copyWith(lat: pos.$1, lng: pos.$2);
       await ProviderScope.containerOf(context, listen: false)
-          .read(chatRiverpod.chatProvider.notifier)
+          .read(chat_riverpod.chatProvider.notifier)
           .updateLocationMessage(messageId, updated.encode());
     });
   }
@@ -99,7 +102,8 @@ void _onSearchChanged(String v) {
   }
 @override
   List<Mention> sendMentionCandidates() => _mentionCandidates;
-void _autoLoadMissingImages(List<MessageModel> msgs) {
+@override
+  void _autoLoadMissingImages(List<MessageModel> msgs) {
     final now = DateTime.now();
     for (final m in msgs) {
       if (m.type != 'image') continue;
@@ -124,7 +128,8 @@ void _autoLoadMissingImages(List<MessageModel> msgs) {
     }
     _drainImageQueue();
   }
-void _drainImageQueue() {
+@override
+  void _drainImageQueue() {
     while (_imgInFlight.length < _maxImageFetches && _imgQueue.isNotEmpty) {
       final id = _imgQueue.removeAt(0);
       _imgQueued.remove(id);
@@ -135,6 +140,7 @@ void _drainImageQueue() {
 /// Derivasikan `(items, deletedIds)` di-cache berbasis IDENTITAS list
   /// pesan sumber ([msgsSrc], dari stream — referensinya stabil antar rebuild
   /// parent) + jumlah `_pending` + locale + hari. [all] dipakai untuk hasil.
+  @override
   (List<ChatItem>, Set<String>) _deriveItems(
     S s,
     List<MessageModel> msgsSrc,
@@ -206,6 +212,7 @@ void _drainImageQueue() {
     _cachedDeletedIds = deletedIds;
     return (items, deletedIds);
   }
+  @override
   void _scheduleRebuild() {
     if (!mounted) return;
     // P1c (2026-10-11): KOALESENSI WINDOW ~80ms (dulu per-frame). Saat buka
@@ -220,7 +227,8 @@ void _drainImageQueue() {
       if (mounted) setState(() {});
     });
   }
-bool get _showCallOverlay {
+@override
+  bool get _showCallOverlay {
     final prov = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
     final sess = prov.activeSession;
     return sess != null &&
@@ -228,11 +236,12 @@ bool get _showCallOverlay {
         sess.remoteUid == widget.otherUid &&
         !_callExpanded;
   }
-void _subscribeTyping() {
+@override
+  void _subscribeTyping() {
     _typingSub?.cancel();
     dlog('[TYPING] screen subscribing for ${widget.chatId}');
     _typingSub = ProviderScope.containerOf(context, listen: false)
-        .read(chatRiverpod.chatProvider.notifier)
+        .read(chat_riverpod.chatProvider.notifier)
         .getTypingPulseStream(widget.chatId)
         .listen((event) {
           final kind = event.$1;
@@ -261,22 +270,25 @@ void _subscribeTyping() {
           dlog('[NAV] typing stream error private-chat: $e');
         });
   }
-void _sendTypingSignal() {
+@override
+  void _sendTypingSignal() {
     final now = DateTime.now();
     if (now.difference(_lastTypingSent).inMilliseconds < 2500) return;
     _lastTypingSent = now;
-    ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier).sendTyping(widget.chatId);
+    ProviderScope.containerOf(context, listen: false).read(chat_riverpod.chatProvider.notifier).sendTyping(widget.chatId);
   }
 /// Misi "chat orang baru": bonus hanya diberikan saat user BENAR-BENAR
   /// mengirim pesan pertama ke lawan bicara (bukan pas membuka chat kosong).
   /// RPC new_chat_bonus tetap punya guard sendiri (sekali per user + limit
   /// harian), jadi aman dipanggil dari semua jalur kirim.
+  @override
   void _maybeNewChatBonus() {
     if (_newChatBonusClaimed) return;
     _newChatBonusClaimed = true;
     ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).newChatBonus(widget.otherUid);
   }
 /// Kandidat mention private 1:1 — hanya lawan bicara. `@all` tidak pernah.
+  @override
   List<Mention> get _mentionCandidates => widget.otherUid.isEmpty
       ? const []
       : [Mention(uid: widget.otherUid, name: widget.otherName)];
@@ -302,7 +314,7 @@ void _sendTypingSignal() {
             '';
       } catch (_) {}
     }
-    await scope.read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
+    await scope.read(chat_riverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
       senderId: e.senderId,
       senderName: e.senderName,
@@ -325,16 +337,18 @@ void _sendTypingSignal() {
     _maybeNewChatBonus();
     _schedulePendingConfirmFallback();
   }
-Future<void> _sendCoins(int amount) async {
+@override
+  Future<void> _sendCoins(int amount) async {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final chat = ProviderScope.containerOf(context, listen: false).read(chatRiverpod.chatProvider.notifier);
+    final chat = ProviderScope.containerOf(context, listen: false).read(chat_riverpod.chatProvider.notifier);
     final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final res = await chat.sendCoins(widget.chatId, widget.otherUid, amount);
       if (res['ok'] == true) {
-        if (res['points'] != null)
+        if (res['points'] != null) {
           points.setPoints((res['points'] as num).toInt());
+        }
         _maybeNewChatBonus();
         if (mounted) points.showPointsToast(context, s.coinSentToast(amount));
         _scrollToBottom();
@@ -351,6 +365,7 @@ Future<void> _sendCoins(int amount) async {
   }
 /// Mulai panggilan audio/video ke lawan bicara.
   /// [mode] menentukan fullscreen atau video dalam chat (overlay).
+  @override
   Future<void> _startCall(
     BuildContext ctx,
     String callType,

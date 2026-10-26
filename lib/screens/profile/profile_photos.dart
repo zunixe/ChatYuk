@@ -2,6 +2,7 @@ part of '../profile_screen.dart';
 
 
 mixin _ProfilePhotosMx on _ProfileBase {
+  @override
   Future<void> _loadPhotos() async {
     final uid = ProviderScope.containerOf(
       context,
@@ -18,6 +19,7 @@ mixin _ProfilePhotosMx on _ProfileBase {
     if (mounted) setState(() => _loadingPhotos = false);
   }
 
+  @override
   void _pickGalleryFromSource() {
     final s = ProviderScope.containerOf(
       context,
@@ -108,16 +110,18 @@ mixin _ProfilePhotosMx on _ProfileBase {
       await _loadPhotos();
       // Reward koin upload DIHAPUS (overhaul coin: tidak ada poin gratis).
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.errPhotoSave)));
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
   }
 
   /// Beli +5 slot foto tambahan (YukCoin v2). Refresh limit setelahnya.
+  @override
   Future<void> _buyExtraSlots() async {
     final pp = ProviderScope.containerOf(
       context,
@@ -161,6 +165,7 @@ mixin _ProfilePhotosMx on _ProfileBase {
     }
   }
 
+  @override
   Future<void> _confirmDeletePhoto(UserPhoto photo) async {
     final s = ProviderScope.containerOf(
       context,
@@ -258,10 +263,11 @@ mixin _ProfilePhotosMx on _ProfileBase {
     // Proses image di background isolate — tidak block UI thread
     final base64 = await processAvatar(bytes);
     if (base64 == null) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.errPhotoLoad)));
+      }
       return;
     }
 
@@ -294,6 +300,7 @@ mixin _ProfilePhotosMx on _ProfileBase {
     }
   }
 
+  @override
   Future<void> _showAvatarOptions() async {
     final s = ProviderScope.containerOf(
       context,
@@ -385,6 +392,7 @@ mixin _ProfilePhotosMx on _ProfileBase {
     );
   }
 
+  @override
   void _showAvatarZoom(Uint8List? bytes, Color bgColor, String initial) {
     if (bytes == null && initial.isEmpty) return;
     final zoomBytes = bytes;
@@ -445,6 +453,7 @@ mixin _ProfilePhotosMx on _ProfileBase {
     });
   }
 
+  @override
   Future<void> _editProfile() async {
     final scope = ProviderScope.containerOf(context, listen: false);
     final s = scope.read(localeProvider).s;

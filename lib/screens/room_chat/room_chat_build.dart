@@ -2,6 +2,7 @@ part of '../room_chat_screen.dart';
 
 
 mixin _RcBuildMx on _RoomChatBase {
+  @override
   Widget _buildMessageList(S s, AuthNotifier auth) {
     return Expanded(
       child: Stack(
@@ -82,8 +83,9 @@ mixin _RcBuildMx on _RoomChatBase {
                 itemCount: items.length,
                 itemBuilder: (_, i) {
                   final item = items[items.length - 1 - i];
-                  if (item.dateLabel != null)
+                  if (item.dateLabel != null) {
                     return DateChip(label: item.dateLabel!);
+                  }
                   // ALBUM: satu bubble grid (bukan N bubble).
                   if (item.isAlbum) {
                     final ph = item.album;
@@ -183,12 +185,11 @@ mixin _RcBuildMx on _RoomChatBase {
                                 Stack(
                                   clipBehavior: Clip.none,
                                   children: [
-                                    Container(
-                                      // Border seleksi digambar DI DALAM bubble
-                                      // (sama seperti private chat) — dulu di
-                                      // Container pembungkus sehingga border
-                                      // memanjang sampai ujung layar.
-                                      child: RoomMessageBubble(
+                                    // Border seleksi digambar DI DALAM bubble
+                                    // (sama seperti private chat) — dulu ada
+                                    // Container pembungkus sehingga border
+                                    // memanjang sampai ujung layar.
+                                    RoomMessageBubble(
                                         key: mkey,
                                         msg: m,
                                         isMe: isMe,
@@ -214,7 +215,6 @@ mixin _RcBuildMx on _RoomChatBase {
                                         highlightMentionAll:
                                             isPrivateRoom && canModerate,
                                       ),
-                                    ),
                                     if (starred)
                                       Positioned(
                                         top: -6,
@@ -305,6 +305,7 @@ mixin _RcBuildMx on _RoomChatBase {
     );
   }
 
+  @override
   PreferredSizeWidget _buildRoomAppBar(BuildContext context, S s) {
     // Tombol aksi RAPAT (tanpa padding bawaan IconButton 48px) — kamera &
     // anggota berdempet tanpa jeda.
@@ -389,10 +390,11 @@ mixin _RcBuildMx on _RoomChatBase {
                   listen: false,
                 ).read(roomProvider.notifier).stopBroadcast(widget.room.id);
                 await _broadcastSession?.stop();
-                if (mounted)
+                if (mounted) {
                   setState(() {
                     _broadcastSession = null;
                   });
+                }
               },
             ),
           tightIcon(
@@ -513,7 +515,7 @@ mixin _RcBuildMx on _RoomChatBase {
       return;
     }
     if (!mounted) return;
-    if (container.read(chatRiverpod.chatProvider.notifier).isBlocked(msg.senderId)) {
+    if (container.read(chat_riverpod.chatProvider.notifier).isBlocked(msg.senderId)) {
       final s = container.read(localeProvider).s;
       showChatSnack(context, s.msgBlocked);
       return;

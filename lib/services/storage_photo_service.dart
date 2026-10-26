@@ -7,7 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 
 /// Penyimpanan foto chat di Supabase Storage.
-/// DB hanya menyimpan PATH (mis. 'chat/<chatId>/<timestamp>.jpg'), bukan
+/// DB hanya menyimpan PATH (mis. 'chat/`<chatId>`/`<timestamp>`.jpg'), bukan
 /// base64 — menghemat ukuran DB drastis. Saat tampil, app download dari bucket.
 ///
 /// Kompatibilitas: helper ini hanya menangani PATH. Base64 lama (sebelum

@@ -129,7 +129,7 @@ class CryptoNative {
     }
   }
 
-  /// Decrypt BANYAK file sekaligus (Map<messageId, path>) → Map<messageId, b64>.
+  /// Decrypt BANYAK file sekaligus (Map`<messageId, path>`) → Map`<messageId, b64>`.
   static Future<Map<String, String>?> decryptFiles(
     Map<String, String> paths,
   ) async {

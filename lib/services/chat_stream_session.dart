@@ -663,8 +663,9 @@ class ChatStreamSession {
     /// yang sudah lewat RLS, atau baris hasil fetch by id) ke list sesi.
     void ingestIncoming(MessageModel msg) {
       if (_current.any((m) => m.id == msg.id)) return; // dedupe
-      if (_hiddenCutoff != null && !msg.timestamp.isAfter(_hiddenCutoff!))
+      if (_hiddenCutoff != null && !msg.timestamp.isAfter(_hiddenCutoff!)) {
         return;
+      }
       // PENTING (perf): JANGAN `await` unduh/thumbnail di jalur realtime —
       // dulu pesan foto menunggu unduh full-res selesai SEBELUM ditampilkan
       // (dan event berikutnya ikut ngantre), jadi pesan masuk terasa

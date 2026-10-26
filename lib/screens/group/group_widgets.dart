@@ -16,7 +16,7 @@ import '../../widgets/message/photo_prefetch.dart';
 
 class GroupCard extends ConsumerWidget {
   final RoomModel room;
-  const GroupCard({required this.room});
+  const GroupCard({super.key, required this.room});
 
   int get _daysLeft {
     if (room.expiresAt == null) return 0;
@@ -154,11 +154,13 @@ class GroupCard extends ConsumerWidget {
         password: room.hasPassword ? pwCtrl.text.trim() : null,
       );
       if (res['ok'] == true) {
-        if (res['points'] != null)
+        if (res['points'] != null) {
           points.setPoints((res['points'] as num).toInt());
+        }
         final charged = (res['charged'] as num?)?.toInt() ?? 0;
-        if (charged > 0 && context.mounted)
+        if (charged > 0 && context.mounted) {
           points.showPointsToast(context, s.coinSentToast(charged));
+        }
         if (context.mounted) {
           final navKey = navKeyRoom(room.id);
           if (tryClaimNav(navKey)) {
@@ -249,8 +251,9 @@ class GroupCard extends ConsumerWidget {
       }
       try {
         final res = await rooms.extendRoom(room.id);
-        if (res['points'] != null)
+        if (res['points'] != null) {
           points.setPoints((res['points'] as num).toInt());
+        }
         messenger.showSnackBar(SnackBar(content: Text(s.roomExtended)));
       } catch (e) {
         messenger.showSnackBar(SnackBar(content: Text(s.errSendCoin)));
@@ -492,7 +495,7 @@ class GroupCard extends ConsumerWidget {
 class GroupSheetIcon extends StatelessWidget {
   final IconData icon;
   final Color color;
-  const GroupSheetIcon({required this.icon, required this.color});
+  const GroupSheetIcon({super.key, required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {

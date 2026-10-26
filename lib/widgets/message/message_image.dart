@@ -781,7 +781,7 @@ class _MessageImageState extends State<MessageImage> {
         barrierColor: null,
         transitionDuration: const Duration(milliseconds: 200),
         reverseTransitionDuration: const Duration(milliseconds: 160),
-        pageBuilder: (_, __, ___) => PhotoViewerScreen(
+        pageBuilder: (_, _, _) => PhotoViewerScreen(
           bytes: decoded.bytes,
           fullLoader: () =>
               PhotoCache.instance.load(widget.chatKey, widget.messageId),
@@ -790,7 +790,7 @@ class _MessageImageState extends State<MessageImage> {
               ? 0
               : widget.galleryIndex.clamp(0, gallery.length - 1),
         ),
-        transitionsBuilder: (_, anim, __, child) {
+        transitionsBuilder: (_, anim, _, child) {
           final curved = CurvedAnimation(
             parent: anim,
             curve: Curves.easeOutCubic,

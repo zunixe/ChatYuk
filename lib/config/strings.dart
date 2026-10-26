@@ -20,6 +20,7 @@ class S
         SAuthMx,
         SPointsMx,
         SSocialMx {
+  @override
   final bool isId;
   // ignore: prefer_const_constructors_in_immutables
   S({required this.isId});

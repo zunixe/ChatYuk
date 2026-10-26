@@ -2,6 +2,7 @@ part of '../admin_chat_view_screen.dart';
 
 
 mixin _AcDataMx on _AdminBase {
+  @override
   bool _applyMessages() {
     if (!mounted) return false;
     final admin = ProviderScope.containerOf(
@@ -112,6 +113,7 @@ mixin _AcDataMx on _AdminBase {
   /// Delegasi tipis ke [computeMonitorLeftUid] (fungsi murni, terkunci test).
   /// JANGAN menaruh logika di sini — dulu tiap lawan mengirim pesan,
   /// `_leftUid` berubah → SEMUA bubble berpindah sisi.
+  @override
   String? _computeLeftUid(List<String> senders) => computeMonitorLeftUid(
     participantOrder: widget.participantOrder,
     chatId: widget.chatId,
@@ -138,6 +140,7 @@ mixin _AcDataMx on _AdminBase {
 
   /// Lawan bicara pengirim di chat 1:1 (uid satunya). Null bila tak jelas
   /// (bukan format uid1_uid2) → pesan fallback centang-1.
+  @override
   String? _recipientOf(String senderId) {
     final parts = widget.chatId.split('_');
     if (parts.length != 2) return null;
@@ -152,6 +155,7 @@ mixin _AcDataMx on _AdminBase {
   /// Tanpa [force], kalau pesan sudah ada di cache lokal (memori/SQLite),
   /// layar TIDAK menembak server — pesan lama dari lokal, yang baru lewat
   /// poll/realtime. Inilah yang bikin buka ulang chat terasa instan.
+  @override
   Future<void> _fetch({bool force = false}) async {
     final admin = ProviderScope.containerOf(
       context,
@@ -253,6 +257,7 @@ mixin _AcDataMx on _AdminBase {
     }
   }
 
+  @override
   Future<void> _poll() async {
     // Tumpukan poll saat jaringan lambat = RPC bertubi + rebuild
     // beruntun. Satu poll jalan dalam satu waktu.
@@ -438,6 +443,7 @@ mixin _AcDataMx on _AdminBase {
     });
   }
 
+  @override
   Future<void> _retryImage(String msgId) async {
     final msg = _msgs.where((m) => m.id == msgId).firstOrNull;
     if (msg == null || !mounted) return;
@@ -463,6 +469,7 @@ mixin _AcDataMx on _AdminBase {
 
   // ── Realtime ──────────────────────────────────────────────────────────────
 
+  @override
   void _subscribeRealtime() {
     // Lewat provider (bukan Supabase.instance langsung) supaya test bisa
     // menyuntik client mock — perilaku produksi identik.
@@ -546,6 +553,7 @@ mixin _AcDataMx on _AdminBase {
   /// — gaya sama dengan kartu di daftar monitor agar header rapi. Tap salah
   /// satu avatar → buka PROFIL-nya (UserInfoScreen, sama seperti tap avatar
   /// di private chat) — bukan zoom foto.
+  @override
   Widget _headerAvatarPair() {
     final uids = widget.participantOrder
         .where((u) => u.isNotEmpty)
@@ -616,6 +624,7 @@ mixin _AcDataMx on _AdminBase {
 
   /// Tahan bubble pesan → salin teks (sama seperti "salin" di private chat).
   /// Monitor read-only: langsung salin + toast, tanpa mode seleksi.
+  @override
   Future<void> _copyMessage(MessageModel msg) async {
     if (msg.text.isEmpty || !mounted) return;
     await Clipboard.setData(ClipboardData(text: msg.text));

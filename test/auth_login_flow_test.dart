@@ -24,7 +24,7 @@ User _user({
       'aud': 'authenticated',
       'created_at': '2026-01-01T00:00:00.000Z',
       'is_anonymous': anon,
-      if (email != null) 'email': email,
+      'email': ?email,
       if (confirmed) 'email_confirmed_at': '2026-01-01T00:00:00.000Z',
       'identities': [],
     })!;

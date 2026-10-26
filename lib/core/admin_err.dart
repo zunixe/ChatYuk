@@ -38,7 +38,7 @@ AdminErrKind classifyAdminError(Object? e) {
   if (e is HttpException) return AdminErrKind.server;
 
   if (e is PostgrestException) {
-    final code = '${e.code ?? ''}';
+    final code = e.code ?? '';
     final msg = e.message.toLowerCase();
     // Guard RPC admin melempar 'Unauthorized' (P0001) — itu sesi, bukan koneksi.
     if (msg.contains('unauthorized') || msg.contains('forbidden')) {

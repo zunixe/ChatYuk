@@ -12,7 +12,7 @@ class StoryVisibilityBadge extends ConsumerWidget {
 
   /// Slide private (dulu "dihapus") — hanya pembuat (atau admin) yang lihat.
   final bool ownerOnly;
-  const StoryVisibilityBadge({
+  const StoryVisibilityBadge({super.key, 
     required this.visibility,
     this.ownerOnly = false,
   });
@@ -66,7 +66,7 @@ class StoryCircleBtn extends StatefulWidget {
   final VoidCallback? onTap;
   final bool popOnTap;
 
-  const StoryCircleBtn({
+  const StoryCircleBtn({super.key, 
     required this.icon,
     required this.color,
     this.busy = false,
@@ -198,7 +198,7 @@ class StoryHeaderBtn extends StatelessWidget {
   final double iconSize;
   final VoidCallback onPressed;
 
-  const StoryHeaderBtn({
+  const StoryHeaderBtn({super.key, 
     required this.icon,
     this.iconSize = 20,
     required this.onPressed,

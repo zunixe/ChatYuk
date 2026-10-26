@@ -88,11 +88,12 @@ class _AdminChatListScreenState extends ConsumerState<AdminChatListScreen>
       if (_refreshTimer == null) {
         unawaited(
           resumeWarmup().then((_) {
-            if (mounted)
+            if (mounted) {
               ProviderScope.containerOf(
                 context,
                 listen: false,
               ).read(adminProvider).fetchActiveCalls();
+            }
           }),
         );
         _startTimers();

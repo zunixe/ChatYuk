@@ -101,8 +101,9 @@ mixin _CallSessionMediaMx on _CallBase {
             if (_closed) return;
             try {
               final cur = _pc?.connectionState;
-              if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected)
+              if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
                 return;
+              }
               if (cur == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
                   cur == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
                 // Relay-only gagal menetap → coba all-candidates (P2P) dulu;
@@ -318,6 +319,7 @@ mixin _CallSessionMediaMx on _CallBase {
   /// Sampling RTT audio (getStats inbound-rtp) 3× tiap 5 dtk setelah connect.
   /// Nilai terburuk dicatat sebagai `call.audioRttMs` — pembanding latency
   /// suara sebelum/sesudah optimasi Opus. Best-effort, tanpa mengganggu call.
+  @override
   Future<void> _sampleAudioRtt() async {
     double? worst;
     for (var i = 0; i < 3; i++) {

@@ -367,7 +367,7 @@ class ChatFilterChipBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         physics: const BouncingScrollPhysics(),
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
           final it = items[i];
           return GestureDetector(

@@ -11,7 +11,7 @@ import '../../../widgets/sheet_drag_handle.dart';
 import '../../../providers/riverpod/admin_provider.dart';
 
 class AdminRegistrationsSheet extends ConsumerStatefulWidget {
-  const AdminRegistrationsSheet();
+  const AdminRegistrationsSheet({super.key});
   @override
   ConsumerState<AdminRegistrationsSheet> createState() => AdminRegistrationsSheetState();
 }

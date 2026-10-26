@@ -238,7 +238,7 @@ class CallSession extends _CallBase
   /// Belum membuat offer — caller menunggu callee jawab.
   Future<void> init() async {
     dlog(
-      '[ICE] ===== init#${hashCode} start isCaller=$isCaller callId=$callId (pc=${_pc != null}) =====',
+      '[ICE] ===== init#$hashCode start isCaller=$isCaller callId=$callId (pc=${_pc != null}) =====',
     );
     if (_pc != null) {
       dlog('[ICE] init() already ran (pc exists) -> skip to avoid phase reset');
@@ -277,7 +277,7 @@ class CallSession extends _CallBase
           if (isCaller && _phase == CallPhase.ringing) {
             _ringTimer?.cancel();
             _phase = CallPhase.connecting;
-            dlog('[SESSION] answered#${hashCode} caller -> connecting');
+            dlog('[SESSION] answered#$hashCode caller -> connecting');
             notifyListeners();
             _createOffer();
           }
@@ -311,7 +311,7 @@ class CallSession extends _CallBase
     if (isCaller) {
       _phase = CallPhase.ringing;
       dlog(
-        '[SESSION] init#${hashCode} tail -> ringing (caller)',
+        '[SESSION] init#$hashCode tail -> ringing (caller)',
       ); // Caller menyerah setelah 30 detik tidak dijawab → cancel.
       _ringTimer = Timer(const Duration(seconds: 30), () {
         if (_closed || _phase != CallPhase.ringing) return;
@@ -331,7 +331,7 @@ class CallSession extends _CallBase
       });
     } else {
       _phase = CallPhase.connecting;
-      dlog('[SESSION] init#${hashCode} tail -> connecting (callee)');
+      dlog('[SESSION] init#$hashCode tail -> connecting (callee)');
       // RACE: penelepon bisa menekan akhiri SETELAH cek status awal di atas
       // tapi SEBELUM langganan realtime benar-benar aktif — Realtime tidak
       // me-replay event lama → penerima nyangkut "menghubungkan…" padahal
@@ -376,6 +376,7 @@ class CallSession extends _CallBase
   /// dinegosiasikan — P2P di jaringan sama (WiFi/hotspot) bisa tersambung
   /// walau TURN tak terjangkau. Cukup SEKALI per sesi (guard
   /// `_iceAllCandidatesTried`).
+  @override
   Future<void> _retryWithAllCandidates() async {
     if (_closed) return;
     _iceAllCandidatesTried = true;
@@ -448,6 +449,7 @@ class CallSession extends _CallBase
   /// lolos throttle 8 dtk menutup pc lama → audio peserta putus sesaat
   /// ("suara sempat hilang, muncul lagi"). Lihat `watch_policy.dart`.
 
+  @override
   Future<void> _syncAll() async {
     if (_closed) return;
     _touchHeartbeat();
@@ -566,6 +568,7 @@ class CallSession extends _CallBase
   // Hanya PEMANGGIL (isCaller) yang ditagih. Tick tiap menit; server
   // memutuskan biaya dari answered_at. Bila server bilang can_continue=false
   // → akhiri call ini (saldo habis).
+  @override
   void _startBilling() {
     if (!isCaller) return;
     _billingTimer?.cancel();
@@ -609,6 +612,7 @@ class CallSession extends _CallBase
   // menyentuh tombol. HANYA audio (video butuh layar hidup). Best-effort.
   bool _proximityOn = false;
 
+  @override
   void _setProximity(bool on) {
     if (callType != 'audio') return; // video: layar harus tetap hidup
     if (_proximityOn == on) return;
@@ -616,6 +620,7 @@ class CallSession extends _CallBase
     unawaited(_service.callUi.setProximity(on).catchError((_) {}));
   }
 
+  @override
   void _finish(CallEndReason reason) {
     if (_closed) return;
     dlog('[CallService] _finish reason=$reason phase=$_phase');

@@ -1,6 +1,7 @@
 part of 'call_session.dart';
 
 mixin _CallSessionWatchMx on _CallBase {
+  @override
   Future<void> _handleWatchRequest(Map<String, dynamic> msg) async {
     final watcher = msg['from'] as String?;
     final me = _service.uid;
@@ -132,6 +133,7 @@ mixin _CallSessionWatchMx on _CallBase {
     );
   }
 
+  @override
   Future<void> _handleWatchAnswer(Map<String, dynamic> msg) async {
     final watcher = msg['from'] as String?;
     final me = _service.uid;
@@ -162,6 +164,7 @@ mixin _CallSessionWatchMx on _CallBase {
     }
   }
 
+  @override
   Future<void> _handleWatchCandidate(Map<String, dynamic> msg) async {
     final me = _service.uid;
     if (msg['to'] != me) return;

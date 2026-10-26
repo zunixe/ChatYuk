@@ -3,6 +3,7 @@ part of '../private_chats_screen.dart';
 
 mixin _PcBuildMx on _PcBase {
 
+  @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('ChatList');
     ref.watch(themeProvider);
@@ -143,7 +144,7 @@ mixin _PcBuildMx on _PcBase {
                 // Baris arsip hanya rebuild saat jumlah arsip berubah.
                 ValueListenableBuilder<int>(
                   valueListenable: _archivedNotifier,
-                  builder: (_, count, __) => count > 0
+                  builder: (_, count, _) => count > 0
                       ? _archivedToggle(s, count)
                       : const SizedBox.shrink(),
                 ),

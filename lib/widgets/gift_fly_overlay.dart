@@ -15,14 +15,14 @@ class GiftFlyOverlay extends StatefulWidget {
 
 /// Controller: room screen memanggil [push] saat pesan type='gift' masuk.
 class GiftFlyController extends ChangeNotifier {
-  final List<_FlyItem> _flies = [];
+  final List<GiftFlyItem> _flies = [];
   int _seq = 0;
 
   /// Kombo aktif: giftId → (count, lastAt)
   final Map<String, ({int count, DateTime at})> _combos = {};
   static const _comboWindow = Duration(seconds: 3);
 
-  List<_FlyItem> get flies => List.unmodifiable(_flies);
+  List<GiftFlyItem> get flies => List.unmodifiable(_flies);
 
   /// Kombo aktif untuk ditampilkan (yang terakhir, masih dalam window).
   (GiftItem, int)? get activeCombo {
@@ -55,7 +55,7 @@ class GiftFlyController extends ChangeNotifier {
 
     // fly item (max 5 biar gak numpuk)
     _seq++;
-    _flies.add(_FlyItem(_seq, gift, senderName, qty));
+    _flies.add(GiftFlyItem(_seq, gift, senderName, qty));
     while (_flies.length > 5) {
       _flies.removeAt(0);
     }
@@ -76,12 +76,12 @@ class GiftFlyController extends ChangeNotifier {
   }
 }
 
-class _FlyItem {
+class GiftFlyItem {
   final int id;
   final GiftItem gift;
   final String sender;
   final int qty;
-  _FlyItem(this.id, this.gift, this.sender, this.qty);
+  GiftFlyItem(this.id, this.gift, this.sender, this.qty);
 }
 
 class _GiftFlyOverlayState extends State<GiftFlyOverlay> {
@@ -166,7 +166,7 @@ class _ComboBadge extends StatelessWidget {
 class _FlyBanner extends StatefulWidget {
   const _FlyBanner({required this.item});
 
-  final _FlyItem item;
+  final GiftFlyItem item;
 
   @override
   State<_FlyBanner> createState() => _FlyBannerState();

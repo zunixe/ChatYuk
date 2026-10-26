@@ -5,6 +5,7 @@ mixin _StoryNavMx on _StoryBase {
   List<int> _windowIndices() =>
       storyPreloadWindow(_slide, _slides.length, _preloadAhead);
 
+  @override
   Future<void> _preloadAdjacent() async {
     await _preloadWindow(includeActive: false);
     // Retry tetangga yang gagal tanpa mengganggu gambar aktif.
@@ -68,6 +69,7 @@ mixin _StoryNavMx on _StoryBase {
 
   /// Muat ulang foto slide aktif bila masih kosong (dipanggil saat
   /// pindah slide) — jaring pengaman kedua selain retry _preload.
+  @override
   Future<void> _reloadCurrentIfMissing() async {
     if (_slides.isEmpty || _slide < 0 || _slide >= _slides.length) return;
     final path = _slides[_slide].imagePath;
@@ -79,6 +81,7 @@ mixin _StoryNavMx on _StoryBase {
     }
   }
 
+  @override
   Future<Uint8List?> _bytes(String path) async {
     final cached = _slideBytesCache[path];
     if (cached != null) return cached;
@@ -118,6 +121,7 @@ mixin _StoryNavMx on _StoryBase {
     }
   }
 
+  @override
   void _startTimer({Duration? duration}) {
     _progress.stop();
     // Saat user masih menggeser PageView, jangan mulai timer — biar ScrollEnd
@@ -128,6 +132,7 @@ mixin _StoryNavMx on _StoryBase {
     _progress.forward(from: 0);
   }
 
+  @override
   void _pause() {
     if (_paused) return;
     _paused = true;
@@ -135,6 +140,7 @@ mixin _StoryNavMx on _StoryBase {
     unawaited(_videoCtrl?.pause());
   }
 
+  @override
   void _resume() {
     if (!_paused) return;
     _paused = false;
@@ -154,6 +160,7 @@ mixin _StoryNavMx on _StoryBase {
   /// Di luar rentang = abaikan (tidak pindah author — itu tugas _next).
   /// Timer hanya jalan untuk slide GAMBAR. Slide video ditangani
   /// `_syncVideo` (mulai timer setelah video siap).
+  @override
   void _startTimerIfImage() {
     // `_slide` valid & slides non-kosong.
     if (_slide >= 0 && _slide < _slides.length && !_slides[_slide].isVideo) {
@@ -163,6 +170,7 @@ mixin _StoryNavMx on _StoryBase {
     }
   }
 
+  @override
   void _goToSlide(int i) {
     if (i < 0 || i >= _slides.length || i == _slide) return;
     setState(() => _slide = i);
@@ -172,6 +180,7 @@ mixin _StoryNavMx on _StoryBase {
     unawaited(_syncVideo());
   }
 
+  @override
   void _next() {
     if (_slide < _slides.length - 1) {
       setState(() => _slide++);
@@ -184,6 +193,7 @@ mixin _StoryNavMx on _StoryBase {
     }
   }
 
+  @override
   void _prev() {
     if (_slide > 0) {
       setState(() => _slide--);
@@ -223,6 +233,7 @@ mixin _StoryNavMx on _StoryBase {
   /// Kumpulkan id slide yang ditonton (dedupe) — dikirim bulk saat ganti
   /// author / keluar viewer. Update ring tray lokal sudah instan.
   /// Ghost-mode admin: lihat story orang TIDAK dikumpulkan sama sekali.
+  @override
   void _markSeen() {
     if (_isAdminCached && !_own) return;
     if (_slide >= _slides.length) return;
@@ -261,6 +272,7 @@ mixin _StoryNavMx on _StoryBase {
     _loadPerson();
   }
 
+  @override
   Future<void> _confirmDelete() async {
     final s = ProviderScope.containerOf(
       context,
@@ -289,6 +301,7 @@ mixin _StoryNavMx on _StoryBase {
     if (ok == true) _deleteSlide();
   }
 
+  @override
   Future<void> _showViewers() async {
     // Guard tumpuk: fetch lambat + tap berkali-kali = N sheet bertumpuk
     // (terlihat seperti hang — harus tutup satu-satu).

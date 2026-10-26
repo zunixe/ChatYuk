@@ -2,6 +2,7 @@ part of '../profile_screen.dart';
 
 
 mixin _ProfileBodyMx on _ProfileBase {
+  @override
   Widget _buildBodySliver(
     BuildContext context,
     S s,
@@ -636,7 +637,7 @@ mixin _ProfileBodyMx on _ProfileBase {
                             ),
                           ),
                           rv.Consumer(
-                            builder: (ctx, ref, __) {
+                            builder: (ctx, ref, _) {
                               final c = ref.watch(
                                 socialProvider.select(
                                   (st) => st.friendRequestCount,
@@ -706,7 +707,7 @@ mixin _ProfileBodyMx on _ProfileBase {
                         style: AppText.bodyStrong,
                       ),
                       subtitle: Text(
-                        '${s.subscribePrice(profile?.subscriptionPrice ?? 0)}',
+                        s.subscribePrice(profile?.subscriptionPrice ?? 0),
                         style: AppText.caption.copyWith(
                           color: AppTheme.textSecondary,
                         ),

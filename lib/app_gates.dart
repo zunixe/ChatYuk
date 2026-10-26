@@ -2,7 +2,7 @@ part of 'app.dart';
 
 class AppFontGate extends ConsumerWidget {
   final Widget Function(BuildContext context) builder;
-  const AppFontGate({required this.builder});
+  const AppFontGate({super.key, required this.builder});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -14,7 +14,7 @@ class AppFontGate extends ConsumerWidget {
 /// Gerbang bahasa (Riverpod) — subtree root rebuild saat bahasa berganti.
 class AppLocaleGate extends ConsumerWidget {
   final Widget Function(BuildContext context) builder;
-  const AppLocaleGate({required this.builder});
+  const AppLocaleGate({super.key, required this.builder});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -27,7 +27,7 @@ class AppLocaleGate extends ConsumerWidget {
 /// gelap/terang berubah (bukan saat notify AuthNotifier lain).
 class AppThemeModeGate extends ConsumerWidget {
   final Widget Function(BuildContext context, ThemeMode mode) builder;
-  const AppThemeModeGate({required this.builder});
+  const AppThemeModeGate({super.key, required this.builder});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -313,7 +313,7 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
 /// buffer clear abu 2-4 frame saat GPU belum siap.
 class AppSwapMask extends StatefulWidget {
   final Widget child;
-  const AppSwapMask({required this.child});
+  const AppSwapMask({super.key, required this.child});
   @override
   State<AppSwapMask> createState() => AppSwapMaskState();
 }
@@ -325,7 +325,7 @@ class AppSwapMask extends StatefulWidget {
 /// popup hilang sendiri. Back button juga diblok (canPop: false).
 class AppProfileGate extends StatelessWidget {
   final Widget child;
-  const AppProfileGate({required this.child});
+  const AppProfileGate({super.key, required this.child});
   @override
   Widget build(BuildContext context) {
     final screenH = MediaQuery.sizeOf(context).height;

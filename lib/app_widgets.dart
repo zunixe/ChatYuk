@@ -3,7 +3,7 @@ part of 'app.dart';
 class AppBottomNav extends ConsumerWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
-  const AppBottomNav({required this.currentIndex, required this.onTap});
+  const AppBottomNav({super.key, required this.currentIndex, required this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -225,7 +225,7 @@ class AppBadgedIcon extends StatelessWidget {
   final Color? color;
   final Color badgeColor;
   final bool badgePill;
-  const AppBadgedIcon({
+  const AppBadgedIcon({super.key, 
     required this.icon,
     required this.count,
     this.color,
@@ -277,7 +277,7 @@ class AppBadgedIcon extends StatelessWidget {
 /// (drawable-v21) supaya system splash → Flutter splash menyatu mulus,
 /// tidak ada lagi layar hitam polos di tengah cold start.
 class AppSplashReplica extends StatelessWidget {
-  const AppSplashReplica();
+  const AppSplashReplica({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -303,7 +303,7 @@ class AppSplashReplica extends StatelessWidget {
 /// background gelap jadi kilatan putih besar yang makin terlihat saat
 /// cold start (jeda lama → loading lebih lama).
 class AppAuthSkeletonScreen extends StatelessWidget {
-  const AppAuthSkeletonScreen();
+  const AppAuthSkeletonScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -381,8 +381,8 @@ class AppAuthSkeletonScreen extends StatelessWidget {
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       itemCount: 3,
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
-                      itemBuilder: (_, __) => Container(
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
+                      itemBuilder: (_, _) => Container(
                         width: 64,
                         height: 96,
                         decoration: BoxDecoration(

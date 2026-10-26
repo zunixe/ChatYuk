@@ -101,15 +101,15 @@ mixin ChatServiceRoomMx on ChatBase {
               type == 'video_once_expired') &&
           videoPoster.isNotEmpty)
         'video_poster': videoPoster,
-      if (repliedToId != null) 'replied_to_id': repliedToId,
-      if (repliedToText != null) 'replied_to_text': repliedToText,
-      if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,
+      'replied_to_id': ?repliedToId,
+      'replied_to_text': ?repliedToText,
+      'replied_to_sender_name': ?repliedToSenderName,
       if (repliedToMeta != null && repliedToMeta.isNotEmpty)
         'replied_to_meta': repliedToMeta,
       if (isForwarded) 'is_forwarded': true,
       if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
-      if (poll != null) 'poll': poll,
-      if (contact != null) 'contact': contact,
+      'poll': ?poll,
+      'contact': ?contact,
     }).select('id').maybeSingle();
     return (inserted as Map?)?['id']?.toString();
   }
@@ -125,6 +125,28 @@ mixin ChatServiceRoomMx on ChatBase {
     } catch (e) {
       dlog('[ChatService] updateRoomLocationMessage error: $e');
       return false;
+    }
+  }
+
+  /// Boleh kirim MEDIA di room ini? (server = sumber kebenaran)
+  ///
+  /// Dipakai klien untuk menonaktifkan tombol foto/video di room PUBLIK bila
+  /// akun belum memenuhi syarat (umur >=3 hari & >=20 pesan room publik).
+  /// Trigger `enforce_room_media_gate` tetap jadi penjaga terakhir.
+  /// null = gagal RPC (jangan blokir UI; server yang menolak).
+  Future<bool?> canSendRoomMedia(String roomId) async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) return false;
+    try {
+      final res = await _sb.rpc(
+        'can_send_room_media',
+        params: {'p_room': roomId, 'p_uid': uid},
+      );
+      if (res is bool) return res;
+      return null;
+    } catch (e) {
+      dlog('[ChatService] canSendRoomMedia error: $e');
+      return null;
     }
   }
 

@@ -273,7 +273,7 @@ mixin SScreenMx {
 
   /// Nama room berdasarkan id (fallback ke nama DB jika tidak ada translasi)
   String roomName(String id) {
-    if (isId)
+    if (isId) {
       return const {
             'general': 'General',
             'curhat': 'Curhat',
@@ -288,6 +288,7 @@ mixin SScreenMx {
             'jualbeli': 'Jual Beli',
           }[id] ??
           id;
+    }
     return const {
           'general': 'General',
           'curhat': 'Confessions',
@@ -305,7 +306,7 @@ mixin SScreenMx {
   }
 
   String roomDesc(String id) {
-    if (isId)
+    if (isId) {
       return const {
             'general': 'Obrolan umum untuk semua',
             'curhat': 'Cerita dan curhat bareng',
@@ -320,6 +321,7 @@ mixin SScreenMx {
             'jualbeli': 'Jual beli barang & jasa',
           }[id] ??
           '';
+    }
     return const {
           'general': 'General chat for everyone',
           'curhat': 'Share your stories & feelings',
@@ -634,6 +636,10 @@ mixin SScreenMx {
   String get viewOnceViewing => isId ? 'Menutup dalam' : 'Closing in';
   String viewOnceClosingIn(int secs) =>
       isId ? 'Menutup dalam $secs dtk' : 'Closing in ${secs}s';
+  /// Gate media room publik: akun baru belum boleh kirim foto/video.
+  String get roomMediaBlocked => isId
+      ? 'Akun baru belum bisa kirim foto/video di room publik. Aktiflah 3 hari dan kirim 20 pesan di room publik dulu.'
+      : 'New accounts cannot send photos/videos in public rooms yet. Be active for 3 days and send 20 messages in public rooms first.';
   String get msgBlocked => isId
       ? 'User ini diblokir, tidak bisa kirim pesan'
       : 'This user is blocked, cannot send message';

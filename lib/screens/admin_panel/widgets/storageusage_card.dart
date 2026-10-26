@@ -14,7 +14,7 @@ import 'tablesize_sheet.dart';
 import '../../../providers/riverpod/admin_provider.dart';
 
 class AdminStorageUsageCard extends ConsumerStatefulWidget {
-  const AdminStorageUsageCard();
+  const AdminStorageUsageCard({super.key});
   @override
   ConsumerState<AdminStorageUsageCard> createState() => AdminStorageUsageCardState();
 }

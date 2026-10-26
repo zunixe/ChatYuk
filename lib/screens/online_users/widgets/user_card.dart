@@ -276,7 +276,7 @@ class _UserCardState extends ConsumerState<UserCard> {
                       // Lingkaran belakang ikon transparan — ikon saja.
                       if (user.isRegistered)
                         rv.Consumer(
-                          builder: (ctx, ref, __) {
+                          builder: (ctx, ref, _) {
                             final (:isFriend, :pending) = ref.watch(
                               socialProvider.select((s) => (
                                 isFriend: s.isFriend(user.uid),

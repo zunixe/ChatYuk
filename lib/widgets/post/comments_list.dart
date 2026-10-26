@@ -18,7 +18,7 @@ class CommentSheet extends ConsumerStatefulWidget {
   final TextEditingController ctrl;
   final GlobalKey<CommentsListState> commentsKey;
   final Future<void> Function(String text, {int? parentId}) onSubmit;
-  const CommentSheet({
+  const CommentSheet({super.key, 
     required this.postId,
     required this.ctrl,
     required this.commentsKey,

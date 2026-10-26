@@ -78,7 +78,7 @@ mixin AdminMarketingMx on AdminBase {
     _notifyMarketing();
   }
 
-  /// Kirim (enqueue) campaign. Return kode: 'ok:<n>' | alasan gagal.
+  /// Kirim (enqueue) campaign. Return kode: 'ok:`<n>`' | alasan gagal.
   Future<String> sendCampaign(int id) async {
     try {
       final r = await _service.emailEnqueue(id);

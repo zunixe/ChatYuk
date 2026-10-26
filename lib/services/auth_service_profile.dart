@@ -274,11 +274,11 @@ mixin AuthServiceProfileMx on AuthBase {
     // membengkak dan tidak ada pesan gagal yang membingungkan user.
     final aboutText = about?.trim();
     final data = <String, dynamic>{
-      if (age != null) 'age': age,
-      if (country != null) 'country': country,
-      if (city != null) 'city': city,
-      if (nickname != null) 'nickname': nickname,
-      if (genderValue != null) 'gender': genderValue,
+      'age': ?age,
+      'country': ?country,
+      'city': ?city,
+      'nickname': ?nickname,
+      'gender': ?genderValue,
       if (aboutText != null)
         'about': aboutText.length > 150
             ? aboutText.substring(0, 150)

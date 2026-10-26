@@ -6,7 +6,7 @@ class PointsToast extends StatefulWidget {
   final String message;
   final bool isError;
   final VoidCallback onDismiss;
-  const PointsToast({
+  const PointsToast({super.key, 
     required this.message,
     this.isError = false,
     required this.onDismiss,
@@ -57,7 +57,7 @@ class PointsToastState extends State<PointsToast>
       right: 0,
       child: AnimatedBuilder(
         animation: _ctrl,
-        builder: (_, __) => FadeTransition(
+        builder: (_, _) => FadeTransition(
           opacity: _fade,
           child: SlideTransition(
             position: _slide,

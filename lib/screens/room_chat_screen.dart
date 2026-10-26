@@ -20,7 +20,7 @@ import '../widgets/poll/poll_composer_sheet.dart';
 import '../models/user_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
-import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
+import '../providers/riverpod/chat_provider.dart' as chat_riverpod;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
@@ -80,6 +80,7 @@ import '../core/cache/broadcast_state_cache.dart';
 part 'room_chat/room_chat_core.dart';
 part 'room_chat/room_chat_room.dart';
 part 'room_chat/room_chat_live.dart';
+part 'room_chat/room_chat_media_gate.dart';
 part 'room_chat/room_chat_build.dart';
 
 
@@ -108,7 +109,7 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   bool _showUsers = false;
   bool _sheetOpen = false;
   late AuthNotifier _auth;
-  late chatRiverpod.ChatNotifier _chat;
+  late chat_riverpod.ChatNotifier _chat;
   int _lastMsgCount = 0;
   PointsNotifier? _pointsProv;
   Timer? _presenceTimer;
@@ -120,6 +121,11 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   bool _pendingVideoOnce = false;
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<UserModel>> _usersStream;
+
+  /// Implementasi di mixin lain (room_chat_media_gate.dart). Dideklarasikan di
+  /// base agar bisa dipanggil dari mixin yang dipasang lebih dulu.
+  Future<void> _refreshMediaGate();
+  bool _mediaGateAllows();
   // ── Optimistic + antrean offline (centang-1 → centang-2 saat online) ──
   final List<MessageModel> _pending = [];
   final Set<String> _queuedIds = {};
@@ -146,7 +152,7 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   bool _muted = false;
   String? _highlightId;
   final Map<String, GlobalKey> _msgKeys = {};
-  chatRiverpod.ChatMessageStream? _msgsHandle;
+  chat_riverpod.ChatMessageStream? _msgsHandle;
   StreamSubscription<List<MessageModel>>? _msgsSub;
   List<MessageModel> _lastMsgs = const [];
   StreamSubscription<List<UserModel>>? _usersSub;
@@ -255,7 +261,7 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
 }
 
 class _RoomChatScreenState extends _RoomChatBase
-    with _RcCoreMx, _RcRoomMx, _RcLiveMx, _RcBuildMx {
+    with _RcCoreMx, _RcRoomMx, _RcLiveMx, _RcBuildMx, _RcMediaGateMx {
   @override
   void dispose() {
     // Reaction-bar seleksi adalah OverlayEntry full-screen di Overlay root

@@ -7,7 +7,7 @@ mixin _PcBuildMx on _PrivateChatBase {
     final ok = await ProviderScope.containerOf(
       context,
       listen: false,
-    ).read(chatRiverpod.chatProvider.notifier).deletePrivateMessage(id);
+    ).read(chat_riverpod.chatProvider.notifier).deletePrivateMessage(id);
     // Optimistic lokal: tandai terhapus SEGERA supaya UI tidak menunggu
     // realtime/refetch. DB sudah menyimpan semua id, tapi tampilan bisa
     // tertinggal (gejala "pilih beberapa, hanya 1 yang kelihatan terhapus").
@@ -25,7 +25,7 @@ mixin _PcBuildMx on _PrivateChatBase {
     final ok = await ProviderScope.containerOf(
       context,
       listen: false,
-    ).read(chatRiverpod.chatProvider.notifier).undeletePrivateMessage(id);
+    ).read(chat_riverpod.chatProvider.notifier).undeletePrivateMessage(id);
     if (ok && mounted) {
       setState(() => _localDeletedIds.remove(id));
     }
@@ -100,7 +100,7 @@ mixin _PcBuildMx on _PrivateChatBase {
     String? sentId;
     try {
       sentId = await ProviderScope.containerOf(context, listen: false)
-          .read(chatRiverpod.chatProvider.notifier)
+          .read(chat_riverpod.chatProvider.notifier)
           .sendPrivateMessage(
             chatId: widget.chatId,
             senderId: uid,
@@ -202,7 +202,7 @@ mixin _PcBuildMx on _PrivateChatBase {
   @override
   Future<bool> sendEditPersist(MessageModel editing, String raw) =>
       ProviderScope.containerOf(context, listen: false)
-          .read(chatRiverpod.chatProvider.notifier)
+          .read(chat_riverpod.chatProvider.notifier)
           .editPrivateMessage(editing.id, raw);
   @override
   void sendOnSentText() {
@@ -210,6 +210,7 @@ mixin _PcBuildMx on _PrivateChatBase {
     _schedulePendingConfirmFallback();
   }
 
+  @override
   Future<void> _fetchImageQueued(String id) async {
     try {
       await _msgsHandleFetchImage(id);
@@ -221,6 +222,7 @@ mixin _PcBuildMx on _PrivateChatBase {
     }
   }
 
+  @override
   void _trimConfirmed(Set<String> ids) {
     while (ids.length > _confirmedCap) {
       ids.remove(ids.first);
@@ -231,6 +233,7 @@ mixin _PcBuildMx on _PrivateChatBase {
   /// sumber memori (diambil yang terbaru): snapshot live `_privateChatsLast`
   /// (ter-fresh — update tiap event realtime) + `peekRawList` (hasil preload
   /// bootstrap). Tidak ada await → centang-2 tampil instan sejak buka chat.
+  @override
   void _primeReadFromCache() {
     try {
       final myUid = ProviderScope.containerOf(
@@ -241,7 +244,7 @@ mixin _PcBuildMx on _PrivateChatBase {
       final candidates = <DateTime?>[];
       // 1) Snapshot live — paling fresh di sesi ini.
       final snap = ProviderScope.containerOf(context, listen: false)
-          .read(chatRiverpod.chatProvider.notifier)
+          .read(chat_riverpod.chatProvider.notifier)
           .lastPrivateChatsSnapshot(myUid);
       if (snap != null) {
         for (final c in snap) {
@@ -268,10 +271,12 @@ mixin _PcBuildMx on _PrivateChatBase {
   }
 
   /// Slider ukuran font chat berubah → rebuild bubble & composer langsung.
+  @override
   void _onFontScaleChanged() {
     if (mounted) setState(() {});
   }
 
+  @override
   void _onCallChanged() {
     final sess = ProviderScope.containerOf(
       context,
@@ -345,6 +350,7 @@ mixin _PcBuildMx on _PrivateChatBase {
     }
   }
 
+  @override
   Future<void> _expandCall() async {
     // Guard anti tap-ganda: dua push beruntun membuat stack kacau &
     // `_callExpanded` salah reset → tombol perbesar terasa "tidak jalan".
@@ -379,10 +385,11 @@ mixin _PcBuildMx on _PrivateChatBase {
     }
   }
 
+  @override
   void _subscribeStatus() {
     _statusSub?.cancel();
     _statusSub = ProviderScope.containerOf(context, listen: false)
-        .read(chatRiverpod.chatProvider.notifier)
+        .read(chat_riverpod.chatProvider.notifier)
         .getUserStatus(widget.otherUid)
         .listen(
           (status) {
@@ -409,7 +416,7 @@ mixin _PcBuildMx on _PrivateChatBase {
               }
               _lastSeenFetchedAt = now;
               ProviderScope.containerOf(context, listen: false)
-                  .read(chatRiverpod.chatProvider.notifier)
+                  .read(chat_riverpod.chatProvider.notifier)
                   .getUserLastSeen(widget.otherUid)
                   .then((t) {
                     if (!mounted || t == null) return;
@@ -424,6 +431,7 @@ mixin _PcBuildMx on _PrivateChatBase {
         );
   }
 
+  @override
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
@@ -435,6 +443,7 @@ mixin _PcBuildMx on _PrivateChatBase {
 
   // Scroll ke atas (reverse list, offset menuju maxScrollExtent = pesan lama)
   // → trigger load pesan lama dari server.
+  @override
   void _onScrollToLoadOlder() {
     if (!_scrollCtrl.hasClients || _loadingOlder) return;
     final max = _scrollCtrl.position.maxScrollExtent;
@@ -529,6 +538,7 @@ mixin _PcBuildMx on _PrivateChatBase {
     }
   }
 
+  @override
   Widget _buildBottomBar(BuildContext context, S s) {
     // L2: baca enabled DI SINI (bukan di root build) — perub. poin tak
     // rebuild header/list; hanya composer.

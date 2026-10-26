@@ -98,6 +98,7 @@ mixin _VoiceStageMx on _VoiceBase {
   bool isSpeaking(String uid) => _speakingNow.contains(uid);
   int get speakerCount => _speakerCount;
 
+  @override
   bool _relayOnlyFor(String peerUid) =>
       relayOnlyFor(peerUid: peerUid, allCandTried: _allCandTriedPeers);
 
@@ -351,6 +352,7 @@ mixin _VoiceStageMx on _VoiceBase {
   }
 
   // ── Turun stage (tetap dengar). ──
+  @override
   Future<void> stopSpeaking({bool announce = true}) async {
     if (!_onStage) return;
     _onStage = false;
@@ -388,6 +390,7 @@ mixin _VoiceStageMx on _VoiceBase {
   }
 
   // ── Audio route: paksa speakerphone (best-effort, aman di semua env). ──
+  @override
   Future<void> _setSpeakerphone(bool on) async {
     try {
       await Helper.setSpeakerphoneOn(on);

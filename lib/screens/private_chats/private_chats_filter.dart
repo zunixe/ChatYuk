@@ -2,12 +2,13 @@ part of '../private_chats_screen.dart';
 
 
 mixin _PcFilterMx on _PcBase {
+  @override
   Widget _chatFilterBar(S s) {
     return ValueListenableBuilder<
       ({int all, int unread, int friends, int anon, int registered})
     >(
       valueListenable: _countsNotifier,
-      builder: (_, counts, __) {
+      builder: (_, counts, _) {
         return ChatFilterChipBar(
           items: [
             ChatFilterChipItem(
@@ -71,6 +72,7 @@ mixin _PcFilterMx on _PcBase {
     );
   }
 
+  @override
   Widget _archivedToggle(S s, int archivedCount) {
     // Jarak antar-kartu dipasang di LUAR InkWell. Dulu margin ada di dalam
     // InkWell → area tap/ripple meluber ~10px keluar kartu yang terlihat
@@ -122,6 +124,7 @@ mixin _PcFilterMx on _PcBase {
     );
   }
 
+  @override
   Future<void> _deleteSelected(String uid) async {
     final ids = _selected.toList();
     _clearSelection();
@@ -144,6 +147,7 @@ mixin _PcFilterMx on _PcBase {
     }
   }
 
+  @override
   Future<void> _deleteChat(String uid, String chatId) async {
     await ProviderScope.containerOf(
       context,
@@ -216,6 +220,7 @@ mixin _PcFilterMx on _PcBase {
     }
   }
 
+  @override
   bool _sameStatusMap(Map<String, String> a, Map<String, String> b) {
     if (a.length != b.length) return false;
     for (final e in a.entries) {
@@ -243,6 +248,7 @@ mixin _PcFilterMx on _PcBase {
     listen: false,
   ).read(socialProvider.notifier).friends;
 
+  @override
   void _recomputeFiltered({
     required String myUid,
     required String query,

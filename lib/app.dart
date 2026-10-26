@@ -92,7 +92,7 @@ class _ChatYukAppState extends ConsumerState<ChatYukApp> {
             // bubble chat langsung menyesuaikan tanpa restart navigasi.
             ValueListenableBuilder<double>(
               valueListenable: ChatTextScale.notifier,
-              builder: (context, _, __) => AppLocaleGate(
+              builder: (context, _, _) => AppLocaleGate(
                   builder: (context) => AppThemeModeGate(
                   builder: (context, themeMode) => MaterialApp(
                   title: 'ChatYuk',

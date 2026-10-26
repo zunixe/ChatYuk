@@ -203,12 +203,12 @@ class PostPhotoCache {
     try {
       final dir = await getApplicationDocumentsDirectory();
       _docs = dir.path;
-      final folder = Directory('${_docs}/$_folderName');
+      final folder = Directory('$_docs/$_folderName');
       if (!folder.existsSync()) folder.createSync(recursive: true);
       // Buang folder legacy (berisi thumb berformat salah) — best-effort.
       for (final legacy in _legacyFolders) {
         try {
-          final d = Directory('${_docs}/$legacy');
+          final d = Directory('$_docs/$legacy');
           if (d.existsSync()) d.deleteSync(recursive: true);
         } catch (_) {}
       }

@@ -50,6 +50,7 @@ mixin _StoryInitMx on _StoryBase {
 
   /// Sinkronkan video dengan slide aktif: init bila slide video,
   /// buang controller bila pindah ke gambar / author lain.
+  @override
   Future<void> _syncVideo() async {
     final cur = _current;
     if (cur == null || !cur.isVideo) {
@@ -176,15 +177,20 @@ mixin _StoryInitMx on _StoryBase {
     unawaited(prov.markSeenBulk(ids, author));
   }
 
+  @override
   StoryTrayItem get _item => widget.items[_person];
+  @override
   bool get _own => _item.own;
+  @override
   bool get _isAdmin => ProviderScope.containerOf(
     context,
     listen: false,
   ).read(authProvider.notifier).isRealAdmin;
+  @override
   StorySlide? get _current =>
       (_slide >= 0 && _slide < _slides.length) ? _slides[_slide] : null;
 
+  @override
   Future<void> _loadPerson() async {
     _progress.stop();
     try {

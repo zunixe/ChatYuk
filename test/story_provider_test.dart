@@ -56,7 +56,7 @@ void main() {
   group('refresh tray', () {
     test('memuat tray + loading mati + notify', () async {
       var notified = 0;
-      container.listen(storyProvider, (_, __) => notified++);
+      container.listen(storyProvider, (_, _) => notified++);
       await provider.refresh();
       expect(provider.tray.map((t) => t.authorId).toList(), ['u1']);
       expect(provider.loading, isFalse);

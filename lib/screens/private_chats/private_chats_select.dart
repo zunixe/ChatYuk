@@ -2,21 +2,25 @@ part of '../private_chats_screen.dart';
 
 
 mixin _PcSelectMx on _PcBase {
+  @override
   void _toggleSelect(String chatId) {
     setState(() {
-      if (_selected.contains(chatId))
+      if (_selected.contains(chatId)) {
         _selected.remove(chatId);
-      else
+      } else {
         _selected.add(chatId);
+      }
     });
   }
 
+  @override
   void _clearSelection() {
     setState(() => _selected.clear());
   }
 
   /// Buka private chat dari kartu list. Dipanggil AppGestureDetector (lapis
   /// luar) supaya tak bergantung InkWell di dalam Dismissible (tap lambat).
+  @override
   Future<void> _openChat(PrivateChatInfo chat) async {
     final myUid = ProviderScope.containerOf(
       context,
@@ -194,6 +198,7 @@ mixin _PcSelectMx on _PcBase {
 
   /// Ikon aksi bar seleksi gaya WhatsApp: pin, hapus, mute, arsip.
   /// Ikon = AKSI yang akan dijalankan (semua sudah pin → tawarkan unpin).
+  @override
   List<Widget> _selectionActions(String uid, S s) {
     final byId = <String, PrivateChatInfo>{
       for (final c in _lastChats) c.chatId: c,
@@ -244,6 +249,7 @@ mixin _PcSelectMx on _PcBase {
   /// [overlay] = dipakai sbg overlay di atas filter bar: margin atas 0 supaya
   /// mulai lebih ke atas & MENUTUPI penuh baris filter di belakangnya
   /// (Semua/Belum dibaca/Teman/...) — tidak ada yang nyembul.
+  @override
   Widget _selectionBar(String uid, S s, {bool overlay = false}) {
     return Container(
       margin: EdgeInsets.fromLTRB(10, overlay ? 0 : 10, 10, 10),

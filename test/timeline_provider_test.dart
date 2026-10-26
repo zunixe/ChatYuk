@@ -273,7 +273,7 @@ void main() {
       await tp.load('all', refresh: true);
 
       var notifies = 0;
-      c.listen(timelineProvider, (_, __) => notifies++);
+      c.listen(timelineProvider, (_, _) => notifies++);
       // Event update untuk post yang tidak ada di feed.
       tp.debugOnNewPost({
         'event': 'update',
@@ -296,7 +296,7 @@ void main() {
       await tp.load('all', refresh: true);
 
       var notifies = 0;
-      c.listen(timelineProvider, (_, __) => notifies++);
+      c.listen(timelineProvider, (_, _) => notifies++);
       tp.debugOnNewPost({
         'event': 'update',
         'row': {'id': 'p1', 'like_count': 5},
@@ -319,7 +319,7 @@ void main() {
       await tp.load('all', refresh: true);
 
       var notifies = 0;
-      c.listen(timelineProvider, (_, __) => notifies++);
+      c.listen(timelineProvider, (_, _) => notifies++);
       // Nilai sama dengan yang sudah ada (likeCount 0).
       tp.debugOnNewPost({
         'event': 'update',

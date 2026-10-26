@@ -101,6 +101,7 @@ mixin _AuthActionsMx on _AuthBase {
   }
 
   /// Daily-login bonus DIHAPUS (overhaul coin: tidak ada poin gratis). No-op.
+  @override
   Future<void> _claimDailyPoints() async {
     // Faucet dihapus — tidak ada bonus login. (lihat 20261001010000)
   }
@@ -112,6 +113,7 @@ mixin _AuthActionsMx on _AuthBase {
 
   /// Klaim welcome bonus (anon/register). Kirim install_id device (stabil
   /// walau reinstall) — server cegah klaim ulang per device & limit IP.
+  @override
   Future<int> _claimWelcome(String kind) async {
     try {
       final installId = await DeviceInfoService.instance.installId();
@@ -406,6 +408,7 @@ mixin _AuthActionsMx on _AuthBase {
     await _deleteLocalFcmToken();
   }
 
+  @override
   Future<void> _deleteLocalFcmToken() async {
     try {
       await FirebaseMessaging.instance
@@ -420,6 +423,7 @@ mixin _AuthActionsMx on _AuthBase {
   /// lama — stream, timer save list chat, antrean offline (memori + disk),
   /// cache pesan/foto. Dipakai logout manual (semua tombol, termasuk layar
   /// banned) DAN logout paksa (sesi mati) — jangan panggil dari screen.
+  @override
   Future<void> _logoutCleanup() async {
     try {
       await ref.read(chatProvider.notifier).reset();
@@ -429,6 +433,7 @@ mixin _AuthActionsMx on _AuthBase {
   }
 
   /// True saat sesi aktif adalah akun dummy (bukan admin).
+  @override
   bool get dummySessionActive => _auth.dummySessionActive;
 
   /// Pindah ke akun dummy (swap sesi tanpa login manual). Profile di-reload
@@ -549,6 +554,7 @@ mixin _AuthActionsMx on _AuthBase {
     _idleTimer = Timer(idleTimeout, _becomeIdle);
   }
 
+  @override
   void resetIdleTimer() {
     if (dummySessionActive) return; // status dummy dikontrol admin panel
     _isIdle = false;
@@ -653,6 +659,7 @@ mixin _AuthActionsMx on _AuthBase {
   }
 
   /// Heartbeat berkala: update last_seen di server tiap 240 detik + Presence.
+  @override
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
@@ -696,6 +703,7 @@ mixin _AuthActionsMx on _AuthBase {
   /// oom_score_adj=0) → frame pertama setelah resume tertahan ~180ms
   /// menunggu panel bangun. App yang MULUS di HP ini (Shopee/WhatsApp)
   /// justru CACHED (oom 701).
+  @override
   void _startLocationPing() {
     _locationTimer?.cancel();
     _locationTimer = Timer.periodic(const Duration(minutes: 5), (_) {
@@ -709,6 +717,7 @@ mixin _AuthActionsMx on _AuthBase {
   /// Update + catat history posisi saat status berubah jadi online
   /// (idle→online, invisible→online, panggil goOnline). Fire-and-forget,
   /// GPS dipakai kalau izin ada, else perkiraan IP.
+  @override
   Future<void> _updateLocationOnOnline() async {
     if (_disposed || dummySessionActive) return;
     if (isProfileBanned) return;
@@ -723,6 +732,7 @@ mixin _AuthActionsMx on _AuthBase {
   /// signOut / signedOut men-cancel keduanya, dan _init hanya jalan sekali
   /// saat konstruksi — tanpa ini, user aktif tetap tampil offline setelah
   /// ganti akun (last_seen basi > 30 menit).
+  @override
   void _restartPresenceTimers() {
     if (_disposed) return;
     _startHeartbeat();
@@ -735,6 +745,7 @@ mixin _AuthActionsMx on _AuthBase {
   /// auto-restore (di situ LoginScreen tidak pernah tampil). Kalau izin
   /// sudah pernah ditentukan (mis. cuma "kira-kira"), Android tidak
   /// menampilkan dialog lagi → arahkan user ke Pengaturan sekali saja.
+  @override
   Future<void> _initLocation() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -810,6 +821,7 @@ mixin _AuthActionsMx on _AuthBase {
     );
   }
 
+  @override
   void _listenProfile() {
     _profileSub?.cancel();
     _profileSub = _auth.onMyProfileUpdates().listen(
@@ -860,7 +872,7 @@ mixin _AuthActionsMx on _AuthBase {
       final prev = _profile?.avatar ?? '';
       final keep = b64.isNotEmpty ? b64 : prev;
       if (b64.isEmpty && prev.isNotEmpty) {
-        dlog('[AUTH] avatar gagal diunduh, pertahankan foto lama (${avatar})');
+        dlog('[AUTH] avatar gagal diunduh, pertahankan foto lama ($avatar)');
       }
       final finalProfile = merged.copyWith(avatar: keep);
       final uid = finalProfile.uid;
@@ -899,6 +911,7 @@ mixin _AuthActionsMx on _AuthBase {
     }
   }
 
+  @override
   void _disposeAll() {
     _disposed = true;
     _idleTimer?.cancel();

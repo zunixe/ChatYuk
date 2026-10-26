@@ -16,7 +16,7 @@ void main() {
         sb: fakeSupabaseClient(handler: h),
         cacheKey: key,
         needsPhotoFill: (_) => false,
-        downloadVoiceToCache: (_, __) async {},
+        downloadVoiceToCache: (_, _) async {},
         prefetchVoiceBytes: (_) async {},
       );
 

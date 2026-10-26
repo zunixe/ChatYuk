@@ -389,7 +389,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                       // rebuild tiap detik, bukan seluruh layar.
                       ValueListenableBuilder<String>(
                         valueListenable: _elapsed,
-                        builder: (_, v, __) => Text(
+                        builder: (_, v, _) => Text(
                           _session.phase == CallPhase.inCall
                               ? v
                               : _phaseText(s),

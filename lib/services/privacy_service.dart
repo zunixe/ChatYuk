@@ -62,7 +62,7 @@ class PrivacyService {
       final res = await _sb.rpc('privacy_can_view', params: {
         'p_owner': ownerUid,
         'p_field': field,
-        if (viewerUid != null) 'p_viewer': viewerUid,
+        'p_viewer': ?viewerUid,
       });
       return res == true;
     } catch (_) {

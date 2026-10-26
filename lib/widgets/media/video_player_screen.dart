@@ -118,7 +118,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         widget.posterBytes!,
                         fit: BoxFit.contain,
                         gaplessPlayback: true,
-                        errorBuilder: (_, __, ___) =>
+                        errorBuilder: (_, _, _) =>
                             const SizedBox.shrink(),
                       ),
                       const CircularProgressIndicator(color: Colors.white),

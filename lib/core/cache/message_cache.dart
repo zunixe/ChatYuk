@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart' show compute;
 import '../../utils.dart';
@@ -93,8 +93,8 @@ class MessageCache {
     return CryptoNative.decryptString(encoded);
   }
 
-  /// Dekripsi BANYAK foto sekaligus (baca file + decrypt) → Map<messageId, b64>.
-  /// paths = Map<messageId, pathFileEnkripsi>. Native: bytes tak masuk Dart.
+  /// Dekripsi BANYAK foto sekaligus (baca file + decrypt) → Map`<messageId, b64>`.
+  /// paths = Map`<messageId, pathFileEnkripsi>`. Native: bytes tak masuk Dart.
   Future<Map<String, String>?> decryptMany(Map<String, String> paths) async {
     return CryptoNative.decryptFiles(paths);
   }
@@ -537,7 +537,9 @@ class MessageCache {
         .getKeys()
         .where((k) => k.startsWith('chat_cache_v1_'))
         .toList();
-    for (final k in keys) await prefs.remove(k);
+    for (final k in keys) {
+      await prefs.remove(k);
+    }
   }
 }
 

@@ -10,6 +10,8 @@
 /// plugin WebRTC.
 
 /// Aksi sisi PESERTA saat menerima `watch_request` dari admin.
+library;
+
 enum WatchReplyAction {
   /// Abaikan: bukan untuk kita / belum ada media / bukan admin / baru saja
   /// dijawab (< throttle).

@@ -16,8 +16,6 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
-include: package:flutter_lints/flutter.yaml
-
   # REVIEW_2026-10-24 BUG-01: dinaikkan ke ERROR setelah 104 pelanggaran
   # dibersihkan (2026-10-24). Ini sumber crash nyata "Looking up a deactivated
   # widget's ancestor" saat user keluar layar ketika RPC/upload masih jalan.
@@ -25,6 +23,8 @@ include: package:flutter_lints/flutter.yaml
   # ScaffoldMessenger SEBELUM await, atau guard `if (!mounted) return;`.
   errors:
     use_build_context_synchronously: error
+
+include: package:flutter_lints/flutter.yaml
 
 linter:
   # The lint rules applied to this project can be customized in the
@@ -40,6 +40,14 @@ linter:
   rules:
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+
+    # SENGAJA DIMATIKAN (2026-10-26): kode ini memakai closure lokal bernama
+    # `_x` untuk menghindari shadowing variabel luar (mis. `_current`,
+    # `_isDead` di ChatStreamSession.start()). `dart fix` sempat mengganti
+    # nama ~200 variabel lokal di file realtime paling sensitif (diff 215
+    # baris) + mematahkan guard test yang membaca nama simbol → risiko
+    # regresi jauh lebih besar dari manfaat gaya. Konvensi tetap dipertahankan.
+    no_leading_underscores_for_local_identifiers: false
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

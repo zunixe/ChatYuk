@@ -13,7 +13,7 @@ import '../../widgets/social_actions.dart';
 class FriendButton extends ConsumerStatefulWidget {
   final String otherUid;
   final String name;
-  const FriendButton({required this.otherUid, required this.name});
+  const FriendButton({super.key, required this.otherUid, required this.name});
 
   @override
   ConsumerState<FriendButton> createState() => FriendButtonState();

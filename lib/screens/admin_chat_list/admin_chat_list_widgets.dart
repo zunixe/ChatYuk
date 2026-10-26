@@ -34,7 +34,7 @@ class AdminChatCard extends StatelessWidget {
 
   /// Tahan kartu → buka sheet aksi (pin/kategori).
   final VoidCallback? onLongPressMenu;
-  const AdminChatCard({
+  const AdminChatCard({super.key, 
     required this.chat,
     required this.s,
     required this.adminUids,
@@ -521,7 +521,7 @@ class AdminChatCard extends StatelessWidget {
 /// Badge call aktif — lingkaran hijau berdenyut dengan icon video/audio.
 class CallActiveBadge extends StatefulWidget {
   final String callType;
-  const CallActiveBadge({required this.callType});
+  const CallActiveBadge({super.key, required this.callType});
 
   @override
   State<CallActiveBadge> createState() => CallActiveBadgeState();

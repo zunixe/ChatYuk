@@ -10,6 +10,7 @@ mixin _RcRoomMx on _RoomChatBase {
       ids.remove(ids.first);
     }
   }
+  @override
   Future<void> _refreshGrant() async {
     try {
       final granted = await ProviderScope.containerOf(
@@ -20,8 +21,9 @@ mixin _RcRoomMx on _RoomChatBase {
       dlog(
         '[BDBG] refreshGrant granted=$granted live=$_liveUid uid=${_auth.uid} g=$g',
       );
-      if (mounted && g != _isGrantedBroadcast)
+      if (mounted && g != _isGrantedBroadcast) {
         setState(() => _isGrantedBroadcast = g);
+      }
       // Simpan untuk buka berikutnya (tampil sejak frame 1, tanpa blink).
       BroadcastStateCache.save(
         widget.room.id,
@@ -38,6 +40,7 @@ mixin _RcRoomMx on _RoomChatBase {
   /// Setiap batch pesan masuk, ambil type='gift' yang belum ditampilkan
   /// → mainkan animasi fly. Stream mengirim snapshot penuh, jadi
   /// dedup via id pesan.
+  @override
   void _onMessagesForGift(List<MessageModel> msgs) {
     _lastMsgs = msgs;
     // Cap peta key lompat-pesan — tanpa ini tumbuh tanpa batas di
@@ -214,6 +217,7 @@ mixin _RcRoomMx on _RoomChatBase {
     }
   }
 
+  @override
   Future<void> _openRoomGiftPanel() async {
     final scope = ProviderScope.containerOf(context, listen: false);
     final s = scope.read(localeProvider).s;
@@ -264,6 +268,7 @@ mixin _RcRoomMx on _RoomChatBase {
   /// Pastikan viewer session jalan kalau ada orang lain yang broadcast.
   /// Menutup celah: live_uid tidak berubah (broadcast restart) atau event
   /// realtime terlewat → tanpa ini viewer harus keluar-masuk room dulu.
+  @override
   Future<void> _ensureViewerSession() async {
     if (!isPrivateRoom || !mounted) return;
     if (_liveUid == null || _liveUid == _auth.uid) return;
@@ -279,6 +284,7 @@ mixin _RcRoomMx on _RoomChatBase {
     } catch (_) {}
   }
 
+  @override
   Future<void> _refreshLiveUid() async {
     final row = await ProviderScope.containerOf(
       context,
@@ -299,6 +305,7 @@ mixin _RcRoomMx on _RoomChatBase {
     _syncBroadcastSession();
   }
 
+  @override
   void _syncBroadcastSession() {
     final iAmLive = _liveUid != null && _liveUid == _auth.uid;
     final someoneElse = _liveUid != null && _liveUid != _auth.uid;
@@ -320,6 +327,7 @@ mixin _RcRoomMx on _RoomChatBase {
     if (mounted) setState(() {});
   }
 
+  @override
   Future<void> _startBroadcastSession() async {
     // cap 4
     final scope = ProviderScope.containerOf(context, listen: false);
@@ -409,6 +417,7 @@ mixin _RcRoomMx on _RoomChatBase {
   }
 
   /// Hand raise — kirim signal ke admin.
+  @override
   Future<void> _raiseHand() async {
     await ProviderScope.containerOf(context, listen: false)
         .read(roomProvider.notifier)
@@ -430,6 +439,7 @@ mixin _RcRoomMx on _RoomChatBase {
   }
 
   /// Menu ⋮ grup ala WA: tambah anggota, info, media, cari, bisu, lainnya.
+  @override
   void _onGroupMenu(String v) {
     switch (v) {
       case 'add':
@@ -674,6 +684,7 @@ mixin _RcRoomMx on _RoomChatBase {
     }
   }
 
+  @override
   Future<void> _openMembersSheet() async {
     await showModalBottomSheet(
       context: context,
@@ -706,6 +717,7 @@ mixin _RcRoomMx on _RoomChatBase {
   /// Heartbeat presence: refresh joined_at tiap 60 detik selama room terbuka.
   /// Kalau app di-kill/force-stop, heartbeat berhenti → row presence basi
   /// dan otomatis hilang dari daftar online room setelah 5 menit.
+  @override
   void _startPresenceHeartbeat() {
     _presenceTimer?.cancel();
     _presenceTimer = Timer.periodic(const Duration(seconds: 60), (_) {
@@ -736,6 +748,7 @@ mixin _RcRoomMx on _RoomChatBase {
     }
   }
 
+  @override
   Future<void> _joinRoom() async {
     final auth = ProviderScope.containerOf(
       context,
@@ -744,7 +757,7 @@ mixin _RcRoomMx on _RoomChatBase {
     final chat = ProviderScope.containerOf(
       context,
       listen: false,
-    ).read(chatRiverpod.chatProvider.notifier);
+    ).read(chat_riverpod.chatProvider.notifier);
     if (auth.profile != null) {
       await chat.joinRoom(widget.room.id, auth.profile!);
       await chat.loadBlockedUids(auth.uid!);

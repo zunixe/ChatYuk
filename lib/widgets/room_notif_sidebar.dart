@@ -26,7 +26,7 @@ Future<void> showRoomNotifSidebar(
     barrierLabel: 'Notifikasi',
     barrierColor: Colors.black.withValues(alpha: 0.45),
     transitionDuration: const Duration(milliseconds: 220),
-    pageBuilder: (ctx, _, __) =>
+    pageBuilder: (ctx, _, _) =>
         _RoomNotifSidebar(onOpenRoom: onOpenRoom),
     transitionBuilder: (ctx, anim, _, child) {
       final curved = CurvedAnimation(
@@ -183,7 +183,7 @@ class _RoomNotifSidebarState extends ConsumerState<_RoomNotifSidebar> {
                       : ListView.separated(
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           itemCount: items.length,
-                          separatorBuilder: (_, __) => Divider(
+                          separatorBuilder: (_, _) => Divider(
                             height: 1,
                             indent: 60,
                             color: PColors.cardDivider,

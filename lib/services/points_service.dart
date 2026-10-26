@@ -171,7 +171,7 @@ class PointsService {
     final res = await measuredRpc(
       _sb,
       'gate_feature',
-      params: {'p_feature': feature, if (priceFeature != null) 'p_price_feature': priceFeature},
+      params: {'p_feature': feature, 'p_price_feature': ?priceFeature},
     );
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }

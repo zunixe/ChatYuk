@@ -9,7 +9,7 @@ class DeviceGroupCard extends StatelessWidget {
   final Map<String, dynamic> group;
   final S s;
   final VoidCallback onTap;
-  const DeviceGroupCard({
+  const DeviceGroupCard({super.key, 
     required this.group,
     required this.s,
     required this.onTap,

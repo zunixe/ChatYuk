@@ -43,7 +43,7 @@ void main() {
         sb: fakeSupabaseClient(handler: handler),
         cacheKey: key,
         needsPhotoFill: (_) => false,
-        downloadVoiceToCache: (_, __) async {},
+        downloadVoiceToCache: (_, _) async {},
         prefetchVoiceBytes: (_) async {},
       );
 
@@ -288,7 +288,7 @@ void main() {
         sb: sb,
         cacheKey: 'room_orphan',
         needsPhotoFill: (_) => false,
-        downloadVoiceToCache: (_, __) async {},
+        downloadVoiceToCache: (_, _) async {},
         prefetchVoiceBytes: (_) async {},
       ).start();
       final sub = handle.stream.listen((_) {});

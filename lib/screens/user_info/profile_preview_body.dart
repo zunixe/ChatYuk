@@ -371,7 +371,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                         heroes[i].bytes,
                         fit: BoxFit.cover,
                         gaplessPlayback: true,
-                        errorBuilder: (_, __, ___) =>
+                        errorBuilder: (_, _, _) =>
                             PNoPhoto(initials: widget.initial),
                       ),
                     ),
@@ -606,7 +606,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                       padding: EdgeInsets.zero,
                       physics: const BouncingScrollPhysics(),
                       itemCount: widget.hashtags.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      separatorBuilder: (_, _) => const SizedBox(width: 6),
                       itemBuilder: (_, i) {
                         final t = widget.hashtags[i];
                         return PChip(

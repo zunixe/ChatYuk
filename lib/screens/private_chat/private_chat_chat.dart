@@ -16,6 +16,7 @@ mixin _PcChatMx on _PrivateChatBase {
   bool get videoOnceSelected => _pendingVideoOnce;
 
   /// Dibaca composer untuk menampilkan pratinjau video (thumbnail base64).
+  @override
   String? get pendingVideoPosterB64 => _pendingVideoPoster;
   // ── Kontrak ChatSendMixin ──
   @override
@@ -78,7 +79,7 @@ mixin _PcChatMx on _PrivateChatBase {
     // Anti-screenshot dikontrol setting admin global (ScreenSecureService).
     // Privasi view_once tetap terjaga via enterViewOnce/exitViewOnce.
 
-    final chat = scope.read(chatRiverpod.chatProvider.notifier);
+    final chat = scope.read(chat_riverpod.chatProvider.notifier);
     final auth = scope.read(authProvider.notifier);
 
     // Prime sinkron supaya akun terhapus langsung tampil banner di frame
@@ -298,7 +299,7 @@ mixin _PcChatMx on _PrivateChatBase {
     // Subscription non-kritis ditunda ke post-frame supaya frame pertama
     // (list pesan) tidak tertahan — ala WhatsApp: pesan tampil dulu,
     // status/typing/centang-2 menyusul di frame berikutnya.
-    _wasBlocked = scope.read(chatRiverpod.chatProvider.notifier).isBlocked(widget.otherUid);
+    _wasBlocked = scope.read(chat_riverpod.chatProvider.notifier).isBlocked(widget.otherUid);
 
     /// P1b: banding reaksi (map pesan→emoji→count) — skip rebuild bila emit
     /// realtime tak mengubah isi (heartbeat/re-emit).
@@ -320,7 +321,7 @@ mixin _PcChatMx on _PrivateChatBase {
 
     _chatInfoSub = _chatInfoStream.listen(
       (chats) {
-        final info = chats.cast<chatRiverpod.PrivateChatInfo?>().firstWhere(
+        final info = chats.cast<chat_riverpod.PrivateChatInfo?>().firstWhere(
           (c) => c?.chatId == widget.chatId,
           orElse: () => null,
         );
@@ -459,13 +460,15 @@ mixin _PcChatMx on _PrivateChatBase {
     loadQueuedForChat();
   }
 
+  @override
   void _sendRecordingSignal() {
     ProviderScope.containerOf(context, listen: false)
-        .read(chatRiverpod.chatProvider.notifier)
+        .read(chat_riverpod.chatProvider.notifier)
         .sendTyping(widget.chatId, kind: 'recording');
   }
 
   // ── Antrean offline: implementasi BERSAMA di ChatOutboxMixin ──
+  @override
   bool get outboxIsOnline => _connOnline;
   @override
   Set<String> get outboxQueuedIds => _queuedIds;

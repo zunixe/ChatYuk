@@ -58,8 +58,9 @@ bool isBannedNickname(String nickname) =>
 /// Validasi nickname — boleh huruf Unicode, angka, spasi, underscore, dash.
 bool isValidNickname(String nickname) {
   final trimmed = nickname.trim();
-  if (trimmed.isEmpty || trimmed.length < 3 || trimmed.length > 20)
+  if (trimmed.isEmpty || trimmed.length < 3 || trimmed.length > 20) {
     return false;
+  }
   return RegExp(r'^[\p{L}\p{N} _\-]+$', unicode: true).hasMatch(trimmed);
 }
 
@@ -200,7 +201,7 @@ final _snakeKeyCache = <String, Map<String, String>>{};
 
 /// Konversi key snake_case (dari Postgres) → camelCase (untuk model Dart).
 /// Cache hanya untuk mapping nama key (snake→camel), BUKAN nilai — tiap row
-/// punya nilai berbeda, jadi cache seluruh Map<String, dynamic> akan merusak data.
+/// punya nilai berbeda, jadi cache seluruh Map`<String, dynamic>` akan merusak data.
 Map<String, dynamic> snakeToCamel(Map<String, dynamic> map) {
   final keyStr = map.keys.join(',');
   final keyMap =

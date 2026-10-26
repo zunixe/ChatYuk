@@ -119,7 +119,7 @@ void main() {
 
     test('refreshWallet notify listener', () async {
       var notified = 0;
-      container.listen(pointsProvider, (_, __) => notified++);
+      container.listen(pointsProvider, (_, _) => notified++);
       await provider.refreshWallet();
       expect(notified, 1);
     });
@@ -140,7 +140,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 150));
 
       var notified = 0;
-      c.listen(pointsProvider, (_, __) => notified++);
+      c.listen(pointsProvider, (_, _) => notified++);
       ctrl.add(120);
       await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(p.points, 120);
@@ -226,7 +226,7 @@ void main() {
   group('syncFromProfile', () {
     test('nilai beda → notify; sama → no-op', () {
       var notified = 0;
-      container.listen(pointsProvider, (_, __) => notified++);
+      container.listen(pointsProvider, (_, _) => notified++);
 
       provider.syncFromProfile(75);
       expect(provider.points, 75);
@@ -393,7 +393,7 @@ void main() {
     test('deduct berhasil mengembalikan saldo baru dan notify', () async {
       when(() => service.deductChatPoint('text')).thenAnswer((_) async => 49);
       var notified = 0;
-      container.listen(pointsProvider, (_, __) => notified++);
+      container.listen(pointsProvider, (_, _) => notified++);
 
       final result = await provider.deductBeforeSend('text');
 
@@ -486,7 +486,7 @@ void main() {
             'multiplier': 5,
           });
       var notified = 0;
-      container.listen(pointsProvider, (_, __) => notified++);
+      container.listen(pointsProvider, (_, _) => notified++);
 
       await provider.refreshRoomPricing();
 

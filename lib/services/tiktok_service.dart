@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 
 import '../utils.dart';
 
+// Nama nilai enum SENGAJA ALL_CAPS: dipetakan langsung ke enum native
+// TikTok SDK (lihat komentar di enum TikTokEvent).
+// ignore_for_file: constant_identifier_names
+
 /// TikTok App Events (Business) SDK — pembungkus Dart dari MethodChannel
 /// native `com.chatyuk.chatyuk/tiktok` (lihat android/.../TikTokBridge.kt).
 ///

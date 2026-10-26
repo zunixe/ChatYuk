@@ -299,7 +299,7 @@ class _GiphyTabState extends State<GiphyTab> {
                           child: Image.network(
                             _urls[i],
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
+                            errorBuilder: (_, _, _) =>
                                 const SizedBox.shrink(),
                           ),
                         ),

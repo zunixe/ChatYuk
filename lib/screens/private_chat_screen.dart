@@ -10,7 +10,7 @@ import '../models/message_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
 import '../providers/riverpod/call_provider.dart';
-import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
+import '../providers/riverpod/chat_provider.dart' as chat_riverpod;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/connectivity_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
@@ -186,7 +186,7 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
   Timer? _liveTimer;
   int? _viewTimerSecs;
   // T1c/T3a: stream+timing pindah ke private_chat_open_timing.dart (part).
-  late Stream<List<chatRiverpod.PrivateChatInfo>> _chatInfoStream;
+  late Stream<List<chat_riverpod.PrivateChatInfo>> _chatInfoStream;
   bool _loadingOlder = false;
   // ── AUTO-LOAD image deferred ──
   // "harusnya muncul semua image yang dikirim user" — image pesan lama
@@ -206,14 +206,14 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
   // AppBar+Scaffold+PopScope+list). Sekarang di provider per-chat
   // (`chatHeaderProvider`) → hanya subtree yang watch yang rebuild.
   // `_hdr` = baca sekali per build; `_patchHdr` = tulis (skip bila identik).
-  chatRiverpod.ChatHeader get _hdr =>
-      ref.read(chatRiverpod.chatHeaderProvider(widget.chatId));
-  void _patchHdr(chatRiverpod.ChatHeader Function(chatRiverpod.ChatHeader) f) =>
+  chat_riverpod.ChatHeader get _hdr =>
+      ref.read(chat_riverpod.chatHeaderProvider(widget.chatId));
+  void _patchHdr(chat_riverpod.ChatHeader Function(chat_riverpod.ChatHeader) f) =>
       ref
-          .read(chatRiverpod.chatHeaderProvider(widget.chatId).notifier)
+          .read(chat_riverpod.chatHeaderProvider(widget.chatId).notifier)
           .patch(f);
   DateTime? _lastIncomingSeen;
-  StreamSubscription<List<chatRiverpod.PrivateChatInfo>>? _chatInfoSub;
+  StreamSubscription<List<chat_riverpod.PrivateChatInfo>>? _chatInfoSub;
   StreamSubscription<List<MessageModel>>? _msgsSub;
   StreamSubscription<String>? _statusSub;
   bool _wasBlocked = false;

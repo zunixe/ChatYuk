@@ -25,7 +25,7 @@ void main() {
         sb: fakeSupabaseClient(handler: handler),
         cacheKey: 'room_r1',
         needsPhotoFill: (_) => false,
-        downloadVoiceToCache: (_, __) async {},
+        downloadVoiceToCache: (_, _) async {},
         prefetchVoiceBytes: (_) async {},
       );
 

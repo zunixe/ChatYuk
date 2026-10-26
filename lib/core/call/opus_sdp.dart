@@ -40,8 +40,8 @@ final _rtpmapRe = RegExp(r'^a=rtpmap:(\d+)\s+([^/\s]+)/(\d+)');
 /// PCMU/PCMA/telephone-event) sehingga panggilan tetap bisa connect.
 ///
 /// Strategi per baris (tidak mengubah urutan m-line):
-/// - baris `a=rtpmap:<pt> opus/...` → catat <pt> sebagai Opus.
-/// - baris `a=fmtp:<pt> ...` dengan <pt> Opus → tulis ulang parameternya
+/// - baris `a=rtpmap:[pt] opus/...` → catat `[pt]` sebagai Opus.
+/// - baris `a=fmtp:[pt] ...` dengan `[pt]` Opus → tulis ulang parameternya
 ///   (buang duplikat key lama, pasang nilai dari [_opusParams]) + sisipkan
 ///   parameter non-Opus milik aplikasi lain (mis. `apt=`) tetap apa adanya.
 /// - baris `a=fmtp:<pt>` yang datang SEBELUM rtpmap-nya (urutan tak lazim)

@@ -72,7 +72,9 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
           status == 'ended' ||
           status == 'declined' ||
           status == 'busy' ||
-          status == 'missed') _close();
+          status == 'missed') {
+        _close();
+      }
     }, onError: (e) {
       // OFFLINE: stream status call error → jangan tak tertangkap.
       dlog('[NAV] call status stream error: $e');

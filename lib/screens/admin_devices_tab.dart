@@ -406,7 +406,7 @@ class _AdminDevicesTabState extends ConsumerState<AdminDevicesTab>
             );
           }
           final u = users[i];
-          final onTap = () => _showUserDetail(context, u);
+          void onTap() => _showUserDetail(context, u);
           // RepaintBoundary: kartu lain tidak ikut repaint saat satu kartu
           // berubah (status GPS/online) — list panjang lebih hemat.
           // Punya device → kartu device biasa (info device lengkap).

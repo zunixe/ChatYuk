@@ -240,7 +240,7 @@ class ProfileInfoTile extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

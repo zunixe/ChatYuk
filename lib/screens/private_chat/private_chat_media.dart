@@ -2,6 +2,7 @@ part of '../private_chat_screen.dart';
 
 
 mixin _PcMediaMx on _PrivateChatBase {
+  @override
   void _openSearch() {
     setState(() {
       _searching = true;
@@ -14,6 +15,7 @@ mixin _PcMediaMx on _PrivateChatBase {
     _searchFocus.requestFocus();
   }
 
+  @override
   void _closeSearch() {
     _searchFocus.unfocus();
     setState(() {
@@ -29,6 +31,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   /// Scroll ke cocok aktif. dir=0: hanya bila sudah ter-render (lembut,
   /// untuk saat mengetik). dir!=0: lompat bertahap ke arahnya lalu coba
   /// lagi (maks 5x) sampai ketemu.
+  @override
   void _scrollToMatch(int dir) {
     if (!mounted || !_searching || _matchIds.isEmpty) return;
     if (_matchIndex < 0 || _matchIndex >= _matchIds.length) return;
@@ -111,7 +114,7 @@ mixin _PcMediaMx on _PrivateChatBase {
     String? albumId,
   }) async {
     return ProviderScope.containerOf(context, listen: false)
-        .read(chatRiverpod.chatProvider.notifier)
+        .read(chat_riverpod.chatProvider.notifier)
         .sendPrivateMessage(
           chatId: widget.chatId,
           senderId: senderId,
@@ -136,7 +139,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   Future<void> stickerDispatch(String path) async {
     final auth = ref.read(authProvider.notifier);
     final prof = auth.profile;
-    await ref.read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
+    await ref.read(chat_riverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
       senderId: auth.uid!,
       senderName: prof?.nickname ?? 'Anon',
@@ -150,6 +153,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   /// Sheet lokasi tampil INSTAN (izin dicek murah dulu, GPS menyusul di
   /// dalam sheet) → user memilih opsi → LANGSUNG terkirim ke chat (tanpa
   /// preview/caption).
+  @override
   Future<void> _sendLocation() async {
     setState(() => _showAttachRow = false);
     final picked = await pickChatLocation(
@@ -196,7 +200,7 @@ mixin _PcMediaMx on _PrivateChatBase {
     required List<Mention> mentions,
   }) async {
     await ProviderScope.containerOf(context, listen: false)
-        .read(chatRiverpod.chatProvider.notifier)
+        .read(chat_riverpod.chatProvider.notifier)
         .sendPrivateMessage(
           chatId: widget.chatId,
           senderId: ProviderScope.containerOf(
@@ -224,6 +228,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   /// (tanpa await) sebelum frame pertama — jadi bintang langsung tampil saat
   /// chat dibuka, tidak menunggu satu hop async apa pun (anti-glich).
   /// Stream realtime + fallback `_loadCachedStarredAsync` menimpa sesudahnya.
+  @override
   void _primeStarredFromCache() {
     try {
       final cached = ProviderScope.containerOf(
@@ -237,6 +242,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   /// Baca last-read tersimpan (kv terenkripsi) — dipanggil di initState agar
   /// centang-2 tampil instan. Hanya mengisi bila lebih baru dari state
   /// (read receipt monoton maju — tidak pernah mundur).
+  @override
   Future<void> _loadCachedRead() async {
     try {
       final obj = await MessageCache.instance.loadRawObj(
@@ -255,6 +261,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   }
 
   /// Simpan last-read network (fire-and-forget) untuk cold start berikutnya.
+  @override
   void _persistRead(DateTime t) {
     try {
       MessageCache.instance.saveRawObj('read:${widget.chatId}', {
@@ -316,6 +323,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   /// Matikan bubble typing/recording segera (tanpa menunggu timer 3 detik).
   /// Dipanggil saat pesan baru dari lawan bicara masuk — pesan = bukti
   /// otoritatif bahwa fase mengetik selesai (anti bubble nyangkut).
+  @override
   void _hideTyping() {
     _typingClearTimer?.cancel();
     if (!mounted) return;
@@ -325,6 +333,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   /// Jaring pengaman konfirmasi pending: kalau 3 detik setelah insert sukses
   /// bubble masih belum terkonfirmasi (event Realtime miss / channel drop),
   /// fetch ulang pesan dari server supaya tidak nyangkut sampai polling 30s.
+  @override
   void _schedulePendingConfirmFallback() {
     _pendingConfirmTimer?.cancel();
     _pendingConfirmTimer = Timer(const Duration(seconds: 3), () async {
@@ -339,6 +348,7 @@ mixin _PcMediaMx on _PrivateChatBase {
   String get outboxUploadChatId => widget.chatId;
   @override
   void outboxScrollToBottom() => _scrollToBottom();
+  @override
   Future<void> voiceFinishRecording(String path, int recordedMs) async {
     final scope = ProviderScope.containerOf(context, listen: false);
     final f = File(path);
@@ -410,11 +420,12 @@ mixin _PcMediaMx on _PrivateChatBase {
         );
         return;
       }
-      if (mounted)
+      if (mounted) {
         showChatSnack(
           context,
           scope.read(localeProvider).s.errVoiceUploadFailed,
         );
+      }
       return;
     }
     // Optimistic: tampilkan bubble voice langsung
@@ -434,7 +445,7 @@ mixin _PcMediaMx on _PrivateChatBase {
     _scrollToBottom();
     try {
       await scope
-          .read(chatRiverpod.chatProvider.notifier)
+          .read(chat_riverpod.chatProvider.notifier)
           .sendPrivateMessage(
             chatId: chatId,
             senderId: uid,
@@ -471,17 +482,19 @@ mixin _PcMediaMx on _PrivateChatBase {
     }
   }
 
+  @override
   Future<void> _sendGift(String giftId, String name, int coins) async {
     final scope = ProviderScope.containerOf(context, listen: false);
     final s = scope.read(localeProvider).s;
-    final chat = scope.read(chatRiverpod.chatProvider.notifier);
+    final chat = scope.read(chat_riverpod.chatProvider.notifier);
     final points = scope.read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final res = await chat.sendGift(widget.chatId, widget.otherUid, giftId);
       if (res['ok'] == true) {
-        if (res['points'] != null)
+        if (res['points'] != null) {
           points.setPoints((res['points'] as num).toInt());
+        }
         _maybeNewChatBonus();
         if (mounted) points.showPointsToast(context, s.giftSentToast(name));
         _scrollToBottom();
@@ -499,6 +512,7 @@ mixin _PcMediaMx on _PrivateChatBase {
 
   /// AppBar mode search (ala WhatsApp): tombol kembali + field cari +
   /// penghitung hasil + panah atas/bawah.
+  @override
   AppBar _buildSearchAppBar() {
     final s = ProviderScope.containerOf(
       context,
@@ -553,6 +567,7 @@ mixin _PcMediaMx on _PrivateChatBase {
     );
   }
 
+  @override
   void _showReportDialog() {
     showReportUserDialog(
       context,

@@ -288,8 +288,10 @@ mixin _ProfileBuildMx on _ProfileBase {
     );
   }
 
+  @override
   Color _statusColor(String status) => AppTheme.statusColor(status);
 
+  @override
   String _statusLabel(String status, S s) {
     switch (status) {
       case 'idle':
@@ -303,6 +305,7 @@ mixin _ProfileBuildMx on _ProfileBase {
     }
   }
 
+  @override
   Future<void> _editSubscriptionPrice(BuildContext context) async {
     final scope = ProviderScope.containerOf(context, listen: false);
     final s = scope.read(localeProvider).s;
@@ -383,7 +386,8 @@ mixin _ProfileBuildMx on _ProfileBase {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(ok ? s.msgProfileSaved : s.errGeneric)),
     );
-    if (ok)
+    if (ok) {
       await scope.read(authProvider.notifier).reloadProfile();
+    }
   }
 }

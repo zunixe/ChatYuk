@@ -2,11 +2,12 @@ part of '../private_chat_screen.dart';
 
 /// KIRIM KONTAK (ala WhatsApp) di private chat: pemilih kontak (ChatYuk —
 /// hanya teman/pernah chat — atau buku kontak HP) → bubble pending instan →
-/// pesan type 'contact' (payload di kolom `contact`, text '📇 <nama>').
+/// pesan type 'contact' (payload di kolom `contact`, text '📇 `<nama>`').
 ///
 /// Kontak ChatYuk: payload **hanya uid** → penerima resolve nama/foto sendiri.
 /// Kontak HP: nama + nomor apa adanya dari buku kontak pengirim.
 mixin _PcContactMx on _PrivateChatBase {
+  @override
   Future<void> _openContactPicker() async {
     if (!mounted) return;
     final picked = await showContactPickerSheet(context: context);
@@ -49,7 +50,7 @@ mixin _PcContactMx on _PrivateChatBase {
     outboxScrollToBottom();
     try {
       await ref
-          .read(chatRiverpod.chatProvider.notifier)
+          .read(chat_riverpod.chatProvider.notifier)
           .sendPrivateMessage(
             chatId: widget.chatId,
             senderId: uid,

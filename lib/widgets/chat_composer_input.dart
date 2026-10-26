@@ -89,7 +89,7 @@ class ChatComposerInput extends ConsumerStatefulWidget {
   final VoidCallback? onSendFile;
   /// Buat polling (private, grup & global room). null = chip tidak tampil.
   final VoidCallback? onCreatePoll;
-  const ChatComposerInput({
+  const ChatComposerInput({super.key, 
     required this.controller,
     this.focusNode,
     required this.onSend,
@@ -827,7 +827,7 @@ class _ChatComposerInputState extends ConsumerState<ChatComposerInput>
                         clipBehavior: Clip.none,
                         alignment: Alignment.center,
                         children: <Widget>[
-                          if (currentChild != null) currentChild,
+                          ?currentChild,
                         ],
                       ),
                   transitionBuilder: (child, anim) => FadeTransition(

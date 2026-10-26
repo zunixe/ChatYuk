@@ -54,6 +54,7 @@ mixin _AcWatchMx on _AdminBase {
     await ws?.stop();
   }
 
+  @override
   void _expandWatch() {
     final ws = _watch;
     if (ws == null) return;
@@ -71,6 +72,7 @@ mixin _AcWatchMx on _AdminBase {
   // ── Items cache: dihitung SEKALI per perubahan _msgs (bukan tiap build) ──
   // Dulu getter dihitung ulang tiap frame → list panjang O(n²) + scroll
   // jump/kedip. Sekarang cache.
+  @override
   List<ChatItem> get _items {
     final cached = _itemsCache;
     if (cached != null) return cached;
@@ -99,6 +101,7 @@ mixin _AcWatchMx on _AdminBase {
     return items;
   }
 
+  @override
   void _invalidateItems() {
     _itemsCache = null;
     _rebuildMsgIndex();
@@ -167,17 +170,15 @@ mixin _AcWatchMx on _AdminBase {
       // hidupkan kembali timer. Satu fetch — bukan tumpukan.
       unawaited(_poll());
       _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
-      if (_callTimer == null) {
-        _callTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
-          if (!mounted) return;
-          final admin = ProviderScope.containerOf(
-            context,
-            listen: false,
-          ).read(adminProvider);
-          await admin.fetchActiveCalls();
-          if (mounted) await _syncCallWatch();
-        });
-      }
+      _callTimer ??= Timer.periodic(const Duration(seconds: 15), (_) async {
+        if (!mounted) return;
+        final admin = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(adminProvider);
+        await admin.fetchActiveCalls();
+        if (mounted) await _syncCallWatch();
+      });
     }
   }
 
@@ -235,6 +236,7 @@ mixin _AcWatchMx on _AdminBase {
 
   /// Pastikan _leftUid tidak null — dipanggil dari jalur cache maupun
   /// early-return supaya tidak semua bubble kanan.
+  @override
   void _ensureLeftUid([List<String>? senders]) {
     if (_leftUid != null) return;
     final s =

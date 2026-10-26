@@ -170,6 +170,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     }
   }
 
+  @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
@@ -774,7 +775,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
       body: Stack(
         children: [
           rv.Consumer(
-            builder: (ctx, ref, __) {
+            builder: (ctx, ref, _) {
               final provider = ref.watch(onlineUsersProvider);
               PerfProbe.buildCount('Online.list');
               final chat = ProviderScope.containerOf(context, listen: false).read(chatProvider.notifier);

@@ -275,7 +275,7 @@ void main() {
   group('fetchUserCounts (header total user)', () {
     test('sukses → total registered + anon tersimpan & notify', () async {
       var notified = 0;
-      container.listen(onlineUsersProvider, (_, __) => notified++);
+      container.listen(onlineUsersProvider, (_, _) => notified++);
       when(() => service.userCounts())
           .thenAnswer((_) async => (registered: 355, anon: 136));
 

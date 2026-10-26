@@ -353,7 +353,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
                             builder: (_) => DraggableScrollableSheet(
                               expand: false,
                               initialChildSize: 0.85,
-                              builder: (_, __) => ClipRRect(
+                              builder: (_, _) => ClipRRect(
                                 borderRadius:
                                     const BorderRadius.vertical(
                                         top: Radius.circular(16)),
@@ -398,7 +398,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
                 style: AppText.bodyStrong
                     .copyWith(color: AppTheme.textPrimary)),
           ),
-          if (trailing != null) trailing,
+          ?trailing,
         ],
       ),
     );

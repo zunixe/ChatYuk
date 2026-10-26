@@ -3,7 +3,7 @@ part of '../room_chat_screen.dart';
 
 mixin _RcLiveMx on _RoomChatBase {
   /// POLL grup/global room (ala WhatsApp): buka sheet → bubble pending instan →
-  /// kirim pesan type 'poll' (definisi di kolom `poll`, teks '📊 <tanya>').
+  /// kirim pesan type 'poll' (definisi di kolom `poll`, teks '📊 `<tanya>`').
   Future<void> _openRoomPollComposer() async {
     final s = ref.read(localeProvider).s;
     final poll = await PollComposerSheet.show(context, s: s);
@@ -125,6 +125,7 @@ mixin _RcLiveMx on _RoomChatBase {
     }
   }
 
+  @override
   void _scrollToBottom() {
     // Instan (acuan private): dulu room animateTo 250ms — scroll panjang
     // saat buka chat terasa "meluncur". Sama seperti private = jumpTo(0).
@@ -135,6 +136,7 @@ mixin _RcLiveMx on _RoomChatBase {
     });
   }
 
+  @override
   bool get _isNearBottom {
     if (!_scrollCtrl.hasClients) return true;
     return _scrollCtrl.position.pixels < 100;
@@ -142,6 +144,7 @@ mixin _RcLiveMx on _RoomChatBase {
 
 
   // ── Antrean offline: implementasi BERSAMA di ChatOutboxMixin ──
+  @override
   bool get outboxIsOnline => _connOnline;
 
   @override
@@ -264,7 +267,7 @@ mixin _RcLiveMx on _RoomChatBase {
     String? sentId;
     try {
       sentId = await ProviderScope.containerOf(context, listen: false)
-          .read(chatRiverpod.chatProvider.notifier)
+          .read(chat_riverpod.chatProvider.notifier)
           .sendRoomMessage(
             roomId: widget.room.id,
             senderId: uid,
@@ -312,7 +315,7 @@ mixin _RcLiveMx on _RoomChatBase {
       if (pos == null || !mounted) return;
       final updated = initial.copyWith(lat: pos.$1, lng: pos.$2);
       await ProviderScope.containerOf(context, listen: false)
-          .read(chatRiverpod.chatProvider.notifier)
+          .read(chat_riverpod.chatProvider.notifier)
           .updateRoomLocationMessage(messageId, updated.encode());
     });
   }
@@ -324,7 +327,7 @@ mixin _RcLiveMx on _RoomChatBase {
         .read(authProvider.notifier);
     final profile = auth.profile!;
     await ProviderScope.containerOf(context, listen: false)
-        .read(chatRiverpod.chatProvider.notifier)
+        .read(chat_riverpod.chatProvider.notifier)
         .sendRoomMessage(
           roomId: widget.room.id,
           senderId: auth.uid!,
@@ -339,7 +342,7 @@ mixin _RcLiveMx on _RoomChatBase {
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
     final scope = ProviderScope.containerOf(context, listen: false);
     final auth = scope.read(authProvider.notifier);
-    final chat = scope.read(chatRiverpod.chatProvider.notifier);
+    final chat = scope.read(chat_riverpod.chatProvider.notifier);
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
@@ -452,7 +455,12 @@ mixin _RcLiveMx on _RoomChatBase {
 
 
   void _toggleAttachRow() {
-    if (!_showAttachRow) FocusScope.of(context).unfocus();
+    if (!_showAttachRow) {
+      FocusScope.of(context).unfocus();
+      // Cek ulang gate media saat panel dibuka (syarat bisa terpenuhi
+      // setelah user aktif) — implementasi di room_chat_media_gate.dart.
+      unawaited(_refreshMediaGate());
+    }
     setState(() => _showAttachRow = !_showAttachRow);
   }
 
@@ -590,23 +598,28 @@ mixin _RcLiveMx on _RoomChatBase {
           pickAndSendFile();
         },
         onPickGalleryPhoto: (bytes) {
+          if (!_mediaGateAllows()) return;
           setState(() => _showAttachRow = false);
           photoFromFileToPreview(bytes);
         },
         onTakePhoto: () {
+          if (!_mediaGateAllows()) return;
           setState(() => _showAttachRow = false);
           photoTakeToPreview();
         },
         onSendPhoto: () {
+          if (!_mediaGateAllows()) return;
           setState(() => _showAttachRow = false);
           openGalleryPicker();
         },
         onSendViewOnce: () {
+          if (!_mediaGateAllows()) return;
           setState(() => _showAttachRow = false);
           sendViewOnceFromPicker();
         },
         // ── Video (room: grup & global) — paritas private chat ──
         onSendVideo: () {
+          if (!_mediaGateAllows()) return;
           if (mounted) setState(() => _showAttachRow = false);
           unawaited(videoPickToPreview());
         },
@@ -805,7 +818,7 @@ mixin _RcLiveMx on _RoomChatBase {
                         vertical: 8,
                       ),
                       itemCount: 4,
-                      itemBuilder: (_, __) => Padding(
+                      itemBuilder: (_, _) => Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,

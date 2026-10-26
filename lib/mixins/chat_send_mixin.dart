@@ -71,6 +71,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
 
   /// Implementasi nyata di `ChatPhotoSendMixin`. Dipisah agar nama publik
   /// `sendVideoFromPreview` bebas di-override tanpa kalah linearisasi mixin.
+  @override
   Future<void> sendVideoFromPreviewImpl({
     String text = '',
     MessageModel? reply,

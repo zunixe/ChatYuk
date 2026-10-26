@@ -35,8 +35,8 @@ mixin _PcOpenTimingMx on ConsumerState<PrivateChatScreen> {
   bool _warmScheduled = false;
 
   /// Akses provider chat (getter lokal mixin, nama beda dari getter kelas).
-  chatRiverpod.ChatNotifier get _pcChat => ref.read(
-        chatRiverpod.chatProvider.notifier,
+  chat_riverpod.ChatNotifier get _pcChat => ref.read(
+        chat_riverpod.chatProvider.notifier,
       );
 
   /// T1c: mulai ChatStreamSession (channel+reload) SETELAH frame pertama —

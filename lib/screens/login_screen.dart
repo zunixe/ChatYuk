@@ -488,7 +488,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           height: 20,
                           cacheWidth: 40,
                           cacheHeight: 40,
-                          errorBuilder: (_, __, ___) => const Icon(
+                          errorBuilder: (_, _, _) => const Icon(
                             Icons.g_mobiledata,
                             size: 22,
                             color: Colors.red,

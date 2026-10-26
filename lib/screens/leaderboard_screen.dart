@@ -281,24 +281,27 @@ class _RankBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (rank == 1)
+    if (rank == 1) {
       return const Text(
         '🥇',
         style: TextStyle(fontSize: AppGlyph.sm),
         textAlign: TextAlign.center,
       );
-    if (rank == 2)
+    }
+    if (rank == 2) {
       return const Text(
         '🥈',
         style: TextStyle(fontSize: AppGlyph.sm),
         textAlign: TextAlign.center,
       );
-    if (rank == 3)
+    }
+    if (rank == 3) {
       return const Text(
         '🥉',
         style: TextStyle(fontSize: AppGlyph.sm),
         textAlign: TextAlign.center,
       );
+    }
     return Text(
       '$rank',
       textAlign: TextAlign.center,

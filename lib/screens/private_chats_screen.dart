@@ -77,7 +77,7 @@ abstract class _PcBase extends ConsumerState<PrivateChatsScreen> {
   Map<String, String> _statusMap = const {};
   Map<String, String> _nameMap = const {};
   Set<String> _friendSet = const {};
-  String _query = '';
+  final String _query = '';
   final TextEditingController _searchCtrl = TextEditingController();
   final Set<String> _selected = {};
   bool get _selectionMode => _selected.isNotEmpty;

@@ -150,7 +150,7 @@ class _AdminContactTabState extends ConsumerState<AdminContactTab> {
                       MediaQuery.of(context).padding.bottom + 24,
                     ),
                     itemCount: admin.contactMessages.length + 1,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, i) {
                       if (i == admin.contactMessages.length) {
                         return admin.contactHasMore
@@ -239,7 +239,7 @@ class _AdminContactTabState extends ConsumerState<AdminContactTab> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            '${s.labelNew}',
+                            s.labelNew,
                             style: AppText.micro.copyWith(color: Colors.white),
                           ),
                         ),

@@ -408,8 +408,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             }
                           } catch (_) {}
                           Future.delayed(const Duration(seconds: 30), () {
-                            if (ctx.mounted)
+                            if (ctx.mounted) {
                               setInner(() => resendCooldown = false);
+                            }
                           });
                         },
                   child: Text(s.btnResendCode),

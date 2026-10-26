@@ -90,7 +90,7 @@ class SkeletonList extends StatelessWidget {
     return ListView.builder(
       padding: padding,
       itemCount: count,
-      itemBuilder: (_, __) => const SkeletonCard(),
+      itemBuilder: (_, _) => const SkeletonCard(),
     );
   }
 }
@@ -179,7 +179,7 @@ class PostSkeletonList extends StatelessWidget {
     return ListView.builder(
       padding: padding,
       itemCount: count,
-      itemBuilder: (_, __) => const PostSkeletonCard(),
+      itemBuilder: (_, _) => const PostSkeletonCard(),
     );
   }
 }

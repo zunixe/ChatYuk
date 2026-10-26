@@ -1,7 +1,7 @@
 part of '../private_chat_screen.dart';
 
 /// POLLING private chat (ala WhatsApp): buka sheet → bubble pending instan →
-/// kirim pesan type 'poll' (definisi di kolom `poll`, teks '📊 <tanya>').
+/// kirim pesan type 'poll' (definisi di kolom `poll`, teks '📊 `<tanya>`').
 /// Dipisah ke `part` sendiri (ratchet ukuran file layar chat).
 mixin _PcPollMx on _PrivateChatBase {
   // Ditangkap saat init: `ref` tak boleh dipakai di dispose.
@@ -20,6 +20,7 @@ mixin _PcPollMx on _PrivateChatBase {
     super.dispose();
   }
 
+  @override
   Future<void> _openPollComposer() async {
     final s = ref.read(localeProvider).s;
     final poll = await PollComposerSheet.show(context, s: s);
@@ -60,7 +61,7 @@ mixin _PcPollMx on _PrivateChatBase {
     });
     outboxScrollToBottom();
     try {
-      await ref.read(chatRiverpod.chatProvider.notifier).sendPrivateMessage(
+      await ref.read(chat_riverpod.chatProvider.notifier).sendPrivateMessage(
         chatId: widget.chatId,
         senderId: uid,
         senderName: profile.nickname,

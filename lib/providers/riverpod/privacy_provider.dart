@@ -55,7 +55,7 @@ class PrivacyState {
 }
 
 /// Provider privasi (Riverpod) — state reaktif (settings + excludable).
-/// Migrasi dari ChangeNotifier → Notifier<PrivacyState>. Global (persist).
+/// Migrasi dari ChangeNotifier → Notifier`<PrivacyState>`. Global (persist).
 class PrivacyNotifier extends Notifier<PrivacyState> {
   final PrivacyService _service;
 

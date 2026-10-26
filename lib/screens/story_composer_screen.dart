@@ -67,7 +67,7 @@ abstract class _StoryComposerBase extends ConsumerState<StoryComposerScreen> {
   bool _dragOverTrash = false;
   int _colorIndex = StoryText.defaultColorIndex;
   int _sizeIndex = 1;
-  bool _withBg = false;
+  final bool _withBg = false;
   // Default: anon = public (dikunci server), registered = pengikut.
   String _visibility = 'followers';
   bool _publishing = false;

@@ -77,6 +77,7 @@ mixin _UiInitMx on _UserInfoBase {
     super.dispose();
   }
 
+  @override
   Future<void> _loadSocial() async {
     try {
       final st = await ProviderScope.containerOf(context, listen: false)
@@ -93,6 +94,7 @@ mixin _UiInitMx on _UserInfoBase {
     } catch (_) {}
   }
 
+  @override
   Future<void> _toggleFollow() async {
     final s = ProviderScope.containerOf(
       context,
@@ -104,17 +106,19 @@ mixin _UiInitMx on _UserInfoBase {
     ).read(authProvider.notifier);
     final targetRegistered = _profile?.isRegistered ?? false;
     if (auth.isAnonymous || !(auth.profile?.isRegistered ?? false)) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.msgRegisterToFollow)));
+      }
       return;
     }
     if (!targetRegistered) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.msgTargetNotRegistered)));
+      }
       return;
     }
     final social = ProviderScope.containerOf(
@@ -142,6 +146,7 @@ mixin _UiInitMx on _UserInfoBase {
     }
   }
 
+  @override
   Future<void> _addFriend() async {
     final s = ProviderScope.containerOf(
       context,
@@ -153,17 +158,19 @@ mixin _UiInitMx on _UserInfoBase {
     ).read(authProvider.notifier);
     final targetRegistered = _profile?.isRegistered ?? false;
     if (auth.isAnonymous || !(auth.profile?.isRegistered ?? false)) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.msgRegisterToFollow)));
+      }
       return;
     }
     if (!targetRegistered) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(s.msgTargetNotRegistered)));
+      }
       return;
     }
     final social = ProviderScope.containerOf(
@@ -197,6 +204,7 @@ mixin _UiInitMx on _UserInfoBase {
   /// Putus pertemanan: konfirmasi dulu, lalu unfollow (yang juga menghapus
   /// relasi friend_requests kedua arah di server → benar-benar putus).
   /// Dialog & snackbar lewat helper bersama `social_actions.dart`.
+  @override
   Future<void> _unfriend() async {
     final name = _profile?.nickname ?? '';
     final social = ProviderScope.containerOf(
@@ -216,6 +224,7 @@ mixin _UiInitMx on _UserInfoBase {
   }
 
   /// Batalkan permintaan teman yang sudah dikirim (id diambil dari outbox).
+  @override
   Future<void> _cancelFriendRequest() async {
     final name = _profile?.nickname ?? '';
     final social = ProviderScope.containerOf(
@@ -232,6 +241,7 @@ mixin _UiInitMx on _UserInfoBase {
   }
 
   /// Bottom sheet penjelasan beda "Ikuti" (Follow) vs "Tambah Teman".
+  @override
   void _showFollowVsFriendInfo(BuildContext context, S s) {
     showModalBottomSheet(
       context: context,
@@ -318,6 +328,7 @@ mixin _UiInitMx on _UserInfoBase {
     );
   }
 
+  @override
   Future<void> _subscribe() async {
     final s = ProviderScope.containerOf(
       context,

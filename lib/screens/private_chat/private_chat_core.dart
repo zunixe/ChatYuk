@@ -23,8 +23,8 @@ mixin _PcCoreMx on _PrivateChatBase {
     // HEADER (Prioritas 4): read-receipt (centang-2) di-drive NOTIFIER — hanya
     // subtree list yang rebuild, bukan AppBar/Scaffold. Dulu `_scheduleRebuild`
     // (setState root) tiap lastRead berubah.
-    ref.listen<chatRiverpod.ChatHeader>(
-      chatRiverpod.chatHeaderProvider(widget.chatId),
+    ref.listen<chat_riverpod.ChatHeader>(
+      chat_riverpod.chatHeaderProvider(widget.chatId),
       (prev, next) {
         if (prev?.otherLastRead != next.otherLastRead) {
           _lastReadNotifier.value = next.otherLastRead;
@@ -44,10 +44,10 @@ mixin _PcCoreMx on _PrivateChatBase {
     final chat = ProviderScope.containerOf(
       context,
       listen: false,
-    ).read(chatRiverpod.chatProvider.notifier);
+    ).read(chat_riverpod.chatProvider.notifier);
     // select: rebuild hanya saat isBlocked untuk UID lawan bicara berubah
     final isBlocked = ref.watch(
-      chatRiverpod.chatProvider.select((c) => c.isBlocked(widget.otherUid)),
+      chat_riverpod.chatProvider.select((c) => c.isBlocked(widget.otherUid)),
     );
     final s = ref.watch(localeProvider).s;
     dlog(
@@ -160,7 +160,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                 title: Consumer(
                   builder: (context, ref2, _) {
                     final hdr = ref2.watch(
-                      chatRiverpod.chatHeaderProvider(widget.chatId),
+                      chat_riverpod.chatHeaderProvider(widget.chatId),
                     );
                     final effGender = widget.otherGender.isNotEmpty
                         ? widget.otherGender
@@ -678,7 +678,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                                 // (murah; chat kosong = tak ada list pesan).
                                 return ValueListenableBuilder<int>(
                                   valueListenable: _typingState,
-                                  builder: (_, tv, __) {
+                                  builder: (_, tv, _) {
                                     if (tv == 0) return const SizedBox.shrink();
                                     return ListView(
                                       controller: _scrollCtrl,
@@ -775,7 +775,7 @@ mixin _PcCoreMx on _PrivateChatBase {
                               }
                               return ValueListenableBuilder<DateTime?>(
                                 valueListenable: _lastReadNotifier,
-                                builder: (_, lastReadValue, __) => ListView.builder(
+                                builder: (_, lastReadValue, _) => ListView.builder(
                                   findChildIndexCallback: (key) =>
                                       key is ValueKey<String>
                                       ? keyIndex[key.value]
@@ -808,9 +808,10 @@ mixin _PcCoreMx on _PrivateChatBase {
                                     if (i == 0) {
                                       return ValueListenableBuilder<int>(
                                         valueListenable: _typingState,
-                                        builder: (_, tv, __) {
-                                          if (tv == 0)
+                                        builder: (_, tv, _) {
+                                          if (tv == 0) {
                                             return const SizedBox.shrink();
+                                          }
                                           return Padding(
                                             padding: const EdgeInsets.fromLTRB(
                                               4,

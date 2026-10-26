@@ -123,7 +123,7 @@ class _CallBannerState extends ConsumerState<CallBanner> {
 
     return ValueListenableBuilder<String?>(
       valueListenable: activeChatId,
-      builder: (_, curChatId, __) {
+      builder: (_, curChatId, _) {
         final show = _shouldShow(sess, mode, chatId, curChatId);
         _syncTicker(show);
         return AnimatedSwitcher(

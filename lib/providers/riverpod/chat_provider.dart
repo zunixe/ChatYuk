@@ -391,6 +391,10 @@ class ChatNotifier extends Notifier<ChatState> {
       ChatService.effectiveStatusOf(raw, lastSeen);
   bool isBlocked(String uid) => _blockedUids.contains(uid);
 
+  /// Boleh kirim media di room ini? (gate trust room publik)
+  Future<bool?> canSendRoomMedia(String roomId) =>
+      _service.canSendRoomMedia(roomId);
+
   /// Status blokir DUA ARAH (saya↔dia). Lihat
   /// `ChatService.getChatBlockState` — RLS `blocks` membuat klien tak bisa
   /// tahu bila dirinya diblokir, sehingga perlu RPC.

@@ -2,6 +2,7 @@ part of 'room_voice_service.dart';
 
 
 mixin _VoicePeerMx on _VoiceBase {
+  @override
   Future<void> _applyForcedMute() async {
     if (!_onStage) return;
     try {
@@ -17,6 +18,7 @@ mixin _VoicePeerMx on _VoiceBase {
   }
 
   // ── Daftar speaker (realtime table + refresh) ──
+  @override
   Future<void> _refreshSpeakers() async {
     if (_closed) return;
     try {
@@ -40,6 +42,7 @@ mixin _VoicePeerMx on _VoiceBase {
     } catch (e) { dlog('[VOICE-PEER]: $e'); }
   }
 
+  @override
   void _applySpeakers(Iterable<String> ids) {
     final next = Set<String>.from(ids)..removeWhere((e) => e.isEmpty);
     // FULL MESH: bila aku di stage, tawarkan uplink ke speaker lain yang
@@ -86,6 +89,7 @@ mixin _VoicePeerMx on _VoiceBase {
   // Dulu non-trickle (tunggu gathering ≤2 dtk) → handshake lambat + macet
   // total bila gathering tak kunjung complete di jaringan aneh.
 
+  @override
   Future<void> _makeOfferTo(String peerUid) async {
     if (_closed || !_onStage || _localStream == null) return;
     if (peerUid.isEmpty || peerUid == myUid) return;
@@ -213,6 +217,7 @@ mixin _VoicePeerMx on _VoiceBase {
     }
   }
 
+  @override
   Future<void> _handleOffer(String from, Map<String, dynamic> payload) async {
     final sdp = payload['sdp'] as Map<String, dynamic>?;
     if (sdp == null || _closed) return;
@@ -378,6 +383,7 @@ mixin _VoicePeerMx on _VoiceBase {
     }
   }
 
+  @override
   Future<void> _handleAnswer(String from, Map<String, dynamic> payload) async {
     final sdp = payload['sdp'] as Map<String, dynamic>?;
     final pc = _peers[from];
@@ -414,6 +420,7 @@ mixin _VoicePeerMx on _VoiceBase {
     }
   }
 
+  @override
   Future<void> _handleCandidate(
     String from,
     Map<String, dynamic> payload,
@@ -467,6 +474,7 @@ mixin _VoicePeerMx on _VoiceBase {
   /// peer (guard `_allCandTriedPeers`). Beda dari call 1:1 (pc tunggal): di
   /// mesh, satu peer punya pc uplink (`uid`) & downlink (`dn_uid`) — keduanya
   /// dibangun ulang dengan config all-candidates supaya konsisten dua arah.
+  @override
   Future<void> _retryPeerAllCandidates(String peerUid) async {
     if (_closed) return;
     if (!_allCandTriedPeers.add(peerUid)) return; // sudah pernah → stop
@@ -501,6 +509,7 @@ mixin _VoicePeerMx on _VoiceBase {
     }
   }
 
+  @override
   Future<void> _dropPeer(String uid) async {
     _uplinkOk.remove(uid);
     _uplinkSince.remove(uid);
@@ -523,6 +532,7 @@ mixin _VoicePeerMx on _VoiceBase {
   }
 
   // ── Indikator bicara via getStats audioLevel (inbound-rtp audio) ──
+  @override
   Future<void> _pollLevels() async {
     if (_closed || _peers.isEmpty) {
       if (_speakingNow.isNotEmpty) {

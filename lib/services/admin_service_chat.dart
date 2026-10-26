@@ -345,17 +345,17 @@ mixin _AdminChatMx on _AdminBase {
         'p_uid': uid,
         'p_enabled': enabled,
         'p_persona': persona,
-        if (scheduleAuto != null) 'p_schedule_auto': scheduleAuto,
+        'p_schedule_auto': ?scheduleAuto,
         // null = ikuti global — kirim key-nya selalu supaya bisa reset.
         'p_guard_enabled': guardEnabled,
         // Rate limit per-dummy: null = ikut global / reset override.
         'p_max_replies': maxReplies,
         'p_min_interval': minInterval,
-        if (noRateLimit != null) 'p_no_rate_limit': noRateLimit,
+        'p_no_rate_limit': ?noRateLimit,
         // Jadwal jam online: selalu dikirim (list dari editor grid).
         'p_active_hours': activeHours ?? const <int>[],
-        if (model != null) 'p_model': model,
-        if (photosEnabled != null) 'p_photos_enabled': photosEnabled,
+        'p_model': ?model,
+        'p_photos_enabled': ?photosEnabled,
       },
     );
   }

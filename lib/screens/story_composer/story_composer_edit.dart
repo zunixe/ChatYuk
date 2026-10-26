@@ -2,6 +2,7 @@ part of '../story_composer_screen.dart';
 
 
 mixin _ScEditMx on _StoryComposerBase {
+  @override
   void dispose() {
     // Kembalikan nav bar default saat keluar composer (tanpa warna —
     // API warna deprecated di Android 15, lihat initState).
@@ -18,6 +19,7 @@ mixin _ScEditMx on _StoryComposerBase {
     super.dispose();
   }
 
+  @override
   Future<void> _publish() async {
     if (_publishing) return;
     final s = ProviderScope.containerOf(
@@ -85,11 +87,13 @@ mixin _ScEditMx on _StoryComposerBase {
   // ── Pinch-to-zoom + drag (satu handler untuk 1 & 2 jari) ──
   // onScaleUpdate jalan untuk geser satu jari (scale≈1) maupun cubit:
   // focalPointDelta = gerakan, scale = rasio terhadap awal gestur.
+  @override
   void _onScaleStart(ScaleStartDetails d) {
     _scaleBase = _textScale;
     _rotationBase = _textRotation;
   }
 
+  @override
   void _onScale(ScaleUpdateDetails d, Size boxSize) {
     setState(() {
       _textScale = (_scaleBase * d.scale).clamp(0.5, 3.0);
@@ -109,6 +113,7 @@ mixin _ScEditMx on _StoryComposerBase {
     });
   }
 
+  @override
   void _onScaleEnd(ScaleEndDetails d) {
     if (_dragOverTrash) {
       _deleteText();
@@ -123,6 +128,7 @@ mixin _ScEditMx on _StoryComposerBase {
   }
 
   /// Hapus teks (drag ke sampah / tap ikon sampah saat teks kepilih).
+  @override
   void _deleteText() {
     setState(() {
       _textCtrl.clear();
@@ -144,6 +150,7 @@ mixin _ScEditMx on _StoryComposerBase {
   // Tombol "T" kanan atas foto → munculkan area teks DI ATAS foto (posisi
   // = posisi overlay nanti). Tap area teks → panel warna + ukuran.
   // Typing langsung di dalam foto; drag di luar area teks = pindahkan.
+  @override
   void _toggleTextArea() {
     setState(() {
       _showTextArea = !_showTextArea;
@@ -168,6 +175,7 @@ mixin _ScEditMx on _StoryComposerBase {
 
   /// Tinggi kartu foto (pixel) — dipakai hitung posisi absolut TextField
   /// edit di layer atas (posisi teks statis pakai koordinat kartu).
+  @override
   double _cardHeight(BuildContext ctx) {
     return MediaQuery.of(ctx).size.height -
         MediaQuery.of(ctx).padding.top -
@@ -176,6 +184,7 @@ mixin _ScEditMx on _StoryComposerBase {
         (MediaQuery.of(ctx).padding.bottom + 68) /* bottom offset */;
   }
 
+  @override
   TextStyle _composerTextStyle() {
     return TextStyle(
       fontSize: StoryText.size(_sizeIndex) * _textScale,
@@ -194,6 +203,7 @@ mixin _ScEditMx on _StoryComposerBase {
 
   /// Preview teks mode SELECT — gaya identik TextField edit supaya
   /// tidak ada lompatan visual saat pindah mode.
+  @override
   Widget _selectPreview(S s) {
     final t = _textCtrl.text;
     final body = t.isEmpty

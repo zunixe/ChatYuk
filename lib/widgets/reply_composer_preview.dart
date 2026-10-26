@@ -117,7 +117,7 @@ class _ReplyComposerPreviewState extends State<ReplyComposerPreview> {
     final thumbAspect = photoAspect > 0 ? photoAspect : 1.0;
     final thumbH = 34.0;
     final thumbW = (thumbH * thumbAspect).clamp(24.0, 48.0);
-    final showThumb = ReplyQuote_hasThumb(kind);
+    final showThumb = replyQuoteHasThumb(kind);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
       child: Container(
@@ -234,5 +234,5 @@ class _ReplyComposerPreviewState extends State<ReplyComposerPreview> {
 
 /// Helper kecil: jenis yang punya thumbnail (foto/video) — foto dicek via
 /// [replyMediaKindOfType] karena enum tidak punya nilai `image`.
-bool ReplyQuote_hasThumb(ReplyMediaKind k) =>
+bool replyQuoteHasThumb(ReplyMediaKind k) =>
     k == ReplyMediaKind.photo || k == ReplyMediaKind.video;

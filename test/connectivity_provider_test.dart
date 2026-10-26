@@ -69,7 +69,7 @@ void main() {
     fake.initial = [ConnectivityResult.none];
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    c.listen(connectivityProvider, (_, _) {}, fireImmediately: true);
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isTrue);
 
@@ -86,7 +86,7 @@ void main() {
     fake.initial = [ConnectivityResult.none];
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    c.listen(connectivityProvider, (_, _) {}, fireImmediately: true);
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isTrue);
   });
@@ -96,7 +96,7 @@ void main() {
     fake.initial = [ConnectivityResult.wifi];
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    c.listen(connectivityProvider, (_, _) {}, fireImmediately: true);
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(c.read(connectivityProvider), isTrue);
 
@@ -120,7 +120,7 @@ void main() {
     fake.initial = [ConnectivityResult.none];
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    c.listen(connectivityProvider, (_, _) {}, fireImmediately: true);
     await Future<void>.delayed(const Duration(milliseconds: 10));
     c.read(connectivityProvider.notifier).revalidate();
     await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -137,10 +137,10 @@ void main() {
     fake.initial = [ConnectivityResult.wifi];
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    c.listen(connectivityProvider, (_, _) {}, fireImmediately: true);
     await Future<void>.delayed(Duration.zero);
     var notified = 0;
-    c.listen<bool>(connectivityProvider, (_, __) => notified++);
+    c.listen<bool>(connectivityProvider, (_, _) => notified++);
 
     fake.emit([ConnectivityResult.wifi]);
     await Future<void>.delayed(Duration.zero);
@@ -150,7 +150,7 @@ void main() {
   test('dispose membatalkan subscription', () async {
     fake.initial = [ConnectivityResult.wifi];
     final c = ProviderContainer();
-    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    c.listen(connectivityProvider, (_, _) {}, fireImmediately: true);
     await Future<void>.delayed(Duration.zero);
     c.dispose();
     // Emit setelah dispose tidak boleh melempar.
@@ -165,7 +165,7 @@ void main() {
     fake.initial = [ConnectivityResult.none];
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    c.listen(connectivityProvider, (_, _) {}, fireImmediately: true);
     await Future<void>.delayed(const Duration(milliseconds: 10));
     c.read(connectivityProvider.notifier).revalidate(); // gagal #2 → offline
     await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -182,10 +182,10 @@ void main() {
     fake.initial = [ConnectivityResult.wifi];
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.listen(connectivityProvider, (_, __) {}, fireImmediately: true);
+    c.listen(connectivityProvider, (_, _) {}, fireImmediately: true);
     await Future<void>.delayed(Duration.zero);
     var notified = 0;
-    c.listen<bool>(connectivityProvider, (_, __) => notified++);
+    c.listen<bool>(connectivityProvider, (_, _) => notified++);
 
     c.read(connectivityProvider.notifier).revalidate();
     await Future<void>.delayed(Duration.zero);

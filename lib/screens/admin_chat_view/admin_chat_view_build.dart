@@ -2,6 +2,7 @@ part of '../admin_chat_view_screen.dart';
 
 
 mixin _AcBuildMx on _AdminBase {
+  @override
   Widget build(BuildContext context) {
     ref.watch(themeProvider);
     final s = ref.watch(localeProvider).s;
@@ -114,8 +115,9 @@ mixin _AcBuildMx on _AdminBase {
                               );
                             }
                             final item = _items[_items.length - 1 - i];
-                            if (item.dateLabel != null)
+                            if (item.dateLabel != null) {
                               return DateChip(label: item.dateLabel!);
+                            }
                             final msg = item.msg!;
                             final isMe = msg.senderId != _leftUid;
                             // Samakan chat asli: centang-2 hanya bila

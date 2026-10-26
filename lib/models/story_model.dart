@@ -124,8 +124,12 @@ class StorySlide {
     final n = v is num ? v.toDouble() : double.tryParse('$v');
     if (n == null) return 0;
     double r = n;
-    while (r > 3.14159265) r -= 6.28318530;
-    while (r < -3.14159265) r += 6.28318530;
+    while (r > 3.14159265) {
+      r -= 6.28318530;
+    }
+    while (r < -3.14159265) {
+      r += 6.28318530;
+    }
     return r;
   }
 }

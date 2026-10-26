@@ -430,13 +430,13 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
   Widget _tabBody(_AdminTab tab, S s) => switch (tab) {
         _AdminTab.globalSetting => const AdminGlobalSettingTab(),
         _AdminTab.overview => rv.Consumer(
-            builder: (ctx, ref, __) {
+            builder: (ctx, ref, _) {
               final ap = ref.watch(adminProvider);
               return _buildOverviewTab(ap, s, ap.stats);
             },
           ),
         _AdminTab.point => rv.Consumer(
-            builder: (ctx, ref, __) {
+            builder: (ctx, ref, _) {
               final ap = ref.watch(adminProvider);
               return _buildPointTab(ap, s, ap.stats);
             },

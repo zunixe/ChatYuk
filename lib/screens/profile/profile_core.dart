@@ -2,6 +2,7 @@ part of '../profile_screen.dart';
 
 
 mixin _ProfileCoreMx on _ProfileBase {
+  @override
   void initState() {
     super.initState();
     final scope = ProviderScope.containerOf(context, listen: false);
@@ -26,16 +27,19 @@ mixin _ProfileCoreMx on _ProfileBase {
     super.dispose();
   }
 
+  @override
   void _startEditAbout(String current) {
     _aboutCtrl.text = current;
     setState(() => _editingAbout = true);
   }
 
+  @override
   void _cancelEditAbout() {
     FocusScope.of(context).unfocus();
     setState(() => _editingAbout = false);
   }
 
+  @override
   Future<void> _saveAbout() async {
     final auth = ProviderScope.containerOf(
       context,
@@ -68,6 +72,7 @@ mixin _ProfileCoreMx on _ProfileBase {
     }
   }
 
+  @override
   void _addHashtag(String raw) {
     final s = ProviderScope.containerOf(
       context,
@@ -93,6 +98,7 @@ mixin _ProfileCoreMx on _ProfileBase {
     _hashtagCtrl.clear();
   }
 
+  @override
   void _removeHashtag(String tag) {
     final tags = List<String>.of(_hashtags)..remove(tag);
     _saveHashtags(tags);

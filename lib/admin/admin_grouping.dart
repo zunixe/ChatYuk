@@ -6,6 +6,8 @@
 
 /// Kelompokkan baris device per install_id.
 /// Tiap grup: brand/model/os/app/ip/last_seen_at + `users[]` (dedupe uid|nick).
+library;
+
 List<Map<String, dynamic>> groupByDevice(List<Map<String, dynamic>> rows) {
   final map = <String, Map<String, dynamic>>{};
   for (final r in rows) {

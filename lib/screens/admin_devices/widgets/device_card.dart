@@ -10,7 +10,7 @@ class DeviceCard extends StatelessWidget {
   final Map<String, dynamic> device;
   final S s;
   final VoidCallback onTap;
-  const DeviceCard({
+  const DeviceCard({super.key, 
     required this.device,
     required this.s,
     required this.onTap,
@@ -190,7 +190,7 @@ class DeviceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${uid.length >= 8 ? uid.substring(0, 8) : uid}',
+                    uid.length >= 8 ? uid.substring(0, 8) : uid,
                     style: AppText.micro.copyWith(
                       color: AppTheme.textSecondary,
                       fontFeatures: const [],

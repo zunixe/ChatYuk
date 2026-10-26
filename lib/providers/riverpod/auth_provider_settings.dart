@@ -1,6 +1,7 @@
 part of 'auth_provider.dart';
 
 mixin _AuthSettingsMx on _AuthBase {
+  @override
   Future<void> _loadGlobalSettings() async {
     final row = await _auth.fetchGlobalSettings();
     if (row == null) {
@@ -113,10 +114,11 @@ mixin _AuthSettingsMx on _AuthBase {
         _profile = _profile?.copyWith(status: 'online');
         resetIdleTimer();
         safeUnawaited(_updateLocationOnOnline());
-        if (uid != null)
+        if (uid != null) {
           safeUnawaited(
             RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''),
           );
+        }
       }
     } catch (e) {
       dlog('[AUTH] updateInvisibleEnabled error: $e');
@@ -125,12 +127,14 @@ mixin _AuthSettingsMx on _AuthBase {
   }
 
   /// Bersihkan akun anonymous stale di server (fire-and-forget).
+  @override
   Future<void> cleanupStaleAnonymous({int minAgeDays = 7}) {
     return _auth.cleanupStaleAnonymous(minAgeDays: minAgeDays);
   }
 
   /// Ambil daftar device ter-exclude (admin-only) — hanya untuk sesi
   /// admin sungguhan; user/dummy tidak perlu datanya.
+  @override
   Future<void> _loadExcludedDevices() async {
     if (!isRealAdmin) return;
     _excludedDevices = await _auth.fetchExcludedDevices();
@@ -207,6 +211,7 @@ mixin _AuthSettingsMx on _AuthBase {
   /// jalan) dengan toggle Sistem Poin di PointsProvider.watchEnabled().
   /// Resilient: error channel me-restart subscription otomatis (dulu:
   /// mati permanen → toggle admin tidak berefek sampai restart).
+  @override
   void _listenAppSettings() {
     if (_appSettingsSub != null) return;
     _appSettingsSub = listenResilient<Map<String, dynamic>?>(
@@ -247,6 +252,7 @@ mixin _AuthSettingsMx on _AuthBase {
   /// Polling cadangan bila websocket realtime mati — 15 menit (realtime
   /// tetap jalur utama; dulu 5 mnt, dijarangkan lagi supaya hemat RPC
   /// per user — realtime app_settings sudah menutup perubahan instan).
+  @override
   void _startSettingsPolling() {
     _settingsPollTimer?.cancel();
     _settingsPollTimer = Timer.periodic(const Duration(minutes: 15), (_) async {

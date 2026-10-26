@@ -13,11 +13,12 @@ mixin _RcCoreMx on _RoomChatBase {
   AuthNotifier get chatAuth => _auth;
 
   @override
-  chatRiverpod.ChatNotifier get chatProvider => _chat;
+  chat_riverpod.ChatNotifier get chatProvider => _chat;
 
   @override
   TextEditingController get chatMsgCtrl => _msgCtrl;
 
+  @override
   void chatFocusComposer() {}
 
   @override
@@ -243,7 +244,7 @@ mixin _RcCoreMx on _RoomChatBase {
   @override
   Future<bool> sendEditPersist(MessageModel editing, String raw) =>
       ProviderScope.containerOf(context, listen: false)
-          .read(chatRiverpod.chatProvider.notifier)
+          .read(chat_riverpod.chatProvider.notifier)
           .editRoomMessage(editing.id, raw);
 
   @override
@@ -303,6 +304,7 @@ mixin _RcCoreMx on _RoomChatBase {
   /// Derivasikan `(items, deletedIds)` di-cache berbasis IDENTITAS list pesan
   /// sumber ([msgsSrc], referensinya stabil dari stream antar rebuild parent)
   /// + jumlah `_pending` + locale + hari. `all` dipakai untuk hasil.
+  @override
   (List<ChatItem>, Set<String>) _deriveItems(
     S s,
     List<MessageModel> msgsSrc,
@@ -364,14 +366,18 @@ mixin _RcCoreMx on _RoomChatBase {
     return (items, deletedIds);
   }
 
+  @override
   bool get isPrivateRoom => widget.room.isPrivate == true;
+  @override
   bool get canModerate =>
       isPrivateRoom && (_myRole == 'owner' || _myRole == 'admin');
   // Moderasi voice global room: owner room ATAU app admin (server cek ulang).
+  @override
   bool get canModerateVoice =>
       !isPrivateRoom && (widget.room.ownerId == _auth.uid || _auth.isRealAdmin);
 
 
+  @override
   void _onVoiceChanged() {
     if (mounted) setState(() {});
   }
@@ -385,6 +391,7 @@ mixin _RcCoreMx on _RoomChatBase {
 
   /// Uid yang sudah tampil di strip voice (atas) — disembunyikan dari list
   /// user (bawah) supaya avatar tidak dobel atas-bawah.
+  @override
   Set<String> get _stripUids {
     final s = _voiceSession;
     if (isPrivateRoom || s == null) return const {};
@@ -393,6 +400,7 @@ mixin _RcCoreMx on _RoomChatBase {
 
   /// True bila SEMUA user (cache) sudah terwakili strip → list bawah collapse
   /// total (tidak menyisakan kotak 90px kosong).
+  @override
   bool get _voiceStripCoversUsers {
     final s = _voiceSession;
     if (isPrivateRoom || s == null || !_showUsers) return false;
@@ -421,6 +429,7 @@ mixin _RcCoreMx on _RoomChatBase {
 
   /// Tap tombol mic: belum join → join + langsung naik stage;
   /// di stage → toggle mute; belum stage → naik stage.
+  @override
   Future<void> _onMicTap() async {
     if (_voiceJoining) return;
     final s = ProviderScope.containerOf(
@@ -484,6 +493,7 @@ mixin _RcCoreMx on _RoomChatBase {
   }
 
   /// Tahan tombol mic = keluar voice sepenuhnya.
+  @override
   Future<void> _onMicLongPress() async {
     final session = _voiceSession;
     if (session == null) return;
@@ -496,6 +506,7 @@ mixin _RcCoreMx on _RoomChatBase {
   /// Sheet diagnostik voice (tap avatar sendiri di strip): state sesi +
   /// kondisi tiap peer (conn/ice/pasangan kandidat/level audio).
   /// Untuk debug "mic hijau tapi bisu" — kirim screenshot ke dev.
+  @override
   Future<void> _showVoiceDiagnostics() async {
     final session = _voiceSession;
     if (session == null || !mounted) return;
@@ -514,6 +525,7 @@ mixin _RcCoreMx on _RoomChatBase {
   }
 
   /// Tap avatar speaker lain → sheet mute (hanya bila boleh moderasi).
+  @override
   Future<void> _onSpeakerTap(String uid) async {
     if (!canModerateVoice || !mounted) return;
     final s = ProviderScope.containerOf(
@@ -562,18 +574,22 @@ mixin _RcCoreMx on _RoomChatBase {
     } catch (_) {}
   }
 
+  @override
   bool get iAmBroadcasting =>
       _broadcastSession != null &&
       _broadcastSession!.isBroadcaster &&
       _liveUid == _auth.uid;
+  @override
   bool get isGrantedBroadcast => _isGrantedBroadcast;
   bool get watchingLive => _broadcastSession != null && !iAmBroadcasting;
 
   /// Slider ukuran font chat berubah → rebuild bubble & composer room.
+  @override
   void _onFontScaleChanged() {
     if (mounted) setState(() {});
   }
 
+  @override
   List<Mention> get _mentionCandidates {
     final myUid = _auth.uid;
     final seen = <String>{};
@@ -595,6 +611,7 @@ mixin _RcCoreMx on _RoomChatBase {
   }
 
   /// Target `@all` (owner/admin) — dibatasi 100 uid agar payload aman.
+  @override
   List<Mention> _mentionAllExpansion() => _mentionCandidates.take(100).toList();
 
   /// Resolusi teks → mention ber-uid. `@all` hanya di grup oleh owner/admin.
@@ -617,7 +634,7 @@ mixin _RcCoreMx on _RoomChatBase {
     // Ukuran font chat berubah (slider) → rebuild bubble & composer room.
     ChatTextScale.notifier.addListener(_onFontScaleChanged);
     _auth = scope.read(authProvider.notifier);
-    _chat = scope.read(chatRiverpod.chatProvider.notifier);
+    _chat = scope.read(chat_riverpod.chatProvider.notifier);
     // DEFER seperti private chat — hindari setState-during-build glitch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) activeChatId.value = widget.room.id;
@@ -704,6 +721,7 @@ mixin _RcCoreMx on _RoomChatBase {
 
   /// Satu pintu mulai broadcast — cegah double-tap (toggle ke stop) dan
   /// beri feedback loading di tombol/banner.
+  @override
   Future<void> _onStartBroadcastTap() async {
     if (_broadcastStarting || iAmBroadcasting) return;
     setState(() => _broadcastStarting = true);
@@ -775,6 +793,8 @@ mixin _RcCoreMx on _RoomChatBase {
     _broadcastReady = true;
     if (!mounted) return;
     setState(() {});
+    // Cek gate media room publik (tombol foto/video) tanpa menahan frame.
+    unawaited(_refreshMediaGate());
   }
 
 

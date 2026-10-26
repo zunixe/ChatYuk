@@ -343,7 +343,7 @@ class _StoryCameraPickerScreenState extends ConsumerState<StoryCameraPickerScree
                         // selesai (dulu: setState → seluruh grid).
                         child: ValueListenableBuilder<int>(
                           valueListenable: _thumbsTick,
-                          builder: (_, __, ___) {
+                          builder: (_, _, _) {
                             final thumb = _thumbs[a.id];
                             final isVideo = a.type == AssetType.video;
                             return Stack(

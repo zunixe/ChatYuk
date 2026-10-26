@@ -41,8 +41,8 @@ PageRoute<T> appSlideRoute<T>({
     reverseTransitionDuration: kChatRouteReverseDuration,
     settings: RouteSettings(name: name),
     fullscreenDialog: fullscreenDialog,
-    pageBuilder: (context, _, __) => builder(context),
-    transitionsBuilder: (_, animation, __, child) {
+    pageBuilder: (context, _, _) => builder(context),
+    transitionsBuilder: (_, animation, _, child) {
       // SLIDE MURNI ala WhatsApp: layar baru masuk dari kanan, layar lama
       // bergeser sedikit ke kiri (parallax) — tanpa fade.
       //
@@ -85,7 +85,7 @@ PageRoute<void> chatRoute({
     transitionDuration: kChatRouteDuration,
     reverseTransitionDuration: kChatRouteReverseDuration,
     settings: RouteSettings(name: routeName ?? 'private-chat:$chatId'),
-    pageBuilder: (_, __, ___) => PrivateChatScreen(
+    pageBuilder: (_, _, _) => PrivateChatScreen(
       chatId: chatId,
       otherName: otherName,
       otherUid: otherUid,
@@ -96,7 +96,7 @@ PageRoute<void> chatRoute({
       initialOtherDeleted: initialOtherDeleted,
       initialAvatarB64: otherAvatarB64,
     ),
-    transitionsBuilder: (_, animation, __, child) {
+    transitionsBuilder: (_, animation, _, child) {
       // SLIDE MURNI ala WhatsApp: layar baru masuk dari kanan, layar lama
       // bergeser sedikit ke kiri (parallax) — tanpa fade.
       //

@@ -17,7 +17,7 @@ import '../../../providers/riverpod/admin_provider.dart';
 import 'usermap_widgets.dart';
 
 class AdminUserMapCard extends ConsumerStatefulWidget {
-  const AdminUserMapCard();
+  const AdminUserMapCard({super.key});
   @override
   ConsumerState<AdminUserMapCard> createState() => AdminUserMapCardState();
 }
@@ -338,7 +338,7 @@ class AdminUserMapCardState extends ConsumerState<AdminUserMapCard> {
                       ],
                       if (lastSeen.isNotEmpty)
                         Text(
-                          s.adminLastUpdate + ' ' + lastSeen,
+                          '${s.adminLastUpdate} $lastSeen',
                           style: AppText.caption.copyWith(
                             color: AppTheme.textSecondary,
                           ),

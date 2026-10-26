@@ -437,13 +437,19 @@ Future<void> _initFcmTokenLazy() async {
   if (token != null) {
     dlog('FCM token: ${token.substring(0, 20)}...');
     final auth = AuthService();
-    if (auth.isSignedIn) unawaited(auth.updateFcmToken(token));
-    else unawaited(_waitForSession().then((ready) { if (ready) unawaited(AuthService().updateFcmToken(token!)); }));
+    if (auth.isSignedIn) {
+      unawaited(auth.updateFcmToken(token));
+    } else {
+      unawaited(_waitForSession().then((ready) { if (ready) unawaited(AuthService().updateFcmToken(token!)); }));
+    }
   }
   FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
     final auth = AuthService();
-    if (auth.isSignedIn) unawaited(auth.updateFcmToken(newToken));
-    else unawaited(_waitForSession().then((ready) { if (ready) unawaited(AuthService().updateFcmToken(newToken)); }));
+    if (auth.isSignedIn) {
+      unawaited(auth.updateFcmToken(newToken));
+    } else {
+      unawaited(_waitForSession().then((ready) { if (ready) unawaited(AuthService().updateFcmToken(newToken)); }));
+    }
   });
 }
 
@@ -685,7 +691,11 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
       } on UnsupportedError catch (e) {
         dlog('[FIREBASE] iOS belum dikonfigurasi, lewati: $e');
       } on FirebaseException catch (e) {
-        if (e.code == 'duplicate-app') _firebaseReady = true; else dlog('[FIREBASE] init gagal: $e');
+        if (e.code == 'duplicate-app') {
+          _firebaseReady = true;
+        } else {
+          dlog('[FIREBASE] init gagal: $e');
+        }
       } catch (e) {
         dlog('[FIREBASE] init error: $e');
       }

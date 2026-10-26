@@ -16,7 +16,7 @@ class CommentAvatar extends StatefulWidget {
   final String gender;
   final String avatar;
   final double size;
-  const CommentAvatar({
+  const CommentAvatar({super.key, 
     required this.uid,
     required this.name,
     required this.gender,
@@ -41,9 +41,9 @@ class CommentAvatarState extends State<CommentAvatar> {
   }
 
   @override
-  void didUpdateWidget(CommentAvatar old) {
-    super.didUpdateWidget(old);
-    if (old.avatar != widget.avatar || old.uid != widget.uid) {
+  void didUpdateWidget(CommentAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.avatar != widget.avatar || oldWidget.uid != widget.uid) {
       _bytes = null;
       _resolvedFor = null;
       if (!_resolveSync()) _resolveAsync();

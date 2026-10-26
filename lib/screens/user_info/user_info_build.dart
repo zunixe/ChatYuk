@@ -3,7 +3,8 @@ part of '../user_info_screen.dart';
 // Analyzer limitation: pada `part`+mixin, method yang dideklarasikan stubs di
 // base tampak 'unused' walau dipanggil lintas-mixin. Aman diabaikan.
 
-mixin _UiBuildMx on _UserInfoBase {  Widget build(BuildContext context) {
+mixin _UiBuildMx on _UserInfoBase {  @override
+  Widget build(BuildContext context) {
     PerfProbe.buildCount('UserInfo');
     ref.watch(themeProvider);
     final s = ref.watch(localeProvider).s;

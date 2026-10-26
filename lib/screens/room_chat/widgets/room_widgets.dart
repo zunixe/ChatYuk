@@ -67,7 +67,7 @@ class RoomUserChip extends StatelessWidget {
 class RoomHeaderToggle extends StatelessWidget {
   final bool showUsers;
   final VoidCallback onTap;
-  const RoomHeaderToggle({required this.showUsers, required this.onTap});
+  const RoomHeaderToggle({super.key, required this.showUsers, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -115,7 +115,7 @@ class RoomHeaderToggle extends StatelessWidget {
 class RoomSheetIcon extends StatelessWidget {
   final IconData icon;
   final Color color;
-  const RoomSheetIcon({required this.icon, required this.color});
+  const RoomSheetIcon({super.key, required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {

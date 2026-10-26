@@ -164,7 +164,7 @@ class OnlineAppBar extends ConsumerWidget implements PreferredSizeWidget {
               )
             : rv.Consumer(
                 key: const ValueKey('title'),
-                builder: (ctx, ref, __) {
+                builder: (ctx, ref, _) {
                   final prov = ref.watch(onlineUsersProvider);
                   PerfProbe.buildCount('Online.title');
                   // Hitung sama seperti list: exclude self + blocked +

@@ -876,7 +876,7 @@ class _InstantBytes extends StatelessWidget {
       gaplessPlayback: true,
       cacheWidth: 720,
       filterQuality: FilterQuality.medium,
-      errorBuilder: (_, __, ___) => ColoredBox(color: AppTheme.bgInput),
+      errorBuilder: (_, _, _) => ColoredBox(color: AppTheme.bgInput),
     );
   }
 

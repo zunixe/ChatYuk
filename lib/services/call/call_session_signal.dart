@@ -1,6 +1,7 @@
 part of 'call_session.dart';
 
 mixin _CallSessionSignalMx on _CallBase {
+  @override
   Future<void> _createOffer() async {
     if (_closed || _pc == null || _offered) return;
     _offered = true;
@@ -31,6 +32,7 @@ mixin _CallSessionSignalMx on _CallBase {
   /// Plus sampling RTT audio (3× tiap 5 dtk setelah connect) sebagai metrik
   /// latency suara (`call.audioRttMs`, diambil nilai terburuk).
   bool _connectedRecorded = false;
+  @override
   void _recordConnected(String source) {
     if (_connectedRecorded) return;
     _connectedRecorded = true;
@@ -64,6 +66,7 @@ mixin _CallSessionSignalMx on _CallBase {
     await _handleSignal(msg);
   }
 
+  @override
   Future<void> _handleSignal(Map<String, dynamic> msg) async {
     if (_closed) return;
     if (_pc == null) {

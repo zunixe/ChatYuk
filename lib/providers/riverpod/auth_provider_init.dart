@@ -1,6 +1,7 @@
 part of 'auth_provider.dart';
 
 mixin _AuthInitMx on _AuthBase {
+  @override
   AuthData build() {
     ref.onDispose(_disposeAll);
     if (!_autoInit) return const AuthData(loading: false);
@@ -12,6 +13,7 @@ mixin _AuthInitMx on _AuthBase {
     return const AuthData();
   }
 
+  @override
   void _emit() {
     if (_disposed) return;
     final email = _auth.currentUser?.email;
@@ -76,6 +78,7 @@ mixin _AuthInitMx on _AuthBase {
   }
 
   /// Ikat referrer (sekali) & klaim reward untuk pengundang. Fire-and-forget.
+  @override
   Future<void> _bindAndClaimReferrer() async {
     final referrer = _pendingReferrer;
     if (referrer == null || referrer.isEmpty) return;
@@ -91,6 +94,7 @@ mixin _AuthInitMx on _AuthBase {
   /// Best-effort: tidak pernah menggagalkan alur auth. Dipanggil tiap
   /// login/daftar & saat profil berubah (panduan TikTok: identify saat
   /// info user berubah).
+  @override
   void _syncTikTok({TikTokEvent? event}) {
     final p = _profile;
     final id = p?.uid.isNotEmpty == true ? p!.uid : (_auth.uid ?? '');
@@ -190,6 +194,7 @@ mixin _AuthInitMx on _AuthBase {
     }
   }
 
+  @override
   Future<void> _saveCachedProfile(UserModel p) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -454,6 +459,7 @@ mixin _AuthInitMx on _AuthBase {
     _pendingLinkNickname = null;
   }
 
+  @override
   Future<void> updateFcmToken() async {
     if (!_notificationsEnabled) return;
     // Jaringan HP sering flaky saat app baru buka (DNS/radio belum stabil) —

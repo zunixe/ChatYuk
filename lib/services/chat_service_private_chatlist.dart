@@ -366,13 +366,13 @@ mixin ChatServicePrivateChatListMx on ChatBase {
           .map((r) => _rowToPrivateChat(Map<String, dynamic>.from(r as Map), myUid: myUid))
           .where((c) => c.messageCount > 0)
           .toList();
-      list_sort(l, myUid);
+      listSort(l, myUid);
       return l;
     });
     return list;
   }
 
-  void list_sort(List<PrivateChatInfo> l, String myUid) =>
+  void listSort(List<PrivateChatInfo> l, String myUid) =>
       l.sort((a, b) => ChatService._comparePinned(a, b, myUid));
 
   PrivateChatInfo _rowToPrivateChat(Map<String, dynamic> row, {String? myUid}) {
@@ -527,7 +527,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
           .where((c) => c.messageCount > 0)
           .toList();
       if (list.isEmpty) return hot;
-      list_sort(list, myUid);
+      listSort(list, myUid);
       // Simpan juga ke memori panas agar panggilan berikutnya instan.
       _privateChatsLast[myUid] = list;
       return list;
@@ -709,8 +709,9 @@ mixin ChatServicePrivateChatListMx on ChatBase {
           if (cutoffStr != null && msgStr != null) {
             final cutoff = DateTime.tryParse('$cutoffStr');
             final msgAt = DateTime.tryParse(msgStr);
-            if (cutoff == null || msgAt == null || !msgAt.isAfter(cutoff))
+            if (cutoff == null || msgAt == null || !msgAt.isAfter(cutoff)) {
               return;
+            }
           }
           await unhideChat(myUid, chatId);
           // Row private_chats berubah → channel di atas yang apply ke list.

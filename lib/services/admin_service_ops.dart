@@ -13,11 +13,11 @@ mixin _AdminOpsMx on _AdminBase {
     String? defaultModel,
   }) async {
     final params = <String, dynamic>{
-      if (globalEnabled != null) 'p_global_enabled': globalEnabled,
-      if (maxReplies != null) 'p_max_replies': maxReplies,
-      if (minInterval != null) 'p_min_interval': minInterval,
-      if (guardEnabled != null) 'p_guard_enabled': guardEnabled,
-      if (aiAiEnabled != null) 'p_ai_ai_enabled': aiAiEnabled,
+      'p_global_enabled': ?globalEnabled,
+      'p_max_replies': ?maxReplies,
+      'p_min_interval': ?minInterval,
+      'p_guard_enabled': ?guardEnabled,
+      'p_ai_ai_enabled': ?aiAiEnabled,
       if (apiBase != null && apiBase.isNotEmpty) 'p_api_base': apiBase,
       if (apiKey != null && apiKey.isNotEmpty) 'p_api_key': apiKey,
       if (defaultModel != null && defaultModel.isNotEmpty)
@@ -56,13 +56,13 @@ mixin _AdminOpsMx on _AdminBase {
     final res = await _rpc(
       'admin_ai_provider_save',
       params: {
-        if (id != null) 'p_id': id,
-        if (label != null) 'p_label': label,
-        if (apiBase != null) 'p_api_base': apiBase,
-        if (apiKey != null) 'p_api_key': apiKey,
-        if (defaultModel != null) 'p_default_model': defaultModel,
-        if (storyModel != null) 'p_story_model': storyModel,
-        if (fallbackModel != null) 'p_fallback_model': fallbackModel,
+        'p_id': ?id,
+        'p_label': ?label,
+        'p_api_base': ?apiBase,
+        'p_api_key': ?apiKey,
+        'p_default_model': ?defaultModel,
+        'p_story_model': ?storyModel,
+        'p_fallback_model': ?fallbackModel,
       },
     );
     return (res as Map<String, dynamic>?) ?? const {};

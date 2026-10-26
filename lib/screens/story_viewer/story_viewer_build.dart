@@ -2,6 +2,7 @@ part of '../story_viewer_screen.dart';
 
 
 mixin _StoryBuildMx on _StoryBase {
+  @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('StoryViewer');
     return Scaffold(
@@ -226,7 +227,7 @@ mixin _StoryBuildMx on _StoryBase {
                                   height: 2,
                                   child: AnimatedBuilder(
                                     animation: _progress,
-                                    builder: (_, __) => LinearProgressIndicator(
+                                    builder: (_, _) => LinearProgressIndicator(
                                       value: _progress.value,
                                       backgroundColor: Colors.white24,
                                       valueColor: const AlwaysStoppedAnimation(

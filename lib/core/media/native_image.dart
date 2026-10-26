@@ -433,7 +433,7 @@ class NativeImage {
     return compute(dartimg.dartAdminThumbB64, (bytes, maxW, quality));
   }
 
-  /// Rasio (w/h) BANYAK gambar sekaligus (header-only di native) → List<double?>.
+  /// Rasio (w/h) BANYAK gambar sekaligus (header-only di native) → List`<double?>`.
   /// Fallback: `dartAspectRatios` di isolate.
   static Future<List<double?>> aspectRatios(List<Uint8List> list) async {
     if (list.isEmpty) return const [];

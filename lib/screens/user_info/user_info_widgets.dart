@@ -8,7 +8,7 @@ import '../../widgets/async_photo.dart';
 
 class UserChatIconButton extends StatelessWidget {
   final VoidCallback onTap;
-  const UserChatIconButton({required this.onTap});
+  const UserChatIconButton({super.key, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +41,7 @@ class UserChatIconButton extends StatelessWidget {
 class UserPhotoViewer extends StatefulWidget {
   final List<UserPhoto> photos;
   final int initialIndex;
-  const UserPhotoViewer({required this.photos, required this.initialIndex});
+  const UserPhotoViewer({super.key, required this.photos, required this.initialIndex});
 
   @override
   State<UserPhotoViewer> createState() => UserPhotoViewerState();
@@ -96,7 +96,7 @@ class UserPhotoViewerState extends State<UserPhotoViewer> {
 /// kecil di bawah — tidak ada layar kosong muter-muter.
 class UserInfoLoadingPlaceholder extends StatelessWidget {
   final String name;
-  const UserInfoLoadingPlaceholder({required this.name});
+  const UserInfoLoadingPlaceholder({super.key, required this.name});
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +139,7 @@ class UserInfoLoadingPlaceholder extends StatelessWidget {
 /// Gagal total (timeout/network) — pesan jelas + tombol coba lagi.
 class UserInfoLoadErrorView extends StatelessWidget {
   final VoidCallback onRetry;
-  const UserInfoLoadErrorView({required this.onRetry});
+  const UserInfoLoadErrorView({super.key, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {

@@ -4,6 +4,7 @@ part of '../profile_screen.dart';
 /// Seksi lanjutan halaman Profil: Foto Saya, Akun, Lainnya, poin, footer.
 mixin _ProfileUiSections2Mx on _ProfileBase {
   /// [6] FOTO SAYA — tile Tambah + foto (92x116) horizontal.
+  @override
   Widget _photosSection(BuildContext context, S s) {
     final maxPhotos = 4 + _extraSlotsCache;
     return Column(
@@ -164,6 +165,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   }
 
   /// [7] KARTU AKUN — Email / Username / User ID.
+  @override
   Widget _accountSection(
     BuildContext context,
     S s,
@@ -335,6 +337,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   }
 
   /// [8] KARTU LAINNYA — Pengaturan, Hubungi Kami.
+  @override
   Widget _otherSection(BuildContext context, S s) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -436,6 +439,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
 
   /// Info YukCoin (hanya bila sistem koin aktif) — kartu saldo + pintu
   /// riwayat/topup, diletakkan dekat atas agar tidak tenggelam di bawah.
+  @override
   Widget _pointsInfo(
     BuildContext context,
     S s,
@@ -584,6 +588,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   }
 
   /// [9] FOOTER — Donasi + versi aplikasi.
+  @override
   Widget _footer(BuildContext context, S s) {
     return Padding(
       padding: const EdgeInsets.only(top: 16, bottom: 20),
@@ -632,6 +637,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   }
 
   /// Versi aplikasi dari package_info_plus (cache 1x).
+  @override
   Future<String> _appVersion() async {
     if (_appVersionCache != null) return _appVersionCache!;
     try {

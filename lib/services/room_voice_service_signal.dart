@@ -2,6 +2,7 @@ part of 'room_voice_service.dart';
 
 
 mixin _VoiceSignalMx on _VoiceBase {
+  @override
   Future<void> _preferOpusCodec(RTCPeerConnection pc) async {
     if (_closed) return;
     try {
@@ -45,6 +46,7 @@ mixin _VoiceSignalMx on _VoiceBase {
   }
 
   // ── Tutup total (keluar voice). ──
+  @override
   Future<void> stop() async {
     if (_closed) return;
     _closed = true;
@@ -114,6 +116,7 @@ mixin _VoiceSignalMx on _VoiceBase {
   }
 
   // ── Sinyal ──
+  @override
   Stream<Map<String, dynamic>> _onSignalStream() {
     final controller = StreamController<Map<String, dynamic>>.broadcast();
     final channel = _sb.channel('room-voice-$roomId-$myUid');
@@ -148,6 +151,7 @@ mixin _VoiceSignalMx on _VoiceBase {
     return controller.stream;
   }
 
+  @override
   Future<void> _sendSignal({
     required String type,
     String? toUid,
@@ -166,6 +170,7 @@ mixin _VoiceSignalMx on _VoiceBase {
     }
   }
 
+  @override
   Future<void> _syncMissedSignals() async {
     if (_closed) return;
     try {
@@ -191,6 +196,7 @@ mixin _VoiceSignalMx on _VoiceBase {
     } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
   }
 
+  @override
   Future<void> _fastForwardSignals() async {
     try {
       final row = await _sb
@@ -204,6 +210,7 @@ mixin _VoiceSignalMx on _VoiceBase {
     } catch (e) { dlog('[VOICE-SIGNAL]: $e'); }
   }
 
+  @override
   void _onSignal(Map<String, dynamic> sig) {
     if (_closed) return;
     final sid = ((sig['id'] ?? 0) as num).toInt();

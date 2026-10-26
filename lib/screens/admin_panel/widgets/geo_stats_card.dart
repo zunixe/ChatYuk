@@ -11,7 +11,7 @@ import '../../../providers/riverpod/admin_provider.dart';
 /// Kartu "Sebaran Negara" untuk Ringkasan admin: bar horizontal negara
 /// dengan user terbanyak. Ketuk negara → sheet daftar kota + jumlahnya.
 class AdminGeoStatsCard extends ConsumerStatefulWidget {
-  const AdminGeoStatsCard();
+  const AdminGeoStatsCard({super.key});
   @override
   ConsumerState<AdminGeoStatsCard> createState() => _AdminGeoStatsCardState();
 }
@@ -321,7 +321,7 @@ class _CitySheetState extends State<_CitySheet> {
                             MediaQuery.of(context).padding.bottom + 20,
                           ),
                           itemCount: cities.length,
-                          separatorBuilder: (_, __) =>
+                          separatorBuilder: (_, _) =>
                               const Divider(height: 1),
                           itemBuilder: (_, i) {
                             final e = cities[i];

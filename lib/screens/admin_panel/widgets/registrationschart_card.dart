@@ -22,7 +22,7 @@ import '../../../providers/riverpod/admin_provider.dart';
 ///   - `admin_registrations_daily(y,m)` → bar harian
 ///   - `admin_attribution_summary(0)`  → sumber (dipakai sheet)
 class AdminRegistrationsChartCard extends ConsumerStatefulWidget {
-  const AdminRegistrationsChartCard();
+  const AdminRegistrationsChartCard({super.key});
   @override
   ConsumerState<AdminRegistrationsChartCard> createState() =>
       AdminRegistrationsChartCardState();
@@ -255,7 +255,7 @@ class AdminRegistrationsChartCardState extends ConsumerState<AdminRegistrationsC
       _kpi(
         icon: Icons.emoji_events_rounded,
         label: s.adminRegKpiBestDay,
-        value: bestDay > 0 ? '${bestDay}' : '-',
+        value: bestDay > 0 ? '$bestDay' : '-',
         sub: bestDay > 0 ? '$bestCount ${s.adminRegUsersSuffix}' : null,
         color: AppTheme.idle,
       ),

@@ -6,7 +6,7 @@ class SearchNavButton extends StatelessWidget {
   final IconData icon;
   final bool enabled;
   final VoidCallback onTap;
-  const SearchNavButton({
+  const SearchNavButton({super.key, 
     required this.icon,
     required this.enabled,
     required this.onTap,
@@ -39,7 +39,7 @@ class SearchNavButton extends StatelessWidget {
 /// redundan (puluhan/detik) me-rebuild SELURUH layar chat.
 class KeyboardInset extends StatelessWidget {
   final Widget child;
-  const KeyboardInset({required this.child});
+  const KeyboardInset({super.key, required this.child});
   @override
   Widget build(BuildContext context) {
     return Padding(

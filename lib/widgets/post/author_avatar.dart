@@ -17,7 +17,7 @@ class PostAuthorAvatar extends StatefulWidget {
   /// Tap avatar → zoom foto (dipisah dari tap nama → profil), pola sama
   /// dengan menu online. Menerima bytes hasil resolve (null = inisial).
   final void Function(Uint8List? bytes)? onAvatarTap;
-  const PostAuthorAvatar({
+  const PostAuthorAvatar({super.key, 
     required this.post,
     required this.name,
     required this.size,

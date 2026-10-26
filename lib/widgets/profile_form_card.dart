@@ -61,7 +61,7 @@ class ProfileFormCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (header case final h?) h,
+          ?header,
           // Nickname
           TextField(
             controller: nicknameCtrl,

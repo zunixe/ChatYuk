@@ -485,7 +485,7 @@ class RoomMessageBubble extends StatelessWidget {
                   children: [
                     // Kutipan balasan (ala WhatsApp) — juga untuk media
                     // (nama + ikon jenis + thumbnail kecil).
-                    if (selfQuote != null) selfQuote,
+                    ?selfQuote,
                     _content(context, timeStr, alignRight: true),
                     // Room & grup TANPA centang status (beda dari private 1:1):
                     // hanya teks "menunggu koneksi" saat pesan terantre offline.
@@ -652,7 +652,7 @@ class RoomMessageBubble extends StatelessWidget {
                       // Kutipan balasan SERAGAM dengan private chat:
                       // ikon jenis + label + thumbnail kecil (foto/video).
                       // `quote` null = tak ada isi kutipan → tanpa blok kosong.
-                      if (quote != null) quote,
+                      ?quote,
                       _content(context, timeStr, alignRight: false),
                     ],
                   ),

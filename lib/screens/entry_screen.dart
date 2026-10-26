@@ -432,7 +432,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                                     height: 20,
                                     cacheWidth: 40,
                                     cacheHeight: 40,
-                                    errorBuilder: (_, __, ___) => Icon(
+                                    errorBuilder: (_, _, _) => Icon(
                                       Icons.g_mobiledata,
                                       size: 22,
                                       color: Colors.red,

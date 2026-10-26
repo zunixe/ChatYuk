@@ -10,7 +10,7 @@ import '../models/chat_contact.dart';
 import '../models/message_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
-import '../providers/riverpod/chat_provider.dart' as chatRiverpod;
+import '../providers/riverpod/chat_provider.dart' as chat_riverpod;
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/profile_lite_provider.dart';
 import '../screens/user_info_screen.dart';
@@ -97,7 +97,7 @@ class _ContactBubbleState extends ConsumerState<ContactBubble> {
   Future<void> _openChat() async {
     final myUid = ref.read(authProvider).uid ?? '';
     if (myUid.isEmpty) return;
-    final chatId = ref.read(chatRiverpod.chatProvider.notifier).privateChatId(
+    final chatId = ref.read(chat_riverpod.chatProvider.notifier).privateChatId(
           myUid,
           _c.uid,
         );
