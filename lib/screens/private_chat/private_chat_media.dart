@@ -136,10 +136,10 @@ mixin _PcMediaMx on _PrivateChatBase {
 
   /// Kontrak ChatStickerSendMixin: insert pesan stiker (path storage).
   @override
-  Future<void> stickerDispatch(String path) async {
+  Future<String?> stickerDispatch(String path) async {
     final auth = ref.read(authProvider.notifier);
     final prof = auth.profile;
-    await ref.read(chat_riverpod.chatProvider.notifier).sendPrivateMessage(
+    return ref.read(chat_riverpod.chatProvider.notifier).sendPrivateMessage(
       chatId: widget.chatId,
       senderId: auth.uid!,
       senderName: prof?.nickname ?? 'Anon',

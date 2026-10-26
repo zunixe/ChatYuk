@@ -88,9 +88,25 @@ mixin _RcMediaGateMx on _RoomChatBase {
       }
       return false;
     }
-    // 'review' → tetap dikirim, namun ditandai agar moderator meninjau
-    // (dibuat sebagai laporan otomatis di server saat moderasi).
+    if (verdict == 'review') {
+      // Borderline: tetap dikirim, tetapi ditandai `needs_review` agar masuk
+      // antrean tinjauan moderator (id pesan diketahui setelah dispatch).
+      mediaReviewNeeded = true;
+    }
     return true;
+  }
+
+  @override
+  Future<void> mediaReviewFlag(String? messageId) async {
+    if (messageId == null || messageId.isEmpty) return;
+    try {
+      await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(chat_riverpod.chatProvider.notifier).flagMediaReview(messageId);
+    } catch (e) {
+      dlog('[MediaReview] flag error: $e');
+    }
   }
 
   /// Dialog "Ajukan izin" untuk kirim media di room negara lain.

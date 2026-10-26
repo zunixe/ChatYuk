@@ -178,6 +178,50 @@ mixin ChatServiceRoomMx on ChatBase {
   }
 
   // ── Moderasi (RPC daftar & aksi) ──────────────────────────────────────
+  /// Tandai pesan agar masuk antrean tinjauan moderator (verdict NSFW
+  /// borderline). Hanya pengirim yang boleh menandai pesannya sendiri.
+  Future<bool> flagMediaReview(String messageId) async {
+    try {
+      await _sb.rpc('flag_media_review',
+          params: {'p_message_id': messageId});
+      return true;
+    } catch (e) {
+      dlog('[ChatService] flagMediaReview error: $e');
+      return false;
+    }
+  }
+
+  /// Moderator menyelesaikan tinjauan media borderline.
+  Future<bool> moderatorResolveReview(
+    String messageId, {
+    required bool hide,
+  }) async {
+    try {
+      await _sb.rpc('moderator_resolve_review', params: {
+        'p_message_id': messageId,
+        'p_hide': hide,
+      });
+      return true;
+    } catch (e) {
+      dlog('[ChatService] moderatorResolveReview error: $e');
+      return false;
+    }
+  }
+
+  /// Admin: cari user untuk diangkat jadi moderator (min 2 karakter).
+  Future<List<Map<String, dynamic>>> adminSearchUsers(String query) async {
+    try {
+      final res = await _sb.rpc('admin_search_users', params: {'p_query': query});
+      if (res is List) {
+        return [for (final e in res) Map<String, dynamic>.from(e as Map)];
+      }
+      return const [];
+    } catch (e) {
+      dlog('[ChatService] adminSearchUsers error: $e');
+      return const [];
+    }
+  }
+
   Future<Map<String, dynamic>?> moderatorConsole(String country) async {
     try {
       final res = await _sb.rpc('moderator_console',

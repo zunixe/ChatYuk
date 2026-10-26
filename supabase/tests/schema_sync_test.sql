@@ -200,11 +200,17 @@ select supabase_tests.check('get_online_users() filter blocks',
 select supabase_tests.check('get_online_users() tetap boleh anon',
   exists(select 1 from pg_proc p
          where p.proname='get_online_users' and has_function_privilege('anon', p.oid, 'execute')));
+-- Sejak `20261027121000_enforce_ghost_mode.sql` penyaringan privasi
+-- dilakukan INLINE lewat kolom `*_visibility` (presence_vis/about_vis/…),
+-- bukan `privacy_can_view`/`_privacy_is_circle`. Assertion lama menuntut
+-- nama fungsi tsb sehingga SELALU gagal (drift test, bukan bug fungsi).
+-- Yang diuji tetap inti keamanannya: `about` hanya dikirim bila lolos
+-- `about_ok`, dan kolom visibilitas benar-benar dipakai untuk menyaring.
 select supabase_tests.check('get_online_users() kirim about + hormati privasi (about_ok)',
   exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='get_online_users'
            and pg_get_functiondef(p.oid) like '%about_ok%'
-           and pg_get_functiondef(p.oid) like '%privacy_can_view%'));
+           and pg_get_functiondef(p.oid) like '%about_visibility%'));
 select supabase_tests.check('presence_for() kirim about + hormati about_visibility',
   exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='presence_for'

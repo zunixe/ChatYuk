@@ -671,6 +671,14 @@ mixin _RcCoreMx on _RoomChatBase {
     }
     _joinRoom();
     _startPresenceHeartbeat();
+    // Gate media + peran moderator berlaku untuk SEMUA room (dulu hanya di
+    // _initPrivate → global room tidak pernah ter-gate saat dibuka dan ikon
+    // "Moderasi" tak muncul untuk moderator).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_refreshMediaGate());
+      unawaited(_loadMyModerationState());
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Cache dulu (tampil instan), stream menimpa sesudahnya.
@@ -793,10 +801,6 @@ mixin _RcCoreMx on _RoomChatBase {
     _broadcastReady = true;
     if (!mounted) return;
     setState(() {});
-    // Cek gate media room publik (tombol foto/video) tanpa menahan frame.
-    unawaited(_refreshMediaGate());
-    // Peran moderasi saya (untuk menu "Moderasi room ini").
-    unawaited(_loadMyModerationState());
   }
 
   Future<void> _loadMyModerationState() async {

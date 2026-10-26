@@ -119,9 +119,17 @@ mixin ChatFileSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
       if (storagePath == null || storagePath.isEmpty) {
         throw Exception('upload failed');
       }
+      // NSFW: dokumen bisa berupa gambar/video. Klasifikasi hanya untuk
+      // mime image/* atau video/* (PDF/DOCX tidak perlu).
+      final mime = ChatFile.mimeOf(name);
+      if (mime.startsWith('image/') || mime.startsWith('video/')) {
+        if (!await contentSafetyAllowsMedia(storagePath)) {
+          throw Exception('file_rejected');
+        }
+      }
       // Simpan path lokal juga untuk path storage (pesan versi server).
       ChatFile.rememberLocal(storagePath, path);
-      await photoDispatch(
+      final fileMsgId = await photoDispatch(
         imageData: storagePath,
         type: 'file',
         senderId: uid,
@@ -134,6 +142,10 @@ mixin ChatFileSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
         repliedToMeta: sendReplyMeta(reply),
         videoDurationMs: size,
       );
+      if (mediaReviewNeeded) {
+        mediaReviewNeeded = false;
+        await mediaReviewFlag(fileMsgId);
+      }
       photoOnSent('file');
       outboxScrollToBottom();
     } catch (e) {

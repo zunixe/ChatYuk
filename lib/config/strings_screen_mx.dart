@@ -698,6 +698,12 @@ mixin SScreenMx {
   String get moderationCandidatesHint => isId
       ? 'Pilih kontributor yang sudah aktif di room publik negara ini.'
       : 'Pick a contributor already active in this country\'s public rooms.';
+  String get moderationReviews => isId ? 'Tinjauan' : 'Review';
+  String get moderationUnhide => isId ? 'Tampilkan lagi' : 'Unhide';
+  String get moderationOpenRoom => isId ? 'Buka room' : 'Open room';
+  String get moderationReviewOk => isId ? 'Layak (setujui)' : 'Looks fine';
+  String get moderationSearchUser =>
+      isId ? 'Cari nama pengguna' : 'Search users';
   String get moderationMenu => isId ? 'Moderasi room ini' : 'Moderate this room';
   String get moderationApply => isId ? 'Ajukan jadi Moderator' : 'Apply as Moderator';
   String get moderationApplySent => isId

@@ -56,6 +56,11 @@ class ViewOnceHost extends StatefulWidget {
 
 class ViewOnceHostState extends State<ViewOnceHost>
     with ChatOutboxMixin<ViewOnceHost>, ChatPhotoSendMixin<ViewOnceHost> {
+  @override
+  bool mediaReviewNeeded = false;
+  @override
+  Future<void> mediaReviewFlag(String? messageId) async {}
+
   // Composer tiruan.
   String composer = '';
   MessageModel? reply;

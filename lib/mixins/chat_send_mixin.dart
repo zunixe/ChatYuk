@@ -30,6 +30,16 @@ import 'chat_photo_send_mixin.dart';
 /// Wajib dipakai bersama [ChatOutboxMixin] + [ChatPhotoSendMixin].
 mixin ChatSendMixin<T extends StatefulWidget>
     on ChatOutboxMixin<T>, ChatPhotoSendMixin<T> {
+  // ── Tinjauan media (verdict NSFW 'review') ──
+  /// Di-set layar room bila media borderline (0.50–0.75); setelah pesan
+  /// terkirim id-nya dikirim ke server agar masuk antrean moderator.
+  @override
+  bool mediaReviewNeeded = false;
+
+  /// Hook: tandai pesan butuh tinjauan (default: tidak berlaku, mis. private).
+  @override
+  Future<void> mediaReviewFlag(String? messageId) async {}
+
   // ── Kontrak ──
   TextEditingController get sendMsgCtrl;
   bool get sendIsSending;

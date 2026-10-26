@@ -590,6 +590,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   // ── Moderasi konten room publik ──────────────────────────────────────────
 
   /// Kartu "Moderasi": pilih NEGARA ASAL, ajukan jadi moderator, buka konsol.
+  @override
   Widget _moderationSection(BuildContext context, S s) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

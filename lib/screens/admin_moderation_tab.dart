@@ -58,7 +58,8 @@ class _AdminModerationTabState extends ConsumerState<AdminModerationTab> {
     final permits = _list('permits');
     final reports = _list('reports');
     final apps = _list('applications');
-    if (permits.isEmpty && reports.isEmpty && apps.isEmpty) {
+    final reviews = _list('reviews');
+    if (permits.isEmpty && reports.isEmpty && apps.isEmpty && reviews.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -87,6 +88,11 @@ class _AdminModerationTabState extends ConsumerState<AdminModerationTab> {
             (r) => _reportRow(s, r),
           ),
           _section(
+            s.moderationReviews,
+            reviews,
+            (r) => _reviewRow(s, r),
+          ),
+          _section(
             s.moderationApplications,
             apps,
             (r) => _applicationRow(s, r),
@@ -95,6 +101,13 @@ class _AdminModerationTabState extends ConsumerState<AdminModerationTab> {
       ),
     );
   }
+
+  Widget _reviewRow(S s, Map<String, dynamic> r) => _tile(
+        country: '${r['country'] ?? '-'}',
+        title: '${r['type'] ?? ''} · ${r['sender_name'] ?? ''}',
+        subtitle: '${s.moderationRoom}: ${r['room_id'] ?? '-'}',
+        color: AppTheme.idle,
+      );
 
   Widget _section(
     String title,

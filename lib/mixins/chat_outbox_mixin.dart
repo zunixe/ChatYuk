@@ -37,6 +37,10 @@ import '../widgets/message/image_decode_core.dart' show warmPhotoCacheForPath;
 /// - [outboxSendEntry]     cara kirim satu entri (bedakan private/room)
 /// - [outboxOnSent]        efek samping setelah 1 entri sukses (bonus/poin)
 mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
+  /// Hook klasifikasi NSFW (dipakai saat flush antrean). Layar room
+  /// meng-override; default lolos (private chat tidak dibatasi).
+  Future<bool> contentSafetyAllowsMedia(String storagePath) async => true;
+
   String get outboxKind;
   String get outboxChatId;
   String get outboxUploadChatId;
@@ -276,6 +280,14 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
             // Widget dibuang saat upload → entri (flag poin sudah tersimpan)
             // tetap di antrean untuk flush berikutnya.
             if (!mounted) break;
+            // NSFW: media yang DIANTRE (offline) tetap wajib lolos
+            // klasifikasi — dulu jalur flush melewati pemeriksaan ini.
+            // Voice tidak diklasifikasi (bukan media visual).
+            if (e.uploadKind != 'voice') {
+              if (!await contentSafetyAllowsMedia(imageData)) {
+                throw const _MediaRejectedException();
+              }
+            }
           }
           await outboxSendEntry(e, imageData);
           await OfflineOutbox.instance.remove(e.pendingId);
@@ -315,4 +327,11 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
       outboxIsFlushing = false;
     }
   }
+}
+
+/// Media yang gagal klasifikasi NSFW saat flush antrean offline.
+class _MediaRejectedException implements Exception {
+  const _MediaRejectedException();
+  @override
+  String toString() => 'media_rejected';
 }

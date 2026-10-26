@@ -1,3 +1,56 @@
+## 2026-10-27 — Menutup celah moderasi (Fase A+B)
+
+Temuan audit: fitur moderasi belum berjalan penuh. Lima migrasi + perbaikan
+klien di bawah ini menutupnya.
+
+### `20261027100000_home_country_default.sql` (APPLIED)
+- **Celah fatal:** `home_country` hanya diisi backfill sekali. User yang
+  mendaftar SETELAH itu punya `home_country = NULL`, dan
+  `can_send_room_media` MELEWATI cek izin lintas negara bila nilainya kosong
+  → user baru bisa kirim media di room publik NEGARA MANA PUN.
+- Trigger `profiles BEFORE INSERT` mengisi `home_country = country`; ditambah
+  backfill idempoten. `home_country` tetap stabil (hanya `set_home_country`,
+  maks 1×/30 hari).
+
+### `20261027101000_media_type_include_sticker_file.sql` (APPLIED)
+- `is_room_media_type` kini mencakup `sticker` dan `file`. Sebelumnya stiker
+  (GIF/WebP/MP4) dan dokumen bisa dikirim tanpa trust gate, tanpa rate limit,
+  dan tanpa klasifikasi NSFW.
+
+### `20261027102000_moderation_review_console.sql` (APPLIED)
+- Kolom `messages.needs_review` + indeks parsial: verdict NSFW `review`
+  (0,50–0,75) tidak lagi diabaikan.
+- RPC `flag_media_review(message_id)` — pengirim menandai pesannya sendiri.
+- `moderator_console` & `admin_moderation_overview` kini mengembalikan
+  `reviews`, dan laporan membawa `type`, `image_path`, `text`, `hidden`
+  (moderator bisa MELIHAT media yang dilaporkan).
+- RPC `admin_search_users(query)` — admin bisa mengangkat moderator di luar
+  daftar kandidat.
+
+### `20261027103000_moderation_thresholds_autohide.sql` (APPLIED)
+- Ambang diturunkan (keputusan user): lamaran moderator **≥7 hari & ≥50
+  pesan** (dari 30 hari & 100), kandidat angkatan **≥20 pesan** (dari 50).
+- **Auto-hide hanya `porn`/`violence`.** Spam/penipuan/lainnya tetap masuk
+  antrean moderator tetapi TIDAK menyembunyikan pesan (mencegah penyalahgunaan
+  tombol lapor).
+
+### `20261027104000_moderator_resolve_review.sql` (APPLIED)
+- RPC `moderator_resolve_review(message_id, hide)` — setujui (`hide=false`,
+  bersihkan flag) atau sembunyikan (`hide=true`), tercatat di
+  `moderator_actions` (`approve_media`/`hide`).
+
+### Perbaikan klien
+- `room_chat_core.dart`: `_refreshMediaGate()` + `_loadMyModerationState()`
+  dipindah keluar dari `_initPrivate()` → kini berlaku untuk SEMUA room
+  (dulu global room tidak ter-gate saat dibuka & ikon "Moderasi" tak muncul).
+- `chat_sticker_send_mixin` / `chat_file_send_mixin`: stiker & file
+  (mime `image/*`/`video/*`) melewati `contentSafetyAllowsMedia`.
+- `chat_outbox_mixin`: media yang diantre offline juga diklasifikasi saat
+  flush (dulu bypass).
+- `moderation_screen`: 4 tab (**Tinjauan**, Laporan, Izin, Lamaran) +
+  thumbnail media, "Tampilkan lagi", dan pencarian user khusus admin.
+- `admin_moderation_tab`: seksi "Tinjauan" lintas negara.
+
 ## 2026-10-27 — Admin lihat lintas negara + moderator boleh angkat rekan
 
 Dua pertanyaan user: (1) "kalau ada yang lintas negara admin taunya dimana?",

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/strings.dart';
 import '../config/theme.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../widgets/chat_info_snack.dart';
+import '../widgets/message/message_image.dart';
 
 /// Konsol MODERASI untuk satu negara: laporan pesan, permohonan izin kirim
 /// media lintas negara, dan lamaran moderator.
@@ -23,7 +25,7 @@ class ModerationScreen extends ConsumerStatefulWidget {
 
 class _ModerationScreenState extends ConsumerState<ModerationScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
   Map<String, dynamic>? _data;
   bool _loading = true;
 
@@ -84,6 +86,25 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
     await _load();
   }
 
+  Future<void> _resolveReview(String messageId, {required bool hide}) async {
+    await ref
+        .read(chatProvider.notifier)
+        .moderatorResolveReview(messageId, hide: hide);
+    if (!mounted) return;
+    showChatSnack(context, _s.moderationUpdated);
+    await _load();
+  }
+
+  /// Batalkan penyembunyian (moderator salah sembunyikan).
+  Future<void> _unhide(String messageId) async {
+    await ref
+        .read(chatProvider.notifier)
+        .moderatorHideMessage(messageId, hide: false);
+    if (!mounted) return;
+    showChatSnack(context, _s.moderationUpdated);
+    await _load();
+  }
+
   Future<void> _hideReported(String messageId, String action) async {
     if (action == 'hide') {
       await ref
@@ -111,6 +132,12 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
             icon: const Icon(Icons.person_add_alt_1_rounded),
             onPressed: _openCandidates,
           ),
+          if (ref.read(authProvider.notifier).isRealAdmin)
+            IconButton(
+              tooltip: s.moderationSearchUser,
+              icon: const Icon(Icons.search_rounded),
+              onPressed: _searchUserToAppoint,
+            ),
         ],
       ),
       body: _loading
@@ -120,6 +147,7 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
           : TabBarView(
               controller: _tabs,
               children: [
+                _reviewsTab(s),
                 _reportsTab(s),
                 _permitsTab(s),
                 _applicationsTab(s),
@@ -131,7 +159,12 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
               color: AppTheme.bgCard,
               child: TabBar(
                 controller: _tabs,
+                isScrollable: true,
                 tabs: [
+                  Tab(
+                    text:
+                        '${s.moderationReviews} (${_list('reviews').length})',
+                  ),
                   Tab(text: '${s.moderationReports} (${_list('reports').length})'),
                   Tab(text: '${s.moderationPermits} (${_list('permits').length})'),
                   Tab(
@@ -155,13 +188,111 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
         ),
       );
 
+  /// Thumbnail media (path storage Supabase / URL) untuk verifikasi cepat.
+  Widget _thumb(String path) {
+    if (path.isEmpty) return const SizedBox.shrink();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: 96,
+        height: 96,
+        child: MessageImage(
+          imageData: path,
+          chatKey: 'moderation',
+          messageId: path,
+        ),
+      ),
+    );
+  }
+
+  /// Tinjauan media borderline (skor NSFW 0.50–0.75).
+  Widget _reviewsTab(S s) {
+    final items = _list('reviews');
+    if (items.isEmpty) return _empty(s);
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: items.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemBuilder: (_, i) {
+        final r = items[i];
+        final mid = '${r['message_id'] ?? ''}';
+        final path = '${r['image_path'] ?? ''}';
+        final text = '${r['text'] ?? ''}';
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _thumb(path),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${r['type'] ?? ''} · ${r['sender_name'] ?? ''}',
+                            style: AppText.bodyStrong,
+                          ),
+                          if (text.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              text,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.caption.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 2),
+                          Text(
+                            '${s.moderationRoom}: ${r['room_id'] ?? '-'}',
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.tonal(
+                        onPressed: () => _resolveReview(mid, hide: false),
+                        child: Text(s.moderationReviewOk),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => _resolveReview(mid, hide: true),
+                        child: Text(s.moderationHide),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _reportsTab(S s) {
     final items = _list('reports');
     if (items.isEmpty) return _empty(s);
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final r = items[i];
         final mid = '${r['message_id'] ?? ''}';
@@ -181,6 +312,38 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
                   style: AppText.caption.copyWith(
                     color: AppTheme.textSecondary,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _thumb('${r['image_path'] ?? ''}'),
+                    if ('${r['image_path'] ?? ''}'.isNotEmpty)
+                      const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if ('${r['text'] ?? ''}'.isNotEmpty)
+                            Text(
+                              '${r['text']}',
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.caption.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          if (r['hidden'] == true) ...[
+                            const SizedBox(height: 6),
+                            OutlinedButton(
+                              onPressed: () => _unhide(mid),
+                              child: Text(s.moderationUnhide),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -214,7 +377,7 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final p = items[i];
         final uid = '${p['uid'] ?? ''}';
@@ -264,7 +427,7 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final a = items[i];
         final id = (a['id'] as num?)?.toInt() ?? 0;
@@ -308,6 +471,102 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
         );
       },
     );
+  }
+
+  /// Admin: cari user mana pun (di luar kandidat) untuk diangkat.
+  Future<void> _searchUserToAppoint() async {
+    final s = _s;
+    final ctrl = TextEditingController();
+    var results = <Map<String, dynamic>>[];
+    var busy = false;
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          Future<void> run() async {
+            final q = ctrl.text.trim();
+            if (q.length < 2) return;
+            setSheet(() => busy = true);
+            final list = await ref
+                .read(chatProvider.notifier)
+                .adminSearchUsers(q);
+            if (!ctx.mounted) return;
+            setSheet(() {
+              results = list;
+              busy = false;
+            });
+          }
+
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: TextField(
+                      controller: ctrl,
+                      autofocus: true,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) => run(),
+                      decoration: InputDecoration(
+                        hintText: s.moderationSearchUser,
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.search_rounded),
+                          onPressed: run,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (busy)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: results.length,
+                        itemBuilder: (_, i) {
+                          final u = results[i];
+                          return ListTile(
+                            leading: const Icon(Icons.person_outline_rounded),
+                            title: Text('${u['nickname'] ?? u['uid']}'),
+                            subtitle: Text(
+                              '${u['home_country'] ?? '-'} · ${u['messages'] ?? 0} pesan',
+                            ),
+                            onTap: () => Navigator.pop(ctx, u),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final uid = '${picked['uid'] ?? ''}';
+    if (uid.isEmpty) return;
+    final res = await ref.read(chatProvider.notifier).moderatorSetColleague(
+          widget.country,
+          uid,
+          grant: true,
+        );
+    if (!mounted) return;
+    showChatSnack(
+      context,
+      res['ok'] == true ? s.moderationAppointed : s.errGeneric,
+    );
+    await _load();
   }
 
   /// Angkat moderator dari KONTRIBUTOR negara ini (>=50 pesan).

@@ -28,14 +28,6 @@ import 'chat_outbox_mixin.dart';
 
 /// Modul BERSAMA kirim foto & view-once (private ↔ room).
 ///
-/// Dulu logika ini hidup dua kali: private sudah pakai optimistic + antrean
-/// offline; room masih 79 baris mandiri TANPA outbox. Sekarang satu jalur —
-/// room ikut dapat centang-1 + kirim otomatis saat koneksi pulih.
-///
-/// Acuan = `private_chat_screen`. Perbedaan produk dijaga lewat hook
-/// ([photoDispatch] beda private/room, [photoFirstBonus] hanya private).
-///
-/// Wajib dipakai bersama [ChatOutboxMixin].
 
 /// Routing timer preview → kind efektif. Murni & testable.
 /// Timer apa pun (0/3/10) memaksa view-once; null = kind asal.
@@ -45,14 +37,10 @@ String resolvePhotoSendKind(String kind, int? viewSecs) =>
 
 /// Type pesan video: 'video_once' bila "sekali lihat" dipilih, else 'video'.
 /// Murni & testable — dipakai optimistic bubble DAN dispatch server supaya
-/// keduanya konsisten (dulu optimistic selalu 'video' & dispatch membaca
-/// flag setelah preview dibersihkan → video sekali-lihat terkirim biasa).
 String videoSendType(bool isOnce) => isOnce ? 'video_once' : 'video';
 mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   // ── Kontrak ──
   /// Kirim pesan gambar (private: sendPrivateMessage; room: sendRoomMessage).
-  /// [viewOnceSecs]: durasi view-once detik (0 = sampai ditutup);
-  /// null = bukan view-once timer / legacy.
   Future<String?> photoDispatch({
     required String imageData,
     required String type,
@@ -121,7 +109,20 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   bool get videoSendEnabled => false;
 
   /// Hook NSFW sebelum kirim; false = batal (alasan sudah ditampilkan).
+  @override
   Future<bool> contentSafetyAllowsMedia(String storagePath) async => true;
+
+  /// Kontrak tinjauan media — diimplementasikan `ChatSendMixin`/layar room.
+  bool get mediaReviewNeeded;
+  set mediaReviewNeeded(bool v);
+  Future<void> mediaReviewFlag(String? messageId);
+  /// Kirim id pesan ke server bila media borderline (verdict 'review').
+  Future<void> _reviewAfterSend(String? messageId) async {
+    if (!mediaReviewNeeded) return;
+    mediaReviewNeeded = false;
+    await mediaReviewFlag(messageId);
+  }
+
   Future<bool> _passesSafety(
     String storagePath,
     PointsNotifier pp,
@@ -261,19 +262,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
 
   /// Status toggle HD yang dipilih di panel galeri saat memilih foto
   /// sekali-lihat (default false). Dibaca `processViewOnceBytes` supaya
-  /// foto terkirim HD saat togglenya aktif — minta user 2026-10-19: "ada HD
-  /// nya disamping kanan" seperti pada pemilih foto biasa.
   bool viewOncePickHd = false;
 
   /// Ambil bytes gambar untuk view-once.
   ///
-  /// Minta user (2026-10-19): pemilihnya harus panel galeri yang SLIDE DARI
-  /// BAWAH dengan judul "Terbaru" + toggle HD di kanan — SAMA seperti saat
-  /// kirim foto biasa (`GalleryPickerSheet`), bukan membuka aplikasi galeri
-  /// HP lewat `image_picker`. `maxSelect: 1` karena sekali-lihat = 1 foto.
-  ///
-  /// Fallback: bila plugin galeri tidak tersedia/gagal (mis. di test),
-  /// kembali ke `image_picker` supaya alur kirim tidak mati.
   Future<Uint8List?> pickViewOnceImage() async {
     if (mounted) {
       final s = ProviderScope.containerOf(
@@ -311,10 +303,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
 
   /// Proses bytes → base64 (watermark view-once bila aktif). Di-override di
   /// test supaya alur caption diuji tanpa `compute()` (isolate di test-fake
-  /// bisa menggantung).
-  ///
-  /// HD: bila toggle HD di panel galeri aktif (`viewOncePickHd`), resolusi
-  /// dinaikkan (1920px / q90) — sama seperti jalur foto biasa.
   Future<String?> processViewOnceBytes(Uint8List bytes) async {
     final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
     if (viewOncePickHd) {
@@ -329,9 +317,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
 
   /// Kirim view-once (watermark bila aktif).
   ///
-  /// View-once dari picker mengirim LANGSUNG (tanpa preview), jadi caption
-  /// harus ditangkap dari composer SAAT INI (dulu caption diabaikan → teks
-  /// yang diketik hilang saat kirim foto sekali-lihat).
   Future<void> sendViewOnceFromPicker() async {
     // Tangkap caption & balasan SEBELUM buka galeri (picker async; teks user
     // saat menekan "sekali lihat" yang dipakai).
@@ -494,11 +479,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
 
   /// Kirim video dari preview (upload → dispatch type 'video').
   ///
-  /// Nama TIDAK boleh sama dengan kontrak publik di `ChatSendMixin`
-  /// (`sendVideoFromPreview`): implementasi di mixin ini akan MENANG atas
-  /// override layar karena urutan linearisasi mixin → video tak terkirim.
-  /// Kontrak publik tetap `sendVideoFromPreview` (lihat ChatSendMixin);
-  /// layar meng-override-nya dan memanggil `sendVideoFromPreviewImpl`.
   Future<void> sendVideoFromPreviewImpl({
     String text = '',
     MessageModel? reply,
@@ -663,11 +643,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       if (!await _passesSafety(path, pp, 'image', pendingVideo.id)) return;
       // "Sekali lihat" video ditandai lewat TYPE (video_once) — bukan
       // durationMs yang sudah dipakai untuk panjang video. Nilai `isOnce`
-      // ditangkap pemanggil SEBELUM preview dibersihkan.
-      // Poster + video hangatkan ke disk cache DARI BYTES LOKAL (tanpa unduh
-      // ulang server). Dipanggil SEBELUM dispatch supaya poster sudah di disk
-      // saat bubble versi-path muncul (kalau dibalik, ada race: bubble render
-      // path baru sebelum poster tersimpan → MISS = "card ngeload").
       final posterB64v = posterB64;
       final posterBytes = (posterB64v != null && posterB64v.isNotEmpty)
           ? base64Decode(posterB64v)
@@ -677,9 +652,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       );
       // PREVIEW PENERIMA (ala WhatsApp): unggah poster (JPEG kecil) ke Storage
       // → penerima tampilkan thumbnail tanpa unduh video penuh. Gagal upload
-      // poster TIDAK menggagalkan kirim (video tetap terkirim; penerima lihat
-      // placeholder + tap). Karena itu unawaited-ish: kita tunggu hasilnya
-      // untuk disertakan di baris pesan, tapi null = lanjut tanpa poster.
       String posterPath = '';
       if (posterBytes != null && posterBytes.isNotEmpty) {
         posterPath = await scope
@@ -690,7 +662,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       } else {
         dlog('[VideoSend] poster KOSONG (posterB64=${posterB64v == null ? "null" : posterB64v.length}) → tanpa preview');
       }
-      await photoDispatch(
+      final videoMsgId = await photoDispatch(
         imageData: path,
         type: videoSendType(isOnce),
         senderId: uid,
@@ -705,6 +677,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         // Path poster untuk preview penerima ('' = tanpa poster).
         videoPoster: posterPath,
       );
+      await _reviewAfterSend(videoMsgId);
       photoFirstBonus(pp);
       photoOnSent(isOnce ? 'video_once' : 'video');
       outboxScrollToBottom();
@@ -741,9 +714,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
 
   /// Kirim foto dari base64 yang sudah diproses (dipakai composer preview).
   ///
-  /// Bila ada foto tambahan (`albumExtraB64`) → kirim sebagai SATU ALBUM:
-  /// semua pesan berbagi `albumId`, caption di foto TERAKHIR, balasan di
-  /// foto PERTAMA. HD (bila aktif) diterapkan ke SEMUA foto dari aslinya.
   Future<void> sendPhotoBase64(
     String base64, {
     String text = '',
@@ -928,7 +898,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         return;
       }
       if (!await _passesSafety(path, pp, effKind, pendingPhoto.id,
-          clearTimer: true)) return;
+          clearTimer: true)) {
+        return;
+      }
       // Isi path == base64 yang baru di-upload → daftarkan decode-nya supaya
       // bubble versi server langsung tampil (tidak download + kotak dulu).
       warmPhotoCacheForPath(path, base64);
@@ -958,6 +930,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
           migrateViewOnceState(pendingPhoto.id, msgId);
         }
       }
+      await _reviewAfterSend(msgId);
       if (kind == 'image') photoFirstBonus(pp);
       photoOnSent(kind);
       photoClearViewTimer();

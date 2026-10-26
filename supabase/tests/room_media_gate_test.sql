@@ -72,8 +72,27 @@ begin
   update public.profiles set created_at = now() - interval '10 days'
    where id = v_old;
 
+  -- Sejak 2026-10-27 `home_country` WAJIB terisi (trigger insert) supaya
+  -- aturan lintas negara berlaku untuk user baru. Samakan negara asal akun
+  -- uji dengan negara room agar yang diuji murni trust gate, bukan izin.
+  update public.profiles
+     set home_country = (select country from public.rooms where id = v_room)
+   where id in (v_new, v_old);
+
   perform supabase_tests.check('akun baru DITOLAK kirim media di room publik',
     public.can_send_room_media(v_room, v_new) = false);
+
+  -- home_country terisi OTOMATIS dari country saat profil dibuat.
+  perform supabase_tests.check('home_country terisi otomatis saat insert',
+    (select home_country from public.profiles where id = v_new) is not null);
+
+  -- Beda negara asal & room → butuh izin (bukan lolos begitu saja).
+  update public.profiles set home_country = 'ZZ' where id = v_old;
+  perform supabase_tests.check('beda negara asal -> butuh izin',
+    public.can_send_room_media(v_room, v_old) = false);
+  update public.profiles
+     set home_country = (select country from public.rooms where id = v_room)
+   where id = v_old;
 
   -- Beri akun lama 20 pesan teks di room publik.
   for i in 1..20 loop

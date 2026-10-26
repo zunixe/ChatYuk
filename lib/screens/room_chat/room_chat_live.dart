@@ -322,11 +322,11 @@ mixin _RcLiveMx on _RoomChatBase {
 
   /// Kontrak ChatStickerSendMixin: insert pesan stiker room (path storage).
   @override
-  Future<void> stickerDispatch(String path) async {
+  Future<String?> stickerDispatch(String path) async {
     final auth = ProviderScope.containerOf(context, listen: false)
         .read(authProvider.notifier);
     final profile = auth.profile!;
-    await ProviderScope.containerOf(context, listen: false)
+    return ProviderScope.containerOf(context, listen: false)
         .read(chat_riverpod.chatProvider.notifier)
         .sendRoomMessage(
           roomId: widget.room.id,

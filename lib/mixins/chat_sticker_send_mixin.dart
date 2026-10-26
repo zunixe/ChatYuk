@@ -21,7 +21,8 @@ import 'chat_send_mixin.dart';
 /// latar. Stiker koleksi TIDAK diunduh ulang sebelum kirim.
 mixin ChatStickerSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
   /// Insert pesan `type='sticker'` dengan path storage (private / room).
-  Future<void> stickerDispatch(String path);
+  /// Dispatch stiker; mengembalikan id pesan server (null bila gagal).
+  Future<String?> stickerDispatch(String path);
 
   MessageModel? _pendingSticker(String data) {
     final auth = ProviderScope.containerOf(context, listen: false)
@@ -80,9 +81,17 @@ mixin ChatStickerSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
             ext: ext,
           );
       if (path == null || path.isEmpty) throw Exception('upload failed');
+      // NSFW/trust: stiker bisa GIF/WebP/MP4 — periksa sebelum dikirim.
+      if (!await contentSafetyAllowsMedia(path)) {
+        throw Exception('sticker_rejected');
+      }
       // Pengirim langsung lihat versi server tanpa unduh.
       StickerBubble.seedCache(path, png);
-      await stickerDispatch(path);
+      final stickerId = await stickerDispatch(path);
+      if (mediaReviewNeeded) {
+        mediaReviewNeeded = false;
+        await mediaReviewFlag(stickerId);
+      }
     } catch (e) {
       await _failPending(pending, e);
     }
@@ -96,6 +105,10 @@ mixin ChatStickerSendMixin<T extends StatefulWidget> on ChatSendMixin<T> {
     setState(() => outboxPending.add(pending));
     outboxScrollToBottom();
     try {
+      // Stiker dari KOLEKSI: periksa konten sebelum kirim.
+      if (!await contentSafetyAllowsMedia(path)) {
+        throw Exception('sticker_rejected');
+      }
       await stickerDispatch(path);
     } catch (e) {
       await _failPending(pending, e);

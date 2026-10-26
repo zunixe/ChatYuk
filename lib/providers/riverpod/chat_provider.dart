@@ -409,6 +409,15 @@ class ChatNotifier extends Notifier<ChatState> {
   Future<String> checkContentSafety(String storagePath) =>
       _service.checkContentSafety(storagePath);
 
+  Future<bool> flagMediaReview(String messageId) =>
+      _service.flagMediaReview(messageId);
+
+  Future<bool> moderatorResolveReview(String messageId, {required bool hide}) =>
+      _service.moderatorResolveReview(messageId, hide: hide);
+
+  Future<List<Map<String, dynamic>>> adminSearchUsers(String query) =>
+      _service.adminSearchUsers(query);
+
   Future<Map<String, dynamic>?> moderatorConsole(String country) =>
       _service.moderatorConsole(country);
 
