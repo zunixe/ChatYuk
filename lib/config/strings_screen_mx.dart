@@ -677,21 +677,21 @@ mixin SScreenMx {
   String get moderationUpdated => isId ? 'Diperbarui' : 'Updated';
   String get moderationCountryTitle => isId ? 'Negara asal' : 'Home country';
   String get moderationCountryHint => isId
-      ? 'Negara ini dipakai untuk aturan kirim media di room publik. Bisa diubah 1× per 30 hari.'
-      : 'Used for public-room media rules. Can be changed once per 30 days.';
+      ? 'Dipakai untuk aturan kirim media & moderator. Bisa diubah 1× per 7 hari.'
+      : 'Used for media rules & moderation. Can be changed once per 7 days.';
   String get moderationCountrySaved => isId ? 'Negara asal disimpan' : 'Home country saved';
   String get moderationCountryCooldown => isId
-      ? 'Negara asal hanya bisa diubah 1× per 30 hari.'
-      : 'Home country can only be changed once per 30 days.';
+      ? 'Negara hanya bisa diubah 1× per 7 hari.'
+      : 'Country can only be changed once per 7 days.';
   String get moderationApplyHint => isId
-      ? 'Bantu jaga room publik negara Anda (syarat: 30 hari & 100 pesan).'
-      : 'Help keep your country\'s public rooms clean (needs 30 days & 100 messages).';
+      ? 'Bantu jaga room publik negara Anda (syarat: 7 hari & 50 pesan).'
+      : 'Help keep your country\'s public rooms clean (needs 7 days & 50 messages).';
   String get moderationOpenConsole => isId ? 'Buka konsol moderasi' : 'Open moderation console';
   String get moderationAddModerator =>
       isId ? 'Angkat moderator' : 'Appoint moderator';
   String get moderationCandidatesEmpty => isId
-      ? 'Belum ada kandidat (butuh >=50 pesan di room publik negara ini).'
-      : 'No candidates yet (needs >=50 messages in this country\'s public rooms).';
+      ? 'Belum ada kandidat (butuh >=20 pesan di room publik negara ini).'
+      : 'No candidates yet (needs >=20 messages in this country\'s public rooms).';
   String get moderationAppointed => isId
       ? 'Moderator ditambahkan'
       : 'Moderator appointed';
@@ -704,12 +704,42 @@ mixin SScreenMx {
   String get moderationAdminAllCountries => isId
       ? 'Admin — akses semua negara'
       : 'Admin — all countries';
-  String get moderationAllCountries => isId
-      ? 'Semua negara'
-      : 'All countries';
-  String get moderationUnsetCountry => isId
-      ? 'Kosongkan (semua negara)'
-      : 'Clear (all countries)';
+  String get moderationSetCountryFirst => isId
+      ? 'Atur negara dulu sebelum mengajukan moderator'
+      : 'Set your country first before applying as moderator';
+  String moderationCountryChangedUntil(String date) => isId
+      ? 'Negara disimpan. Bisa diubah lagi pada $date.'
+      : 'Country saved. Can be changed again on $date.';
+  String moderationRevokedOnCountryChange(String country) => isId
+      ? 'Jabatan moderator $country otomatis dicabut karena pindah negara.'
+      : 'Your $country moderator role was revoked because you moved country.';
+  String moderationRevokedNote(String country, String date) => isId
+      ? 'Jabatan moderator $country dicabut karena pindah negara pada $date'
+      : 'Moderator role for $country revoked on $date (country changed)';
+  String moderationChangeCountryWarn(String to, String until) => isId
+      ? 'Pindah ke $to? Negara terkunci 7 hari setelah diubah — kamu baru bisa '
+          'mengubahnya lagi pada $until.'
+      : 'Move to $to? Your country is locked for 7 days — you can change it '
+          'again on $until.';
+  String moderationChangeCountryRevokeWarn(
+    String moderating,
+    String to,
+    String until,
+  ) => isId
+      ? 'Kamu moderator $moderating.\n\nPindah ke $to akan MENCABUT jabatan '
+          'moderator & akses konsol. Untuk kembali, kamu harus melamar ulang '
+          '(min. 7 hari & 50 pesan di room publik negara itu).\n\n'
+          'Negara juga terkunci 7 hari — bisa diubah lagi pada $until.'
+      : 'You moderate $moderating.\n\nMoving to $to will REVOKE your '
+          'moderator role & console access. To return you must re-apply '
+          '(min. 7 days & 50 messages in that country\'s public rooms).\n\n'
+          'Country is also locked for 7 days — changeable again on $until.';
+  String get moderationChangeCountryTitle => isId
+      ? 'Pindah negara?'
+      : 'Change country?';
+  String get moderationChangeCountryConfirm => isId
+      ? 'Ya, pindah'
+      : 'Yes, move';
   String moderationCooldownUntil(String date) => isId
       ? 'Negara asal baru bisa diubah pada $date'
       : 'Home country can be changed on $date';

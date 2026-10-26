@@ -295,12 +295,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (info != null && info.ipAddress.isNotEmpty && mounted) {
         final auth = scope.read(authProvider.notifier);
         await auth.updateIpAddress(info.ipAddress);
-        // Update country/city jika deteksi valid dan berbeda dari profile
-        final profile = auth.profile;
-        if (profile != null &&
-            (profile.country != info.country || profile.city != info.city)) {
-          await auth.updateProfile(country: info.country, city: info.city);
-        }
+        // NEGARA TIDAK LAGI DIPEROLEH DARI IP (keputusan 2026-10-27):
+        // negara hanya diubah USER lewat Profil dan terkunci 7 hari, supaya
+        // aturan izin lintas negara tidak bisa diakali dengan VPN/roaming.
       }
       // Perbarui koordinat (minta izin GPS sekali kalau belum pernah;
       // ditolak → perkiraan IP). Jalan INDEPENDEN dari deteksi IP —

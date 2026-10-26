@@ -74,17 +74,17 @@ void main() {
     });
   });
 
-  group('effectiveHomeCountry', () {
+  group('effectiveCountry', () {
     test('pakai profil bila belum ada override', () {
       expect(
-        effectiveHomeCountry(override: null, fromProfile: 'Armenia'),
+        effectiveCountry(override: null, fromProfile: 'Armenia'),
         'Armenia',
       );
     });
 
     test('override user menang atas profil', () {
       expect(
-        effectiveHomeCountry(override: 'Indonesia', fromProfile: 'Armenia'),
+        effectiveCountry(override: 'Indonesia', fromProfile: 'Armenia'),
         'Indonesia',
       );
     });
@@ -93,19 +93,99 @@ void main() {
       // Inilah bug lama: nilai kosong jatuh kembali ke profil sehingga
       // "unset" tampak tidak berpengaruh.
       expect(
-        effectiveHomeCountry(override: '', fromProfile: 'Armenia'),
+        effectiveCountry(override: '', fromProfile: 'Armenia'),
         '',
       );
     });
 
     test('profil null → string kosong (bukan "null")', () {
-      expect(effectiveHomeCountry(override: null, fromProfile: null), '');
+      expect(effectiveCountry(override: null, fromProfile: null), '');
     });
   });
 
-  group('homeCountryCooldownMessage', () {
+  group('countryChangedMessage (info setelah ubah negara)', () {
+    test('menyebut jabatan moderator yang dicabut', () {
+      final msg = countryChangedMessage(
+        {
+          'ok': true,
+          'country': 'Thailand',
+          'revoked_moderator_for': ['Indonesia'],
+          'next_change_at': '2026-11-03T10:00:00Z',
+        },
+        s,
+      );
+      expect(msg, s.moderationRevokedOnCountryChange('Indonesia'));
+      expect(msg, contains('Indonesia'));
+    });
+
+    test('tanpa pencabutan → info kapan bisa diubah lagi', () {
+      final msg = countryChangedMessage(
+        {
+          'ok': true,
+          'country': 'Thailand',
+          'revoked_moderator_for': <String>[],
+          'next_change_at': '2026-11-03T10:00:00Z',
+        },
+        s,
+      );
+      expect(msg, s.moderationCountryChangedUntil('03/11/2026'));
+    });
+
+    test('revoked null tidak crash', () {
+      final msg = countryChangedMessage(
+        {'ok': true, 'next_change_at': '2026-11-03T10:00:00Z'},
+        s,
+      );
+      expect(msg, contains('03/11/2026'));
+    });
+  });
+
+  group('countryChangeConfirmBody (popup persetujuan)', () {
+    test('moderator: menyebut jabatan akan DICABUT + negara lama/baru', () {
+      final body = countryChangeConfirmBody(
+        from: 'Indonesia',
+        to: 'Thailand',
+        moderating: 'Indonesia',
+        lockUntil: '03/11/2026',
+        s: s,
+      );
+      expect(body, s.moderationChangeCountryRevokeWarn(
+        'Indonesia',
+        'Thailand',
+        '03/11/2026',
+      ));
+      expect(body.toUpperCase(), contains('CABUT'));
+      expect(body, contains('Thailand'));
+      expect(body, contains('50 pesan'));
+    });
+
+    test('bukan moderator: tetap beri tahu lock 7 hari', () {
+      final body = countryChangeConfirmBody(
+        from: 'Indonesia',
+        to: 'Thailand',
+        moderating: '',
+        lockUntil: '03/11/2026',
+        s: s,
+      );
+      expect(body, s.moderationChangeCountryWarn('Thailand', '03/11/2026'));
+      expect(body, contains('7 hari'));
+    });
+  });
+
+  group('moderationDate', () {
+    test('format dd/MM/yyyy', () {
+      expect(moderationDate('2026-11-03T10:00:00Z'), '03/11/2026');
+    });
+    test('null / kosong / rusak → null', () {
+      expect(moderationDate(null), isNull);
+      expect(moderationDate(''), isNull);
+      expect(moderationDate('bukan-tanggal'), isNull);
+    });
+  });
+
+  group('countryCooldownMessage', () {
     test('menyebut TANGGAL bila server mengirim next_change_at', () {
-      final msg = homeCountryCooldownMessage(
+      final msg = countryCooldownMessage(
         {'ok': false, 'error': 'cooldown', 'next_change_at': '2026-11-25T10:00:00Z'},
         s,
       );
@@ -115,20 +195,20 @@ void main() {
 
     test('tanpa next_change_at → pesan cooldown umum', () {
       expect(
-        homeCountryCooldownMessage({'ok': false, 'error': 'cooldown'}, s),
+        countryCooldownMessage({'ok': false, 'error': 'cooldown'}, s),
         s.moderationCountryCooldown,
       );
     });
 
     test('next_change_at rusak tidak crash', () {
       expect(
-        homeCountryCooldownMessage({'next_change_at': 'bukan-tanggal'}, s),
+        countryCooldownMessage({'next_change_at': 'bukan-tanggal'}, s),
         s.moderationCountryCooldown,
       );
     });
 
     test('tanggal satu digit diberi nol depan', () {
-      final msg = homeCountryCooldownMessage(
+      final msg = countryCooldownMessage(
         {'next_change_at': '2027-01-05T08:00:00Z'},
         s,
       );

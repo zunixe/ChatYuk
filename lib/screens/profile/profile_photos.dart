@@ -650,6 +650,69 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                     return;
                                   }
                                 }
+                                // NEGARA: hanya boleh diubah lewat RPC resmi
+                                // (lock 7 hari + cabut jabatan moderator).
+                                // Jangan ikut dikirim lewat updateProfile —
+                                // server akan menahannya dan user bingung.
+                                final countryChanged = negara != profile.country;
+                                if (countryChanged) {
+                                  // Negara yang sedang dimoderasi (bila user
+                                  // moderator) — agar popup menyebut risikonya.
+                                  final modState = await scope
+                                      .read(chatProvider.notifier)
+                                      .myModerationState();
+                                  final mods = modState?['moderates'];
+                                  final prevMod = mods is List && mods.isNotEmpty
+                                      ? '${mods.first}'
+                                      : '';
+                                  if (!mounted) return;
+                                  final lockUntil = moderationDate(
+                                        DateTime.now()
+                                            .add(const Duration(days: 7))
+                                            .toIso8601String(),
+                                      ) ??
+                                      '';
+                                  final oke = await showDialog<bool>(
+                                    context: context,
+                                    builder: (dc) => AlertDialog(
+                                      title: Row(
+                                        children: [
+                                          Icon(Icons.public_rounded,
+                                              color: AppTheme.danger, size: 24),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                                s.moderationChangeCountryTitle),
+                                          ),
+                                        ],
+                                      ),
+                                      content: Text(
+                                        countryChangeConfirmBody(
+                                          from: profile.country,
+                                          to: negara,
+                                          moderating: prevMod,
+                                          lockUntil: lockUntil,
+                                          s: s,
+                                        ),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(dc).pop(false),
+                                          child: Text(s.btnCancel),
+                                        ),
+                                        FilledButton(
+                                          onPressed: () =>
+                                              Navigator.of(dc).pop(true),
+                                          child: Text(
+                                              s.moderationChangeCountryConfirm),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (oke != true || !mounted) return;
+                                }
+
                                 setSheet(() => loading = true);
                                 try {
                                   await scope
@@ -657,10 +720,24 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                       .updateProfile(
                                         nickname: nickChanged ? nick : null,
                                         age: age,
-                                        country: negara,
+                                        // Negara TIDAK via updateProfile.
                                         city: kota,
                                         gender: gender,
                                       );
+                                  if (countryChanged) {
+                                    final cres = await scope
+                                        .read(chatProvider.notifier)
+                                        .setMyCountry(negara);
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      SnackBar(
+                                        content: Text(cres['ok'] == true
+                                            ? countryChangedMessage(cres, s)
+                                            : countryCooldownMessage(cres, s)),
+                                      ),
+                                    );
+                                  }
                                   if (sheetCtx.mounted) Navigator.pop(sheetCtx);
                                   if (mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(

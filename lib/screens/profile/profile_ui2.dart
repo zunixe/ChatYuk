@@ -597,7 +597,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   @override
   Widget _moderationSection(BuildContext context, S s) {
     final isAdmin = ref.read(authProvider.notifier).isRealAdmin;
-    final home = _effectiveHomeCountry;
+    final home = _effectiveCountry;
     if (!_modRoleLoaded) {
       _modRoleLoaded = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -620,12 +620,9 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                   leading: const Icon(Icons.public_rounded),
                   title: Text(s.moderationCountryTitle),
                   subtitle: Text(
-                    isAdmin && home.isEmpty
-                        // Admin tanpa negara = akses semua negara.
-                        ? s.moderationAllCountries
-                        : (home.isEmpty
-                            ? s.moderationCountryHint
-                            : '$home · ${s.moderationCountryHint}'),
+                    home.isEmpty
+                        ? s.moderationCountryHint
+                        : '$home · ${s.moderationCountryHint}',
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => _pickHomeCountry(context, s, isAdmin: isAdmin),
@@ -661,6 +658,32 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
             ),
           ),
         ),
+        // Catatan: jabatan moderator yang dicabut karena pindah negara.
+        // (Tidak ada notifikasi in-app; ini cara user menyadarinya.)
+        for (final rv in _revokedHistory) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    size: 16, color: AppTheme.textSecondary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    s.moderationRevokedNote(
+                      '${rv['country'] ?? '-'}',
+                      moderationDate('${rv['revoked_at'] ?? ''}') ?? '-',
+                    ),
+                    style: AppText.caption
+                        .copyWith(color: AppTheme.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -689,8 +712,9 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   /// Ajukan diri jadi moderator negara asal (user biasa).
   Future<void> _applyModerator(BuildContext context, S s, String home) async {
     if (home.isEmpty) {
+      // Bukan soal media — suruh atur negara dulu (pesan lama salah konteks).
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.moderationCountryHint)));
+          .showSnackBar(SnackBar(content: Text(s.moderationSetCountryFirst)));
       return;
     }
     final res = await ProviderScope.containerOf(context, listen: false)
@@ -703,14 +727,20 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
-  /// Negara asal efektif: override sesi (hasil pilih user) di atas PROFIL.
-  String get _effectiveHomeCountry => effectiveHomeCountry(
-        override: _homeCountryOverride,
-        fromProfile: ref.read(authProvider).profile?.homeCountry,
+  /// Negara efektif (satu-satunya): override sesi di atas PROFIL.
+  String get _effectiveCountry => effectiveCountry(
+        override: _countryOverride,
+        fromProfile: ref.read(authProvider).profile?.country,
       );
 
   /// Override sesi hasil pilih user (null = pakai nilai PROFIL).
-  String? _homeCountryOverride;
+  String? _countryOverride;
+
+  /// Negara yang sedang dimoderasi user (kosong = bukan moderator).
+  String _moderatingCountry = '';
+
+  /// Riwayat pencabutan jabatan karena pindah negara (catatan di Profil).
+  List<Map<String, dynamic>> _revokedHistory = const [];
 
   /// True bila user ini moderator negara (atau admin) → boleh buka konsol.
   bool _canOpenConsole = false;
@@ -725,7 +755,17 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
       final list = res['moderates'];
       final isMod = list is List && list.isNotEmpty;
       final isAdmin = ref.read(authProvider.notifier).isRealAdmin;
-      setState(() => _canOpenConsole = isMod || isAdmin);
+      final revoked = res['revoked'];
+      setState(() {
+        _canOpenConsole = isMod || isAdmin;
+        _moderatingCountry = isMod ? '${list.first}' : '';
+        _revokedHistory = revoked is List
+            ? [
+                for (final e in revoked)
+                  if (e is Map) Map<String, dynamic>.from(e),
+              ]
+            : const [];
+      });
     } catch (_) {}
   }
 
@@ -758,74 +798,99 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
-  /// Pilih negara asal. Admin memakai RPC khusus (tanpa cooldown, bisa
-  /// dikosongkan = akses semua negara); user biasa tetap kena cooldown 30 hari.
+  /// Pilih negara (satu-satunya negara di profil).
+  ///
+  /// Admin memakai RPC admin (tanpa cooldown). User biasa: popup PERSETUJUAN
+  /// dulu supaya sadar bahwa pindah negara mencabut jabatan moderator & lock
+  /// 7 hari; lalu `set_my_country`.
   Future<void> _pickHomeCountry(
     BuildContext context,
     S s, {
     bool isAdmin = false,
   }) async {
+    final picked = await _showCountryPicker(context, s);
+    if (picked == null || !context.mounted) return;
+
+    final uid = ref.read(authProvider).uid ?? '';
+    if (uid.isEmpty) return;
+
     if (isAdmin) {
-      final aksi = await showModalBottomSheet<String>(
-        context: context,
-        backgroundColor: AppTheme.bgCard,
-        builder: (ctx) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.public_rounded),
-                title: Text(s.moderationCountryTitle),
-                onTap: () => Navigator.pop(ctx, 'set'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.clear_rounded),
-                title: Text(s.moderationUnsetCountry),
-                subtitle: Text(s.moderationAllCountries),
-                onTap: () => Navigator.pop(ctx, 'unset'),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (aksi == null || !context.mounted) return;
-      final uid = ref.read(authProvider).uid ?? '';
-      if (uid.isEmpty) return;
-      final picked =
-          aksi == 'unset' ? null : await _showCountryPicker(context, s);
-      if (aksi == 'set' && (picked == null || !context.mounted)) return;
-      if (!context.mounted) return;
       final res = await ref
           .read(chatProvider.notifier)
-          .adminSetHomeCountry(uid, picked);
+          .adminSetCountry(uid, picked);
       if (!context.mounted) return;
-      setState(() => _homeCountryOverride = picked ?? '');
+      setState(() => _countryOverride = picked);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            res['ok'] == true
-                ? s.moderationCountrySaved
-                : s.errGeneric,
+            res['ok'] == true ? s.moderationCountrySaved : s.errGeneric,
           ),
         ),
       );
       return;
     }
 
-    final picked = await _showCountryPicker(context, s);
-    if (picked == null || !context.mounted) return;
-    final res = await ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(chatProvider.notifier).setHomeCountry(picked);
+    // Popup persetujuan: user harus SADAR sebelum pindah negara.
+    final from = _effectiveCountry;
+    final lockUntil =
+        moderationDate(DateTime.now().add(const Duration(days: 7))
+            .toIso8601String()) ??
+        '';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.public_rounded, color: AppTheme.danger, size: 24),
+            const SizedBox(width: 8),
+            Expanded(child: Text(s.moderationChangeCountryTitle)),
+          ],
+        ),
+        content: Text(
+          countryChangeConfirmBody(
+            from: from,
+            to: picked,
+            moderating: _moderatingCountry,
+            lockUntil: lockUntil,
+            s: s,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(s.moderationChangeCountryConfirm),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+
+    final res = await ref
+        .read(chatProvider.notifier)
+        .setMyCountry(picked);
     if (!context.mounted) return;
+
     if (res['ok'] == true) {
-      setState(() => _homeCountryOverride = picked);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.moderationCountrySaved)));
+      setState(() {
+        _countryOverride = picked;
+        // Jabatan moderator dicabut bila server melaporkannya.
+        final revoked = res['revoked_moderator_for'];
+        if (revoked is List && revoked.isNotEmpty) {
+          _moderatingCountry = '';
+          _canOpenConsole = ref.read(authProvider.notifier).isRealAdmin;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(countryChangedMessage(res, s))),
+      );
+      unawaited(_loadModerationRole());
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(homeCountryCooldownMessage(res, s))),
+        SnackBar(content: Text(countryCooldownMessage(res, s))),
       );
     }
   }

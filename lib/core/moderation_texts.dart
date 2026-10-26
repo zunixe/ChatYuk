@@ -25,12 +25,11 @@ String moderationApplyMessage(Map<String, dynamic> res, S s) {
   return s.errGeneric;
 }
 
-/// Negara asal efektif: override sesi (hasil pilih user) di atas nilai PROFIL.
+/// Negara efektif: override sesi (hasil pilih user) di atas nilai PROFIL.
 ///
-/// Override kosong (`''`) berarti user/admin sudah mengosongkannya, jadi
-/// nilai profil TIDAK boleh dipakai lagi (dulu `??=` mengunci null sehingga
-/// nama negara tidak pernah tampil).
-String effectiveHomeCountry({
+/// Sejak 2026-10-27 hanya ada SATU negara (`profiles.country`). Override
+/// dipakai agar perubahan langsung terlihat tanpa menunggu profil di-refresh.
+String effectiveCountry({
   required String? override,
   required String? fromProfile,
 }) {
@@ -38,12 +37,50 @@ String effectiveHomeCountry({
   return fromProfile ?? '';
 }
 
-/// Pesan penolakan ubah negara asal. Bila server menyertakan
+/// Pesan penolakan ubah negara (lock 7 hari). Bila server menyertakan
 /// `next_change_at`, sebutkan TANGGALNYA agar user tahu kapan bisa diubah.
-String homeCountryCooldownMessage(Map<String, dynamic> res, S s) {
+String countryCooldownMessage(Map<String, dynamic> res, S s) {
   final next = DateTime.tryParse('${res['next_change_at'] ?? ''}');
   if (next == null) return s.moderationCountryCooldown;
   final d = next.day.toString().padLeft(2, '0');
   final m = next.month.toString().padLeft(2, '0');
   return s.moderationCooldownUntil('$d/$m/${next.year}');
+}
+
+/// Tanggal `dd/MM/yyyy` dari string ISO, atau null bila tak valid.
+String? moderationDate(String? iso) {
+  final d = DateTime.tryParse(iso ?? '');
+  if (d == null) return null;
+  final day = d.day.toString().padLeft(2, '0');
+  final month = d.month.toString().padLeft(2, '0');
+  return '$day/$month/${d.year}';
+}
+
+/// Info SETELAH negara berhasil diubah: kapan bisa diubah lagi, dan (bila
+/// user tadinya moderator) jabatan mana yang dicabut.
+String countryChangedMessage(Map<String, dynamic> res, S s) {
+  final next = moderationDate('${res['next_change_at'] ?? ''}');
+  final revoked = res['revoked_moderator_for'];
+  final list = revoked is List ? [for (final e in revoked) '$e'] : const <String>[];
+
+  if (list.isNotEmpty) {
+    return s.moderationRevokedOnCountryChange(list.join(', '));
+  }
+  if (next == null) return s.moderationCountrySaved;
+  return s.moderationCountryChangedUntil(next);
+}
+
+/// Teks popup PERSETUJUAN pindah negara. [moderating] = negara yang sedang
+/// dimoderasi user (kosong bila bukan moderator).
+String countryChangeConfirmBody({
+  required String from,
+  required String to,
+  required String moderating,
+  required String lockUntil,
+  required S s,
+}) {
+  if (moderating.isEmpty) {
+    return s.moderationChangeCountryWarn(to, lockUntil);
+  }
+  return s.moderationChangeCountryRevokeWarn(moderating, to, lockUntil);
 }

@@ -191,19 +191,19 @@ mixin ChatServiceRoomMx on ChatBase {
     }
   }
 
-  /// Admin: set / kosongkan negara asal seorang user (`null` = semua negara).
-  Future<Map<String, dynamic>> adminSetHomeCountry(
+  /// Admin: set negara seorang user (tanpa cooldown).
+  Future<Map<String, dynamic>> adminSetCountry(
     String uid,
-    String? country,
+    String country,
   ) async {
     try {
-      final res = await _sb.rpc('admin_set_home_country', params: {
+      final res = await _sb.rpc('admin_set_country', params: {
         'p_uid': uid,
         'p_country': country,
       });
       return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
     } catch (e) {
-      dlog('[ChatService] adminSetHomeCountry error: $e');
+      dlog('[ChatService] adminSetCountry error: $e');
       return {'ok': false};
     }
   }
@@ -352,13 +352,15 @@ mixin ChatServiceRoomMx on ChatBase {
     }
   }
 
-  Future<Map<String, dynamic>> setHomeCountry(String country) async {
+  /// Ganti negara sendiri (maks 1x/7 hari). Mengembalikan
+  /// `revoked_moderator_for` bila jabatan moderator ikut dicabut.
+  Future<Map<String, dynamic>> setMyCountry(String country) async {
     try {
-      final res = await _sb.rpc('set_home_country',
+      final res = await _sb.rpc('set_my_country',
           params: {'p_country': country});
       return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
     } catch (e) {
-      dlog('[ChatService] setHomeCountry error: $e');
+      dlog('[ChatService] setMyCountry error: $e');
       return {'ok': false};
     }
   }

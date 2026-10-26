@@ -31,10 +31,15 @@ select supabase_tests.check('trigger enforce_room_media_gate_trg terpasang',
            where c.relname = 'messages'
              and t.tgname = 'enforce_room_media_gate_trg' and not t.tgisinternal));
 
-select supabase_tests.check('kolom profiles.home_country ada',
+select supabase_tests.check('kolom profiles.country_changed_at ada (lock 7 hari)',
   exists (select 1 from information_schema.columns
            where table_schema = 'public' and table_name = 'profiles'
-             and column_name = 'home_country'));
+             and column_name = 'country_changed_at'));
+
+select supabase_tests.check('konsep home_country sudah DIHAPUS',
+  not exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = 'profiles'
+                 and column_name in ('home_country', 'home_country_changed_at')));
 
 select supabase_tests.check('tabel moderator negara ada',
   (select count(*) from information_schema.tables
@@ -72,33 +77,31 @@ begin
   update public.profiles set created_at = now() - interval '10 days'
    where id = v_old;
 
-  -- Sejak 2026-10-27 `home_country` WAJIB terisi (trigger insert) supaya
-  -- aturan lintas negara berlaku untuk user baru. Samakan negara asal akun
-  -- uji dengan negara room agar yang diuji murni trust gate, bukan izin.
-  -- `home_country` dijaga trigger (tak bisa diubah lewat UPDATE biasa) →
-  -- fixture WAJIB menandai dirinya sebagai trusted seperti RPC resmi.
-  perform set_config('chatyuk.home_country_ok', '1', true);
+  -- Samakan negara akun uji dengan negara room agar yang diuji murni trust
+  -- gate, bukan izin lintas negara. `country` dijaga trigger → fixture WAJIB
+  -- menandai dirinya trusted seperti RPC resmi.
+  perform set_config('chatyuk.country_ok', '1', true);
   update public.profiles
-     set home_country = (select country from public.rooms where id = v_room)
+     set country = (select country from public.rooms where id = v_room)
    where id in (v_new, v_old);
-  perform set_config('chatyuk.home_country_ok', '', true);
+  perform set_config('chatyuk.country_ok', '', true);
 
   perform supabase_tests.check('akun baru DITOLAK kirim media di room publik',
     public.can_send_room_media(v_room, v_new) = false);
 
-  -- home_country terisi OTOMATIS dari country saat profil dibuat.
-  perform supabase_tests.check('home_country terisi otomatis saat insert',
-    (select home_country from public.profiles where id = v_new) is not null);
+  -- Negara wajib ada pada profil (dipakai aturan lintas negara).
+  perform supabase_tests.check('negara profil terisi',
+    coalesce(btrim((select country from public.profiles where id = v_new)), '') <> '');
 
   -- Beda negara asal & room → butuh izin (bukan lolos begitu saja).
-  perform set_config('chatyuk.home_country_ok', '1', true);
-  update public.profiles set home_country = 'ZZ' where id = v_old;
-  perform supabase_tests.check('beda negara asal -> butuh izin',
+  perform set_config('chatyuk.country_ok', '1', true);
+  update public.profiles set country = 'ZZ' where id = v_old;
+  perform supabase_tests.check('beda negara -> butuh izin',
     public.can_send_room_media(v_room, v_old) = false);
   update public.profiles
-     set home_country = (select country from public.rooms where id = v_room)
+     set country = (select country from public.rooms where id = v_room)
    where id = v_old;
-  perform set_config('chatyuk.home_country_ok', '', true);
+  perform set_config('chatyuk.country_ok', '', true);
 
   -- Beri akun lama 20 pesan teks di room publik.
   for i in 1..20 loop
@@ -130,95 +133,118 @@ begin
 end
 $t$;
 
--- ── Negara asal: TIDAK bisa diubah paksa lewat UPDATE langsung ────────────
-do $hc$
+-- ── Negara: lock 7 hari + cabut jabatan moderator saat pindah ─────────────
+do $ct$
 declare
-  v_uid  uuid := 'd0c1e000-0000-4000-8000-0000000000b1';
-  v_prev text;
+  v_mod   uuid := 'd0c1e000-0000-4000-8000-0000000000b1';
+  v_plain uuid := 'd0c1e000-0000-4000-8000-0000000000b2';
+  v_admin uuid;
+  v_prev  text;
+  r       jsonb;
 begin
-  perform supabase_tests.mk_dummy(v_uid, '[TEST] HomeCountry', 'offline');
-  perform set_config('chatyuk.home_country_ok', '1', true);
+  perform supabase_tests.mk_dummy(v_mod, '[TEST] CountryLock', 'offline');
+  perform set_config('chatyuk.country_ok', '1', true);
   update public.profiles
-     set home_country = 'Indonesia', home_country_changed_at = now()
-   where id = v_uid;
-  perform set_config('chatyuk.home_country_ok', '', true);
-  v_prev := (select home_country from public.profiles where id = v_uid);
+     set country = 'Indonesia', country_changed_at = now()
+   where id = v_mod;
+  perform set_config('chatyuk.country_ok', '', true);
+  insert into public.country_moderators (scope, scope_value, uid, source)
+  values ('country', 'Indonesia', v_mod, 'admin');
 
-  -- (a) UPDATE langsung oleh user (bukan lewat RPC) harus DIABAIKAN.
+  v_prev := (select country from public.profiles where id = v_mod);
   perform set_config('request.jwt.claims',
-    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
-  update public.profiles set home_country = 'Thailand' where id = v_uid;
-  perform supabase_tests.check('home_country tak bisa diubah lewat UPDATE langsung',
-    (select home_country from public.profiles where id = v_uid) = v_prev);
+    json_build_object('sub', v_mod, 'role', 'authenticated')::text, true);
 
-  -- (b) Reset cooldown lewat UPDATE langsung juga harus DIABAIKAN.
+  -- (a) UPDATE langsung oleh user (bukan RPC) DIABAIKAN.
+  update public.profiles set country = 'Thailand' where id = v_mod;
+  perform supabase_tests.check('negara tak bisa diubah lewat UPDATE langsung',
+    (select country from public.profiles where id = v_mod) = v_prev);
+
+  -- (b) Lock tidak bisa di-reset dari klien.
   update public.profiles
-     set home_country_changed_at = now() - interval '90 days'
-   where id = v_uid;
-  perform supabase_tests.check('home_country_changed_at tak bisa direset langsung',
-    (select home_country_changed_at from public.profiles where id = v_uid)
+     set country_changed_at = now() - interval '90 days'
+   where id = v_mod;
+  perform supabase_tests.check('country_changed_at tak bisa direset langsung',
+    (select country_changed_at from public.profiles where id = v_mod)
       > now() - interval '2 days');
 
-  -- (c) RPC resmi DALAM masa cooldown tetap menolak.
-  perform supabase_tests.check('RPC set_home_country tolak perubahan <30 hari',
-    (public.set_home_country('Thailand')->>'ok') = 'false');
+  -- (c) RPC resmi DALAM masa lock (7 hari) tetap menolak.
+  r := public.set_my_country('Thailand');
+  perform supabase_tests.check('set_my_country tolak perubahan <7 hari',
+    (r->>'ok') = 'false' and (r->>'error') = 'cooldown');
 
-  perform set_config('request.jwt.claims', '', true);
-end
-$hc$;
+  -- (d) Nilai kosong ditolak.
+  begin
+    perform public.set_my_country('');
+    perform supabase_tests.check('set_my_country tolak negara kosong', false);
+  exception when others then
+    perform supabase_tests.check('set_my_country tolak negara kosong (22023)',
+      sqlstate = '22023');
+  end;
 
+  -- (e) Setelah lock lewat (disimulasikan DB) → boleh + jabatan DICABUT.
+  perform set_config('chatyuk.country_ok', '1', true);
+  update public.profiles
+     set country_changed_at = now() - interval '8 days'
+   where id = v_mod;
+  perform set_config('chatyuk.country_ok', '', true);
 
--- ── Admin set/unset negara asal (unset = akses semua negara) ──────────────
-do $ah$
-declare
-  v_admin uuid;
-  v_user  uuid := 'd0c1e000-0000-4000-8000-0000000000c1';
-  r jsonb;
-begin
+  r := public.set_my_country('Thailand');
+  perform supabase_tests.check('set_my_country izinkan setelah 7 hari',
+    (r->>'ok') = 'true'
+    and (select country from public.profiles where id = v_mod) = 'Thailand');
+
+  perform supabase_tests.check('moderator pindah negara -> jabatan dicabut',
+    (select count(*) from public.country_moderators
+      where uid = v_mod and revoked_at is null) = 0);
+
+  perform supabase_tests.check('pencabutan tercatat di moderator_actions',
+    exists (select 1 from public.moderator_actions
+             where uid = v_mod and target_uid = v_mod
+               and note = 'auto_revoke_country_change'));
+
+  -- (f) Setelah berubah, lock 7 hari berjalan lagi.
+  r := public.set_my_country('Malaysia');
+  perform supabase_tests.check('lock 7 hari berjalan lagi setelah perubahan',
+    (r->>'ok') = 'false' and (r->>'error') = 'cooldown');
+
+  -- (g) Admin selalu bisa (tanpa cooldown).
   select id into v_admin from public.profiles
    where lower(email) = 'zunixe@gmail.com' limit 1;
 
-  if v_admin is null then
-    perform supabase_tests.check('admin_set_home_country (dilewati: admin tidak ada)', true);
-  else
+  if v_admin is not null then
     perform set_config('request.jwt.claims',
       json_build_object('sub', v_admin, 'role', 'authenticated')::text, true);
-
-    r := public.admin_set_home_country(v_admin, null);
-    perform supabase_tests.check('admin bisa UNSET negara asal',
+    r := public.admin_set_country(v_mod, 'Indonesia');
+    perform supabase_tests.check('admin bisa ubah negara tanpa cooldown',
       (r->>'ok') = 'true'
-      and (select home_country is null from public.profiles where id = v_admin)
-      and (select home_country_changed_at is null from public.profiles where id = v_admin));
+      and (select country from public.profiles where id = v_mod) = 'Indonesia');
 
-    r := public.admin_set_home_country(v_admin, 'Indonesia');
-    perform supabase_tests.check('admin bisa SET negara asal',
-      (r->>'ok') = 'true'
-      and (select home_country from public.profiles where id = v_admin) = 'Indonesia'
-      and (select home_country_changed_at from public.profiles where id = v_admin) is not null);
-
-    -- Admin tanpa negara asal tetap boleh kirim media (bypass lintas negara).
-    perform supabase_tests.check('admin tanpa negara asal tetap lolos gate media',
-      public.can_send_room_media(
-        (select id from public.rooms where is_private = false limit 1),
-        v_admin) = true);
-
-    -- USER BIASA tidak boleh memakai RPC ini (bahaya: unset melewati cek
-    -- izin lintas negara).
-    perform supabase_tests.mk_dummy(v_user, '[TEST] AdminHC', 'offline');
-    perform set_config('request.jwt.claims',
-      json_build_object('sub', v_user, 'role', 'authenticated')::text, true);
+    -- Negara kosong ditolak (harus exception 22023).
     begin
-      perform public.admin_set_home_country(v_user, null);
-      perform supabase_tests.check('user biasa DILARANG unset negara asal', false);
+      perform public.admin_set_country(v_mod, '');
+      perform supabase_tests.check('admin_set_country tolak negara kosong', false);
     exception when others then
-      perform supabase_tests.check('user biasa DILARANG unset negara asal (42501)',
-        sqlstate = '42501');
+      perform supabase_tests.check('admin_set_country tolak negara kosong (22023)',
+        sqlstate = '22023');
     end;
   end if;
 
+  -- (h) USER BIASA tidak boleh memakai admin_set_country.
+  perform supabase_tests.mk_dummy(v_plain, '[TEST] NotAdmin', 'offline');
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_plain, 'role', 'authenticated')::text, true);
+  begin
+    perform public.admin_set_country(v_plain, 'Thailand');
+    perform supabase_tests.check('user biasa DILARANG admin_set_country', false);
+  exception when others then
+    perform supabase_tests.check('user biasa DILARANG admin_set_country (42501)',
+      sqlstate = '42501');
+  end;
+
   perform set_config('request.jwt.claims', '', true);
 end
-$ah$;
+$ct$;
 
 -- ── Moderator mengangkat rekan + admin melihat lintas negara ──────────────
 select supabase_tests.check('RPC moderator_set_colleague ada',

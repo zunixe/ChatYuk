@@ -1,3 +1,65 @@
+## 2026-10-27 (lanjutan 4) — SATU negara, lock 7 hari, moderator dicabut saat pindah
+
+Keputusan user: satu negara saja (ikut profil), tidak bisa diganti 7 hari,
+**IP tidak menimpa negara**, moderator yang pindah negara **otomatis dicabut**,
+popup persetujuan wajib, info lewat snackbar + catatan Profil.
+
+### `20261027150000_single_country_lock.sql` (APPLIED)
+- **Data diselamatkan:** `country = home_country` bila pilihan eksplisit user
+  ada (contoh: `ChatAja` → Argentina).
+- Kolom baru `profiles.country_changed_at`; diisi `now()` untuk user lama
+  (masa lock mulai hari ini). User baru = `NULL` (boleh betulkan sekali).
+- **Dihapus:** kolom `home_country`, `home_country_changed_at`; trigger
+  `set_home_country_default_trg`, `guard_home_country_trg`; fungsi
+  `set_home_country_default()`, `guard_home_country()`, `set_home_country()`,
+  `admin_set_home_country()`.
+- **Guard `guard_country_lock_trg`** — perubahan `country`/`country_changed_at`
+  hanya lolos bila: flag `chatyuk.country_ok='1'` (RPC resmi) · admin ·
+  `country_changed_at IS NULL` · atau sudah lewat **7 hari**. Selain itu nilai
+  lama dipulihkan (tanpa error) sehingga update kolom lain tetap jalan.
+- **`set_my_country(country)`** — satu-satunya jalur user: tolak kosong, tolak
+  `<7 hari` (`cooldown` + `next_change_at`), set + `changed_at = now()`.
+  **Auto-revoke:** baris `country_moderators` dengan negara berbeda dicabut
+  (`revoked_at = now()`) dan dicatat di `moderator_actions`
+  (`auto_revoke_country_change`). Respons menyertakan `revoked_moderator_for`.
+- **`admin_set_country(uid, country)`** — admin-only, wajib terisi, tanpa
+  cooldown, tercatat di `moderator_actions`.
+- **6 fungsi pindah ke `country`:** `can_send_room_media`,
+  `room_media_gate_state`, `request_country_permit`, `profile_public`,
+  `admin_moderation_overview`, `admin_search_users`.
+- `my_moderation_state` kini mengembalikan `revoked` (riwayat pencabutan
+  otomatis) untuk catatan di Profil.
+
+### Perbaikan klien
+- `login_screen.dart`: **berhenti mengirim `country`/`city`** dari deteksi IP —
+  negara tidak lagi bisa ditimpa VPN/roaming.
+- `UserModel.homeCountry` dihapus.
+- `lib/core/moderation_texts.dart`: `effectiveCountry`, `countryCooldownMessage`,
+  `countryChangedMessage`, `countryChangeConfirmBody`, `moderationDate`.
+- Profil: **popup persetujuan pindah negara** (menyebut jabatan yang akan
+  DICABUT + lock 7 hari), snackbar hasil + tanggal bisa ubah lagi, dan
+  **catatan riwayat pencabutan** jabatan moderator.
+- Edit Profil (`profile_photos.dart`): negara **tidak** dikirim lewat
+  `updateProfile`; memakai popup + `set_my_country` (field lain tetap tersimpan).
+- Ajukan moderator saat negara kosong → "Atur negara dulu" (bukan hint media).
+- String: hint lamaran **7 hari & 50 pesan** (dari 30/100), kandidat **≥20
+  pesan**, konsep "semua negara"/unset dihapus.
+
+### Test
+- `test/moderation_texts_test.dart` — **22 unit test** (negara tunggal, lock
+  7 hari, format tanggal, isi popup untuk moderator & non-moderator, pesan
+  pencabutan).
+- `room_media_gate_test` 24 → **29 assert**: lock <7 hari ditolak, UPDATE
+  langsung ditahan, lock tak bisa direset, boleh setelah 7 hari, **jabatan
+  moderator dicabut + tercatat**, lock berjalan lagi, admin tanpa cooldown,
+  `admin_set_country` admin-only & tolak kosong, `set_my_country` tolak kosong.
+
+### Risiko yang diakui
+`can_send_room_media` kini memakai `country` yang **bisa** diubah user setiap
+7 hari → izin lintas negara bisa berpindah setelah lock lewat. Ini konsekuensi
+langsung dari keputusan "satu negara"; lock 7 hari menjaga agar tidak bisa
+dipindah sesukanya.
+
 ## 2026-10-27 (lanjutan 3) — Admin: unset negara asal = akses semua negara
 
 Keputusan user: (1) hilangkan redundansi dua negara, (2) tanpa baris

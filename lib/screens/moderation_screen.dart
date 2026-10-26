@@ -564,7 +564,7 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
                             leading: const Icon(Icons.person_outline_rounded),
                             title: Text('${u['nickname'] ?? u['uid']}'),
                             subtitle: Text(
-                              '${u['home_country'] ?? '-'} · ${u['messages'] ?? 0} pesan',
+                              '${u['country'] ?? '-'} · ${u['messages'] ?? 0} pesan',
                             ),
                             onTap: () => Navigator.pop(ctx, u),
                           );
