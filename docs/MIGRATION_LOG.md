@@ -1,3 +1,48 @@
+## 2026-10-26 — Moderasi media room publik: trust gate, rate limit, moderator negara (SUDAH APPLY)
+
+**Latar (permintaan user):** di global room ada yang mengirim foto/video porn.
+Sebelumnya SIAPA PUN yang terdaftar bisa kirim media di room publik — tanpa
+gate umur akun, tanpa rate limit, tanpa verifikasi konten, tanpa moderator.
+
+**Aturan yang diterapkan (keputusan produk):**
+- Room **privat/grup**: TIDAK berubah (bebas).
+- Room **publik**: kirim media (image/video/video_once) wajib (1) umur akun
+  >= `media_trust_min_days` (default 3 hari) DAN (2) >= `media_trust_min_msgs`
+  (default 20) pesan **di room publik**. Moderator negara/admin bypass.
+- Rate limit media: `media_rate_per_min` (3) & `media_rate_per_hour` (20)
+  per user per room.
+- Hanya MEDIA yang dibatasi; teks/voice/lokasi tetap bebas.
+- Akun tidak dihukum (hanya tombol media ditahan sampai syarat terpenuhi).
+
+**Migrasi:**
+1. `20261026130000_country_moderators.sql` — `profiles.home_country` (negara
+   asal STABIL, tidak ditimpa IP) + backfill dari `country`; tabel
+   `country_moderators` (kolom `scope` disiapkan untuk naik ke per-room),
+   `moderator_applications`, `moderator_actions` (audit) + RLS 3 tabel baru.
+2. `20261026130500_country_moderator_rpcs.sql` — RPC `apply_country_moderator`
+   (syarat >=30 hari & >=100 pesan room publik negara itu),
+   `decide_moderator_application`, `admin_set_country_moderator`,
+   `moderator_hide_message` (hide/unhide; TIDAK ada aksi blokir akun).
+3. `20261026140000_room_media_trust_gate.sql` — kolom `app_settings`
+   (media_trust_min_days/min_msgs, media_rate_per_min/hour,
+   nsfw_reject_threshold, nsfw_review_threshold), fungsi
+   `is_room_media_type`, `can_send_room_media(room text, uid)`,
+   `room_media_rate_ok(room text, uid)`, dan trigger
+   `enforce_room_media_gate_trg` (BEFORE INSERT pada `messages`).
+
+**Penting:** `rooms.id` & `messages.room_id` bertipe **TEXT**
+(mis. `'Hong_Kong_general'`), bukan uuid — sempat salah tipe saat uji dan
+sudah diperbaiki.
+
+**Verifikasi (transaksi ROLLBACK di live):** akun baru → `can_send_room_media`
+false; akun lama + 20 pesan → true; room privat → true; rate limit 3 media →
+ditolak. Pasca-apply: `trigger_gate=1`, 5 fungsi, 3 tabel, kolom
+`home_country` ada. pgTAP `room_media_gate_test.sql` 11/11.
+
+**SAFE:** semua aditif (kolom baru, tabel baru, fungsi baru, 1 trigger baru).
+Tidak mengubah policy/RLS/kolom yang sudah ada; room privat & private chat
+tidak terpengaruh.
+
 ## 2026-10-24 — refund_chat_point: anti-replay + jendela + kill-switch (SUDAH APPLY)
 
 **Review `docs/REVIEW_2026-10-24.md` SEC-02 (P0).** Dua rancangan sempat dibuat
