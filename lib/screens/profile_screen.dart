@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../core/media/native_image.dart';
+import '../core/moderation_texts.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
 import '../widgets/verified_badge.dart';

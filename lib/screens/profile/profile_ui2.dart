@@ -589,14 +589,15 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
 
   // ── Moderasi konten room publik ──────────────────────────────────────────
 
-  /// Kartu "Moderasi": pilih NEGARA ASAL, ajukan jadi moderator, buka konsol.
+  /// Kartu "Moderasi": negara asal, lamaran moderator, buka konsol.
   ///
-  /// Negara asal dibaca dari PROFIL (`homeCountry`), bukan hanya dari pilihan
-  /// sesi — dulu `_homeCountry` selalu null sehingga "Ajukan jadi moderator"
-  /// dan "Buka konsol" mengirim string kosong dan SELALU gagal.
+  /// Negara asal diambil dari PROFIL setiap build (`_effectiveHomeCountry`)
+  /// — dulu memakai `??=` yang mengunci `null` bila profil belum termuat,
+  /// sehingga namanya tidak pernah muncul walau negara sudah tersimpan.
   @override
   Widget _moderationSection(BuildContext context, S s) {
-    _homeCountry ??= ref.watch(authProvider).profile?.homeCountry;
+    final isAdmin = ref.read(authProvider.notifier).isRealAdmin;
+    final home = _effectiveHomeCountry;
     if (!_modRoleLoaded) {
       _modRoleLoaded = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -614,78 +615,46 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
             margin: EdgeInsets.zero,
             child: Column(
               children: [
+                // ── Negara asal ──
                 ListTile(
                   leading: const Icon(Icons.public_rounded),
                   title: Text(s.moderationCountryTitle),
                   subtitle: Text(
-                    (_homeCountry ?? '').isEmpty
-                        ? s.moderationCountryHint
-                        : '${_homeCountry!} · ${s.moderationCountryHint}',
+                    isAdmin && home.isEmpty
+                        // Admin tanpa negara = akses semua negara.
+                        ? s.moderationAllCountries
+                        : (home.isEmpty
+                            ? s.moderationCountryHint
+                            : '$home · ${s.moderationCountryHint}'),
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => _pickHomeCountry(context, s),
+                  onTap: () => _pickHomeCountry(context, s, isAdmin: isAdmin),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.shield_outlined),
-                  title: Text(s.moderationApply),
-                  subtitle: Text(
-                    // Admin langsung diangkat (tanpa syarat kontribusi);
-                    // user biasa melihat syaratnya di hint.
-                    s.moderationApplyHint,
+                // ── Lamaran (user biasa) / status admin ──
+                if (isAdmin) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.verified_user_outlined),
+                    title: Text(s.moderationAdminAllCountries),
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () async {
-                    final res = await ProviderScope.containerOf(
-                      context,
-                      listen: false,
-                    ).read(chatProvider.notifier).applyCountryModerator(
-                          _homeCountry ?? '',
-                          reason: '',
-                        );
-                    if (!context.mounted) return;
-                    final msg = switch (res['error']) {
-                      'account_too_new' => s.moderationApplyNeedDays(
-                          (res['min_days'] as num?)?.toInt() ?? 7,
-                        ),
-                      'not_enough_messages' => s.moderationApplyNeedMsgs(
-                          (res['need'] as num?)?.toInt() ?? 50,
-                          (res['have'] as num?)?.toInt() ?? 0,
-                        ),
-                      _ => res['already_moderator'] == true ||
-                              res['already_pending'] == true
-                          ? s.moderationApplyPending
-                          : (res['ok'] == true
-                              ? s.moderationApplySent
-                              : s.errGeneric),
-                    };
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text(msg)));
-                  },
-                ),
-                // Konsol hanya untuk MODERATOR/ADMIN — user biasa yang
-                // menekannya dulu selalu "gagal" (RPC forbidden), jadi
-                // tombolnya disembunyikan.
-                if (_canOpenConsole) ...[
+                ] else ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.shield_outlined),
+                    title: Text(s.moderationApply),
+                    subtitle: Text(s.moderationApplyHint),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _applyModerator(context, s, home),
+                  ),
+                ],
+                // ── Konsol: moderator negara / admin (negara dipilih di layar) ──
+                if (_canOpenConsole && (home.isNotEmpty || isAdmin)) ...[
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.fact_check_outlined),
                     title: Text(s.moderationOpenConsole),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () {
-                    final c = _homeCountry ?? '';
-                    if (c.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(s.moderationCountryHint)),
-                      );
-                      return;
-                    }
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ModerationScreen(country: c),
-                        ),
-                      );
-                    },
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _openConsoleFromProfile(context, s, home),
                   ),
                 ],
               ],
@@ -696,7 +665,52 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
-  String? _homeCountry;
+  /// Buka konsol moderasi dari Profil.
+  ///
+  /// Admin tanpa negara asal: menampilkan pilihan negara dulu (karena admin
+  /// boleh membuka negara mana pun).
+  Future<void> _openConsoleFromProfile(
+    BuildContext context,
+    S s,
+    String home,
+  ) async {
+    var country = home;
+    if (country.isEmpty) {
+      final picked = await _showCountryPicker(context, s);
+      if (picked == null || !context.mounted) return;
+      country = picked;
+    }
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ModerationScreen(country: country)),
+    );
+  }
+
+  /// Ajukan diri jadi moderator negara asal (user biasa).
+  Future<void> _applyModerator(BuildContext context, S s, String home) async {
+    if (home.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(s.moderationCountryHint)));
+      return;
+    }
+    final res = await ProviderScope.containerOf(context, listen: false)
+        .read(chatProvider.notifier)
+        .applyCountryModerator(home, reason: '');
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(moderationApplyMessage(res, s))),
+    );
+  }
+
+  /// Negara asal efektif: override sesi (hasil pilih user) di atas PROFIL.
+  String get _effectiveHomeCountry => effectiveHomeCountry(
+        override: _homeCountryOverride,
+        fromProfile: ref.read(authProvider).profile?.homeCountry,
+      );
+
+  /// Override sesi hasil pilih user (null = pakai nilai PROFIL).
+  String? _homeCountryOverride;
 
   /// True bila user ini moderator negara (atau admin) → boleh buka konsol.
   bool _canOpenConsole = false;
@@ -715,9 +729,10 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     } catch (_) {}
   }
 
-  Future<void> _pickHomeCountry(BuildContext context, S s) async {
+  /// Dialog daftar negara. Mengembalikan nama negara atau null.
+  Future<String?> _showCountryPicker(BuildContext context, S s) {
     final countries = getNegaraKeys()..sort();
-    final picked = await showDialog<String>(
+    return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(s.moderationCountryTitle),
@@ -741,6 +756,63 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
         ],
       ),
     );
+  }
+
+  /// Pilih negara asal. Admin memakai RPC khusus (tanpa cooldown, bisa
+  /// dikosongkan = akses semua negara); user biasa tetap kena cooldown 30 hari.
+  Future<void> _pickHomeCountry(
+    BuildContext context,
+    S s, {
+    bool isAdmin = false,
+  }) async {
+    if (isAdmin) {
+      final aksi = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: AppTheme.bgCard,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.public_rounded),
+                title: Text(s.moderationCountryTitle),
+                onTap: () => Navigator.pop(ctx, 'set'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.clear_rounded),
+                title: Text(s.moderationUnsetCountry),
+                subtitle: Text(s.moderationAllCountries),
+                onTap: () => Navigator.pop(ctx, 'unset'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (aksi == null || !context.mounted) return;
+      final uid = ref.read(authProvider).uid ?? '';
+      if (uid.isEmpty) return;
+      final picked =
+          aksi == 'unset' ? null : await _showCountryPicker(context, s);
+      if (aksi == 'set' && (picked == null || !context.mounted)) return;
+      if (!context.mounted) return;
+      final res = await ref
+          .read(chatProvider.notifier)
+          .adminSetHomeCountry(uid, picked);
+      if (!context.mounted) return;
+      setState(() => _homeCountryOverride = picked ?? '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            res['ok'] == true
+                ? s.moderationCountrySaved
+                : s.errGeneric,
+          ),
+        ),
+      );
+      return;
+    }
+
+    final picked = await _showCountryPicker(context, s);
     if (picked == null || !context.mounted) return;
     final res = await ProviderScope.containerOf(
       context,
@@ -748,12 +820,12 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     ).read(chatProvider.notifier).setHomeCountry(picked);
     if (!context.mounted) return;
     if (res['ok'] == true) {
-      _homeCountry = picked;
+      setState(() => _homeCountryOverride = picked);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(s.moderationCountrySaved)));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.moderationCountryCooldown)),
+        SnackBar(content: Text(homeCountryCooldownMessage(res, s))),
       );
     }
   }

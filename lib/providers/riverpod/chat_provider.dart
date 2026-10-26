@@ -412,6 +412,9 @@ class ChatNotifier extends Notifier<ChatState> {
   Future<bool> flagMediaReview(String messageId) =>
       _service.flagMediaReview(messageId);
 
+  Future<Map<String, dynamic>> adminSetHomeCountry(String uid, String? country) =>
+      _service.adminSetHomeCountry(uid, country);
+
   Future<bool> moderatorResolveReview(String messageId, {required bool hide}) =>
       _service.moderatorResolveReview(messageId, hide: hide);
 

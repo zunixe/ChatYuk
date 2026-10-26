@@ -168,6 +168,58 @@ end
 $hc$;
 
 
+-- ── Admin set/unset negara asal (unset = akses semua negara) ──────────────
+do $ah$
+declare
+  v_admin uuid;
+  v_user  uuid := 'd0c1e000-0000-4000-8000-0000000000c1';
+  r jsonb;
+begin
+  select id into v_admin from public.profiles
+   where lower(email) = 'zunixe@gmail.com' limit 1;
+
+  if v_admin is null then
+    perform supabase_tests.check('admin_set_home_country (dilewati: admin tidak ada)', true);
+  else
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', v_admin, 'role', 'authenticated')::text, true);
+
+    r := public.admin_set_home_country(v_admin, null);
+    perform supabase_tests.check('admin bisa UNSET negara asal',
+      (r->>'ok') = 'true'
+      and (select home_country is null from public.profiles where id = v_admin)
+      and (select home_country_changed_at is null from public.profiles where id = v_admin));
+
+    r := public.admin_set_home_country(v_admin, 'Indonesia');
+    perform supabase_tests.check('admin bisa SET negara asal',
+      (r->>'ok') = 'true'
+      and (select home_country from public.profiles where id = v_admin) = 'Indonesia'
+      and (select home_country_changed_at from public.profiles where id = v_admin) is not null);
+
+    -- Admin tanpa negara asal tetap boleh kirim media (bypass lintas negara).
+    perform supabase_tests.check('admin tanpa negara asal tetap lolos gate media',
+      public.can_send_room_media(
+        (select id from public.rooms where is_private = false limit 1),
+        v_admin) = true);
+
+    -- USER BIASA tidak boleh memakai RPC ini (bahaya: unset melewati cek
+    -- izin lintas negara).
+    perform supabase_tests.mk_dummy(v_user, '[TEST] AdminHC', 'offline');
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', v_user, 'role', 'authenticated')::text, true);
+    begin
+      perform public.admin_set_home_country(v_user, null);
+      perform supabase_tests.check('user biasa DILARANG unset negara asal', false);
+    exception when others then
+      perform supabase_tests.check('user biasa DILARANG unset negara asal (42501)',
+        sqlstate = '42501');
+    end;
+  end if;
+
+  perform set_config('request.jwt.claims', '', true);
+end
+$ah$;
+
 -- ── Moderator mengangkat rekan + admin melihat lintas negara ──────────────
 select supabase_tests.check('RPC moderator_set_colleague ada',
   exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace

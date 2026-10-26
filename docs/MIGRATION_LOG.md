@@ -1,3 +1,47 @@
+## 2026-10-27 (lanjutan 3) — Admin: unset negara asal = akses semua negara
+
+Keputusan user: (1) hilangkan redundansi dua negara, (2) tanpa baris
+`country_moderators` untuk admin, (3) RPC admin-only, (4) tombol "Ajukan"
+untuk admin diganti teks statis, (5) unset hanya mengosongkan `home_country`.
+
+### `20261027140000_admin_home_country.sql` (APPLIED)
+- RPC `admin_set_home_country(p_uid, p_country)` — **admin-only**
+  (`forbidden` 42501 untuk selain admin):
+  - `p_country` NULL/kosong → unset (`home_country` & `changed_at` = NULL)
+  - `p_country` terisi → set + `changed_at = now()`
+  - Menulis di bawah flag trusted `chatyuk.home_country_ok` agar
+    `guard_home_country_trg` mengizinkan (termasuk transisi ke NULL)
+  - Audit `moderator_actions` (`grant_permit` / `revoke_permit`)
+- **Kenapa admin-only:** `can_send_room_media` MELEWATI cek izin lintas
+  negara bila `home_country` kosong; untuk admin tak berdampak (bypass lebih
+  awal), tapi user biasa tidak boleh bisa mengosongkannya sendiri.
+
+### Data live
+- Baris `country_moderators` milik `ChatYuk Admin` (Armenia, Indonesia)
+  **dihapus** — admin tidak butuh baris moderator (aksesnya lintas negara
+  lewat `is_chatyuk_admin`).
+- `home_country` admin → **NULL** (semua negara).
+
+### Perbaikan klien
+- `lib/core/moderation_texts.dart` (baru, murni/testable):
+  `moderationApplyMessage`, `effectiveHomeCountry`,
+  `homeCountryCooldownMessage`.
+- Profil: negara asal dibaca dari PROFIL tiap build (+ override sesi) —
+  `??=` dihapus (akar "negara tidak tertulis").
+- Admin: tile negara asal membuka sheet **Pilih negara / Kosongkan (semua
+  negara)**; baris "Admin — akses semua negara" menggantikan tombol Ajukan;
+  konsol bisa dibuka untuk negara mana pun (pilih negara dulu).
+- User biasa: cooldown menyebut TANGGAL (`next_change_at`);
+  `already_moderator` ≠ `already_pending` pada pesan lamaran.
+- Konsol moderasi: selain moderator/admin → "Bukan moderator negara ini" +
+  tombol kembali (bukan "terjadi kesalahan").
+
+### Test
+- `test/moderation_texts_test.dart` — **15 unit test** (urutan pesan lamaran,
+  unset≠profil, format tanggal cooldown).
+- `room_media_gate_test` 20 → **24 assert** (unset/set oleh admin, admin tanpa
+  negara tetap lolos gate media, user biasa ditolak 42501).
+
 ## 2026-10-27 (lanjutan 2) — Admin tidak perlu "melamar" jadi moderator
 
 Laporan user: "di chatyuk admin ajukan jadi moderator gagal".

@@ -191,6 +191,23 @@ mixin ChatServiceRoomMx on ChatBase {
     }
   }
 
+  /// Admin: set / kosongkan negara asal seorang user (`null` = semua negara).
+  Future<Map<String, dynamic>> adminSetHomeCountry(
+    String uid,
+    String? country,
+  ) async {
+    try {
+      final res = await _sb.rpc('admin_set_home_country', params: {
+        'p_uid': uid,
+        'p_country': country,
+      });
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] adminSetHomeCountry error: $e');
+      return {'ok': false};
+    }
+  }
+
   /// Moderator menyelesaikan tinjauan media borderline.
   Future<bool> moderatorResolveReview(
     String messageId, {

@@ -143,7 +143,32 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _data == null
-          ? Center(child: Text(s.errGeneric))
+          // RPC menolak (bukan moderator/admin negara ini) atau gagal →
+          // beri pesan yang benar + jalan keluar, bukan "terjadi kesalahan".
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_outline_rounded, size: 42),
+                    const SizedBox(height: 12),
+                    Text(
+                      s.moderationNotModeratorHere,
+                      textAlign: TextAlign.center,
+                      style: AppText.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      child: Text(s.btnCancel),
+                    ),
+                  ],
+                ),
+              ),
+            )
           : TabBarView(
               controller: _tabs,
               children: [

@@ -698,6 +698,24 @@ mixin SScreenMx {
   String get moderationCandidatesHint => isId
       ? 'Pilih kontributor yang sudah aktif di room publik negara ini.'
       : 'Pick a contributor already active in this country\'s public rooms.';
+  String get moderationAlreadyModerator => isId
+      ? 'Kamu sudah moderator negara ini'
+      : 'You are already a moderator of this country';
+  String get moderationAdminAllCountries => isId
+      ? 'Admin — akses semua negara'
+      : 'Admin — all countries';
+  String get moderationAllCountries => isId
+      ? 'Semua negara'
+      : 'All countries';
+  String get moderationUnsetCountry => isId
+      ? 'Kosongkan (semua negara)'
+      : 'Clear (all countries)';
+  String moderationCooldownUntil(String date) => isId
+      ? 'Negara asal baru bisa diubah pada $date'
+      : 'Home country can be changed on $date';
+  String get moderationNotModeratorHere => isId
+      ? 'Bukan moderator negara ini'
+      : 'Not a moderator of this country';
   String moderationApplyNotYet(int have, int need) => isId
       ? 'Belum memenuhi syarat: $have/$need pesan di room publik negara ini'
       : 'Not eligible yet: $have/$need messages in this country\'s public rooms';
