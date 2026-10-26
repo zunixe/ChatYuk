@@ -86,6 +86,21 @@ mixin _AdminStatsMx on _AdminBase {
     return (res as Map<String, dynamic>?) ?? const {};
   }
 
+  /// Daftar user yang SEDANG memakai Ghost Mode (invisible berbayar).
+  ///
+  /// Sebelumnya admin tidak punya sumber data apa pun untuk ini — user ghost
+  /// tampak seperti user biasa dan tidak tercatat di mana pun. RPC
+  /// `admin_ghost_users` (migrasi 20261027121000) mengisi celah itu.
+  ///
+  /// Item: {uid, nickname, status, last_seen, ghost_expires_at, ghost_sisa_jam}
+  Future<List<Map<String, dynamic>>> fetchGhostUsers() async {
+    final res = await _rpc('admin_ghost_users').timeout(_openTimeout);
+    return ((res as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
   /// Sebaran user per NEGARA → [{country, count, registered}] desc.
   Future<List<Map<String, dynamic>>> fetchCountryStats() async {
     final res = await _rpc('admin_country_stats').timeout(_openTimeout);

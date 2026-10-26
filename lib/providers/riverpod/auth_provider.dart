@@ -36,8 +36,18 @@ part 'auth_provider_init.dart';
 part 'auth_provider_settings.dart';
 part 'auth_provider_actions.dart';
 
+/// Klien menandai IDLE setelah 3 menit tanpa interaksi layar.
+/// PENTING: nilai ini HARUS < [heartbeatInterval] (4 menit), supaya saat app
+/// masih dipegang user tapi layar tak disentuh, klien sendiri yang menurunkan
+/// status ke 'idle' (masih tampil di daftar Online) sebelum heartbeat berikut.
 const Duration idleTimeout = Duration(minutes: 3);
+
+/// Heartbeat presence ke server. Ambang idle SERVER
+/// (`presence_idle_tick`, 10 menit di migrasi 20261027120000) sengaja dibuat
+/// 2,5x nilai ini supaya jitter jaringan tidak lebih dulu menendang user
+/// aktif ke 'idle' — lihat docs/PERFORMANCE.md & migrasi tersebut.
 const Duration heartbeatInterval = Duration(seconds: 240);
+
 const String _referrerPrefKey = 'pending_referrer_uid';
 const String _profileCachePrefix = 'cached_profile_v1_';
 const String _notifPrefKey = 'notif_enabled';

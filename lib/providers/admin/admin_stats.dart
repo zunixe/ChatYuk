@@ -169,7 +169,20 @@ mixin AdminStatsMx on AdminBase {
 
   // ── Sebaran geografis (negara → kota) ──
   List<Map<String, dynamic>> _countryStats = const [];
-  final Map<String, List<Map<String, dynamic>>> _cityStatsCache = {};
+
+  /// Daftar user yang sedang Ghost Mode (invisible berbayar).
+  ///
+  /// Fitur ini dijual ke user (§YukCoin) tetapi sebelumnya tidak tercatat di
+  /// panel admin sama sekali. Diambil langsung (tanpa cache) karena jumlahnya
+  /// kecil dan admin perlu data terbaru saat membuka sheet.
+  Future<List<Map<String, dynamic>>> fetchGhostUsers() async {
+    try {
+      return await _service.fetchGhostUsers();
+    } catch (e) {
+      dlog('[ADMIN] fetchGhostUsers error: $e');
+      return const [];
+    }
+  }  final Map<String, List<Map<String, dynamic>>> _cityStatsCache = {};
   bool _geoLoading = false;
   bool _geoLoaded = false;
 

@@ -731,7 +731,139 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
             cell(5),
           ],
         ),
+        const SizedBox(height: 8),
+        // BARIS GHOST: user yang membeli "mode invisible" (Ghost Mode).
+        // Dulu TIDAK tercatat di mana pun → admin tak bisa membedakan user
+        // ghost dari user biasa. Sumber: RPC admin_ghost_users.
+        Row(
+          children: [
+            Expanded(
+              child: Material(
+                color: AppTheme.bgCard,
+                borderRadius: BorderRadius.circular(10),
+                child: AppGestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _showGhostUsers(),
+                  child: Container(
+                    height: 76,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.visibility_off_outlined,
+                          size: 15,
+                          color: Colors.deepPurple,
+                        ),
+                        const SizedBox(height: 5),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: FutureBuilder<List<Map<String, dynamic>>>(
+                              future: ProviderScope.containerOf(
+                                context,
+                                listen: false,
+                              ).read(adminProvider).fetchGhostUsers(),
+                              builder: (context, snap) => Text(
+                                snap.hasData
+                                    ? '${snap.data!.length}'
+                                    : (snap.hasError ? '-' : '…'),
+                                style: AppText.titleEmphasis.copyWith(
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Mode invisible',
+                          style: AppText.micro.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Ruang kosong 2 slot supaya lebar kartu ghost sama dengan yang
+            // lain (grid tetap 3 kolom).
+            const Expanded(child: SizedBox.shrink()),
+            const SizedBox(width: 8),
+            const Expanded(child: SizedBox.shrink()),
+          ],
+        ),
       ],
+    );
+  }
+
+  /// Daftar user yang sedang Ghost Mode (invisible berbayar).
+  Future<void> _showGhostUsers() async {
+    final admin = ProviderScope.containerOf(context, listen: false).read(
+      adminProvider,
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => FutureBuilder<List<Map<String, dynamic>>>(
+        future: admin.fetchGhostUsers(),
+        builder: (c, snap) {
+          if (!snap.hasData) {
+            return const SizedBox(
+              height: 160,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            );
+          }
+          final rows = snap.data!;
+          if (rows.isEmpty) {
+            return const SizedBox(
+              height: 160,
+              child: Center(child: Text('Tidak ada user mode invisible')),
+            );
+          }
+          return SafeArea(
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: rows.length,
+              separatorBuilder: (_, _) => Divider(
+                height: 1,
+                indent: 16,
+                endIndent: 16,
+                color: AppTheme.divider,
+              ),
+              itemBuilder: (c2, i) {
+                final r = rows[i];
+                final nama = '${r['nickname'] ?? '-'}';
+                final sisa = r['ghost_sisa_jam'];
+                return ListTile(
+                  dense: true,
+                  leading: const Icon(
+                    Icons.visibility_off_outlined,
+                    size: 20,
+                    color: Colors.deepPurple,
+                  ),
+                  title: Text(nama, style: AppText.bodyStrong),
+                  subtitle: Text(
+                    'status: ${r['status'] ?? '-'} · sisa ${sisa ?? '-'} jam',
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 

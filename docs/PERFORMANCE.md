@@ -1385,6 +1385,122 @@ lebih lambat (cold read bisa 3–10× lebih besar), sehingga dampak nyata **lebi
 besar**, bukan lebih kecil. Angka HP belum diambil (butuh build `PERF_PROBE` di
 perangkat uji terpisah, bukan HP kerja — §3); dicatat sebagai utang pengukuran.
 
+### 2.24 Presence: user aktif "hilang" dari daftar Online + Ghost Mode mati (2026-10-26)
+
+**Gejala laporan:** user `pornsex` "active 5m" tapi tidak muncul di daftar
+Online. Kecurigaan awal: invisible / privacy.
+
+**Diagnosa (pakai query read-only ke DB produksi, bukan asumsi):**
+
+| Diperiksa | Hasil |
+|---|---|
+| `status` | `offline` ← penyebab |
+| `presence_visibility` | `everyone` (bukan privasi) |
+| `last_seen_visibility` | `everyone` |
+| `ghost_mode_active` | tidak ada (bukan ghost) |
+| `invisible_admin_uid` | bukan dia |
+| Lolos filter admin (`last_seen >= hari ini`) | **ya** → jadi ini bukan soal admin |
+
+**Akar masalah — RACE ambang idle vs heartbeat:**
+
+- Klien heartbeat tiap `heartbeatInterval = 240s` (4 menit).
+- `presence_idle_tick(p_idle_after default interval '4 minutes')` menurunkan
+  `online → idle` bila `last_seen < now() - 4 menit`.
+- **Ambang idle == interval heartbeat.** Setiap jitter jaringan / timer drift
+  / app sempat background membuat cron **mendahului** heartbeat → user yang
+  benar-benar aktif ikut diturunkan ke `idle`, lalu `presence_stale_offline(30)`
+  memindahkannya ke `offline` — dan `offline` **tidak pernah** kembali sendiri
+  tanpa heartbeat (bisa sampai 4 menit "tak terlihat" setelah app dibuka).
+- Bukti pendukung: saat diperiksa, dari 527 user hanya **1** yang lolos
+  `status in (online,idle) and last_seen <= 30 mnt`, padahal ada user dengan
+  `last_seen` 9,4 menit yang berstatus `idle`.
+
+**Perbaikan:** migrasi `20261027120000_fix_presence_idle_race.sql`
+1. Ambang idle **4 mnt → 10 mnt** (2,5× heartbeat) → beri ruang 2–3 heartbeat
+   terlewat sebelum dianggap idle. Batas atas tetap 30 mnt.
+2. `presence_idle_tick` **tidak lagi** menyentuh `last_seen` (itu milik
+   heartbeat).
+3. `housekeeping_tick` memakai ambang 10 mnt eksplisit.
+
+**Bug kedua (ditemukan saat audit) — GHOST MODE TIDAK BERFUNGSI:**
+Fitur berbayar YukCoin "Sembunyikan status online-mu" (`ghostModeDesc`) hanya
+dibaca oleh `buy_ghost_mode_v2()` dan `is_ghost_mode()`. **Nol** referensi di
+`get_online_users`, `presence_for`, maupun `admin_stats*` → user **membayar
+koin tapi tetap tampil online**, dan admin **tidak punya cara melihat** siapa
+yang sedang ghost (menjawab "kenapa di admin tidak tercatat").
+
+Perbaikan: migrasi `20261027121000_enforce_ghost_mode.sql`
+1. `get_online_users` — user `ghost_mode_active.expires_at > now()` dikeluarkan
+   (admin bypass tetap melihat, untuk audit).
+2. `presence_for` — status user ghost dipaksa `offline` bagi viewer lain
+   (`last_seen` tetap mengikuti `last_seen_visibility`; ghost menyembunyikan
+   **presence**, bukan kemampuan chat).
+3. RPC baru `admin_ghost_users()` + kartu **"Mode invisible"** di panel admin
+   (tap → sheet daftar user ghost + sisa jam).
+
+**Verifikasi (dijalankan langsung ke DB produksi, lalu dipulihkan):**
+
+| Uji | Hasil |
+|---|---|
+| `presence_idle_tick` default | `00:10:00` (10 mnt) ✅ |
+| `last_seen` 6 mnt | tetap `online` ✅ |
+| `last_seen` 12 mnt | jadi `idle` ✅ |
+| Ghost aktif → `get_online_users` | **0** (hilang) ✅ |
+| Ghost aktif → `admin_ghost_users` | **1** (terlihat admin) ✅ |
+| Ghost dimatikan → `get_online_users` | **1** (muncul lagi) ✅ |
+
+Data uji dipulihkan: `pornsex` kembali `offline` + `last_seen` asli, 0 baris
+ghost tertinggal, 0 user `[TEST]`.
+
+**REVIEW ULANG (penting) — ghost masih bocor di 3 jalur lain.**
+Setelah perbaikan pertama, audit menyeluruh atas semua RPC yang membawa
+`status` menemukan kebocoran lanjutan:
+
+| RPC | privacy | cek ghost (awal) | status |
+|---|---|---|---|
+| `get_online_users` | ya | ya | ditutup |
+| `presence_for` | ya | ya | ditutup |
+| `profile_public` | ya | **tidak** | bocor → ditutup |
+| `nearby_users` | ya | **tidak** | bocor → ditutup |
+| realtime `postgres_changes` pada `profiles` | — | **tidak** | bocor → ditutup |
+
+- `profile_public` mengembalikan `status` mentah → badge Online di halaman
+  profil tetap menyala untuk user ghost.
+- **Realtime** `user-status-<uid>` membaca `payload.newRecord['status']`
+  MENTAH → ghost hanya tersembunyi saat fetch awal, lalu bocor begitu status
+  berubah.
+- `nearby_users` memakai filter presence yang sama tapi tanpa cek ghost.
+
+Perbaikan: migrasi `20261027122000_ghost_mode_close_leaks.sql`
+1. `profile_public` — status ghost dipaksa `offline` (selain pemilik).
+2. Trigger `trg_enforce_ghost_mode` — selama ghost aktif, `profiles.status`
+   **dipaksa `offline`** sehingga payload realtime pun `offline`. Ini juga
+   yang membuat klien tidak perlu diubah.
+3. `20261027123000_ghost_mode_nearby_users.sql` — `nearby_users` + klausa
+   `not exists (ghost_mode_active)`.
+
+**Urutan trigger aman:** Postgres menjalankan trigger `BEFORE` secara
+alfabetis, jadi `trg_enforce_ghost_mode` jalan **sebelum**
+`trg_enforce_invisible` → bila admin invisible + ghost aktif bersamaan,
+`invisible` tetap menang (diuji).
+
+**Efek yang perlu diketahui:** `profiles.status` milik user ghost menjadi
+`offline` di DB. UI pemilik memakai state lokal (`online`) dan toggle Ghost di
+layar Privasi membaca `is_ghost_mode()` (bukan `profiles.status`), jadi
+tampilan pemilik tetap benar. Saat ghost kedaluwarsa, trigger berhenti memaksa
+dan heartbeat berikutnya mengembalikan `online` otomatis.
+
+**Test regresi:** `supabase/tests/presence_ghost_test.sql` — **14/14 PASS**
+(transaksional + rollback, pakai `mk_dummy`). Mencakup: ambang idle, ghost
+tersembunyi dari Online, terlihat di admin, `profile_public`/`presence_for`
+`offline`, trigger memaksa offline, lepas saat kedaluwarsa, dan interaksi
+dengan invisible admin.
+
+Catatan: `presence_idle_tick` sengaja mengecualikan akun **dummy**
+(`dummy_accounts`) karena presence dummy diatur `ai_presence_tick`/admin —
+test menyesuaikan (hapus dari `dummy_accounts` dulu) agar menguji jalur user
+asli.
+
 ### 8. Target tersisa
 
 **Tidak ada.** Semua item bagian 6 sudah tertutup:
