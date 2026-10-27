@@ -769,6 +769,59 @@ mixin SScreenMx {
   String get moderationApplyPending => isId
       ? 'Lamaran sedang ditinjau.'
       : 'Application under review.';
+  String moderationGranted(String country) => isId
+      ? 'Selamat! Kamu moderator $country.'
+      : 'Congratulations! You are now a moderator of $country.';
+  String get moderationSlotsFull => isId
+      ? 'Slot moderator negara ini penuh (maks 2).'
+      : 'Moderator slots for this country are full (max 2).';
+  String moderationApplyConfirmTitle(String country) => isId
+      ? 'Jadi moderator $country?'
+      : 'Become a moderator of $country?';
+  String get moderationApplyConfirmBody => isId
+      ? 'Lamaran yang memenuhi syarat langsung ditetapkan — batas 2 moderator '
+          'per negara, siapa cepat dia dapat. Kamu bisa berhenti kapan saja.'
+      : 'Eligible applications are granted instantly — max 2 moderators per '
+          'country, first come first served. You can resign anytime.';
+  String get moderationApplyConfirmYes => isId
+      ? 'Ya, jadi moderator'
+      : 'Yes, become moderator';
+  String get moderationResign => isId
+      ? 'Berhenti jadi moderator'
+      : 'Resign as moderator';
+  String get moderationResignConfirmTitle => isId
+      ? 'Berhenti jadi moderator?'
+      : 'Resign as moderator?';
+  String get moderationResignConfirmBody => isId
+      ? 'Akses konsol moderasi dicabut. Slot terbuka untuk user lain dan kamu '
+          'bisa melamar lagi kapan pun slotnya terbuka.'
+      : 'Your moderation console access is removed. The slot opens for others '
+          'and you can apply again anytime a slot is open.';
+  String get moderationResignDone => isId
+      ? 'Kamu berhenti jadi moderator'
+      : 'You resigned as moderator';
+  String get moderationApplyConfirmNote => isId
+      ? 'Syarat lamaran: 7 hari & 50 pesan di room publik negara ini.'
+      : 'Requirements: 7 days & 50 messages in this country\'s public rooms.';
+  String get adminModNotifPrefix => isId ? 'Moderasi: ' : 'Moderation: ';
+  String adminModNotifPermits(int n) => isId
+      ? '$n permohonan izin baru'
+      : '$n new permit requests';
+  String adminModNotifApplications(int n) => isId
+      ? '$n lamaran moderator baru'
+      : '$n new moderator applications';
+  String adminModNotifReports(int n) => isId
+      ? '$n laporan baru'
+      : '$n new reports';
+  String adminModNotifReviews(int n) => isId
+      ? '$n pesan perlu ditinjau'
+      : '$n messages to review';
+  String adminModNotifModGranted(String nick, String country) => isId
+      ? 'Moderator $country: $nick ditunjuk'
+      : '$country moderator: $nick appointed';
+  String adminModNotifModRevoked(String nick, String country) => isId
+      ? 'Moderator $country: $nick dicabut'
+      : '$country moderator: $nick revoked';
   String get roomMediaNsfwRejected => isId
       ? 'Gambar/video ini tidak diizinkan di room publik.'
       : 'This image/video is not allowed in public rooms.';

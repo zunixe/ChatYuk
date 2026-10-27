@@ -378,4 +378,11 @@ mixin _AdminChatMx on _AdminBase {
   }
 
   /// Ubah setting AI global — hanya key yang diisi yang berubah.
+
+  /// Aktivitas moderasi (hitungan + timestamp terakhir, tanpa daftar
+  /// penuh) — dipakai notifikasi admin panel, ringan untuk polling 180s.
+  Future<Map<String, dynamic>?> moderationActivity() async {
+    final res = await _rpc('admin_moderation_activity');
+    return (res as Map<String, dynamic>?);
+  }
 }

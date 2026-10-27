@@ -35,6 +35,10 @@ abstract class AdminBase extends ChangeNotifier {
   final Set<String> _seenDeviceIds = {};
   final Set<String> _seenCallIds = {};
   bool _notifArmed = false;
+
+  // Baseline siklus arm notifikasi MODERASI (direset tiap arm di
+  // AdminNotifMx; dipakai mixin AdminModNotifMx).
+  bool _modBaselineDone = false;
   bool _seenDevicesLoaded = false;
   // Seed sekali: fetchDevices pertama SETELAH arm menjadi baseline diam-diam
   // (pengganti fetch limit-1000 di armNotifications — hemat 1 RPC besar

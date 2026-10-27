@@ -228,7 +228,13 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
       if (!mounted) return;
       final a = ProviderScope.containerOf(context, listen: false).read(adminProvider);
       a.fetchDevices();
+      unawaited(a.checkModerationActivity());
     });
+    // Aktivitas moderasi REALTIME (bukan nunggu poll 180s): event
+    // INSERT/UPDATE tabel moderasi → bump → RPC ringan → notifikasi.
+    ProviderScope.containerOf(context, listen: false)
+        .read(adminProvider)
+        .startModerationRealtime();
   }
 
   Future<void> _showAdminNotification(String msg) async {

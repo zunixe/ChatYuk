@@ -372,9 +372,10 @@ hanya `service_role` (user tak bisa mendebit orang lain); saldo = cache ledger
 (`follow_count_sync`); timeline hanya user terdaftar.
 
 > **Follow vs Teman vs Subscribe → lihat `docs/SOCIAL_GRAPH.md`.** Relasi sosial
-> (follow 1-arah, teman mutual+request, subscribe berbayar), **dua definisi
-> "teman"** (`_are_friends` vs `_privacy_are_friends`), aturan putus teman, dan
-> catatan `isFriend` realtime dibahas lengkap di sana.
+> (follow 1-arah, **teman = saling follow** sejak 2026-10-27 — `_are_friends`
+> dan `_privacy_are_friends` kini definisi SAMA), Tambah Teman = ikuti + ajak
+> follow balik, aturan putus teman, dan catatan `isFriend` realtime dibahas
+> lengkap di sana. Test: `supabase/tests/friend_mutual_follow_test.sql`.
 
 **Top Aktif (2026-10-05) — leaderboard keaktifan:** `activity_leaderboard()`
 menghitung **pesan private + pesan room + reaksi** (weekly=7 hari / alltime).
@@ -529,6 +530,27 @@ ke user asli). Dikunci: `supabase/tests/schema_sync_test.sql`.
 
 **Review/diagnosa cepat:** `select has_column_privilege('authenticated',
 'public.profiles','<kolom>','SELECT');` harus **false** untuk kolom sensitif.
+
+---
+
+## 9b. Moderasi (moderator negara) — 2026-10-26/27
+
+| Lapis | Lokasi |
+|---|---|
+| UI user | `lib/screens/profile/profile_ui_moderation.dart` (kartu moderasi, visibilitas via `moderationCardVisible`), `lib/screens/moderation_screen.dart` (konsol) |
+| UI admin | `lib/screens/admin_moderation_tab.dart`, notifikasi aktivitas via `lib/providers/admin/admin_mod_notif.dart` |
+| Provider | `lib/providers/riverpod/chat_provider.dart`, `lib/providers/admin_provider.dart` (+part) |
+| Service | `lib/services/chat_service_room.dart`, `lib/services/admin_service_chat.dart` |
+| SQL inti | `country_moderators` (maks **2** aktif/negara), `moderator_applications`, `moderator_actions`, `country_send_permits`; RPC `apply_country_moderator` (**langsung ditetapkan — siapa cepat dia dapat**, lock `pg_advisory_xact_lock('modslot:'||country)`), `moderator_resign` (keluar sendiri), `my_moderation_state` (+`eligible`/`slot_open`/`slot_count`), `moderator_set_colleague`, `decide_moderator_application`, `admin_set_country_moderator`, `moderator_hide_message`, `admin_moderation_activity` (hitungan ringan utk notif admin), `admin_moderation_overview` |
+| Syarat lamaran | umur akun >= 7 hari & >= 50 pesan publik di negaranya sendiri (kandidat >= 20) |
+| Visibilitas kartu | admin ATAU moderator ATAU lamaran pending ATAU negara kosong ATAU (eligible && slot terbuka); selain itu hanya catatan pencabutan |
+| Realtime | `country_moderators` + 4 tabel aktivitas di publication `supabase_realtime` (`20261027162000`): user — `moderatorSlotChanges` reload state Profil; admin — `startModerationRealtime` → `checkModerationActivity` (poll 180s tetap fallback); laporan hanya untuk admin (`reports_select_admin`) |
+| Test | `supabase/tests/room_media_gate_test.sql`, `supabase/tests/moderator_slots_test.sql`, `test/moderation_texts_test.dart` |
+
+**Invariant:** batas 2 slot dijaga DI SEMUA jalur grant (lamaran/rekan/admin) dengan
+advisory-lock per negara; VISIBILITAS panel klien hanya penampil — validasi ulang
+selalu di server saat lamaran. Moderator yang pindah negara otomatis dicabut
+(`20261027150000_single_country_lock.sql`).
 
 ---
 

@@ -7,11 +7,21 @@ import '../config/strings.dart';
 /// `already_pending` (menunggu) sama-sama ditampilkan sebagai
 /// "lamaran menunggu", sehingga admin/moderator aktif merasa lamarannya
 /// gagal padahal dia sudah berwenang.
-String moderationApplyMessage(Map<String, dynamic> res, S s) {
+///
+/// Sejak 2026-10-27 lamaran memenuhi syarat LANGSUNG ditetapkan (batas
+/// 2 moderator/negara, siapa cepat dia dapat) → `granted` dipetakan ke
+/// pesan selamat; `slots_full` punya pesan sendiri.
+String moderationApplyMessage(
+  Map<String, dynamic> res,
+  S s, {
+  String country = '',
+}) {
   if (res['already_moderator'] == true) return s.moderationAlreadyModerator;
   if (res['already_pending'] == true) return s.moderationApplyPending;
 
   switch (res['error']) {
+    case 'slots_full':
+      return s.moderationSlotsFull;
     case 'account_too_new':
       return s.moderationApplyNeedDays((res['min_days'] as num?)?.toInt() ?? 7);
     case 'not_enough_messages':
@@ -21,8 +31,30 @@ String moderationApplyMessage(Map<String, dynamic> res, S s) {
       );
   }
 
-  if (res['ok'] == true) return s.moderationApplySent;
+  if (res['ok'] == true) {
+    if (res['granted'] == true) return s.moderationGranted(country);
+    return s.moderationApplySent;
+  }
   return s.errGeneric;
+}
+
+/// Aturan TAMPIL kartu moderasi di Profil (pure — diuji tanpa UI).
+///
+/// Kartu muncul bila user berwenang (admin/sudah moderator/lamaran pending)
+/// ATAU negaranya belum diatur (panel bantu atur dulu) ATAU dia memenuhi
+/// syarat DAN slot masih terbuka. Setelah 2 slot penuh, kartu DISUNGUI
+/// dari user lain — begitu ada moderator berhenti, kartu muncul kembali.
+bool moderationCardVisible({
+  required bool isAdmin,
+  required bool isModerator,
+  required bool hasPending,
+  required bool countrySet,
+  required bool eligible,
+  required bool slotOpen,
+}) {
+  if (!countrySet) return true;
+  if (isAdmin || isModerator || hasPending) return true;
+  return eligible && slotOpen;
 }
 
 /// Negara efektif: override sesi (hasil pilih user) di atas nilai PROFIL.

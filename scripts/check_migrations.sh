@@ -84,7 +84,7 @@ if [ -f "$FROZEN_LIST" ]; then
   while IFS= read -r fn; do
     [ -z "$fn" ] && continue
     case "$fn" in \#*) continue ;; esac
-    last=$(grep -rlE "create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.${fn}\b" "$MIG_DIR" --include="*.sql" 2>/dev/null | sort | tail -1 || true)
+    last=$(grep -rliE "create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.${fn}\b" "$MIG_DIR" --include="*.sql" 2>/dev/null | sort | tail -1 || true)
     [ -z "$last" ] && continue
     b=$(basename "$last"); v=${b%%_*}
     case "$v" in ''|*[!0-9]*) continue ;; esac
@@ -104,7 +104,7 @@ if [ -f "$SNAP" ]; then
   while IFS= read -r fn; do
     [ -z "$fn" ] && continue
     case "$fn" in \#*) continue ;; esac
-    last=$(grep -rlE "create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.${fn}\b" "$MIG_DIR" --include="*.sql" 2>/dev/null | sort | tail -1 || true)
+    last=$(grep -rliE "create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.${fn}\b" "$MIG_DIR" --include="*.sql" 2>/dev/null | sort | tail -1 || true)
     [ -z "$last" ] && continue
     b=$(basename "$last"); v=${b%%_*}
     case "$v" in ''|*[!0-9]*) continue ;; esac
@@ -136,7 +136,7 @@ echo "[5] Cek cabang kritis tiap migrasi yang men-replace fungsi FROZEN"
 while IFS= read -r fn; do
   [ -z "$fn" ] && continue
   case "$fn" in \#*) continue ;; esac
-  last=$(grep -rlE "create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.${fn}\b" "$MIG_DIR" --include="*.sql" 2>/dev/null | sort | tail -1 || true)
+  last=$(grep -rliE "create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.${fn}\b" "$MIG_DIR" --include="*.sql" 2>/dev/null | sort | tail -1 || true)
   [ -z "$last" ] && continue
   b=$(basename "$last"); v=${b%%_*}
   case "$v" in ''|*[!0-9]*) continue ;; esac

@@ -49,6 +49,7 @@ part 'profile/profile_build.dart';
 part 'profile/profile_body.dart';
 part 'profile/profile_ui.dart';
 part 'profile/profile_ui2.dart';
+part 'profile/profile_ui_moderation.dart';
 
 // Avatar profil (resize 640×640 + JPEG q85) kini di NATIVE via
 // `NativeImage.processSquare` (fallback Dart di chat_photo_helper.dart).
@@ -178,4 +179,5 @@ class _ProfileScreenState extends _ProfileBase
         // UI baru halaman Profil.
         _ProfileUiMx,
         _ProfileUiSectionsMx,
-        _ProfileUiSections2Mx {}
+        _ProfileUiSections2Mx,
+        _ProfileUiModerationMx {}

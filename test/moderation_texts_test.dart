@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/core/moderation_texts.dart';
-import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/providers/riverpod/locale_provider.dart';
 
 /// Regresi fitur moderasi (laporan user 2026-10-27):
@@ -61,6 +60,25 @@ void main() {
       );
     });
 
+    test('langsung ditetapkan → pesan selamat menyebut negara', () {
+      final msg = moderationApplyMessage(
+        {'ok': true, 'granted': true},
+        s,
+        country: 'Indonesia',
+      );
+      expect(msg, s.moderationGranted('Indonesia'));
+      expect(msg, contains('Indonesia'));
+    });
+
+    test('slot penuh → pesan slots_full', () {
+      final msg = moderationApplyMessage(
+        {'ok': false, 'error': 'slots_full', 'max': 2},
+        s,
+      );
+      expect(msg, s.moderationSlotsFull);
+      expect(msg, contains('2'));
+    });
+
     test('gagal tak dikenal → pesan generik', () {
       expect(moderationApplyMessage({'ok': false}, s), s.errGeneric);
     });
@@ -71,6 +89,86 @@ void main() {
         s,
       );
       expect(msg, s.moderationApplyNeedMsgs(50, 0));
+    });
+  });
+
+  group('moderationCardVisible (visibilitas kartu moderasi)', () {
+    test('negara belum diatur → tampil (panel bantu atur dulu)', () {
+      expect(
+        moderationCardVisible(
+          isAdmin: false,
+          isModerator: false,
+          hasPending: false,
+          countrySet: false,
+          eligible: false,
+          slotOpen: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('berwenang (admin/moderator/pending) → tampil walau slot penuh', () {
+      for (final (isAdmin, isMod, pending) in [
+        (true, false, false),
+        (false, true, false),
+        (false, false, true),
+      ]) {
+        expect(
+          moderationCardVisible(
+            isAdmin: isAdmin,
+            isModerator: isMod,
+            hasPending: pending,
+            countrySet: true,
+            eligible: false,
+            slotOpen: false,
+          ),
+          isTrue,
+          reason: 'isAdmin=$isAdmin isMod=$isMod pending=$pending',
+        );
+      }
+    });
+
+    test('slot penuh & bukan berwenang → DISUNGUI', () {
+      expect(
+        moderationCardVisible(
+          isAdmin: false,
+          isModerator: false,
+          hasPending: false,
+          countrySet: true,
+          eligible: true,
+          slotOpen: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('belum memenuhi syarat → disungui walau slot terbuka', () {
+      expect(
+        moderationCardVisible(
+          isAdmin: false,
+          isModerator: false,
+          hasPending: false,
+          countrySet: true,
+          eligible: false,
+          slotOpen: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('syarat terpenuhi + slot terbuka → tampil (siapa cepat dia dapat)',
+        () {
+      expect(
+        moderationCardVisible(
+          isAdmin: false,
+          isModerator: false,
+          hasPending: false,
+          countrySet: true,
+          eligible: true,
+          slotOpen: true,
+        ),
+        isTrue,
+      );
     });
   });
 

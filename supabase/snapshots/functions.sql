@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-10-22T23:25:31Z
+-- Timestamp: 2026-10-27T00:14:37Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -728,7 +728,7 @@ begin
   return new;
 end; $function$
 
--- snapshot-fn: create_private_room @ 20260905190000_group_visibility_expiry.sql
+-- snapshot-fn: create_private_room @ 20261006080000_room_category_jualbeli.sql
 CREATE OR REPLACE FUNCTION public.create_private_room(p_name text, p_icon text, p_country text, p_password text DEFAULT NULL::text, p_category text DEFAULT 'private'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1510,7 +1510,7 @@ begin
   return null; -- AFTER trigger, return value diabaikan
 end; $function$
 
--- snapshot-fn: nearby_users @ 20261009250000_pagination_social_nearby.sql
+-- snapshot-fn: nearby_users @ 20261027123000_ghost_mode_nearby_users.sql
 CREATE OR REPLACE FUNCTION public.nearby_users(p_radius_km double precision DEFAULT 10, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
  RETURNS TABLE(uid uuid, nickname text, gender text, age integer, country text, city text, status text, avatar text, is_registered boolean, last_seen timestamp with time zone, distance_km double precision)
  LANGUAGE plpgsql
@@ -1582,6 +1582,11 @@ begin
     and p.status in ('online', 'idle')
     and p.last_seen >= now() - interval '30 minutes'
     and public.privacy_can_view(p.id, 'presence', me)
+    -- GHOST MODE: user yang membeli invisible tidak boleh muncul di Nearby.
+    and not exists (
+      select 1 from public.ghost_mode_active g
+      where g.user_id = p.id and g.expires_at > now()
+    )
     and not (p.id = any(v_excl))
     and not exists (
       select 1 from public.blocks b

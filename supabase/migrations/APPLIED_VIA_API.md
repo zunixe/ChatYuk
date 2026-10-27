@@ -2,6 +2,16 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-27 — Moderator negara: maks 2 slot FCFS + resign + realtime
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261027160000_moderator_slots_fcfs.sql` (2x, idempoten) & `20261027162000_moderation_realtime.sql`.
+- **Verifikasi:** `scripts/run_sql_tests.sh moderator_slots_test.sql` 17/17; suite penuh hijau; snapshot direfresh (tidak ada cabang hilang).
+
+## 2026-10-27 — Teman = saling follow
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261027130000_friend_equals_mutual_follow.sql`.
+- **Verifikasi:** `scripts/run_sql_tests.sh friend_mutual_follow_test.sql` 12/12; suite penuh hijau.
+
 ## 2026-10-25 — Admin hapus pesan room siapa pun
 
 - **Status:** SUDAH TERAPPLIED via Management API — `20261025120000_admin_delete_room_message.sql`.

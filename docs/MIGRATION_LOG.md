@@ -3205,6 +3205,59 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - **Verifikasi:** `select count(*) filter (where image_blurhashes <> '[]')`
   = **22** dari 22 post berfoto.
 
+## 20261027160000_moderator_slots_fcfs
+
+- **Status:** TERAPPLIED via Management API (2026-10-27) — di-apply 2x
+  (revisi kecil menambah `action` pada `mods_last`, tetap idempoten).
+- **Keputusan produk:** panel moderasi di Profil hanya muncul bagi yang
+  memenuhi syarat & slot terbuka; **maks 2 moderator aktif per negara**,
+  lamaran memenuhi syarat **langsung ditetapkan** (siapa cepat dia dapat);
+  moderator bisa keluar sendiri; admin panel dapat notifikasi aktivitas
+  moderasi (permohonan izin/laporan/tinjauan/perubahan moderator).
+- **Isi:** `active_moderator_count()`, `moderator_resign()` (BARU),
+  `admin_moderation_activity()` (BARU, ringan utk notif), replace
+  `apply_country_moderator` (instant grant + advisory lock
+  `modslot:<negara>` + tutup pending legacy saat granted),
+  `moderator_set_colleague` / `decide_moderator_application` /
+  `admin_set_country_moderator` (semua jalur grant hormati batas 2 slot),
+  `my_moderation_state` (+`eligible`/`slot_open`/`slot_count`/`slot_max`),
+  3 index parsial aditif (`messages_needs_review_idx`, `reports_open_idx`,
+  `moderator_actions_grant_idx`).
+- **Verifikasi:** pgTAP `moderator_slots_test.sql` 17/17; suite pgTAP penuh
+  hijau; snapshot `supabase/snapshots/functions.sql` di-refresh (diff review:
+  hanya penambahan cabang ghost-mode migrasi sebelumnya yang belum
+  tersnapshot — tidak ada cabang hilang); tidak ada negara dengan >2
+  moderator aktif di produksi. `is_chatyuk_admin` tidak disentuh.
+- **Klien:** visibilitas kartu via `moderationCardVisible` (pure, tested),
+  lamaran diawali dialog konfirmasi (instant grant), tile resign, angkat
+  rekan di konsol memetakan `slots_full`; admin panel poll
+  `admin_moderation_activity` tiap 180s (part `admin/admin_mod_notif.dart`,
+  seen persist di SharedPreferences `admin_mod_seen_at`).
+
+## 20261027162000_moderation_realtime
+
+- **Status:** TERAPPLIED via Management API (2026-10-27), idempoten.
+- **Isi:** (1) 5 tabel moderasi (`country_moderators`,
+  `moderator_applications`, `moderator_actions`, `country_send_permits`,
+  `reports`) ditambahkan ke publication `supabase_realtime` → kartu
+  moderasi Profil user & notifikasi admin panel kini REALTIME (bukan
+  menunggu buka-tutup Profil / poll 180s). (2)
+  `admin_moderation_activity()` + hitungan & timestamp `applications`
+  (lamaran moderator pending). (3) policy SELECT admin-only
+  `reports_select_admin` (aditif; user biasa tetap tanpa SELECT).
+- **Klien:** user — `ChatService.moderatorSlotChanges` (channel
+  `mod-slot-watch`, tabel `country_moderators`) → reload state Profil
+  debounce 400ms; admin — `startModerationRealtime` (channel
+  `admin-mod-notif`, 4 tabel + `messages` filter `needs_review=true`) →
+  bump → `checkModerationActivity` debounce 1200ms; poll 180s tetap jadi
+  fallback.
+- **Guard:** `scripts/check_migrations.sh` & `snapshot_functions.sh`
+  diubah grep-nya jadi case-insensitive — migrasi UPPERCASE
+  (`CREATE OR REPLACE`, gaya dump) sebelumnya lolos deteksi dan bikin
+  lama (`20261009250000`) dianggap versi terakhir `nearby_users`.
+  Header `-- menyentuh:` ditambahkan ke `20261027123000` + snapshot
+  refresh (stempel `create_private_room` & `nearby_users` terkoreksi).
+
 ## 20261024100000_refund_chat_point_idempotent
 
 - **Status:** TERAPPLIED via Management API (2026-10-24), versi tercatat di
@@ -3218,3 +3271,18 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
   (user_id, refund_of) + advisory lock per user. Kontrak RPC tetap.
 - **Test:** `supabase/tests/refund_chat_point_test.sql` 7/7 (merah sebelum
   apply: refund ke-2/ke-3 menambah saldo); seluruh suite pgTAP 37 file hijau.
+
+## 20261027130000_friend_equals_mutual_follow
+
+- **Status:** TERAPPLIED via Management API (2026-10-27), versi tercatat di
+  `supabase_migrations.schema_migrations`.
+- **Masalah:** dua definisi teman — story (`_are_friends`) = `friend_requests`
+  accepted, sisanya = saling follow. 23 pasangan accepted tanpa saling follow
+  masih saling lihat story `friends`.
+- **Fix:** `_are_friends` = saling follow; kolom aditif
+  `friend_requests.auto_follow`; `send_friend_request` = ikuti + ajakan;
+  `follow_user` follow balik → teman (+`friend` di respons, request pending →
+  accepted); tolak/batal hanya menarik follow buatan request.
+- **Verifikasi live:** 41 accepted → 18 tetap teman (saling follow), 23 basi
+  tertutup. `friend_mutual_follow_test.sql` 12/12 (merah 8/12 sebelum apply);
+  suite pgTAP penuh hijau.

@@ -41,7 +41,7 @@ fi
 stamp_for() {
   local fn="$1"
   local last
-  last=$(grep -rlE "create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.${fn}\b" "$ROOT/supabase/migrations" --include="*.sql" 2>/dev/null | sort | tail -1 || true)
+  last=$(grep -rliE "create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.${fn}\b" "$ROOT/supabase/migrations" --include="*.sql" 2>/dev/null | sort | tail -1 || true)
   [ -z "$last" ] && echo "unknown" || basename "$last"
 }
 

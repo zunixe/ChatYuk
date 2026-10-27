@@ -375,6 +375,81 @@ mixin ChatServiceRoomMx on ChatBase {
     }
   }
 
+  /// Aktivitas moderasi (hitungan + timestamp terakhir) untuk notifikasi
+  /// admin panel — ringan, tanpa daftar penuh.
+  Future<Map<String, dynamic>?> moderationActivity() async {
+    try {
+      final res = await measuredRpc(_sb, 'admin_moderation_activity',
+          label: 'admin.admin_moderation_activity');
+      return res is Map ? Map<String, dynamic>.from(res) : null;
+    } catch (e) {
+      dlog('[ChatService] moderationActivity error: $e');
+      return null;
+    }
+  }
+
+  /// Moderator keluar sendiri — mencabut semua jabatan aktif miliknya;
+  /// slot langsung terbuka untuk pelamar berikutnya.
+  Future<Map<String, dynamic>> moderatorResign() async {
+    try {
+      final res = await _sb.rpc('moderator_resign');
+      return res is Map ? Map<String, dynamic>.from(res) : {'ok': false};
+    } catch (e) {
+      dlog('[ChatService] moderatorResign error: $e');
+      return {'ok': false};
+    }
+  }
+
+  // ── Realtime slot moderator ─────────────────────────────────────────────
+  // Satu channel global 'mod-slot-watch' (RLS SELECT authenticated sudah
+  // dibuka di migrasi; tabel hanya berisi uid + negara). Event INSERT
+  // (lamaran ditetapkan) & UPDATE (resign/dicabut) dipush ke stream —
+  // kartu moderasi Profil tampil/hilang REALTIME tanpa menunggu buka-tutup
+  // halaman.
+  RealtimeChannel? _modSlotChannel;
+  StreamController<void>? _modSlotCtl;
+
+  /// Stream ping tiap kali slot moderator mana pun berubah. Broadcast —
+  /// boleh didengar lebih dari satu pemanggil.
+  Stream<void> moderatorSlotChanges() {
+    final existing = _modSlotCtl;
+    if (existing != null && !existing.isClosed) return existing.stream;
+    final ctl = StreamController<void>.broadcast();
+    _modSlotCtl = ctl;
+    try {
+      final ch = _sb.channel('mod-slot-watch');
+      ch.onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'country_moderators',
+        callback: (_, [__]) {
+          if (!ctl.isClosed) ctl.add(null);
+        },
+      );
+      ch.subscribe((status, err) {
+        if (err != null) dlog('[ChatService] mod-slot realtime error: $err');
+      });
+      _modSlotChannel = ch;
+    } catch (e) {
+      dlog('[ChatService] moderatorSlotChanges error: $e');
+    }
+    return ctl.stream;
+  }
+
+  /// Tutup watcher slot moderator (dipanggil saat keluar dari Profil).
+  void closeModeratorSlotWatch() {
+    final ch = _modSlotChannel;
+    _modSlotChannel = null;
+    final ctl = _modSlotCtl;
+    _modSlotCtl = null;
+    try {
+      if (ch != null) _sb.removeChannel(ch);
+    } catch (_) {}
+    try {
+      if (ctl != null && !ctl.isClosed) ctl.close();
+    } catch (_) {}
+  }
+
   Future<List<Map<String, dynamic>>> moderatorCandidates(String country) async {
     try {
       final res = await _sb.rpc('moderator_candidates',

@@ -480,6 +480,17 @@ class ChatNotifier extends Notifier<ChatState> {
   Future<Map<String, dynamic>?> myModerationState() =>
       _service.myModerationState();
 
+  Future<Map<String, dynamic>> moderatorResign() => _service.moderatorResign();
+
+  Future<Map<String, dynamic>?> moderationActivity() =>
+      _service.moderationActivity();
+
+  /// Ping realtime tiap kali slot moderator berubah (konsol ditambah /
+  /// dicabut / resign). Dipakai kartu moderasi Profil agar update realtime.
+  Stream<void> moderatorSlotChanges() => _service.moderatorSlotChanges();
+
+  void closeModeratorSlotWatch() => _service.closeModeratorSlotWatch();
+
   Future<Map<String, dynamic>> requestCountryPermit(
     String country, {
     String reason = '',

@@ -26,5 +26,6 @@ mixin AdminNotifMx on AdminBase {
     _seedDone = false;
     _seenDevicesLoaded = true;
     _notifArmed = true;
+    _modBaselineDone = false;
   }
 }

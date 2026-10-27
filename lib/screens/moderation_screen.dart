@@ -589,9 +589,17 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
     if (!mounted) return;
     showChatSnack(
       context,
-      res['ok'] == true ? s.moderationAppointed : s.errGeneric,
+      _colleagueMessage(res, s),
     );
     await _load();
+  }
+
+  /// Pesan hasil angkat copot moderator — `slots_full` punya pesan sendiri
+  /// (batas 2 moderator aktif per negara).
+  String _colleagueMessage(Map<String, dynamic> res, S s) {
+    if (res['ok'] == true) return s.moderationAppointed;
+    if (res['error'] == 'slots_full') return s.moderationSlotsFull;
+    return s.errGeneric;
   }
 
   /// Angkat moderator dari KONTRIBUTOR negara ini (>=50 pesan).
@@ -651,7 +659,7 @@ class _ModerationScreenState extends ConsumerState<ModerationScreen>
     if (!mounted) return;
     showChatSnack(
       context,
-      res['ok'] == true ? s.moderationAppointed : s.errGeneric,
+      _colleagueMessage(res, s),
     );
     await _load();
   }

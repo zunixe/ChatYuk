@@ -1,4 +1,5 @@
 -- ============================================================
+-- menyentuh: nearby_users
 -- LENGKAPI ghost mode: tutup jalur bocor TERAKHIR — `nearby_users`.
 --
 -- Audit (2026-10-26) membandingkan semua RPC yang membawa `status`:

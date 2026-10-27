@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import '../utils.dart';
@@ -14,9 +15,11 @@ import '../core/cache/photo_cache.dart';
 import '../core/admin_err.dart';
 import '../core/admin_trim_registry.dart';
 import '../services/storage_photo_service.dart';
+import 'riverpod/locale_provider.dart';
 
 part 'admin/admin_base.dart';
 part 'admin/admin_notif.dart';
+part 'admin/admin_mod_notif.dart';
 part 'admin/admin_passthrough.dart';
 part 'admin/admin_stats.dart';
 part 'admin/admin_devices.dart';
@@ -39,6 +42,7 @@ part 'admin/admin_timeline.dart';
 class AdminProvider extends AdminBase
     with
         AdminNotifMx,
+        AdminModNotifMx,
         AdminPassthroughMx,
         AdminStatsMx,
         AdminDevicesMx,
@@ -112,6 +116,7 @@ class AdminProvider extends AdminBase
   void dispose() {
     _disposed = true;
     AdminTrimRegistry.unregister(trimMemCache);
+    stopModerationRealtime();
     _callRealtimeDebounce?.cancel();
     try {
       _callChannel?.unsubscribe();

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 
 import '../../../config/theme.dart';
+import '../../../config/strings.dart';
 import '../../../models/user_photo.dart';
 import '../../../providers/riverpod/device_info_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
@@ -484,6 +485,105 @@ class _ProfileChatFontTileState extends ConsumerState<ProfileChatFontTile> {
           const SizedBox(height: 12),
         ],
       ),
+    );
+  }
+}
+
+/// Dialog pilih negara (kartu "Moderasi" di Profil) dengan pencarian live
+/// case-insensitive — daftar negara ratusan, scroll manual susah dicari.
+///
+/// Gaya field cari mengikuti `SearchDropdown` (isDense + prefixIcon 18).
+/// Tinggi konten adaptif — menyusut saat keyboard naik supaya dialog tidak
+/// overflow di layar kecil (AlertDialog sudah inset viewInsets, tinggi konten
+/// yang tetap 420 yang dulu bikin overflow).
+class CountryPickerDialog extends StatefulWidget {
+  final S s;
+  final List<String> countries;
+
+  const CountryPickerDialog({
+    super.key,
+    required this.s,
+    required this.countries,
+  });
+
+  @override
+  State<CountryPickerDialog> createState() => _CountryPickerDialogState();
+}
+
+class _CountryPickerDialogState extends State<CountryPickerDialog> {
+  String _query = '';
+
+  List<String> get _filtered {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return widget.countries;
+    return [
+      for (final c in widget.countries)
+        if (c.toLowerCase().contains(q)) c,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final list = _filtered;
+    return AlertDialog(
+      title: Text(widget.s.moderationCountryTitle),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: (mq.size.height - mq.viewInsets.bottom - 240)
+            .clamp(180.0, 420.0),
+        child: Column(
+          children: [
+            TextField(
+              autofocus: true,
+              onChanged: (v) => setState(() => _query = v),
+              style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: widget.s.searchCountry,
+                hintStyle:
+                    AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                prefixIcon: Icon(
+                  Icons.search,
+                  size: 18,
+                  color: AppTheme.textSecondary,
+                ),
+                prefixIconConstraints:
+                    const BoxConstraints(minWidth: 32, minHeight: 0),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: list.isEmpty
+                  ? Center(
+                      child: Text(
+                        widget.s.searchNoResult,
+                        style: AppText.bodySmall
+                            .copyWith(color: AppTheme.textSecondary),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: list.length,
+                      itemBuilder: (_, i) => ListTile(
+                        dense: true,
+                        title: Text(list[i]),
+                        onTap: () => Navigator.pop(context, list[i]),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(widget.s.btnCancel),
+        ),
+      ],
     );
   }
 }
