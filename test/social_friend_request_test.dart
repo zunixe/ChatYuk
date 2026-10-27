@@ -50,7 +50,8 @@ void main() {
   }
 
   group('sendFriendRequest', () {
-    test('sukses → "pending" + pending lokal di-set', () async {
+    test('sukses → "pending" + pending lokal di-set + ikut mengikuti',
+        () async {
       when(() => svc.sendFriendRequest('u2'))
           .thenAnswer((_) async => {'ok': true, 'status': 'pending'});
       final p = prov();
@@ -58,17 +59,47 @@ void main() {
       expect(r, 'pending');
       expect(p.isPendingFriendRequest('u2'), isTrue);
       expect(p.isFriend('u2'), isFalse);
+      // Tambah Teman = ikuti + ajak follow balik (server sudah follow).
+      expect(p.isFollowing('u2'), isTrue);
     });
 
-    test('sudah teman → "friends" + friends lokal di-set', () async {
+    test('sudah teman → "friends" + friends & following lokal di-set',
+        () async {
       when(() => svc.sendFriendRequest('u2'))
           .thenAnswer((_) async => {'ok': true, 'already_friends': true});
       final p = prov();
       final r = await p.sendFriendRequest('u2');
       expect(r, 'friends');
       expect(p.isFriend('u2'), isTrue);
+      expect(p.isFollowing('u2'), isTrue);
       expect(p.isPendingFriendRequest('u2'), isFalse);
     });
+  });
+
+  group('follow (teman = saling follow)', () {
+    test('follow balik (server friend:true) → langsung teman', () async {
+      when(() => svc.followUser('u2')).thenAnswer(
+        (_) async => {'ok': true, 'following': true, 'friend': true},
+      );
+      final p = prov();
+      expect(await p.follow('u2'), isTrue);
+      expect(p.isFollowing('u2'), isTrue);
+      expect(p.isFriend('u2'), isTrue);
+      expect(p.isPendingFriendRequest('u2'), isFalse);
+    });
+
+    test('follow satu arah (friend:false) → bukan teman', () async {
+      when(() => svc.followUser('u2')).thenAnswer(
+        (_) async => {'ok': true, 'following': true, 'friend': false},
+      );
+      final p = prov();
+      expect(await p.follow('u2'), isTrue);
+      expect(p.isFollowing('u2'), isTrue);
+      expect(p.isFriend('u2'), isFalse);
+    });
+  });
+
+  group('sendFriendRequest (gagal)', () {
 
     test('gagal (exception) → "failed" (bukan "" / bukan sukses)', () async {
       when(() => svc.sendFriendRequest('u2'))

@@ -1,8 +1,9 @@
 # SOCIAL_GRAPH — Follow / Teman / Subscribe (ChatYuk)
 
 > **Untuk AI/dev berikutnya.** Dokumen ini menjelaskan 3 sistem relasi sosial
-> ChatYuk, perbedaannya, efeknya ke fitur lain, dan **dua definisi "teman"**
-> yang sengaja dibiarkan berbeda. Cari fitur di `FEATURE_MAP.md`, cari aturan
+> ChatYuk, perbedaannya, dan efeknya ke fitur lain. **Sejak 2026-10-27:
+> Teman = saling follow** — satu definisi di semua tempat
+> (migrasi `20261027130000_friend_equals_mutual_follow.sql`). Cari fitur di `FEATURE_MAP.md`, cari aturan
 > relasi di sini.
 >
 > Sumber kebenaran SQL = `supabase/snapshots/functions.sql` (auto-generate).
@@ -15,7 +16,7 @@
 | Sistem | Tabel | Arah | Persetujuan | Biaya |
 |---|---|---|---|---|
 | **Follow** | `follows` | Satu arah (A→B) | Tidak | Gratis |
-| **Teman** | `friend_requests` (accepted) + 2 baris `follows` | Dua arah | Ya (accept) | Gratis |
+| **Teman** | saling follow (2 baris `follows`); `friend_requests` = ajakan follow balik | Dua arah | Follow balik (atau Terima) | Gratis |
 | **Subscribe** | `subscriptions` | Satu arah | Tidak | Berbayar (YukCoin) |
 
 Subscribe **terpisah** dari Follow/Teman — jangan dicampur. Pembahasan
@@ -25,11 +26,11 @@ subscribe ada di akhir dokumen.
 
 ## 2. Perbedaan Follow vs Teman
 
-| Aspek | **Follow** (`follows`, 1 arah) | **Teman** (`friend_requests` accepted → mutual follow) |
+| Aspek | **Follow** (`follows`, 1 arah) | **Teman** (saling follow) |
 |---|---|---|
 | Arah | Satu arah (A ikut B; B belum tentu ikut A) | Dua arah (timbal balik) |
-| Cara | Tap "Ikuti" — tanpa persetujuan | "Tambah Teman" → kirim request → lawan **Terima** |
-| Baris DB | insert 1 baris `follows` | 1 baris `friend_requests` (accepted) **+ 2 baris `follows`** |
+| Cara | Tap "Ikuti" — tanpa persetujuan | "Tambah Teman" (= ikuti + ajak) → lawan **Terima** atau **Ikuti Balik** |
+| Baris DB | insert 1 baris `follows` | 2 baris `follows` (dua arah); `friend_requests` hanya catatan ajakan |
 | Efek utama | Post B muncul di Feed → tab **Mengikuti** | Buka fitur privacy tingkat "teman" + story "friends" |
 | Notif | "X mulai mengikuti kamu" (1 arah) | "X mengirim permintaan teman" + badge inbox |
 | Tombol UI | `btnFollow` / `btnUnfollow` (teks) | `btnAddFriend` / `btnFriendRequested` / `btnFriends` (ikon) |
@@ -55,30 +56,33 @@ tombol **ikon**. Tujuannya agar user sadar keduanya berbeda (lihat
 
 ---
 
-## 3. ⚠️ DUA definisi "teman" (SENGAJA berbeda)
+## 3. Satu definisi "teman" = saling follow (2026-10-27)
 
-Ada **dua** helper berbeda di DB. Ini **bukan bug** — masing-masing dipakai
-untuk kebutuhan yang berbeda:
+Dulu ada dua helper: `_are_friends` (story, = `friend_requests` accepted) dan
+`_privacy_are_friends` (privacy/daftar teman, = saling follow). Analisa DB live
+2026-10-26 menemukan **23 pasangan** accepted tapi sudah tidak saling follow →
+UI bilang "bukan teman" tapi story `friends` masih saling terlihat.
 
-| Helper | Definisi | Dipakai oleh |
-|---|---|---|
-| `_are_friends(a,b)` | `friend_requests.status = 'accepted'` | **Story**: `stories`, `story_slides`, `story_tray`, `mark_story_seen` |
-| `_privacy_are_friends(a,b)` | **Mutual follow** (`follows` dua arah) | **Privacy**: `privacy_can_view`, Top Aktif (`activity_leaderboard`), `privacy_friends`, `privacy_excludable_users` |
+Sekarang `_are_friends` = **saling follow** (body sama dengan
+`_privacy_are_friends`). Semua pemakai story (`stories_select`, `story_slides`,
+`story_tray`, `mark_story_seen*`, `toggle_story_like`) ikut lewat fungsi itu.
 
-Definisi:
-- `_are_friends` → `supabase/migrations/20260906000000_stories.sql:57`
-- `_privacy_are_friends` → `supabase/migrations/20260920130003_privacy_friends_mutual.sql:21`
+| Aksi | Efek server |
+|---|---|
+| `follow_user` | Bila lawan sudah follow saya → teman; request pending di antara keduanya → `accepted`; return `friend: true` |
+| `send_friend_request` | Insert `follows(me→dia)` (`auto_follow = true` bila sebelumnya belum follow) + request pending; bila dia sudah follow saya → langsung `already_friends` |
+| `respond_friend_request(accept)` | 2 baris `follows` (tetap) |
+| `respond_friend_request(reject)` | Hapus follow pengirim **hanya bila** `auto_follow` |
+| `cancel_friend_request` | Hapus follow saya **hanya bila** `auto_follow` |
+| `unfollow_user` | Putus penuh (hapus follow + request dua arah) |
 
-**Kenapa dibiarkan berbeda?** Because the app's "Teman" list
-(`SocialProvider.friends`, filter "Teman" di chat, profil) memakai **mutual
-follow** (`social_list('friends')`), sedangkan story memakai `friend_requests`
-accepted. Menyatukan keduanya berisiko mengubah visibilitas story secara
-global. Keputusan: **biarkan 2 definisi**, tetapi pastikan keduanya
-**konsisten saat putus teman** (lihat §4).
+> **Aturan untuk dev:** jangan membuat definisi teman kedua. Kalau butuh
+> "teman", pakai `_are_friends` / `_privacy_are_friends` (identik). Jalankan
+> `supabase/tests/friend_mutual_follow_test.sql` + `privacy_test.sql`.
 
-> **Aturan untuk dev:** kalau kamu mengubah salah satu definisi, cek dampaknya
-> ke 2 sisi: story (`_are_friends`) DAN privacy/Top Aktif (`_privacy_are_friends`).
-> Jalankan `supabase/tests/privacy_test.sql`.
+**UI (hint, tanpa dialog):** profil orang yang sudah mengikuti saya tapi belum
+saya ikuti menampilkan kartu "Ikuti balik untuk jadi teman" + aksi
+`btnFollowBack`; follow balik → snackbar `snackNowFriends`.
 
 ---
 
@@ -161,10 +165,9 @@ respond_friend_request(p_request_id, p_accept=true)
 ```
 
 **Fakta penting:**
-- Berteman **otomatis** membuat follow dua arah → A & B saling muncul di
-  "Mengikuti" satu sama lain.
-- Saling follow manual **tidak** otomatis jadi teman (status `friend` tetap
-  butuh baris `friend_requests` accepted).
+- Berteman = saling follow → A & B saling muncul di "Mengikuti".
+- Saling follow manual (follow balik) **otomatis** jadi teman (sejak 2026-10-27).
+- Kirim request sudah langsung mengikuti target.
 - Hanya **user terdaftar** yang bisa follow/berteman (anon diblok via
   `_social_registered_guard` / `SOCIAL_REGISTERED_ONLY`).
 
@@ -223,8 +226,9 @@ respond_friend_request(p_request_id, p_accept=true)
 1. `respond_friend_request(accept)` → 2 baris `follows` (mutual) + status accepted.
 2. `unfollow_user` → hapus `follows` **dan** `friend_requests` kedua arah →
    `_are_friends` & `_privacy_are_friends` = false.
-3. Berteman otomatis mutual-follow; saling follow tidak otomatis berteman.
+3. Teman = saling follow; follow balik otomatis berteman; request = ikuti + ajakan.
 4. Anon tidak bisa follow/berteman.
-5. Story `friends` butuh `_are_friends`; privacy `friends` butuh `_privacy_are_friends`.
+5. `_are_friends` ≡ `_privacy_are_friends` (saling follow) — story & privacy selaras.
+7. Tolak/batal request hanya menarik follow buatan request (`auto_follow`).
 6. Badge "Teman" di post (realtime) = `SocialProvider.isFriend(authorId)`,
    bukan nilai hardcode.
