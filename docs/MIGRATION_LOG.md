@@ -3286,3 +3286,23 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - **Verifikasi live:** 41 accepted → 18 tetap teman (saling follow), 23 basi
   tertutup. `friend_mutual_follow_test.sql` 12/12 (merah 8/12 sebelum apply);
   suite pgTAP penuh hijau.
+
+## 20261030100000_random_video_match
+
+- **Status:** TERAPPLIED via Management API (2026-10-30), versi tercatat di
+  `supabase_migrations.schema_migrations`.
+- **Fitur:** Random Video Call ("Match Nearby") — dua user yang sama-sama
+  menekan Match dipasangkan server lalu langsung video call tanpa ringing.
+- **Skema:** `calls.kind` ('direct'|'random', default 'direct'); tabel
+  `random_match_queue` (RLS: baca baris sendiri, tulis via RPC) &
+  `random_match_pairs` (anti pasangan berulang 10 menit); realtime queue.
+- **RPC:** `random_match_join/ping/leave/stats`, `random_call_history`,
+  `random_match_sweep` (cron tiap menit). Flag `feature_flags.random_call`
+  (default unpublished → admin dulu).
+- **Penjaga alur lain (body dari DB live):** `call_history_insert` dilewati
+  untuk kind='random' (tidak menulis bubble "Call ended" ke chat orang asing);
+  `call_billing_tick` gratis untuk random (keputusan produk: gratis dulu).
+- **Verifikasi:** `supabase/tests/random_match_test.sql` 15/15 (merah sebelum
+  apply pada 8 assert); suite pgTAP lain hijau kecuali
+  `moderator_slots_test.sql` (gagal karena kolom `requested_at` belum ada —
+  berasal dari commit fitur moderasi sesi lain, tidak terkait fitur ini).

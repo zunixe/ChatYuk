@@ -418,6 +418,36 @@ TIDAK dipakai (tak terisi) — "sering online" diproksikan via keaktifan chat.
 dijawab. Konsumen WAJIB baca `sess.status`, bukan `sess.call.status`
 (`audio_listen_chip.dart`, `admin_call_watch_overlay.dart`).
 
+### 7a. Random Video Call (Match Nearby) — 2026-10-30
+
+| Lapis | Lokasi |
+|---|---|
+| UI | `lib/screens/random_match_screen.dart` (radar + tombol Match), `random_call_screen.dart` (video + Next), `random_call_history_screen.dart` |
+| Entry | `lib/widgets/quick_side_menu.dart` → item **Video Random** (tepat di bawah "Buat Grup"), dipasang di `online_users_screen.dart` |
+| Provider | `lib/providers/riverpod/random_match_provider.dart` (antrean → pasangan → sesi → Next) |
+| Service | `lib/services/random_match_service.dart` (RPC + realtime baris antrean sendiri) |
+| Model | `lib/models/random_match.dart` (`RandomPartner`, `RandomRadarUser`, `RandomCallEntry`) |
+| Strings | `lib/config/strings_random_mx.dart` (`SRandomMx`) |
+| SQL inti | `random_match_join/ping/leave/stats`, `random_call_history`, `random_match_sweep`; tabel `random_match_queue`, `random_match_pairs`; kolom `calls.kind` |
+| Flag | `feature_flags.random_call` (`published` = semua user boleh; false = admin saja) |
+| Cron | `random-match-sweep` (*/1m) — antrean basi >60 dtk, call random ditinggal >3 mnt, pairs >1 hari |
+| Test | `test/random_match_{model,provider,screen}_test.dart`, `supabase/tests/random_match_test.sql` |
+
+**Invariant (WAJIB dijaga):**
+1. Hanya user yang **sama-sama menekan Match** yang dipasangkan; baris `calls`
+   dibuat dengan `kind='random'` + status **`answered`** (TANPA ringing) supaya
+   `IncomingCallScreen`/push tidak muncul.
+2. `call_history_insert()` **melewati** `kind='random'` → tidak ada bubble
+   "Call ended" ke chat orang asing (kalau dilewati ini, tiap Next membuat chat
+   baru).
+3. `call_billing_tick()` mengembalikan biaya 0 untuk `kind='random'` (gratis
+   dulu; tarif menyusul lewat `app_settings`).
+4. Matching menghormati: blokir dua arah, ghost mode, `admin_excluded_uids`,
+   privacy presence/foto, dan pasangan yang sama ≤10 menit (`random_match_pairs`).
+5. Gender harus cocok **dua arah** (saya ingin X & lawan ingin gender saya).
+6. "Next" = akhiri call lalu masuk antrean lagi; lawan yang menutup call
+   otomatis membuat sisi kita mencari lagi.
+
 ### 7b. Voice stage global room (audio-only, max 6 mic) — 2026-09-26
 
 | Lapis | Lokasi |
