@@ -34,6 +34,9 @@ class QuickSideMenu extends ConsumerStatefulWidget {
   /// Aksi saat pintasan Buat Grup diketuk (buka dialog buat grup).
   final VoidCallback? onCreateGroup;
 
+  /// Aksi saat pintasan Video Random diketuk (layar Match Nearby).
+  final VoidCallback? onRandomVideo;
+
   /// Offset vertikal (px) dari posisi default; + = ke atas. Dipakai untuk
   /// menghitung Highlight Global Room yang aktif (opsional).
   final bool roomActive;
@@ -45,6 +48,7 @@ class QuickSideMenu extends ConsumerStatefulWidget {
     super.key,
     required this.onOpenRoom,
     this.onCreateGroup,
+    this.onRandomVideo,
     this.roomActive = false,
     this.ownerUid,
   });
@@ -288,6 +292,21 @@ class _QuickSideMenuState extends ConsumerState<QuickSideMenu>
                                     reduceMotion: reduceMotion,
                                     onTap: () => _tap(() async {
                                       widget.onCreateGroup?.call();
+                                    }),
+                                  ),
+                                ],
+                                // Video Random — tepat DI BAWAH Buat Grup.
+                                if (widget.onRandomVideo != null) ...[
+                                  SizedBox(height: _gap),
+                                  _item(
+                                    icon: Icons.videocam_rounded,
+                                    active: false,
+                                    color: AppTheme.quickTimeline,
+                                    tooltip: s.quickMenuRandomVideo,
+                                    semanticLabel: s.quickMenuRandomVideo,
+                                    reduceMotion: reduceMotion,
+                                    onTap: () => _tap(() async {
+                                      widget.onRandomVideo?.call();
                                     }),
                                   ),
                                 ],

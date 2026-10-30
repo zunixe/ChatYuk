@@ -2,6 +2,12 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## 2026-10-30 — Random Video Call (Match Nearby)
+
+- **Status:** SUDAH TERAPPLIED via Management API — `20261030100000_random_video_match.sql`.
+- **Verifikasi:** `scripts/run_sql_tests.sh random_match_test.sql` 15/15; kolom `calls.kind`, 2 tabel baru, cron `random-match-sweep`, flag `random_call` (unpublished).
+- **Catatan:** `call_history_insert` & `call_billing_tick` di-replace dari body live + guard `kind='random'` (bukan FROZEN).
+
 ## 2026-10-27 — Moderator negara: maks 2 slot FCFS + resign + realtime
 
 - **Status:** SUDAH TERAPPLIED via Management API — `20261027160000_moderator_slots_fcfs.sql` (2x, idempoten) & `20261027162000_moderation_realtime.sql`.

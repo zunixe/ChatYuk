@@ -31,6 +31,7 @@ import 'online_users/widgets/avatar_zoom.dart';
 import 'online_users/widgets/avatar_upload.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../widgets/quick_side_menu.dart';
+import 'random_match_screen.dart';
 import '../models/story_model.dart';
 import '../providers/riverpod/social_provider.dart';
 import 'nearby_screen.dart';
@@ -873,6 +874,12 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
             child: QuickSideMenu(
               onOpenRoom: () => _openGeneralRoom(context),
               onCreateGroup: () => showCreateGroupDialog(context),
+              onRandomVideo: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const RandomMatchScreen(),
+                ),
+              ),
               ownerUid: authUid,
             ),
           ),
