@@ -3,12 +3,18 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/nav_gate.dart';
+import '../core/call/call_permissions.dart';
 import '../config/strings.dart';
+import '../config/gifts.dart';
 import '../config/theme.dart';
 import '../models/random_match.dart';
 import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
+import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/random_match_provider.dart';
 import '../widgets/gender_avatar.dart';
+import '../widgets/call_permission_dialog.dart';
 import 'random_call_history_screen.dart';
 import 'random_call_screen.dart';
 
@@ -28,12 +34,27 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _float;
   bool _callRouteOpen = false;
+
+  /// callId yang layar call-nya SUDAH dibuka. Kunci anti re-push: kalau
+  /// user menutup RandomCallScreen pakai back (call tetap hidup di
+  /// provider), layar TIDAK dibuka ulang tiap rebuild — jalan kembali
+  /// lewat CallBanner/tombol Match. Dulu hanya pakai flag bool → layar
+  /// muncul lagi sendiri setiap ada state emission = "layar kaya double".
+  String? _openedCallId;
   String? _lastError;
 
   /// Notifier ditangkap saat initState: `ref` TIDAK boleh dipakai di
   /// dispose() (Flutter melempar "Cannot use ref after the widget was
   /// disposed" → timer & antrean jadi bocor).
   late final RandomMatchNotifier _notifier;
+
+  String get _myGender {
+    try {
+      return ref.read(authProvider).profile?.gender ?? 'male';
+    } catch (_) {
+      return 'male';
+    }
+  }
 
   @override
   void initState() {
@@ -58,6 +79,41 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
     super.dispose();
   }
 
+  /// Dialog "koin tidak cukup" → arahkan ke top-up.
+  Future<void> _showNeedCoinDialog(S s) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(
+          s.randomNeedCoinTitle,
+          style: AppText.title.copyWith(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          s.randomNeedCoinBody(kMatchFeeCoins),
+          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.yukcoinCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(s.callNoCoinTopup),
+          ),
+        ],
+      ),
+    );
+    if (go == true && mounted) {
+      NavGate.topupSheet?.call(context, s);
+    }
+  }
+
   String _errorText(S s, String? code) {
     switch (code) {
       case 'FEATURE_DISABLED':
@@ -72,35 +128,67 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
     }
   }
 
+  /// Push RandomCallScreen di atas layar ini; flag dibuka sebelum push
+  /// (dipanggil dari build/postFrame & tombol Match) dan direset saat
+  /// route selesai — user back / digantikan layar chat.
+  void _openCallRoute() {
+    Navigator.push(
+      context,
+      // PERF: fullscreenDialog → lewati slide 250 ms; nama route agar
+      // CallBanner/ensureCallScreenRoute tahu layar call sudah terbuka
+      // (dulu tanpa nama → banner menimpa layar call & bisa membuka
+      // layar duplikat).
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        settings: const RouteSettings(name: kCallScreenRoute),
+        builder: (_) => const RandomCallScreen(),
+      ),
+    ).then((_) => _callRouteOpen = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(localeProvider).s;
     final st = ref.watch(randomMatchProvider);
 
-    // Error dari provider → snackbar sekali per kode.
+    // Error dari provider → snackbar/dialog sekali per kode.
     if (st.errorCode != null && st.errorCode != _lastError) {
       _lastError = st.errorCode;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorText(s, st.errorCode))));
+        if (st.errorCode == 'MATCH_NEED_COIN') {
+          // Male + koin kosong → LANGSUNG sheet top-up dari bawah (tanpa
+          // dialog perantara). `no_funds` server hanya untuk male; bila
+          // gender lain entah kenapa kena, tetap dialog penjelasan.
+          if (_myGender == 'male') {
+            NavGate.topupSheet?.call(context, s);
+          } else {
+            _showNeedCoinDialog(s);
+          }
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(_errorText(s, st.errorCode))));
+        }
       });
     } else if (st.errorCode == null) {
       _lastError = null;
     }
 
-    // Sudah tersambung → buka layar video call sekali.
-    if (st.phase == RandomMatchPhase.inCall && !_callRouteOpen) {
-      _callRouteOpen = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (!mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const RandomCallScreen()),
-        );
-        _callRouteOpen = false;
-      });
+    // Sudah tersambung → buka layar video call SEKALI per match. callId
+    // jadi kunci: setelah user menutup layar pakai back, jangan auto
+    // re-push (CallBanner jadi jalan kembali). Saat Next, callId baru
+    // hanya memicu push bila route memang sudah tertutup.
+    if (st.phase == RandomMatchPhase.inCall &&
+        st.callId != null &&
+        st.callId != _openedCallId) {
+      _openedCallId = st.callId;
+      if (!_callRouteOpen) {
+        _callRouteOpen = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openCallRoute();
+        });
+      }
     }
 
     return Scaffold(
@@ -127,22 +215,43 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
                 const Spacer(),
                 _Counter(s: s, state: st),
                 const SizedBox(height: 18),
-                _GenderChips(
-                  s: s,
-                  value: st.wantGender,
-                  onChanged: _notifier.setWantGender,
-                ),
+                _OppositeGenderBadge(s: s, myGender: _myGender),
                 const SizedBox(height: 18),
                 _MatchButton(
                   s: s,
                   searching: st.isSearching,
-                  onTap: () {
+                  onTap: () async {
                     final n = _notifier;
                     if (st.isSearching) {
                       n.cancel();
-                    } else {
-                      n.start();
+                      return;
                     }
+                    // Call masih berjalan tapi layarnya ditutup (back) →
+                    // kembalikan layar call; JANGAN antre ulang (server
+                    // menolak ALREADY_IN_CALL).
+                    if (st.inCall) {
+                      if (!_callRouteOpen) {
+                        _callRouteOpen = true;
+                        _openCallRoute();
+                      }
+                      return;
+                    }
+                    // Izin kamera+mic WAJIB sebelum antre — di sebagian HP
+                    // (Xiaomi/MIUI) getUserMedia tidak memunculkan dialog OS
+                    // dan mengembalikan stream audio-only → kamera sendiri
+                    // tak pernah tampil, pair terbentuk sia-sia.
+                    final perm = await ensureCallPermissions(video: true);
+                    if (perm != CallPermissionResult.granted) {
+                      if (!context.mounted) return;
+                      showCallPermissionDialog(
+                        context,
+                        video: true,
+                        permanentlyDenied:
+                            perm == CallPermissionResult.permanentlyDenied,
+                      );
+                      return;
+                    }
+                    await n.start();
                   },
                 ),
                 const SizedBox(height: 24),
@@ -308,70 +417,36 @@ class _Counter extends StatelessWidget {
   }
 }
 
-class _GenderChips extends StatelessWidget {
+/// Badge info: match otomatis lawan jenis.
+class _OppositeGenderBadge extends StatelessWidget {
   final S s;
-  final String value;
-  final ValueChanged<String> onChanged;
+  final String myGender;
 
-  const _GenderChips({
-    required this.s,
-    required this.value,
-    required this.onChanged,
-  });
+  const _OppositeGenderBadge({required this.s, required this.myGender});
 
   @override
   Widget build(BuildContext context) {
-    final items = <String, String>{
-      'all': s.randomGenderAll,
-      'male': s.randomGenderMale,
-      'female': s.randomGenderFemale,
-    };
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (final e in items.entries) ...[
-          _Chip(
-            label: e.value,
-            selected: value == e.key,
-            onTap: () => onChanged(e.key),
-          ),
-          if (e.key != 'female') const SizedBox(width: 8),
-        ],
-      ],
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _Chip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? Colors.white.withValues(alpha: 0.92)
-          : Colors.white.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
+    final target = myGender == 'female'
+        ? s.randomGenderMale
+        : s.randomGenderFemale;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            label,
-            style: AppText.label.copyWith(
-              color: selected ? const Color(0xFF0B0F14) : Colors.white,
-            ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.swap_horiz_rounded,
+              size: 16, color: Colors.white70),
+          const SizedBox(width: 6),
+          Text(
+            s.randomOppositeHint(target),
+            style: AppText.caption.copyWith(color: Colors.white70),
           ),
-        ),
+        ],
       ),
     );
   }

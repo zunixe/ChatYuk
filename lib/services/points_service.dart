@@ -5,9 +5,13 @@ import 'subscription_rpc.dart';
 import '../core/perf/rpc_probe.dart';
 
 class PointsService {
-  final SupabaseClient _sb;
+  final SupabaseClient? _client;
 
-  PointsService([SupabaseClient? sb]) : _sb = sb ?? Supabase.instance.client;
+  PointsService([SupabaseClient? sb]) : _client = sb;
+
+  /// Client di-resolve LAZY (bukan di konstruktor) supaya test yang tidak
+  /// menginisialisasi Supabase tetap bisa membuat instance ini.
+  SupabaseClient get _sb => _client ?? Supabase.instance.client;
 
   /// Dedupe RPC idempoten: bila panggilan untuk [key] sedang berjalan,
   /// panggilan berikutnya MENUNGGU future yang sama (bukan menembak RPC
@@ -42,9 +46,13 @@ class PointsService {
     if (running != null) return running.then((v) => v as T);
     final fut = fn();
     _inflight[key] = fut;
+    // Bookkeeping inflight — future buangannya HARUS di-ignore: kalau `fut`
+    // reject (mis. RPC 400 di widget test), future hasil whenComplete ikut
+    // reject tanpa penanganan → unhandled async error (test gagal & log
+    // berisik). Error asli tetap mengalir ke pemanggil lewat `return fut`.
     fut.whenComplete(() {
       if (identical(_inflight[key], fut)) _inflight.remove(key);
-    });
+    }).ignore();
     if (ttl) {
       fut.then((v) {
         _ttlCache[key] = (value: v, at: DateTime.now());
@@ -164,17 +172,6 @@ class PointsService {
 
   /// Potong akses harian (filter gender / nearby). Return {ok, charged, ...}.
   /// Raise 'YukCoin tidak cukup' bila saldo kurang.
-  Future<Map<String, dynamic>> gateFeature(
-    String feature, {
-    String? priceFeature,
-  }) async {
-    final res = await measuredRpc(
-      _sb,
-      'gate_feature',
-      params: {'p_feature': feature, 'p_price_feature': ?priceFeature},
-    );
-    return res is Map ? Map<String, dynamic>.from(res) : {};
-  }
 
   Stream<bool> watchEnabled() async* {
     // TIDAK memakai `.stream()`: ia selalu `SELECT *` (supabase 2.16.x),
@@ -228,25 +225,32 @@ class PointsService {
   // ── YukCoin v2 ──────────────────────────────────────────────
   // Satu saldo (total) untuk UI, dipotong earned→bonus lewat spend_yukcoin.
 
-  /// Saldo YukCoin terpadu: {total, bonus, earned}.
-  Future<Map<String, dynamic>> getYukcoin() {
-    return _coalesce<Map<String, dynamic>>('get_yukcoin', () async {
-      final res = await measuredRpc(_sb, 'get_yukcoin');
+  /// Level saya (kumulatif topup) — {level, cumulative, next_level, next_at,
+  /// remaining, ladder[], just_rewarded[]}. Reward naik-level dicetak server
+  /// (idempoten) → panggil ulang aman. TTL singkat: burst buka screen cukup
+  /// 1 RPC; refresh setelah topup lewat invalidateTtl.
+  Future<Map<String, dynamic>> getMyLevel() {
+    return _coalesce<Map<String, dynamic>>('get_my_level', () async {
+      final res = await measuredRpc(_sb, 'get_my_level');
       if (res is Map) return Map<String, dynamic>.from(res);
-      return {'total': 0, 'bonus': 0, 'earned': 0};
-    });
+      return {'level': 0, 'cumulative': 0, 'ladder': const []};
+    }, ttl: true);
   }
 
-  /// Apakah fitur YukCoin v2 aktif untuk user ini (flag server / admin).
-  Future<bool> yukcoinV2For() async {
-    try {
-      final res = await measuredRpc(_sb, 'yukcoin_v2_enabled_for');
-      return res == true;
-    } catch (e) {
-      dlog('[PointsService] yukcoinV2For error: $e');
-      return false;
-    }
+  /// Level user lain (badge di user_info) — {level}. Level bukan data
+  /// sensitif; female/dummy memang 0 (male-only di server).
+  Future<int> getUserLevel(String uid) {
+    return _coalesce<int>('get_user_level_$uid', () async {
+      final res = await measuredRpc(_sb, 'get_user_level', params: {'p_user': uid});
+      if (res is Map) return (res['level'] as num?)?.toInt() ?? 0;
+      return 0;
+    }, ttl: true, ttlDuration: _ttlLong);
   }
+
+
+  /// Saldo YukCoin terpadu: {total, bonus, earned}.
+
+  /// Apakah fitur YukCoin v2 aktif untuk user ini (flag server / admin).
 
   /// Status ringkas YukCoin v2: {active, total, bonus, earned, ghost, extra_slots}.
   Future<Map<String, dynamic>> yukcoinV2Status() {
@@ -269,33 +273,8 @@ class PointsService {
   }
 
   /// Slot foto tambahan milik user.
-  Future<int> myExtraPhotoSlots() async {
-    try {
-      final res = await measuredRpc(_sb, 'my_extra_photo_slots');
-      return (res as num?)?.toInt() ?? 0;
-    } catch (_) {
-      return 0;
-    }
-  }
 
   /// Potong YukCoin (earned→bonus). Return {tier, remaining}.
-  Future<Map<String, dynamic>> spendYukcoin(
-    String feature,
-    int amount, {
-    String? ref,
-  }) async {
-    final res = await measuredRpc(
-      _sb,
-      'spend_yukcoin',
-      params: {
-        'p_user': uid,
-        'p_feature': feature,
-        'p_amount': amount,
-        'p_ref': ?ref,
-      },
-    );
-    return res is Map ? Map<String, dynamic>.from(res) : {};
-  }
 
   /// Undo pesan (soft delete). Return {ok, cost, remaining}.
   Future<Map<String, dynamic>> undoMessage(int messageId) async {
@@ -308,14 +287,6 @@ class PointsService {
   }
 
   /// Edit pesan. Return {ok, cost, remaining}.
-  Future<Map<String, dynamic>> editMessage(int messageId, String newText) async {
-    final res = await measuredRpc(
-      _sb,
-      'edit_message_v2',
-      params: {'p_message_id': messageId, 'p_new_text': newText},
-    );
-    return res is Map ? Map<String, dynamic>.from(res) : {};
-  }
 
   /// Beli slot foto tambahan (default +5). Return {ok, cost, extra, remaining}.
   Future<Map<String, dynamic>> buyExtraPhotoSlots({int slots = 5}) async {
@@ -328,24 +299,8 @@ class PointsService {
   }
 
   /// Beli ghost mode (invisible). Return {ok, cost, expires_at, remaining}.
-  Future<Map<String, dynamic>> buyGhostMode({int days = 1}) async {
-    final res = await measuredRpc(
-      _sb,
-      'buy_ghost_mode_v2',
-      params: {'p_days': days},
-    );
-    return res is Map ? Map<String, dynamic>.from(res) : {};
-  }
 
   /// Apakah ghost mode (invisible) aktif.
-  Future<bool> isGhostMode() async {
-    try {
-      final res = await measuredRpc(_sb, 'is_ghost_mode');
-      return res == true;
-    } catch (_) {
-      return false;
-    }
-  }
 
   /// Riwayat ledger (terbaru dulu). Field:
   /// id, bucket, type, amount, ref_id, metadata, created_at.
@@ -398,57 +353,13 @@ class PointsService {
     return (res as num).toInt();
   }
 
-  Future<int> roomReadBonus() async {
-    final res = await measuredRpc(_sb, 'room_read_bonus');
-    return (res as num).toInt();
-  }
 
-  Future<int> oneTimeBonus(String actionKey, int bonus) async {
-    final res = await measuredRpc(_sb, 
-      'one_time_bonus',
-      params: {'action_key': actionKey, 'bonus': bonus},
-    );
-    return (res as num).toInt();
-  }
 
   /// Reward koin upload foto slot 1..5 (sekali per slot). Return total koin.
-  Future<int> rewardPhotoSlot(int slotIndex) async {
-    final res = await measuredRpc(_sb, 
-      'reward_photo_slot',
-      params: {'p_slot_index': slotIndex},
-    );
-    return (res as num).toInt();
-  }
 
-  /// Buka foto terkunci. mode 'once'|'perm'. Return {ok, points, mode}.
-  Future<Map<String, dynamic>> unlockPhoto(String photoId, String mode) async {
-    final res = await measuredRpc(_sb, 
-      'unlock_photo',
-      params: {'p_photo_id': photoId, 'p_mode': mode},
-    );
-    return res is Map ? Map<String, dynamic>.from(res) : {};
-  }
 
   /// Biaya buka foto (once, perm) dari app_settings.
-  Future<(int, int)> photoCosts() async {
-    try {
-      final rows = await _sb
-          .from('app_settings')
-          .select('photo_unlock_once,photo_unlock_perm')
-          .eq('id', 'global')
-          .maybeSingle();
-      final once = (rows?['photo_unlock_once'] as num?)?.toInt() ?? 5;
-      final perm = (rows?['photo_unlock_perm'] as num?)?.toInt() ?? 20;
-      return (once, perm);
-    } catch (_) {
-      return (5, 20);
-    }
-  }
 
-  Future<int> registerBonus() async {
-    final res = await measuredRpc(_sb, 'register_bonus');
-    return (res as num).toInt();
-  }
 
   /// Leaderboard. scope: 'weekly' | 'alltime'. Return {scope, entries[], me}.
   ///
@@ -513,8 +424,4 @@ class PointsService {
   }
 
   /// Klaim reward referral-install (sekali per referred).
-  Future<Map<String, dynamic>> claimReferralReward() async {
-    final res = await measuredRpc(_sb, 'claim_referral_reward');
-    return res is Map ? Map<String, dynamic>.from(res) : {};
-  }
 }

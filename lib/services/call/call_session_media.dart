@@ -7,17 +7,19 @@ mixin _CallSessionMediaMx on _CallBase {
       // Relay-only saat Cloudflare OK (deterministik & cepat). Fallback ke
       // semua tipe kandidat terjadi lewat `_retryWithAllCandidates()` bila
       // ICE gagal menetap — di sini cukup pakai default.
-      final peerConfig = await CallConfig.getPeerConfig(relayOnly: _relayOnly);
-      // Sinkronkan flag dengan kebijakan yang BENAR-BENAR diterapkan —
-      // relay-only hanya aktif bila Cloudflare tersedia. Kalau tidak,
-      // kandidat host/srflx sudah dipakai → fallback tak perlu.
-      _relayOnly = CallConfig.lastConfigWasRelayOnly;
+      //
+      // PERF: fetch TURN dan getUserMedia TIDAK saling bergantung → jalankan
+      // paralel. Dulu berurutan: TURN (hingga 5 dtk timeout saat dingin)
+      // baru kamera/mic dinyalakan, sehingga frame lokal & offer jauh lebih
+      // lambat siap.
       // Constraint audio eksplisit (latency rendah + jernih):
       // AEC/NS/AGC standar + perbaikan Google (highpass = low-rumble hilang,
       // typing-noise = ketikan keyboard tidak bocor) + mono (hemat bandwidth).
       // Tanpa constraint eksplisit, tiap device memakai default berbeda —
       // di Xiaomi pernah mic jauh yang kepilih (suara pelan).
-      _localStream = await navigator.mediaDevices.getUserMedia({
+      final peerConfigFuture =
+          CallConfig.getPeerConfig(relayOnly: _relayOnly);
+      final localStreamFuture = navigator.mediaDevices.getUserMedia({
         'audio': {
           'echoCancellation': true,
           'noiseSuppression': true,
@@ -31,7 +33,23 @@ mixin _CallSessionMediaMx on _CallBase {
         },
         'video': callType == 'video' ? {'facingMode': 'user'} : false,
       });
+      final peerConfig = await peerConfigFuture;
+      // Sinkronkan flag dengan kebijakan yang BENAR-BENAR diterapkan —
+      // relay-only hanya aktif bila Cloudflare tersedia. Kalau tidak,
+      // kandidat host/srflx sudah dipakai → fallback tak perlu.
+      _relayOnly = CallConfig.lastConfigWasRelayOnly;
+      _localStream = await localStreamFuture;
+      // Di sebagian HP (Xiaomi/MIUI) getUserMedia bisa sukses tapi
+      // mengembalikan stream TANPA track video bila izin kamera ditolak di
+      // level appops — call audio jalan tapi preview lokal tak pernah ada.
+      // Gagal jujur supaya UI menampilkan error media, bukan PiP kosong.
+      if (callType == 'video' && _localStream!.getVideoTracks().isEmpty) {
+        throw Exception('NotFoundError: getUserMedia returned no video track');
+      }
       localRenderer.srcObject = _localStream;
+      _armLocalVideoWatchdog(_localStream!);
+      // PiP lokal harus tampil seketika — jangan tunggu ICE/track remote.
+      if (!_closed) notifyListeners();
       // Pilih mic terbaik (audioinput pertama): di sebagian device (Xiaomi)
       // default bisa jatuh ke mic jauh sehingga suara pelan. Best-effort.
       try {
@@ -97,7 +115,9 @@ mixin _CallSessionMediaMx on _CallBase {
         }
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
             state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-          Future.delayed(const Duration(seconds: 4), () async {
+          // Failed adalah kondisi terminal — cukup 1 dtk untuk memastikan
+          // bukan blip transisi, lalu langsung fallback.
+          Future.delayed(const Duration(seconds: 1), () async {
             if (_closed) return;
             try {
               final cur = _pc?.connectionState;
@@ -106,12 +126,17 @@ mixin _CallSessionMediaMx on _CallBase {
               }
               if (cur == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
                   cur == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+                // Lawan menutup call ikut mematikan pc kita — konfirmasi
+                // status call dulu: terminal → _finish (jangan retry ke
+                // sesi mati); masih hidup → ini blip jaringan → retry.
+                if (await _remoteEnded()) return;
                 // Relay-only gagal menetap → coba all-candidates (P2P) dulu;
                 // ini menyelamatkan call saat relay TURN tak terjangkau.
                 if (_relayOnly && !_iceAllCandidatesTried) {
                   dlog(
                     '[ICE] grace-timeout still $cur -> fallback all-candidates',
                   );
+                  _CallBase._relaySuspect = true;
                   await _retryWithAllCandidates();
                   return;
                 }
@@ -132,6 +157,7 @@ mixin _CallSessionMediaMx on _CallBase {
                   await _service.sendSignal(callId, 'bye');
                   await _service.updateStatus(callId, 'ended');
                 } catch (e) { dlog('[CALL-MEDIA]: $e'); }
+                if (!_relayOnly) _CallBase._relaySuspect = false;
                 _finish(
                   _phase == CallPhase.inCall
                       ? CallEndReason.ended
@@ -175,12 +201,16 @@ mixin _CallSessionMediaMx on _CallBase {
         // menyerah; coba all-candidates (P2P) dulu sebelum menyatakan gagal.
         if (_relayOnly && !_iceAllCandidatesTried) {
           dlog('[ICE] 15s timeout still $cur -> fallback all-candidates');
+          _CallBase._relaySuspect = true;
           await _retryWithAllCandidates();
           return;
         }
         dlog(
           '[ICE] 15s timeout still $cur phase=$_phase -> bye + _finish error',
         );
+        // Bahkan non-relay ikut gagal → jaringan mungkin berubah; call
+        // berikutnya probe relay lagi dari awal.
+        if (!_relayOnly) _CallBase._relaySuspect = false;
         try {
           await _service.sendSignal(callId, 'bye');
           await _service.updateStatus(callId, 'ended');
@@ -218,6 +248,9 @@ mixin _CallSessionMediaMx on _CallBase {
             if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
               return;
             }
+            // Lawan menutup call ikut memutus media — konfirmasi status dulu
+            // supaya layar ikut tertutup, bukan retry ICE ke sesi mati.
+            if (await _remoteEnded()) return;
             if (!_iceRestarted) {
               await _attemptIceRestart();
             } else {
@@ -291,6 +324,69 @@ mixin _CallSessionMediaMx on _CallBase {
     return CallMediaError.other;
   }
 
+  /// Watchdog kamera lokal: di sebagian HP (MIUI appops) getUserMedia sukses
+  /// dan track video ADA, tetapi kamera tak pernah menghasilkan frame →
+  /// `videoWidth` tetap 0 → PiP hitam selamanya tanpa ada error. Setelah 6
+  /// dtk tanpa frame pertama → nyatakan media error supaya UI jujur (bukan
+  /// call "hidup" dengan kamera mati).
+  ///
+  /// [stream] ditangkap per setup — watchdog lama otomatis no-op bila stream
+  /// sudah diganti (ICE fallback membuat stream baru + menjadwalkan ulang).
+  void _armLocalVideoWatchdog(MediaStream stream) {
+    if (callType != 'video') return;
+    Future.delayed(const Duration(seconds: 6), () async {
+      if (_closed ||
+          _phase == CallPhase.ended ||
+          _phase == CallPhase.error ||
+          !identical(_localStream, stream) ||
+          !_cameraOn ||
+          localRenderer.videoWidth > 0) {
+        return;
+      }
+      dlog('[CALL-MEDIA] no local video frames after 6s → media error');
+      _mediaError = CallMediaError.notFound;
+      // Akhiri call dengan benar (bye + status ended) — pola sama seperti
+      // timeout ICE 15 dtk: jangan hanya flip fase lokal sementara partner
+      // dan billing terus berjalan di sisi lain.
+      try {
+        await _service.sendSignal(callId, 'bye');
+        await _service.updateStatus(callId, 'ended');
+      } catch (e) {
+        dlog('[CALL-MEDIA]: $e');
+      }
+      _finish(CallEndReason.error);
+    });
+  }
+
+  /// Segarkan video setelah app kembali dari background (minimize → buka).
+  /// Android melepas sink frame renderer & mem-pause capture kamera saat app
+  /// di-background; saat resume frame tidak mengalir lagi → gambar membeku
+  /// di frame terakhir walau call masih hidup. Re-assign srcObject renderer
+  /// + aktifkan ulang track kamera mengalirkan frame lagi. Best-effort.
+  Future<void> refreshVideoAfterResume() async {
+    if (_closed || callType != 'video') return;
+    try {
+      if (_cameraOn) {
+        for (final t in _localStream?.getVideoTracks() ?? const <MediaStreamTrack>[]) {
+          if (!t.enabled) t.enabled = true;
+        }
+      }
+      final ls = _localStream;
+      if (ls != null && localRenderer.srcObject != null) {
+        localRenderer.srcObject = null;
+        localRenderer.srcObject = ls;
+      }
+      final rs = _remoteStream;
+      if (rs != null && remoteRenderer.srcObject != null) {
+        remoteRenderer.srcObject = null;
+        remoteRenderer.srcObject = rs;
+      }
+      dlog('[CALL-MEDIA] refreshVideoAfterResume (unfreeze)');
+    } catch (e) {
+      dlog('[CALL-MEDIA] refreshVideoAfterResume: $e');
+    }
+  }
+
   /// Paksa codec Opus untuk transceiver audio (latency rendah + FEC).
   /// Dipanggil setelah addTrack (transceiver sudah ada) dan sebelum
   /// createOffer/createAnswer. Best-effort: gagal → pakai default.
@@ -350,17 +446,27 @@ mixin _CallSessionMediaMx on _CallBase {
     if (pc == null || _closed) return;
     _iceRestarted = true;
     dlog('[ICE] restart attempt (isCaller=$isCaller)');
-    try {
-      await pc.restartIce();
-    } catch (e) {
-      dlog('[ICE] restartIce failed: $e');
-    }
-    if (isCaller && !_closed && _pc != null) {
-      _offered = false;
-      await _createOffer();
+    if (!isCaller) {
+      // Callee TIDAK boleh restartIce unilateral: ufrag baru tidak pernah
+      // sampai ke caller (callee tak pernah re-offer) → kandidat tak cocok
+      // → check ICE gagal terus. Minta caller re-offer; ICE restart
+      // merambat lewat offer baru (ufrag baru) → kedua sisi sinkron.
+      unawaited(
+        _service.sendSignal(callId, 'ice_retry').catchError((_) {}),
+      );
+    } else {
+      try {
+        await pc.restartIce();
+      } catch (e) {
+        dlog('[ICE] restartIce failed: $e');
+      }
+      if (!_closed && _pc != null) {
+        _offered = false;
+        await _createOffer();
+      }
     }
     // Recheck: masih buruk → serahkan ke tombol manual.
-    Future.delayed(const Duration(seconds: 5), () {
+    Future.delayed(const Duration(seconds: 5), () async {
       if (_closed) return;
       if (_phase == CallPhase.inCall) {
         if (_iceReconnectFailed) {
@@ -373,6 +479,9 @@ mixin _CallSessionMediaMx on _CallBase {
       if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         return;
       }
+      // Retry mentok bisa berarti lawan sudah menutup call — konfirmasi
+      // status: terminal → _finish, jangan tampilkan tombol ke sesi mati.
+      if (await _remoteEnded()) return;
       _iceReconnectFailed = true;
       dlog('[ICE] still bad after restart -> tombol manual');
       notifyListeners();
@@ -383,6 +492,7 @@ mixin _CallSessionMediaMx on _CallBase {
   /// percobaan otomatis supaya bisa dicoba berkali-kali). Bila setup media
   /// sebelumnya gagal (phase `error`, pc belum ada) → ulangi setup penuh,
   /// supaya panggilan bisa pulih tanpa harus menutup & menelepon ulang.
+  @override
   Future<void> reconnect() async {
     if (_closed) return;
     _iceReconnectFailed = false;
@@ -402,6 +512,7 @@ mixin _CallSessionMediaMx on _CallBase {
     // Relay-only & belum pernah coba all-candidates → fallback P2P dulu
     // (relay bisa tak terjangkau), baru ICE restart biasa.
     if (_relayOnly && !_iceAllCandidatesTried) {
+      _CallBase._relaySuspect = true;
       await _retryWithAllCandidates();
       return;
     }

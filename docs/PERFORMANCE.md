@@ -5164,3 +5164,59 @@ channel yatim` + grup `loadOlder`).
 - Jangan pindahkan `channel = null` ke SETELAH `removeChannel`.
 - Jangan panggil `_trim()` di `loadOlder` / jangan simpan `_current` penuh ke
   cache (pakai `cacheWindow()`).
+
+---
+
+## 22. Random Video Match — latensi video muncul (2026-11-01)
+
+**Gejala:** setelah Match tersambung, video lawan baru muncul terasa
+terlambat walau media sudah mengalir.
+
+### Akar masalah (diukur dari kode, bukan tebakan)
+
+1. **`RandomCallScreen` tidak pernah mendengarkan `CallSession`.**
+   `CallSession` adalah `ChangeNotifier` yang memanggil `notifyListeners()`
+   di `onTrack` (`call_session_media.dart:83`), tetapi layar hanya
+   `ref.watch(callProvider)` — dan `CallNotifier` TIDAK meneruskan notifikasi
+   sesi. Akibatnya `hasRemoteVideo` hanya dievaluasi ulang oleh
+   `Timer.periodic(1 dtk)` (`random_call_screen.dart:43`). Texture remote
+   bisa sudah live tetapi tetap tertutup `_PartnerBackdrop` (opaque) sampai
+   **0–1000 ms** berikutnya. Ini delay presentasi murni, bukan jaringan.
+2. **`getPeerConfig` (TURN) dan `getUserMedia` berurutan.**
+   `call_session_media.dart` dulu: `await getPeerConfig` → `await getUserMedia`.
+   Keduanya tidak saling bergantung. Saat dingin, TURN bisa sampai 1760 ms
+   (`call.turnFetch`), dan biaya itu ditambahkan penuh sebelum kamera menyala.
+3. **Route panggilan random tanpa `fullscreenDialog` dan tanpa nama.**
+   `random_match_screen.dart` mem-push `MaterialPageRoute` biasa → kena
+   `AppSlidePageTransitionsBuilder` **250 ms**, dan karena tidak ada
+   `RouteSettings(name: kCallScreenRoute)`, `CallBanner` menganggap tidak ada
+   layar call (`call_banner.dart:65`) → banner ikut menimpa dan tap-nya bisa
+   membuka `CallScreen` duplikat.
+
+### Perbaikan
+
+- `RandomCallScreen` memasang listener ke `CallSession` (`_bindSession`) dan
+  melepasnya di `dispose`. Frame pertama video kini tampil seketika saat
+  `onTrack`, tidak menunggu tick. Tick 1 detik tetap ada untuk durasi/koin.
+- TURN fetch & `getUserMedia` dijalankan **paralel** (dua future, di-await
+  berurutan hanya untuk hasil). Urutan semantik lain tidak berubah:
+  `_relayOnly` tetap disinkronkan dari `lastConfigWasRelayOnly` setelah
+  config tiba.
+- Route panggilan memakai `fullscreenDialog: true` + nama
+  `kCallScreenRoute` → tanpa slide 250 ms, dan `CallBanner`/
+  `ensureCallScreenRoute` tahu layar call sudah terbuka.
+
+### JANGAN dibalik
+
+- Jangan hapus listener sesi di `RandomCallScreen` dan kembali mengandalkan
+  tick 1 detik — itu menambah hingga 1 detik sebelum video terlihat.
+- Jangan serialkan kembali TURN fetch dan `getUserMedia`.
+- Jangan hapus `fullscreenDialog`/`settings.name` pada route panggilan.
+- Jangan pindahkan `CallSession.init()` agar berjalan sebelum user menerima
+  panggilan 1:1 — invarian itu tetap berlaku (`docs/CALL_NATIVE.md:141`).
+
+**Batas pengukuran:** perubahan ini belum diukur di perangkat fisik. Yang
+dapat dipastikan dari kode: menghapus 0–1000 ms delay presentasi, 250 ms
+transisi route, dan menjalankan dua operasi async terberat secara paralel.
+Verifikasi lapangan tetap perlu `PERF_PROBE=true` + `[PERF] call.setupMedia`
+/ `call.turnFetch` sebelum-sesudah.

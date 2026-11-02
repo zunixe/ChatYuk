@@ -35,6 +35,7 @@ import 'screens/friend_requests_screen.dart';
 import 'screens/user_info_screen.dart';
 import 'screens/post_detail_screen.dart';
 import 'screens/private_chat_screen.dart';
+import 'screens/random_call_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/env.dart';
 import 'config/strings.dart';
@@ -175,21 +176,29 @@ Future<bool> _waitForSession({
 bool ensureCallScreenRoute(NavigatorState? navIn) {
   if (navIn == null) return false;
   final nav = navIn;
-  final sess = _rootContainer!.read(callProvider.notifier).activeSession;
+  final prov = _rootContainer!.read(callProvider.notifier);
+  final sess = prov.activeSession;
   if (sess == null) return false;
   if (routeTracker.contains(kCallScreenRoute)) return true;
+  // Call RANDOM harus kembali ke RandomCallScreen (UI Next/partner), bukan
+  // CallScreen 1:1 — dulu selalu CallScreen → dua UI call berbeda untuk
+  // sesi yang sama ("layar kaya double").
+  final isRandom =
+      (prov.activeChatId ?? '').startsWith(kRandomChatIdPrefix);
   nav.push(
     MaterialPageRoute(
       fullscreenDialog: true,
       settings: const RouteSettings(name: kCallScreenRoute),
-      builder: (_) => CallScreen(
-        callId: sess.callId,
-        remoteUid: sess.remoteUid,
-        remoteName: sess.remoteName,
-        callType: sess.callType,
-        isCaller: sess.isCaller,
-        session: sess,
-      ),
+      builder: (_) => isRandom
+          ? const RandomCallScreen()
+          : CallScreen(
+              callId: sess.callId,
+              remoteUid: sess.remoteUid,
+              remoteName: sess.remoteName,
+              callType: sess.callType,
+              isCaller: sess.isCaller,
+              session: sess,
+            ),
     ),
   );
   return true;
@@ -238,10 +247,11 @@ void _openFromData(Map<String, dynamic> data) {
   if (data['type'] == 'active_call') {
     if (ensureCallScreenRoute(navigatorKey.currentState)) return;
     // Tidak ada sesi aktif (sudah berakhir) → fallback buka chat.
+    // chatId 'random_*' BUKAN chat 1:1 asli → jangan buka private chat.
     final chatId = data['chatId'] ?? '';
     final otherUid = data['otherUid'] ?? '';
     final otherName = data['otherName'] ?? s.unknownUser;
-    if (chatId.isNotEmpty) {
+    if (chatId.isNotEmpty && !chatId.startsWith(kRandomChatIdPrefix)) {
       final target = privateChatRoute(chatId);
       if (routeTracker.contains(target)) {
         nav.popUntil((r) => r.isFirst || r.settings.name == target);

@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
-import '../config/strings.dart';
+
 import '../models/user_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/storage_provider.dart';
@@ -17,7 +17,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNot
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rv;
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/nav_provider.dart';
-import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../widgets/chat_yuk_chat_header.dart' show ChatSection, requestedChatSection;
 import 'online_users/widgets/my_status_sheet.dart';
@@ -46,7 +45,7 @@ import '../providers/riverpod/privacy_provider.dart';
 import '../models/privacy_settings.dart';
 import '../core/perf/perf_probe.dart';
 import '../widgets/anon_prompt_dialog.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:flutter/services.dart';
 import '../providers/riverpod/location_provider.dart';
 
@@ -852,7 +851,7 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
                   });
                   _saveFilter();
                 },
-                onGenderChanged: (v) => _applyGenderFilter(v, s),
+                onGenderChanged: (v) async => _applyGenderFilter(v),
                 onToggleHidden: () =>
                     setState(() => _showHidden = !_showHidden),
                 onOutOfPoints: ({required outOfPoints, required s}) {},
@@ -912,36 +911,10 @@ class _OnlineUsersScreenState extends ConsumerState<OnlineUsersScreen>
     rp.setExploreCategory('general');
   }
 
-  /// Terapkan filter gender (dari SearchDropdown). Filter gender berbayar
-  /// (harian) — gate server saat fitur sudah dipublish. Pilih 'all' = gratis.
-  Future<void> _applyGenderFilter(String v, S s) async {
-    if (v != 'all') {
-      final pp = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(pointsProvider.notifier);
-      if (pp.genderFilterPublished) {
-        try {
-          await pp.gateFeature(
-            'gender_filter',
-            priceFeature: 'filter_gender',
-          );
-        } on PostgrestException catch (e) {
-          if (!mounted) return;
-          if (e.message.contains('tidak cukup') ||
-              e.message.contains('Not enough')) {
-            pp.showOutOfPointsDialog(context, s.isId);
-          } else {
-            dlog('[ONLINE] gate gender error: $e');
-          }
-          return;
-        } catch (e) {
-          if (!mounted) return;
-          dlog('[ONLINE] gate gender error: $e');
-          return;
-        }
-      }
-    }
+  /// Terapkan filter gender (dari SearchDropdown). Filter gender GRATIS
+  /// — `gate_feature` di server selalu mengembalikan free, jadi tidak ada
+  /// gate RPC di sini (menghindari round-trip mati).
+  void _applyGenderFilter(String v) {
     if (!mounted) return;
     setState(() {
       _gender = v;

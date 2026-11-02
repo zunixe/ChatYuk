@@ -15,6 +15,7 @@ import '../providers/riverpod/phone_verify_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../config/theme.dart';
 import 'profile/widgets/profile_widgets.dart';
+import 'profile/widgets/my_level_entry.dart';
 import '../config/regions.dart';
 import '../config/strings.dart';
 import '../models/user_model.dart';
@@ -22,6 +23,7 @@ import '../models/user_photo.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/points_provider.dart';
+import '../providers/riverpod/missions_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../utils.dart';
@@ -31,6 +33,7 @@ import 'user_info_screen.dart';
 import 'contact_screen.dart';
 import 'donate_screen.dart';
 import '../core/admin_gate.dart';
+import '../core/nav_gate.dart';
 import '../core/ui/dispose_after_dialog.dart';
 import 'leaderboard_screen.dart';
 import 'point_history_screen.dart';
@@ -38,6 +41,9 @@ import 'social_list_screen.dart';
 import 'friend_requests_screen.dart';
 import 'subscriptions_screen.dart';
 import '../core/perf/perf_probe.dart';
+import 'saldo_screen.dart';
+import 'missions_screen.dart';
+import '../widgets/gender_lock_dialog.dart';
 import 'package:share_plus/share_plus.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
@@ -150,6 +156,8 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
     int extraSlots,
     bool v2, {
     bool isAnon,
+    bool pointsOn,
+    bool canTopup,
   });
   Widget _moderationSection(BuildContext context, S s);
   Widget _footer(BuildContext context, S s);

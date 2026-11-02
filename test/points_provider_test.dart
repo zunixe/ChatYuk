@@ -24,8 +24,6 @@ void main() {
 
   setUp(() {
     service = MockPointsService();
-    // Poin naik (50 → 999) supaya wrapper klaim mengembalikan true.
-    when(() => service.oneTimeBonus(any(), any())).thenAnswer((_) async => 999);
     when(() => service.watchOwnPoints()).thenAnswer((_) => Stream<int>.empty());
     when(() => service.getWallet()).thenAnswer(
       (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 50},
@@ -56,20 +54,17 @@ void main() {
     test('300 dtk → TIDAK klaim (faucet dihapus)', () async {
       provider.setOnlineSecondsForTest(300);
       await provider.debugClaimOnlineBonus();
-      verifyNever(() => service.oneTimeBonus(any(), any()));
     });
 
     test('4000 dtk → TIDAK klaim apa pun', () async {
       provider.setOnlineSecondsForTest(4000);
       await provider.debugClaimOnlineBonus();
-      verifyNever(() => service.oneTimeBonus(any(), any()));
     });
 
     test('resetOnlineTrackers tidak memanggil service', () async {
       provider.setOnlineSecondsForTest(300);
       provider.resetOnlineTrackers();
       await provider.debugClaimOnlineBonus();
-      verifyNever(() => service.oneTimeBonus(any(), any()));
     });
   });
 
@@ -223,19 +218,6 @@ void main() {
     });
   });
 
-  group('syncFromProfile', () {
-    test('nilai beda → notify; sama → no-op', () {
-      var notified = 0;
-      container.listen(pointsProvider, (_, _) => notified++);
-
-      provider.syncFromProfile(75);
-      expect(provider.points, 75);
-      expect(notified, 1);
-
-      provider.syncFromProfile(75);
-      expect(notified, 1, reason: 'nilai sama tidak memicu rebuild');
-    });
-  });
 
   group('bonus klaim & unlock (provider)', () {
     setUp(() async {
@@ -243,12 +225,15 @@ void main() {
       await provider.refreshEnabled();
     });
 
-    test('claimDailyLogin → no-op (faucet dihapus), saldo tak berubah',
-        () async {
-      await provider.claimDailyLogin();
-      // Tidak memanggil RPC daily_login_bonus & saldo tetap.
-      verifyNever(() => service.dailyLoginBonus());
-      expect(provider.points, 50);
+    test('claimDailyLogin → RPC + saldo ikut total respons', () async {
+      when(() => service.dailyLoginBonus()).thenAnswer(
+        (_) async => {'streak': 1, 'bonus': 25, 'total': 75},
+      );
+      final r = await provider.claimDailyLogin();
+      verify(() => service.dailyLoginBonus()).called(1);
+      expect(provider.points, 75);
+      expect(r.streak, 1);
+      expect(r.bonus, 25);
     });
 
     test('claimDailyLogin OFF → diam', () async {
@@ -277,85 +262,8 @@ void main() {
       verifyNever(() => service.newChatBonus(any()));
     });
 
-    test('roomReadBonus update saldo; OFF diam', () async {
-      when(() => service.roomReadBonus()).thenAnswer((_) async => 58);
-      await provider.roomReadBonus();
-      expect(provider.points, 58);
 
-      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
-      await provider.refreshEnabled();
-      await provider.roomReadBonus();
-      verify(() => service.roomReadBonus()).called(1);
-    });
 
-    test('rewardPhotoSlot → delta; error/OFF → 0', () async {
-      when(() => service.rewardPhotoSlot(2)).thenAnswer((_) async => 53);
-      expect(await provider.rewardPhotoSlot(2), 3);
-
-      when(() => service.rewardPhotoSlot(2))
-          .thenThrow(Exception('offline'));
-      expect(await provider.rewardPhotoSlot(2), 0);
-
-      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
-      await provider.refreshEnabled();
-      expect(await provider.rewardPhotoSlot(2), 0);
-      verify(() => service.rewardPhotoSlot(any())).called(2);
-    });
-
-    test('unlockPhoto sukses → true + saldo ikut', () async {
-      when(() => service.unlockPhoto('p1', 'once')).thenAnswer(
-        (_) async => {'ok': true, 'points': 44},
-      );
-
-      expect(await provider.unlockPhoto('p1', 'once'), isTrue);
-      expect(provider.points, 44);
-    });
-
-    test('unlockPhoto ok=false → false', () async {
-      when(() => service.unlockPhoto('p1', 'once')).thenAnswer(
-        (_) async => {'ok': false, 'points': 50},
-      );
-
-      expect(await provider.unlockPhoto('p1', 'once'), isFalse);
-    });
-
-    test('unlockPhoto saldo kurang → lempar topup', () async {
-      when(() => service.unlockPhoto('p1', 'once')).thenThrow(
-        PostgrestException(
-          message: 'Not enough points',
-          code: 'P0001',
-          details: null,
-          hint: null,
-        ),
-      );
-
-      await expectLater(provider.unlockPhoto('p1', 'once'), throwsA('topup'));
-    });
-
-    test('unlockPhoto error lain → rethrow', () async {
-      when(() => service.unlockPhoto('p1', 'once')).thenThrow(
-        PostgrestException(
-          message: 'boom',
-          code: '500',
-          details: null,
-          hint: null,
-        ),
-      );
-
-      await expectLater(
-        provider.unlockPhoto('p1', 'once'),
-        throwsA(isA<PostgrestException>()),
-      );
-    });
-
-    test('claimRegisterBonus naik → true; OFF → false', () async {
-      when(() => service.registerBonus()).thenAnswer((_) async => 60);
-      expect(await provider.claimRegisterBonus(), isTrue);
-
-      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
-      await provider.refreshEnabled();
-      expect(await provider.claimRegisterBonus(), isFalse);
-    });
 
     test('subscribeCreator → map + wallet refresh', () async {
       when(() => service.subscribeCreator(any(), periods: any(named: 'periods')))
@@ -370,18 +278,6 @@ void main() {
       expect(provider.points, 60);
     });
 
-    test('claimReferralReward → map + wallet refresh', () async {
-      when(() => service.claimReferralReward())
-          .thenAnswer((_) async => {'ok': true, 'bonus': 10});
-      when(() => service.getWallet()).thenAnswer(
-        (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 70},
-      );
-
-      final res = await provider.claimReferralReward();
-
-      expect(res['bonus'], 10);
-      expect(provider.points, 70);
-    });
   });
 
   group('chat charge/refund', () {
@@ -391,16 +287,26 @@ void main() {
     });
 
     test('deduct berhasil mengembalikan saldo baru dan notify', () async {
-      when(() => service.deductChatPoint('text')).thenAnswer((_) async => 49);
+      when(() => service.deductChatPoint('image')).thenAnswer((_) async => 49);
       var notified = 0;
       container.listen(pointsProvider, (_, _) => notified++);
 
-      final result = await provider.deductBeforeSend('text');
+      final result = await provider.deductBeforeSend('image');
 
       expect(result, 49);
       expect(provider.points, 49);
       expect(notified, 1);
-      verify(() => service.deductChatPoint('text')).called(1);
+      verify(() => service.deductChatPoint('image')).called(1);
+    });
+
+    test('teks gratis → deduct/refund tanpa RPC (2026-10-31)', () async {
+      // deduct_chat_point no-op untuk 'text' di server — provider
+      // short-circuit lokal supaya tidak tembak RPC per pesan.
+      expect(await provider.deductBeforeSend('text'), 50);
+      await provider.refundChatPoint('text');
+      verifyNever(() => service.deductChatPoint(any()));
+      verifyNever(() => service.refundChatPoint(any()));
+      expect(provider.points, 50);
     });
 
     test('saldo tidak cukup mengembalikan -1 tanpa mengubah saldo', () async {
@@ -431,20 +337,20 @@ void main() {
     });
 
     test('refund memperbarui saldo dan memanggil service', () async {
-      when(() => service.refundChatPoint('text')).thenAnswer((_) async => 51);
+      when(() => service.refundChatPoint('image')).thenAnswer((_) async => 51);
 
-      await provider.refundChatPoint('text');
+      await provider.refundChatPoint('image');
 
       expect(provider.points, 51);
-      verify(() => service.refundChatPoint('text')).called(1);
+      verify(() => service.refundChatPoint('image')).called(1);
     });
 
     test('refund error tidak melempar dan saldo tetap', () async {
       when(
-        () => service.refundChatPoint('text'),
+        () => service.refundChatPoint('image'),
       ).thenThrow(Exception('network offline'));
 
-      await expectLater(provider.refundChatPoint('text'), completes);
+      await expectLater(provider.refundChatPoint('image'), completes);
       expect(provider.points, 50);
     });
 
@@ -452,8 +358,8 @@ void main() {
       when(() => service.fetchEnabled()).thenAnswer((_) async => false);
       await provider.refreshEnabled();
 
-      expect(await provider.deductBeforeSend('text'), 50);
-      await provider.refundChatPoint('text');
+      expect(await provider.deductBeforeSend('image'), 50);
+      await provider.refundChatPoint('image');
 
       verifyNever(() => service.deductChatPoint(any()));
       verifyNever(() => service.refundChatPoint(any()));
@@ -469,15 +375,17 @@ void main() {
       ]);
       final fresh = freshC.read(pointsProvider.notifier);
       addTearDown(freshC.dispose);
-      when(() => service.deductChatPoint('text')).thenAnswer((_) async => 49);
+      when(() => service.deductChatPoint('image')).thenAnswer((_) async => 49);
 
-      expect(await fresh.deductBeforeSend('text'), 49);
-      verify(() => service.deductChatPoint('text')).called(1);
+      expect(await fresh.deductBeforeSend('image'), 49);
+      verify(() => service.deductChatPoint('image')).called(1);
     });
   });
 
   group('harga server (room pricing + photo costs)', () {
     test('refreshRoomPricing memetakan semua field + notify', () async {
+      // join_paid sengaja dikirim server (kolom masih ada) tapi provider
+      // TIDAK lagi menyimpannya — join room gratis di server (charge 0).
       when(() => service.roomPricing()).thenAnswer((_) async => {
             'create_paid': 200,
             'create_pw_paid': 250,
@@ -492,7 +400,6 @@ void main() {
 
       expect(provider.roomCreatePaid, 200);
       expect(provider.roomCreatePwPaid, 250);
-      expect(provider.roomJoinPaid, 10);
       expect(provider.roomExtendPaid, 80);
       expect(provider.bonusMultiplier, 5);
       expect(notified, 1);
@@ -505,12 +412,6 @@ void main() {
       expect(provider.bonusMultiplier, 3);
     });
 
-    test('refreshPhotoCosts memetakan once/perm', () async {
-      when(() => service.photoCosts()).thenAnswer((_) async => (7, 25));
-      await provider.refreshPhotoCosts();
-      expect(provider.photoUnlockOnce, 7);
-      expect(provider.photoUnlockPerm, 25);
-    });
   });
 
   group('harga fitur berbayar (metered)', () {
@@ -529,8 +430,8 @@ void main() {
       await provider.refreshMeteredPricing();
       expect(provider.callCostPerMin('audio'), 8);
       expect(provider.callCostPerMin('video'), 25);
-      expect(provider.filterGenderCost, 20);
-      expect(provider.nearbyCost, 30);
+      // filter_gender_cost / nearby_cost: field mati — server masih
+      // mengirim tapi provider tak lagi menyimpan (fitur gratis).
     });
 
     test('featurePublished dari flag server', () async {
@@ -542,29 +443,10 @@ void main() {
           });
       await provider.refreshMeteredPricing();
       expect(provider.callBillingPublished, isTrue);
-      expect(provider.nearbyPaidPublished, isFalse);
-      expect(provider.genderFilterPublished, isFalse);
+      expect(provider.featurePublished('nearby_paid'), isFalse);
     });
 
-    test('gateFeature sukses → true + refreshWallet', () async {
-      when(() => service.gateFeature(any(), priceFeature: any(named: 'priceFeature')))
-          .thenAnswer((_) async => {'ok': true});
-      when(() => service.getWallet()).thenAnswer(
-        (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 35},
-      );
-      final ok = await provider.gateFeature('nearby', priceFeature: 'nearby');
-      expect(ok, isTrue);
-      expect(provider.points, 35);
-    });
 
-    test('gateFeature error → rethrow', () async {
-      when(() => service.gateFeature(any(), priceFeature: any(named: 'priceFeature')))
-          .thenThrow(Exception('YukCoin tidak cukup'));
-      await expectLater(
-        provider.gateFeature('nearby'),
-        throwsA(isA<Exception>()),
-      );
-    });
 
     test('claimWelcomeBonus → coins + refreshWallet', () async {
       when(() => service.claimWelcomeBonus(

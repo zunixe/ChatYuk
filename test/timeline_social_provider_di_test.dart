@@ -4,10 +4,21 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
+import 'package:chatyuk/services/points_service.dart';
 import 'package:chatyuk/services/social_service.dart';
 import 'package:chatyuk/services/timeline_service.dart';
 
 import 'supabase_test_client.dart';
+
+class MockPointsService extends Mock implements PointsService {}
+
+/// PointsNotifier tanpa jaringan — `build()` tidak menembak RPC.
+class TestPoints extends PointsNotifier {
+  TestPoints(MockPointsService svc) : super(service: svc);
+  @override
+  PointsState build() => const PointsState();
+}
 
 /// Bukti DI provider Grup C: `SocialNotifier` & `TimelineNotifier` menerima
 /// service/client dari luar. Dengan `autoInit: false`, konstruksi tidak
@@ -51,6 +62,7 @@ void main() {
               autoInit: false,
             ),
           ),
+          pointsProvider.overrideWith(() => TestPoints(MockPointsService())),
         ],
       );
       addTearDown(container.dispose);
@@ -74,6 +86,7 @@ void main() {
               autoInit: false,
             ),
           ),
+          pointsProvider.overrideWith(() => TestPoints(MockPointsService())),
         ],
       );
       addTearDown(container.dispose);

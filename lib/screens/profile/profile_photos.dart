@@ -135,7 +135,9 @@ mixin _ProfilePhotosMx on _ProfileBase {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(s.extraPhotoBuy),
-        content: Text(s.yukcoinUseConfirmBody(pp.costExtraPhotoSlot)),
+        // 2026-10-31: slot foto GRATIS — jangan tampilkan harga (server
+        // tidak menagih; menampilkan harga menakuti user).
+        content: Text(s.extraPhotoFreeBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -536,29 +538,62 @@ mixin _ProfilePhotosMx on _ProfileBase {
                       onChanged: (v) => setSheet(() => error = null),
                     ),
                     const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: gender,
-                      hint: Text(
-                        profile.gender == 'female'
-                            ? s.labelGenderFemale
-                            : s.labelGenderMale,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: s.labelGenderFilter,
-                        prefixIcon: const Icon(Icons.wc_outlined, size: 20),
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'male',
-                          child: Text(s.labelGenderMale),
+                    if (profile.genderLocked)
+                      // Gender terkunci permanen → tampil read-only.
+                      InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: s.labelGenderFilter,
+                          prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                          suffixIcon: const Icon(
+                            Icons.lock,
+                            size: 16,
+                            color: Color(0xFF9E9E9E),
+                          ),
                         ),
-                        DropdownMenuItem(
-                          value: 'female',
-                          child: Text(s.labelGenderFemale),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              profile.gender == 'female'
+                                  ? s.labelGenderFemale
+                                  : s.labelGenderMale,
+                              style: AppText.bodyStrong
+                                  .copyWith(color: AppTheme.textPrimary),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              s.genderLockedNotice,
+                              style: AppText.caption
+                                  .copyWith(color: AppTheme.textSecondary),
+                            ),
+                          ],
                         ),
-                      ],
-                      onChanged: (v) => setSheet(() => gender = v),
-                    ),
+                      )
+                    else
+                      DropdownButtonFormField<String>(
+                        initialValue: gender,
+                        hint: Text(
+                          profile.gender == 'female'
+                              ? s.labelGenderFemale
+                              : s.labelGenderMale,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: s.labelGenderFilter,
+                          prefixIcon: const Icon(Icons.wc_outlined, size: 20),
+                        ),
+                        items: [
+                          DropdownMenuItem(
+                            value: 'male',
+                            child: Text(s.labelGenderMale),
+                          ),
+                          DropdownMenuItem(
+                            value: 'female',
+                            child: Text(s.labelGenderFemale),
+                          ),
+                        ],
+                        onChanged: (v) => setSheet(() => gender = v),
+                      ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<int>(
                       initialValue: age,
@@ -713,6 +748,18 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                   if (oke != true || !mounted) return;
                                 }
 
+                                // Gender berubah? Minta konfirmasi dulu —
+                                // setelah disimpan, gender terkunci permanen.
+                                if (gender != null &&
+                                    gender != profile.gender) {
+                                  if (!mounted) return;
+                                  final ok = await confirmGenderLock(
+                                    context,
+                                    gender: gender!,
+                                  );
+                                  if (!ok || !mounted) return;
+                                }
+
                                 setSheet(() => loading = true);
                                 try {
                                   await scope
@@ -740,9 +787,16 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                   }
                                   if (sheetCtx.mounted) Navigator.pop(sheetCtx);
                                   if (mounted) {
+                                    final genderChanged =
+                                        gender != null &&
+                                        gender != profile.gender;
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text(s.msgProfileSaved),
+                                        content: Text(
+                                          genderChanged
+                                              ? s.genderLockSaved
+                                              : s.msgProfileSaved,
+                                        ),
                                       ),
                                     );
                                     // Bonus profil DIHAPUS (tidak ada poin gratis).

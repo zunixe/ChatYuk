@@ -85,21 +85,21 @@ extension SDocsX on S {
   String get docsUserMissionsTitle =>
       isId ? '🏆 Top Aktif' : '🏆 Top Active';
   String get docsUserMissionsBody => isId
-      ? 'Adu aktif di papan peringkat.\n\n• Top Aktif: peringkat chat terseru minggu ini / sepanjang masa.\n• Ada juga Top Saldo di Profil (berbasis koin).'
+      ? 'Adu aktif di papan peringkat.\n\n• Top Aktif: peringkat chat terseru minggu ini / sepanjang masa.\n• Ada juga Top Saldo di Profil (berbasis YukCoin).'
       : 'Compete on the activity boards.\n\n• Top Active: chattiest ranking this week / all time.\n• There is also a Top Balance board in Profile (coin-based).';
 
   // ── PENGGUNA: Top up & riwayat ──
   String get docsUserTopupTitle =>
-      isId ? '💳 Top Up & Riwayat Koin' : '💳 Top-up & Coin History';
+      isId ? '💳 Top Up & Riwayat YukCoin' : '💳 Top-up & YukCoin History';
   String get docsUserTopupBody => isId
-      ? 'YukCoin = satu saldo untuk semua fitur berbayar.\n\n• Dapat dari: top up Google Play Billing (khusus build Play Store), bonus selamat datang user baru, dan pemasukan saat ditelepon.\n• Dipakai untuk: nelpon, filter gender, orang sekitar, undo/edit pesan, mode invisible, slot foto, buka foto, room, dan gift.\n• Katalog gift: Mawar 10, Kopi 25, Boneka 50, Kue 75, Berlian 150, Mahkota 300, Roket 500, Mobil Sport 1000.\n• Riwayat Koin mencatat semua masuk-keluar.'
+      ? 'YukCoin = satu saldo untuk semua fitur berbayar.\n\n• Dapat dari: top up Google Play Billing (khusus build Play Store), bonus selamat datang user baru, dan pemasukan saat ditelepon.\n• Dipakai untuk: nelpon (audio/video), match video, buka foto terkunci, room privat, dan gift. Filter gender, orang sekitar, undo/edit pesan, mode invisible, dan slot foto gratis.\n• Katalog gift: Mawar 10, Kopi 25, Boneka 50, Kue 75, Berlian 150, Mahkota 300, Roket 500, Mobil Sport 1000.\n• Riwayat YukCoin mencatat semua masuk-keluar.'
       : 'YukCoin = one balance for every paid feature.\n\n• Earned from: Google Play Billing top-up (Play Store build only), new-user welcome bonus, and income when called.\n• Spent on: calls, gender filter, nearby, undo/edit messages, invisible mode, photo slots, photo unlocks, rooms, and gifts.\n• Gift catalog: Rose 10, Coffee 25, Teddy 50, Cake 75, Diamond 150, Crown 300, Rocket 500, Sports Car 1000.\n• Coin History records every in and out.';
 
   // ── PENGGUNA: Profil ──
   String get docsUserProfileTitle =>
       isId ? '👤 Profil & Galeri' : '👤 Profile & Gallery';
   String get docsUserProfileBody => isId
-      ? 'Kartu identitasmu di ChatYuk.\n\n• Foto profil + galeri foto (bisa dikunci: orang lain bayar koin untuk buka).\n• Ganti username, status/about, umur, kota.\n• Lihat daftar langganan, permintaan teman, dan kontak.\n• Ganti bahasa Indonesia/English dan tema dari sini.'
+      ? 'Kartu identitasmu di ChatYuk.\n\n• Foto profil + galeri foto (bisa dikunci: orang lain bayar YukCoin untuk buka).\n• Ganti username, status/about, umur, kota.\n• Lihat daftar langganan, permintaan teman, dan kontak.\n• Ganti bahasa Indonesia/English dan tema dari sini.'
       : 'Your identity card in ChatYuk.\n\n• Profile photo + photo gallery (can be locked: others pay coins to unlock).\n• Change username, status/about, age, city.\n• See subscriptions, friend requests, and contacts.\n• Switch language (Indonesian/English) and theme from here.';
 
   // ── PENGGUNA: Privasi ──
@@ -132,7 +132,7 @@ extension SDocsX on S {
 
   // ── PENGGUNA: Fitur berbayar koin (undo/edit/ghost/slot) ──
   String get docsUserCoinFxTitle =>
-      isId ? '✨ Fitur Koin (Undo, Edit, Ghost, Slot)' : '✨ Coin Features (Undo, Edit, Ghost, Slots)';
+      isId ? '✨ Fitur YukCoin (Undo, Edit, Ghost, Slot)' : '✨ YukCoin Features (Undo, Edit, Ghost, Slots)';
   String get docsUserCoinFxBody => isId
       ? 'Beberapa aksi pintar memakai YukCoin (nominal diatur admin).\n\n• Undo: tarik kembali pesan yang baru dikirim.\n• Edit: perbaiki tulisan pesan yang sudah terkirim.\n• Mode Hantu (invisible): status online disembunyikan, tetap bisa chat — bayar per hari.\n• Slot Foto: tambah jatah slot di galeri profil (+5 slot).\n• Semua ini hanya muncul setelah admin mem-publish (YukCoin v2).'
       : 'Some smart actions cost YukCoin (rates set by the admin).\n\n• Undo: pull back a message just sent.\n• Edit: fix an already-sent message.\n• Ghost (invisible) mode: hide your online status while still chatting — paid daily.\n• Photo Slots: add gallery slots to your profile (+5 slots).\n• All of these appear only after the admin publishes them (YukCoin v2).';
@@ -190,7 +190,7 @@ extension SDocsX on S {
   String get docsDevEdgeTitle =>
       isId ? '⚡ Edge Functions' : '⚡ Edge Functions';
   String get docsDevEdgeBody => isId
-      ? 'Fungsi Deno di supabase/functions/ (autentikasi antar-layanan via header x-app-secret dari app_settings.app_shared_secret).\n\n• send-push & outbox-worker: kirim push FCM (worker menguras tabel outbox tiap menit).\n• ai-reply & ai-daily-life: balasan + cerita harian dummy AI.\n• welcome-bonus: klaim bonus anti-farming (cek IP server-side).\n• play-topup-verify: verifikasi pembelian Play Billing → kredit koin.\n• turn-credentials: kredensial TURN untuk call.\n• fanout & dummy-manage: kipas notifikasi topik & kelola dummy.\n• migrate-photos, admin-cf-usage, terms, r: utilitas (migrasi foto, kuota TURN, syarat, redirect share).'
+      ? 'Fungsi Deno di supabase/functions/ (autentikasi antar-layanan via header x-app-secret dari app_settings.app_shared_secret).\n\n• send-push & outbox-worker: kirim push FCM (worker menguras tabel outbox tiap menit).\n• ai-reply & ai-daily-life: balasan + cerita harian dummy AI.\n• welcome-bonus: klaim bonus anti-farming (cek IP server-side).\n• play-topup-verify: verifikasi pembelian Play Billing → kredit YukCoin.\n• turn-credentials: kredensial TURN untuk call.\n• fanout & dummy-manage: kipas notifikasi topik & kelola dummy.\n• migrate-photos, admin-cf-usage, terms, r: utilitas (migrasi foto, kuota TURN, syarat, redirect share).'
       : 'Deno functions in supabase/functions/ (service-to-service auth via x-app-secret header from app_settings.app_shared_secret).\n\n• send-push & outbox-worker: send FCM push (worker drains the outbox table every minute).\n• ai-reply & ai-daily-life: dummy-AI replies + daily stories.\n• welcome-bonus: anti-farming bonus claims (server-side IP check).\n• play-topup-verify: verify Play Billing purchases → credit coins.\n• turn-credentials: TURN credentials for calls.\n• fanout & dummy-manage: topic fan-out & dummy management.\n• migrate-photos, admin-cf-usage, terms, r: utilities (photo migration, TURN quota, terms, share redirect).';
 
   // ── DEV: Realtime ──
@@ -223,7 +223,7 @@ extension SDocsX on S {
 
   // ── DEV: Ekonomi ──
   String get docsDevEconomyTitle =>
-      isId ? '🪙 Mesin Ekonomi Koin' : '🪙 Coin Economy Engine';
+      isId ? '🪙 Mesin Ekonomi YukCoin' : '🪙 YukCoin Economy Engine';
   String get docsDevEconomyBody => isId
       ? 'Satu saldo coin_ledger (cache profiles.points); masuk hanya dari topup + welcome bonus + income call.\n\n• charge_metered(): potong + split generik (hanya service_role).\n• call_billing_tick(): tagih call per menit dari calls.answered_at (saldo tak bisa minus).\n• gate_feature(): akses harian (filter gender, nearby).\n• credit_welcome_bonus(): idempoten per install_id + limit IP/hari.\n• credit_play_topup(): hasil verifikasi Play Billing.\n• feature_enabled_for() / admin_set_feature_flag(): publish fitur ke user (sebelum publish hanya admin yang bisa pakai).'
       : 'One balance in coin_ledger (cached as profiles.points); inflow only from top-up + welcome bonus + call income.\n\n• charge_metered(): generic charge + split (service_role only).\n• call_billing_tick(): per-minute call billing from calls.answered_at (never negative).\n• gate_feature(): daily access (gender filter, nearby).\n• credit_welcome_bonus(): idempotent per install_id + IP/day limit.\n• credit_play_topup(): Play Billing verification result.\n• feature_enabled_for() / admin_set_feature_flag(): publish features to users (before publishing, only admins can use them).';
@@ -254,7 +254,7 @@ extension SDocsX on S {
       isId ? '🛠️ Admin Panel (modul ini)' : '🛠️ Admin Panel (this module)';
   String get docsDevAdminPanelBody => isId
       ? 'Panel admin hidup DI BUILD TERPISAH (flavor adminProd, appId .admin) dan ter-tree-shake dari APK rilis.\n\n• Entry: lib/main_admin.dart + AdminGate (lib/core/admin_gate.dart) — jembatan netral yang mengisi builder/provider admin; build user tidak pernah menyentuh kode admin.\n• UI: lib/screens/admin_panel_screen.dart (10 tab) + admin_*_tab.dart; provider lib/providers/admin_provider.dart (part-mixin providers/admin/*).\n• RPC admin (SECURITY DEFINER) hanya jalan untuk email admin tunggal (admin_gate.dart adminEmail) — anon/user biasa diblokir server.\n• Tab: Pengaturan Global, Ringkasan, Poin, Monitor Chat, Dummy (AI), Kontak, Perangkat, Terhapus, Atribusi, Dokumentasi.\n• Keamanan: clearAdminCache() menghapus cache PII (email/IP/device) bila HP dipakai bergantian.'
-      : 'The admin panel lives in a SEPARATE build (adminProd flavor, .admin appId) and is tree-shaken out of release APKs.\n\n• Entry: lib/main_admin.dart + AdminGate (lib/core/admin_gate.dart) — a neutral bridge wiring admin builders/providers; the user build never touches admin code.\n• UI: lib/screens/admin_panel_screen.dart (10 tabs) + admin_*_tab.dart; provider lib/providers/admin_provider.dart (part-mixin providers/admin/*).\n• Admin RPCs (SECURITY DEFINER) only run for the single admin email (admin_gate.dart adminEmail) — anon/regular users are blocked server-side.\n• Tabs: Global Setting, Overview, Points, Chat Monitor, Dummy (AI), Contact, Devices, Deleted, Attribution, Docs.\n• Security: clearAdminCache() wipes PII cache (email/IP/device) when the phone is shared.';
+      : 'The admin panel lives in a SEPARATE build (adminProd flavor, .admin appId) and is tree-shaken out of release APKs.\n\n• Entry: lib/main_admin.dart + AdminGate (lib/core/admin_gate.dart) — a neutral bridge wiring admin builders/providers; the user build never touches admin code.\n• UI: lib/screens/admin_panel_screen.dart (10 tabs) + admin_*_tab.dart; provider lib/providers/admin_provider.dart (part-mixin providers/admin/*).\n• Admin RPCs (SECURITY DEFINER) only run for the single admin email (admin_gate.dart adminEmail) — anon/regular users are blocked server-side.\n• Tabs: Global Setting, Overview, YukCoin, Chat Monitor, Dummy (AI), Contact, Devices, Deleted, Attribution, Docs.\n• Security: clearAdminCache() wipes PII cache (email/IP/device) when the phone is shared.';
 
   // ── DEV: Diagram / flow ──
   String get docsDevDiagramsTitle =>
@@ -421,7 +421,7 @@ extension SDocsX on S {
 
   // Diagram 5 — ekonomi koin
   String get docsDevCoinFlowTitle =>
-      isId ? 'Alur ekonomi koin (masuk → keluar)' : 'Coin economy flow (inflow → outflow)';
+      isId ? 'Alur ekonomi YukCoin (masuk → keluar)' : 'YukCoin economy flow (inflow → outflow)';
   String get docsDevCoinFlow => isId
       ? '        MASUK (inflow)                       KELUAR (outflow)\n'
           '   ┌──────────────────────┐        ┌──────────────────────────┐\n'

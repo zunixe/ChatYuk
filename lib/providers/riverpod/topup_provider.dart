@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/topup_service.dart';
+import 'points_provider.dart';
 
 /// Topup Play Billing (Riverpod) — action-only, wrapper [TopupService].
 /// Fase B boundary: screen topup dilarang import services/ langsung.
@@ -16,4 +17,12 @@ class TopupNotifier {
   Future<void> buy(String productId) => service.buy(productId);
 }
 
-final topupProvider = Provider<TopupNotifier>((_) => TopupNotifier());
+final topupProvider = Provider<TopupNotifier>((ref) {
+  final n = TopupNotifier();
+  // Koin sukses di-credit server → segarkan saldo (kartu YukCoin, counter
+  // call). Dulu callback ini TIDAK PERNAH di-wire → saldo stale setelah
+  // beli koin sampai ada refresh lain.
+  n.service.onCredited = (_) =>
+      ref.read(pointsProvider.notifier).refreshWallet();
+  return n;
+});

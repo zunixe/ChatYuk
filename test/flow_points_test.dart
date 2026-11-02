@@ -23,7 +23,6 @@ void main() {
 
   MockPointsService newService({required bool enabled}) {
     final service = MockPointsService();
-    when(() => service.oneTimeBonus(any(), any())).thenAnswer((_) async => 999);
     when(() => service.watchOwnPoints()).thenAnswer((_) => Stream<int>.empty());
     when(() => service.getWallet()).thenAnswer(
       (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 50},
@@ -74,7 +73,6 @@ void main() {
 
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
-    verifyNever(() => service.oneTimeBonus(any(), any()));
     c.dispose();
   });
 
@@ -87,7 +85,6 @@ void main() {
 
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
-    verifyNever(() => service.oneTimeBonus(any(), any()));
     c.dispose();
   });
 }

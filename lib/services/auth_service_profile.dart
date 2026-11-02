@@ -78,6 +78,9 @@ mixin AuthServiceProfileMx on AuthBase {
       // User menyelesaikan isi profil → tandai onboarding selesai (gerbang
       // root tak lagi mengarahkan ke EntryScreen untuk sesi anon ini).
       'needs_onboarding': false,
+      // Gender dipilih SEKALI saat registrasi → langsung terkunci.
+      // Trigger `guard_gender_lock` menegakkan ini di server.
+      'gender_locked': true,
       'login_at': now.toUtc().toIso8601String(),
       'created_at': now.toUtc().toIso8601String(),
       'last_seen': now.toUtc().toIso8601String(),

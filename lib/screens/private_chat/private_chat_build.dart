@@ -529,8 +529,6 @@ mixin _PcBuildMx on _PrivateChatBase {
       context,
       pointsEnabled: points.enabled,
       paidBalance: points.paidBalance,
-      bonusBalance: points.bonusBalance,
-      bonusMultiplier: points.bonusMultiplier,
     );
     if (gift != null && mounted) {
       setState(() => _showAttachRow = false);

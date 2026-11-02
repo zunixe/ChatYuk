@@ -12,6 +12,7 @@ export '../../services/call/call_session.dart'
     show CallSession, CallPhase, CallEndReason, CallEndReasonMessage;
 import '../../services/call_notification.dart';
 import '../../services/call/call_ui_factory.dart';
+import 'points_provider.dart';
 import '../../utils.dart';
 
 enum CallMode { fullscreen, chat }
@@ -19,6 +20,12 @@ enum CallMode { fullscreen, chat }
 /// Nama rute terdaftar di navigator — dipakai RouteTracker supaya banner
 /// call & handler notifikasi tidak menumpuk layar chat/call duplikat.
 const String kCallScreenRoute = 'call-screen';
+
+/// Prefix penanda `activeChatId` untuk call RANDOM: `random_<callId>` —
+/// bukan chat 1:1 asli. Dipakai `ensureCallScreenRoute` & CallBanner untuk
+/// memilih `RandomCallScreen` (bukan `CallScreen`) saat membuka ulang
+/// layar call yang masih hidup.
+const String kRandomChatIdPrefix = 'random_';
 
 String privateChatRoute(String chatId) => 'private-chat:$chatId';
 
@@ -121,8 +128,9 @@ class CallState {
   bool get inCall => activeCallId != null;
 }
 
-class CallNotifier extends Notifier<CallState> {
+class CallNotifier extends Notifier<CallState> with WidgetsBindingObserver {
   var _disposed = false;
+  var _observerAdded = false;
 
   static CallUi _ui = createCallUi();
 
@@ -136,6 +144,14 @@ class CallNotifier extends Notifier<CallState> {
   @override
   CallState build() {
     ref.onDispose(_disposeAll);
+    // Observer lifecycle: video call beku setelah minimize→buka (Android
+    // melepas sink frame/kamera saat background) → segarkan renderer saat
+    // resume. Satu observer di provider = mencakup CallScreen,
+    // RandomCallScreen & overlay video chat sekaligus.
+    if (!_observerAdded) {
+      _observerAdded = true;
+      WidgetsBinding.instance.addObserver(this);
+    }
     _ui.onAccept = (callId) => _onSystemAccept(callId);
     _ui.onDecline = (callId) => _onSystemDecline(callId);
     _ui.onEnd = (callId) => _onSystemEnd(callId);
@@ -540,6 +556,10 @@ class CallNotifier extends Notifier<CallState> {
     _notifChannel = notifChannel;
     _notifDesc = notifDesc;
     session.addListener(_onActiveSession);
+    // Billing tick mengembalikan saldo sisa → counter/kartu YukCoin ikut
+    // live selama panggilan (tanpa RPC tambahan — tick sudah memuatnya).
+    session.onBalanceUpdate = (total) =>
+        ref.read(pointsProvider.notifier).setPoints(total);
     unawaited(session.init());
     // UI sistem: pindah dari "ringing" ke "in-call" (durasi/tombol end).
     unawaited(CallNotifier.callUi.setConnected(callId));
@@ -594,8 +614,25 @@ class CallNotifier extends Notifier<CallState> {
     } catch (_) {}
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Resume setelah minimize: Android melepas sink frame renderer &
+    // mem-pause kamera → video membeku di frame terakhir walau call masih
+    // hidup. Re-assign srcObject + aktifkan ulang track kamera.
+    final sess = _activeSession;
+    if (state == AppLifecycleState.resumed &&
+        sess != null &&
+        sess.callType == 'video') {
+      unawaited(sess.refreshVideoAfterResume());
+    }
+  }
+
   void _disposeAll() {
     _disposed = true;
+    if (_observerAdded) {
+      _observerAdded = false;
+      WidgetsBinding.instance.removeObserver(this);
+    }
     _incomingSub?.cancel();
     _incomingSub = null;
     _authSub?.cancel();

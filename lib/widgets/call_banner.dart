@@ -9,6 +9,7 @@ import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import 'chat_route.dart';
 import '../screens/call_screen.dart';
+import '../screens/random_call_screen.dart';
 import '../utils.dart';
 
 class CallBanner extends ConsumerStatefulWidget {
@@ -60,6 +61,12 @@ class _CallBannerState extends ConsumerState<CallBanner> {
   ) {
     if (sess == null) return false;
     if (sess.phase == CallPhase.ended) return false;
+    // Call random (match): layar call satu-satunya permukaan — back sudah
+    // lewat konfirmasi & mengakhiri call. Banner hijau di atas radar
+    // membingungkan (user minta dihilang).
+    if (chatId != null && chatId.startsWith(kRandomChatIdPrefix)) {
+      return false;
+    }
     // CallScreen fullscreen sedang terbuka → panggilan sudah terlihat penuh,
     // banner hanya menghalangi (dan tap-nya bisa menumpuk layar duplikat).
     if (routeTracker.contains(kCallScreenRoute)) return false;
@@ -96,18 +103,24 @@ class _CallBannerState extends ConsumerState<CallBanner> {
         ),
       ).then((_) => releaseNav(navKey));
     } else if (!routeTracker.contains(kCallScreenRoute)) {
+      // Call random → RandomCallScreen (ada Next/partner); CallScreen 1:1
+      // untuk sesi yang sama membuat user melihat DUA UI call berbeda.
+      final isRandom =
+          (chatId ?? '').startsWith(kRandomChatIdPrefix);
       nav.push(
         MaterialPageRoute(
           fullscreenDialog: true,
           settings: const RouteSettings(name: kCallScreenRoute),
-          builder: (_) => CallScreen(
-            callId: sess.callId,
-            remoteUid: sess.remoteUid,
-            remoteName: sess.remoteName,
-            callType: sess.callType,
-            isCaller: sess.isCaller,
-            session: sess,
-          ),
+          builder: (_) => isRandom
+              ? const RandomCallScreen()
+              : CallScreen(
+                  callId: sess.callId,
+                  remoteUid: sess.remoteUid,
+                  remoteName: sess.remoteName,
+                  callType: sess.callType,
+                  isCaller: sess.isCaller,
+                  session: sess,
+                ),
         ),
       );
     }

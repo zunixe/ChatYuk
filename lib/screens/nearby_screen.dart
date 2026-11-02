@@ -8,7 +8,6 @@ import 'nearby/widgets/nearby_card.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../providers/riverpod/points_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/nav_guard.dart';
 
@@ -167,16 +166,9 @@ class _NearbyScreenState extends ConsumerState<NearbyScreen> {
         await Future.delayed(const Duration(milliseconds: 350) - elapsed);
       }
       if (!mounted) return;
+      // Catatan: penanganan "YukCoin tidak cukup" untuk Orang Sekitar
+      // dihapus — fitur ini gratis sejak overhaul koin (2026-10-31).
       final msg = e.toString().toLowerCase();
-      // Koin habis untuk Orang Sekitar (berbayar harian) → dialog topup.
-      if (msg.contains('yukcoin tidak cukup') || msg.contains('not enough')) {
-        setState(() => _loading = false);
-        ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).showOutOfPointsDialog(
-              context,
-              ProviderScope.containerOf(context, listen: false).read(localeProvider).s.isId,
-            );
-        return;
-      }
       setState(() {
         _loading = false;
         _error = msg.contains('share required')

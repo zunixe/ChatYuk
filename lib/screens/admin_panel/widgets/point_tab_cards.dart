@@ -233,7 +233,7 @@ class PointSettingsCard extends StatelessWidget {
   final S s;
   final bool loaded;
   final TextEditingController shareCtrl;
-  final List<(String, String)> fields;
+  final List<String> fields;
   final Map<String, TextEditingController> ctrls;
   final Map<String, bool> flags;
   final void Function(String key, bool value) onFlagChanged;
@@ -330,7 +330,7 @@ class PointSettingsCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    f.$2,
+                    s.adminPointFieldLabel(f),
                     style: AppText.bodySmall.copyWith(
                       color: AppTheme.textPrimary,
                     ),
@@ -339,7 +339,7 @@ class PointSettingsCard extends StatelessWidget {
                 SizedBox(
                   width: 72,
                   child: TextField(
-                    controller: ctrls[f.$1],
+                    controller: ctrls[f],
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
                     style: AppText.bodyStrong,
@@ -465,6 +465,7 @@ class _FeaturePublishCardState extends State<FeaturePublishCard> {
 
   List<(String, String)> get _items => [
     ('call_billing', widget.s.adminFlagCallBilling),
+    ('random_call', widget.s.adminFlagRandomCall),
     ('gender_filter_paid', widget.s.adminFlagGenderFilter),
     ('nearby_paid', widget.s.adminFlagNearby),
     ('play_topup', widget.s.adminFlagPlayTopup),

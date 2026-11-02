@@ -11,6 +11,7 @@ import '../providers/riverpod/points_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/call/call_permissions.dart';
 import '../utils.dart';
+import '../widgets/call_no_coin_dialog.dart';
 import '../widgets/call_control_button.dart';
 import '../widgets/profile_avatar.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -175,11 +176,84 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     }
   }
 
+  /// Menit panggilan yang SUDAH dikirim ke misi (dasar hitung delta).
+  int _missionCallMinutesSent = 0;
+  /// Misi "Panggilan Pribadi" sudah dicatat untuk sesi ini?
+  bool _missionPrivateCounted = false;
+
+  bool _noCoinDialogShown = false;
+
+  /// Koin habis di tengah panggilan → jeda + dialog lanjut/top-up.
+  void _checkNoCoin() {
+    if (!_session.awaitingContinue || _noCoinDialogShown) return;
+    _noCoinDialogShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final s = ref.read(localeProvider).s;
+      // Batas gratis female habis → top-up tak bisa melanjutkan: Akhiri saja.
+      if (_session.billingPauseReason == 'free_limit') {
+        await showCallFreeLimitDialog(
+          context,
+          limitMin: _session.billingFreeLimitMin,
+          onEnd: () {
+            _noCoinDialogShown = false;
+            _session.endCallNoCoin();
+          },
+        );
+        return;
+      }
+      final perMin =
+          _session.billingPerMinute > 0 ? _session.billingPerMinute : 20;
+      await showCallNoCoinDialog(
+        context,
+        perMinute: perMin,
+        onEnd: () {
+          _noCoinDialogShown = false;
+          _session.endCallNoCoin();
+        },
+        onContinue: () async {
+          _noCoinDialogShown = false;
+          final ok = await _session.resumeBillingAfterTopup();
+          if (!ok && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(s.callNoCoinStillEmpty)),
+            );
+          }
+        },
+      );
+    });
+  }
+
   void _tick() {
+    _checkNoCoin();
     final start = _session.connectedAt;
     if (start == null) return;
     final t = formatMmSs(DateTime.now().difference(start).inSeconds);
     if (_elapsed.value != t) _elapsed.value = t;
+    _trackCallMissions();
+  }
+
+  /// Kirim menit panggilan ke misi — hanya DELTA yang belum dikirim.
+  void _trackCallMissions() {
+    final start = _session.connectedAt;
+    if (start == null) return;
+    final pp = ProviderScope.containerOf(context, listen: false)
+        .read(pointsProvider.notifier);
+
+    // Hitung sekali per sesi: panggilan 1:1 (bukan random match).
+    if (!_missionPrivateCounted) {
+      _missionPrivateCounted = true;
+      pp.trackMission('private_calls');
+    }
+
+    final totalMinutes =
+        DateTime.now().difference(start).inSeconds ~/ 60;
+    final delta = totalMinutes - _missionCallMinutesSent;
+    if (delta <= 0) return;
+    _missionCallMinutesSent = totalMinutes;
+
+    pp.trackMission('call_minutes', increment: delta);
+    pp.trackMission('daily_private_call_duration', increment: delta);
   }
 
   /// Kecilkan video ke overlay dalam chat: pindahkan mode ke chat lalu

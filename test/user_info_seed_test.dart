@@ -99,7 +99,6 @@ void main() {
         .thenAnswer((_) => Stream<int>.empty());
     when(() => pointsSvc.meteredPricing()).thenAnswer((_) async => {});
     when(() => pointsSvc.featureFlags()).thenAnswer((_) async => {});
-    when(() => pointsSvc.photoCosts()).thenAnswer((_) async => (5, 20));
     // subscribeOwnPoints() → refreshWallet() memanggil getWallet +
     // yukcoinV2Status; tanpa stub → error type-NoSuchMethod (noise log).
     when(() => pointsSvc.getWallet()).thenAnswer((_) async => {});

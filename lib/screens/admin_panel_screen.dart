@@ -19,6 +19,7 @@ import 'admin_room_list_screen.dart';
 import 'admin_contact_tab.dart';
 import 'admin_devices_tab.dart';
 import 'admin_deleted_tab.dart';
+import 'admin_withdraw_tab.dart';
 import 'admin_dummy_tab.dart';
 import 'admin_global_setting_tab.dart';
 import 'admin_attribution_tab.dart';
@@ -55,6 +56,7 @@ enum _AdminTab {
   globalSetting,
   overview,
   point,
+  withdraw,
   chatMonitor,
   roomMonitor,
   dummy,
@@ -96,45 +98,48 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
   // Toggle boolean (Switch) pengaturan YukCoin.
   final Map<String, bool> _pointFlags = {};
 
-  // Urutan & label field pengaturan YukCoin (selaras app_settings live).
-  // Semua nilai bertipe int kecuali yang ditandai (bool/url ditangani terpisah).
-  // Label bilingual via `s.` (AGENTS.md: tak boleh hardcode Indonesia).
-  static const List<(String, String)> _pointFields = [
+  // Urutan field pengaturan YukCoin (key = kolom app_settings live).
+  // Semua nilai bertipe int (bool/url ditangani terpisah).
+  // Label bilingual via `s.adminPointFieldLabel(key)` di strings_admin.dart.
+  // Field mati DIHAPUS (fiturnya gratis/no-op di server):
+  // filter_gender_cost, nearby_cost, cost_chat_text, room_join_paid,
+  // cost_undo_message, cost_edit_message, cost_extra_photo_slot,
+  // cost_ghost_mode_daily.
+  static const List<String> _pointFields = [
     // ── Call berbayar (per menit) ──
-    ('call_audio_cost_per_min', 'Call audio — koin / menit'),
-    ('call_video_cost_per_min', 'Call video — koin / menit'),
-    ('call_cut_pct', 'Bagian platform dari call (%)'),
-    // ── Filter gender & orang sekitar (per hari) ──
-    ('filter_gender_cost', 'Filter gender (koin / hari)'),
-    ('nearby_cost', 'Orang sekitar (koin / hari)'),
-    // ── YukCoin v2 (fitur koin generik) ──
-    ('cost_undo_message', 'Hapus pesan (undo)'),
-    ('cost_edit_message', 'Edit pesan'),
-    ('cost_extra_photo_slot', 'Slot foto tambahan'),
-    ('cost_ghost_mode_daily', 'Mode invisible (per hari)'),
-    // ── Foto berbayar ──
-    ('photo_upload_reward', 'Reward upload foto'),
-    ('photo_unlock_once', 'Buka foto: lihat sekali'),
-    ('photo_unlock_perm', 'Buka foto: permanen'),
-    ('photo_unlock_owner_pct', '% ke pemilik foto'),
-    // ── Biaya chat ──
-    ('cost_chat_text', 'Biaya kirim teks'),
-    ('cost_chat_image', 'Biaya kirim foto'),
-    ('cost_view_once', 'Biaya kirim view-once'),
-    // ── Room berbayar ──
-    ('room_create_paid', 'Buat room'),
-    ('room_create_pw_paid', 'Buat room +password'),
-    ('room_join_paid', 'Join room'),
-    ('room_extend_paid', 'Perpanjang room'),
-    ('bonus_price_multiplier', 'Pengali harga tier bonus'),
+    'call_audio_cost_per_min',
+    'call_video_cost_per_min',
+    'call_cut_pct',
+    // ── Biaya chat (teks gratis — hanya lampiran berbayar) ──
+    // (Field foto DIHAPUS 2026-11-01/02: unlock_photo dicabut dan
+    //  reward_photo_slot no-op → photo_upload_reward &
+    //  photo_unlock_owner_pct tidak berpengaruh apa pun.)
+    'cost_chat_image',
+    'cost_view_once',
+    // ── Room berbayar (join gratis — hanya buat/perpanjang) ──
+    'room_create_paid',
+    'room_create_pw_paid',
+    'room_extend_paid',
+    'bonus_price_multiplier',
     // ── Gift & subscribe ──
-    ('gift_cut_pct', 'Potongan platform gift (%)'),
-    ('subscribe_cut_pct', 'Potongan subscribe (%)'),
-    ('subscription_duration_days', 'Durasi subscribe (hari)'),
+    'gift_cut_pct',
+    'subscribe_cut_pct',
+    'subscription_duration_days',
     // ── Welcome bonus user baru (anti-farming per install/IP) ──
-    ('welcome_anon_coins', 'Welcome bonus — anon'),
-    ('welcome_register_coins', 'Welcome bonus — register email'),
-    ('welcome_max_claims_per_ip_day', 'Maks klaim welcome / IP / hari'),
+    'welcome_anon_coins',
+    'welcome_register_coins',
+    'welcome_max_claims_per_ip_day',
+    // ── Withdraw (tarik saldo ke DANA) ──
+    'withdraw_rate_idr',
+    'withdraw_min_coins',
+    'withdraw_fee_pct',
+    'withdraw_fee_min_idr',
+    'withdraw_max_per_day',
+    'withdraw_min_interval_hours',
+    'withdraw_min_account_age_hours',
+    'female_free_call_min_per_day',
+    // ── Anti-fraud ──
+    'coin_tx_max_per_hour',
   ];
 
   // Field boolean (Switch) — ditangani terpisah dari field int.
@@ -147,7 +152,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _tabCtrl = TabController(length: 14, vsync: this);
+    _tabCtrl = TabController(length: 15, vsync: this);
     _tabCtrl.addListener(_onTabChanged);
     final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(() => admin.fetchStats());
@@ -272,7 +277,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
     try {
       final data = await ProviderScope.containerOf(context, listen: false).read(adminProvider).getPointSettings();
       for (final f in _pointFields) {
-        _pointCtrls[f.$1] = TextEditingController(text: '${data[f.$1] ?? ''}');
+        _pointCtrls[f] = TextEditingController(text: '${data[f] ?? ''}');
       }
       for (final key in _pointBoolFields) {
         _pointFlags[key] = data[key] == true;
@@ -428,6 +433,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
         _AdminTab.globalSetting => s.adminGlobalSettingTab,
         _AdminTab.overview => s.adminOverview,
         _AdminTab.point => s.adminPointTab,
+        _AdminTab.withdraw => s.adminWithdrawTab,
         _AdminTab.chatMonitor => s.adminChatMonitor,
         _AdminTab.roomMonitor => s.adminRoomMonitor,
         _AdminTab.dummy => s.adminDummyTab,
@@ -458,6 +464,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
               return _buildPointTab(ap, s, ap.stats);
             },
           ),
+        _AdminTab.withdraw => const AdminWithdrawTab(),
         _AdminTab.chatMonitor => const AdminChatListScreen(),
         _AdminTab.roomMonitor => const AdminRoomListScreen(),
         _AdminTab.dummy => const AdminDummyTab(),

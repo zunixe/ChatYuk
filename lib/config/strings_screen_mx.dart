@@ -145,6 +145,7 @@ mixin SScreenMx {
     }
   }
   String get joinRoomTitle => isId ? 'Masuk Room' : 'Join Room';
+  String get labelFree => isId ? 'Gratis' : 'Free';
   String joinRoomCost(int c) =>
       isId ? 'Biaya masuk: $c YukCoin' : 'Entry cost: $c YukCoin';
   String get enterPassword => isId ? 'Masukkan password' : 'Enter password';
@@ -187,6 +188,12 @@ mixin SScreenMx {
       isId ? 'Aksi grup gagal. Coba lagi.' : 'Group action failed. Try again.';
   String get roomExtended =>
       isId ? 'Room diperpanjang 7 hari' : 'Room extended by 7 days';
+  String get roomExtendTitle =>
+      isId ? 'Perpanjang room?' : 'Extend room?';
+  String roomExtendCost(int coins) => isId
+      ? 'Perpanjang 7 hari memotong $coins YukCoin. Lanjutkan?'
+      : 'Extending by 7 days costs $coins YukCoin. Continue?';
+  String get btnContinue => isId ? 'Lanjutkan' : 'Continue';
   String roomExpiresIn(int days) => isId ? '$days hari lagi' : '${days}d left';
   String get roomExpiresToday => isId ? 'Berakhir hari ini' : 'Ends today';
 
@@ -251,9 +258,12 @@ mixin SScreenMx {
   String get coinAmountLabel => isId ? 'Jumlah YukCoin' : 'YukCoin amount';
   String get coinAmountHint =>
       isId ? 'Ketik jumlah sendiri' : 'Type your own amount';
-  String get coinDialogHelper =>
-      isId ? 'Minimal 5, maksimal saldo kamu' : 'Minimum 5, up to your balance';
+  String get coinDialogHelper => isId
+      ? 'Minimal 5, maksimal 1000 per kirim'
+      : 'Minimum 5, maximum 1000 per send';
   String get errCoinMin => isId ? 'Minimal 5 YukCoin' : 'Minimum 5 YukCoin';
+  String get errCoinMax =>
+      isId ? 'Maksimal 1000 YukCoin per kirim' : 'Maximum 1000 YukCoin per send';
   String get errCoinInsufficient =>
       isId ? 'YukCoin kamu tidak cukup' : 'Not enough YukCoin';
   String get errCoinRegisterOnly => isId
@@ -478,7 +488,7 @@ mixin SScreenMx {
   String get previewSticker => isId ? '[Stiker]' : '[Sticker]';
   String get previewVoice => isId ? '[Pesan suara]' : '[Voice message]';
   String get previewVideo => isId ? '[Video]' : '[Video]';
-  String get previewCoin => isId ? '[Koin]' : '[Coin]';
+  String get previewCoin => isId ? '[YukCoin]' : '[YukCoin]';
   String get previewGift => isId ? '[Hadiah]' : '[Gift]';
   String get previewLocation => isId ? '[Lokasi]' : '[Location]';
   // ── Kirim Lokasi (ala WhatsApp) ──

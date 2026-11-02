@@ -13,6 +13,8 @@ import 'package:chatyuk/models/auth_data.dart';
 import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
 import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
+import 'package:chatyuk/services/points_service.dart';
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/social_service.dart';
@@ -43,6 +45,15 @@ class TestSocial extends SocialNotifier {
   TestSocial(this.preset);
   @override
   SocialState build() => preset;
+}
+
+class MockPointsService extends Mock implements PointsService {}
+
+/// PointsNotifier tanpa jaringan — `build()` tidak menembak RPC.
+class TestPoints extends PointsNotifier {
+  TestPoints(MockPointsService svc) : super(service: svc);
+  @override
+  PointsState build() => const PointsState();
 }
 
 Map<String, dynamic> _post({
@@ -131,6 +142,7 @@ void main() {
         timelineProvider.overrideWith(
           () => TimelineNotifier(service: timeline, autoInit: false),
         ),
+        pointsProvider.overrideWith(() => TestPoints(MockPointsService())),
         authProvider.overrideWith(() => TestAuth(auth)),
       ],
     );

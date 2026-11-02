@@ -594,26 +594,6 @@ mixin ChatServiceRoomMx on ChatBase {
     }
   }
 
-  /// Kirim hadiah di room (live) ke host/owner. Server memotong koin
-  /// pengirim (bucket bonus→topup→earned), ambil platform cut, kredit
-  /// net ke owner, lalu insert pesan bukti type='gift' di room feed.
-  /// Return {ok, points, gift, qty, gross, net, cut}.
-  Future<Map<String, dynamic>> sendRoomGift(
-    String roomId,
-    String giftId, {
-    int qty = 1,
-  }) async {
-    final res = await measuredRpc(_sb, 
-      'send_room_gift',
-      params: {
-        'p_room_id': roomId,
-        'p_gift_id': giftId,
-        'p_qty': qty,
-      },
-    );
-    return res is Map ? Map<String, dynamic>.from(res) : {};
-  }
-
   /// Broadcast ringan `view_once_seen` ke kanal STREAM penerima chat/room —
   /// dipakai sebagai penanda realtime ke PENGIRIM tanpa menunggu event UPDATE
   /// postgres (yang bisa telat/terlewat di MIUI/Doze).

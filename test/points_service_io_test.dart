@@ -10,18 +10,6 @@ import 'supabase_test_client.dart';
 /// crash"). Semua nilai return di-stub agar jalur parsing juga teruji.
 void main() {
   group('PointsService (I/O palsu)', () {
-    test('oneTimeBonus: RPC one_time_bonus + action_key/bonus', () async {
-      final handler = FakeSupabaseHandler();
-      handler.on('/rest/v1/rpc/one_time_bonus', (_) => 999);
-      final svc = PointsService(fakeSupabaseClient(handler: handler));
-
-      final result = await svc.oneTimeBonus('online_5min', 5);
-
-      expect(result, 999);
-      final params = rpcParamsOf(handler, 'one_time_bonus');
-      expect(params['action_key'], 'online_5min');
-      expect(params['bonus'], 5);
-    });
 
     test('dailyLoginBonus: RPC + parsing map', () async {
       final handler = FakeSupabaseHandler();
@@ -38,21 +26,6 @@ void main() {
       rpcRequestOf(handler, 'daily_login_bonus');
     });
 
-    test('unlockPhoto: p_photo_id + p_mode terkirim', () async {
-      final handler = FakeSupabaseHandler();
-      handler.on(
-        '/rest/v1/rpc/unlock_photo',
-        (_) => {'ok': true, 'points': 45, 'mode': 'once'},
-      );
-      final svc = PointsService(fakeSupabaseClient(handler: handler));
-
-      final res = await svc.unlockPhoto('photo-1', 'once');
-
-      expect(res['ok'], isTrue);
-      final params = rpcParamsOf(handler, 'unlock_photo');
-      expect(params['p_photo_id'], 'photo-1');
-      expect(params['p_mode'], 'once');
-    });
 
     test('leaderboard offset 0: row_offset TIDAK dikirim', () async {
       final handler = FakeSupabaseHandler();

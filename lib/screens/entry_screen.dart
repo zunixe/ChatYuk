@@ -15,6 +15,7 @@ import 'donate_screen.dart';
 import 'legal_screen.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../widgets/profile_form_card.dart';
+import '../widgets/gender_lock_dialog.dart';
 import '../widgets/auth_header.dart';
 import '../providers/riverpod/location_provider.dart';
 
@@ -213,6 +214,14 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
       _nicknameFocus.requestFocus();
       return;
     }
+
+    // Konfirmasi gender — dipilih SEKALI, terkunci permanen di server.
+    final genderOk = await confirmGenderLock(
+      context,
+      gender: _gender,
+      isRegister: true,
+    );
+    if (!genderOk || !mounted) return;
 
     _entered = true;
     setState(() => _loading = true);

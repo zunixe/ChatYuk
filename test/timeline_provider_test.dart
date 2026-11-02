@@ -3,9 +3,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
+import 'package:chatyuk/services/points_service.dart';
 import 'package:chatyuk/services/timeline_service.dart';
 
 import 'test_helper.dart';
+
+class MockPointsService extends Mock implements PointsService {}
+
+/// PointsNotifier tanpa jaringan — `build()` tidak menembak RPC.
+class TestPoints extends PointsNotifier {
+  TestPoints(MockPointsService svc) : super(service: svc);
+  @override
+  PointsState build() => const PointsState();
+}
 
 class MockTimelineService extends Mock implements TimelineService {}
 
@@ -51,6 +62,7 @@ void main() {
     final c = ProviderContainer(overrides: [
       timelineProvider.overrideWith(
           () => TimelineNotifier(service: service, autoInit: false)),
+      pointsProvider.overrideWith(() => TestPoints(MockPointsService())),
     ]);
     addTearDown(c.dispose);
     await c.read(timelineProvider.notifier).createPost(

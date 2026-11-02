@@ -10,7 +10,7 @@ import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../services/random_match_service.dart';
+import '../providers/riverpod/random_match_provider.dart';
 import '../utils.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../widgets/chat_route.dart';
@@ -60,7 +60,9 @@ class _RandomCallHistoryScreenState
   }
 
   Future<void> _load() async {
-    final rows = await RandomMatchService.instance.history(limit: _pageSize);
+    final rows = await ref
+        .read(randomMatchProvider.notifier)
+        .history(limit: _pageSize);
     if (!mounted) return;
     setState(() {
       _items
@@ -74,10 +76,9 @@ class _RandomCallHistoryScreenState
   Future<void> _loadMore() async {
     if (_loading || !_hasMore || _busy) return;
     _busy = true;
-    final rows = await RandomMatchService.instance.history(
-      limit: _pageSize,
-      offset: _items.length,
-    );
+    final rows = await ref
+        .read(randomMatchProvider.notifier)
+        .history(limit: _pageSize, offset: _items.length);
     if (!mounted) return;
     setState(() {
       _items.addAll(rows);

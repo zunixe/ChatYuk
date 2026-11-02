@@ -50,6 +50,8 @@ class _PProfileBody extends StatefulWidget {
   final VoidCallback onBlock;
   final VoidCallback onReport;
   final int galleryCount;
+  /// Badge level (male) — widget jadi dari pemanggil (Consumer), null = tanpa.
+  final Widget? levelBadge;
 
   const _PProfileBody({
     required this.name,
@@ -80,6 +82,7 @@ class _PProfileBody extends StatefulWidget {
     required this.isSelf,
     required this.canCall,
     required this.s,
+    this.levelBadge,
     required this.onCall,
     required this.onMessage,
     required this.onAddFriend,
@@ -476,6 +479,7 @@ class _PProfileBodyState extends State<_PProfileBody> {
                                 color: PColors.accent,
                               ),
                             ],
+                            if (widget.levelBadge != null) widget.levelBadge!,
                           ],
                         ),
                         const SizedBox(height: 6),

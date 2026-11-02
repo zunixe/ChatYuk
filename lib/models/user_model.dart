@@ -29,6 +29,10 @@ class UserModel {
   /// Nomor HP (Pengaturan › Akun). '' = belum diisi.
   final String phone;
 
+  /// Gender sudah dipilih sekali & terkunci permanen (tidak bisa diubah).
+  /// Dijaga trigger DB `guard_gender_lock`.
+  final bool genderLocked;
+
   /// Profil dibuat otomatis (trigger `handle_new_user_profile`) dan user
   /// BELUM menyelesaikan isi nickname. Dipakai gerbang root supaya user
   /// anon baru tetap diarahkan ke EntryScreen (bukan langsung masuk).
@@ -62,6 +66,7 @@ class UserModel {
     this.birthDate,
     this.phone = '',
     this.needsOnboarding = false,
+    this.genderLocked = false,
   });
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -94,6 +99,8 @@ class UserModel {
       birthDate: _parseBirthDate(map['birthDate'] ?? map['birth_date']),
       phone: map['phone'] ?? '',
       needsOnboarding: map['needsOnboarding'] == true,
+      genderLocked: map['genderLocked'] == true ||
+          map['gender_locked'] == true,
     );
   }
 
@@ -130,6 +137,7 @@ class UserModel {
       'birthDate': birthDate?.toIso8601String(),
       'phone': phone,
       'needsOnboarding': needsOnboarding,
+      'genderLocked': genderLocked,
     };
   }
 
@@ -157,6 +165,7 @@ class UserModel {
     DateTime? birthDate,
     String? phone,
     bool? needsOnboarding,
+    bool? genderLocked,
   }) {
     return UserModel(
       uid: uid,
@@ -185,6 +194,7 @@ class UserModel {
       birthDate: birthDate ?? this.birthDate,
       phone: phone ?? this.phone,
       needsOnboarding: needsOnboarding ?? this.needsOnboarding,
+      genderLocked: genderLocked ?? this.genderLocked,
     );
   }
 

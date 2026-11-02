@@ -87,6 +87,11 @@ abstract class _CallBase extends ChangeNotifier {
   StreamSubscription<String>? _statusSub;
   Timer? _ringTimer;
   Timer? _syncTimer;
+  /// Pengawas cepat fase: sebagian device (dilaporkan di Xiaomi) tidak
+  /// memanggil onConnectionState/onIceConnectionState walau media sudah
+  /// mengalir → layar tertahan "Menyambungkan…" sampai sync 12 dtk.
+  /// Cek `pc.connectionState` langsung tiap 700 ms selama belum inCall.
+  Timer? _phaseWatchTimer;
   int _syncTick = 0;
   bool _closed = false;
   bool _offered = false;
@@ -96,12 +101,21 @@ abstract class _CallBase extends ChangeNotifier {
   bool _iceRestarted = false;
   bool _iceReconnectFailed = false;
 
+  /// Static: true setelah relay-only terbukti gagal sekali (pc pertama
+  /// mencapai Failed sebelum fallback). Sesi berikutnya langsung
+  /// all-candidates — menghemat ~3-4 dtk tunggu gagal TURN per call.
+  /// Bukan paparan IP baru: call itu toh akan jatuh ke P2P juga.
+  /// In-memory saja (per sesi aplikasi) + di-reset bila call non-relay
+  /// ikut gagal total — jaringan mungkin berubah, relay diuji ulang.
+  static bool _relaySuspect = false;
+
   /// True bila peer config saat ini memaksa `iceTransportPolicy: 'relay'`
   /// (Cloudflare OK). Dipakai sebagai sinyal untuk fallback sekali ke
   /// "semua tipe kandidat" saat relay tak terjangkau & ICE gagal — supaya
   /// P2P di jaringan sama masih bisa connect tanpa TURN.
-  /// Default **true** = perilaku lama (relay-only bila Cloudflare tersedia).
-  bool _relayOnly = true;
+  /// Default **true** = perilaku lama (relay-only bila Cloudflare tersedia),
+  /// kecuali [_relaySuspect] sudah menandai relay mati di jaringan ini.
+  bool _relayOnly = !_relaySuspect;
 
   /// True bila fallback "all candidates" (tanpa relay-only) sudah dicoba —
   /// hindari loop; cukup sekali per sesi.
@@ -129,9 +143,27 @@ abstract class _CallBase extends ChangeNotifier {
   int _billingPerMin = 0;
   int _billingCharged = 0;
   bool _billingEndedNoCoin = false;
+  /// Saldo habis di tengah panggilan → panggilan DIJEDA (bukan diputus) dan
+  /// UI menampilkan dialog "lanjutkan + isi koin". Di-set oleh _billingTick.
+  bool _awaitingContinue = false;
+  /// Alasan server saat can_continue=false ('insufficient' | 'free_limit').
+  /// 'free_limit' = kuota gratis female harian habis — top-up TIDAK bisa
+  /// melanjutkan, UI harus menawarkan Akhiri saja.
+  String? _billingPauseReason;
+  /// Batas menit gratis female/hari dari server (untuk teks dialog).
+  int _billingFreeLimitMin = 0;
   int get billingPerMinute => _billingPerMin;
   int get billingChargedTotal => _billingCharged;
   bool get endedDueToNoCoin => _billingEndedNoCoin;
+
+  /// Callback saldo: `call_billing_tick` mengembalikan `remaining` (saldo
+  /// sisa) di SETIAP respons — dipakai untuk menyegarkan counter/kartu
+  /// YukCoin tanpa RPC tambahan. Di-wire oleh callProvider (bridge ke
+  /// pointsProvider); null = tidak dipakai (test).
+  void Function(int total)? onBalanceUpdate;
+  bool get awaitingContinue => _awaitingContinue;
+  String? get billingPauseReason => _billingPauseReason;
+  int get billingFreeLimitMin => _billingFreeLimitMin;
 
   /// Tarif per menit call ini (dari client pricing) — dipakai UI untuk
   /// menampilkan banner SEBELUM tick pertama tiba.
@@ -146,6 +178,15 @@ abstract class _CallBase extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Test-only: paksa total tagihan supaya UI counter koin bisa diverifikasi
+  /// tanpa menjalankan tick billing sungguhan.
+  @visibleForTesting
+  void debugSetBilling({int? charged, int? remaining}) {
+    if (charged != null) _billingCharged = charged;
+    if (remaining != null) onBalanceUpdate?.call(remaining);
+    notifyListeners();
+  }
+
   // Sinyal yang datang sebelum peer connection siap (offer bisa sampai
   // sebelum getUserMedia selesai di callee) — diproses setelah setup.
   final List<Map<String, dynamic>> _pendingSignals = [];
@@ -155,6 +196,23 @@ abstract class _CallBase extends ChangeNotifier {
   // Dedup sinyal berdasarkan id baris call_signals (hindari double-process
   // akibat realtime + re-sync SELECT).
   final Set<String> _processedSignalIds = {};
+  // SDP offer remote terakhir yang sudah di-apply — dedup replay
+  // (realtime + sync DB bisa mengirim offer yang sama berkali-kali)
+  // TANPA menelan offer BARU dari retry/restart caller. Dedup lama
+  // (`getRemoteDescription() != null → abaikan`) menelan semua offer
+  // renegosiasi → caller & callee beda generasi pc → ICE tak pernah connect.
+  String? _lastRemoteOfferSdp;
+  // Sama untuk answer: replay DB bisa mengirim answer yang sama — dedup
+  // per-konten supaya tak error "Called in wrong state: stable".
+  String? _lastRemoteAnswerSdp;
+  // Generasi offer/answer — caller menaikkan tiap `_createOffer` (retry /
+  // ICE restart = sesi baru). Callee menolak offer dengan gen ≤ terakhir
+  // (replay/stale) dan meng-echo gen di answer; caller menolak answer yang
+  // bukan untuk gen penawaran terakhirnya. Tanpa ini, sinyal stale dari
+  // sync DB bisa MENURUNKAN negosiasi ke generasi lama → ufrag beda →
+  // ICE tak pernah connect (terbukti di logcat Redmi/Xiaomi).
+  int _offerGen = 0;
+  int _remoteOfferGen = -1;
   // ── Watcher (pantau dari admin panel) ──
   // Peer connection per watcher (uid admin) + antrian candidate yang datang
   // sebelum remoteDescription terpasang + throttle balasan watch_request.
@@ -205,6 +263,28 @@ abstract class _CallBase extends ChangeNotifier {
     return tracks.any((t) => t.enabled);
   }
 
+  /// Konfirmasi ke server: apakah call ini sudah ditutup (status terminal)?
+  /// Dipakai jalur kegagalan ICE — kematian media tak bisa membedakan
+  /// "jaringan blip" dari "lawan menutup call" (sinyal `bye`/event realtime
+  /// `ended` bisa terlewat saat channel drop). Status terminal → [_finish];
+  /// error jaringan → dianggap belum berakhir (ICE retry tetap berjalan).
+  Future<bool> _remoteEnded() async {
+    if (_closed) return true;
+    try {
+      final row = await _service.getCall(callId);
+      if (_closed) return true;
+      final st = row?['status'] as String?;
+      if (st == 'ended' || st == 'canceled') {
+        dlog('[CALL] status call=$st (cek jalur ICE) -> _finish');
+        _finish(CallEndReason.ended);
+        return true;
+      }
+    } catch (e) {
+      dlog('[CALL] cek status remote gagal: $e');
+    }
+    return false;
+  }
+
   // Kontrak lintas-mixin (didefinisikan di CallSession / mixin lain) — agar
   // mixin per-domain (`on _CallBase`) bisa memanggilnya tanpa siklik.
   void _recordConnected(String source);
@@ -212,6 +292,7 @@ abstract class _CallBase extends ChangeNotifier {
   void _startBilling();
   void _finish(CallEndReason reason);
   Future<void> _retryWithAllCandidates();
+  Future<void> reconnect();
   Future<void> _createOffer();
   Future<void> _handleSignal(Map<String, dynamic> msg);
   Future<void> _sampleAudioRtt();
@@ -280,11 +361,15 @@ class CallSession extends _CallBase
             dlog('[SESSION] answered#$hashCode caller -> connecting');
             notifyListeners();
             _createOffer();
+          } else if (isCaller && _phase == CallPhase.inCall) {
+            // Sudah tersambung (ICE cepat) → jangan sentuh fase.
+            _ringTimer?.cancel();
           }
       }
     }, onError: (e) => dlog('[CallService] status stream error: $e'));
 
     await PerfProbe.timed('call.setupMedia', _setupMediaAndPeer);
+    _startPhaseWatch();
 
     // Media siap → balas permintaan pantau yang datang terlalu dini.
     unawaited(_flushPendingWatchRequests());
@@ -309,7 +394,14 @@ class CallSession extends _CallBase
     }
 
     if (isCaller) {
-      _phase = CallPhase.ringing;
+      // JANGAN turunkan fase bila media sudah tersambung lebih dulu
+      // (`_setupMediaAndPeer` + cek status di atas bisa memakan waktu,
+      // sementara onConnectionState/onIceConnectionState sudah men-set
+      // inCall). Dulu baris ini menimpa inCall → layar "Menyambungkan…"
+      // selamanya walau suara/video sudah mengalir.
+      if (_phase != CallPhase.inCall) {
+        _phase = CallPhase.ringing;
+      }
       dlog(
         '[SESSION] init#$hashCode tail -> ringing (caller)',
       ); // Caller menyerah setelah 30 detik tidak dijawab → cancel.
@@ -330,7 +422,11 @@ class CallSession extends _CallBase
         if (!_closed && _pc != null) _createOffer();
       });
     } else {
-      _phase = CallPhase.connecting;
+      // Idem: kalau ICE sudah Connected saat init masih berjalan, jangan
+      // kembalikan ke connecting.
+      if (_phase != CallPhase.inCall) {
+        _phase = CallPhase.connecting;
+      }
       dlog('[SESSION] init#$hashCode tail -> connecting (callee)');
       // RACE: penelepon bisa menekan akhiri SETELAH cek status awal di atas
       // tapi SEBELUM langganan realtime benar-benar aktif — Realtime tidak
@@ -343,6 +439,31 @@ class CallSession extends _CallBase
     // 12 dtk (dulu 2 dtk) — realtime onSignal/onCallStatus jalur utama;
     // _syncAll skip sendiri saat sudah connected & ICE stabil.
     _syncTimer = Timer.periodic(const Duration(seconds: 12), (_) => _syncAll());
+  }
+
+  /// Cek state PC langsung (bukan menunggu callback). Berhenti sendiri
+  /// begitu fase inCall atau sesi ditutup.
+  void _startPhaseWatch() {
+    _phaseWatchTimer?.cancel();
+    _phaseWatchTimer = Timer.periodic(const Duration(milliseconds: 700), (_) {
+      if (_closed || _phase == CallPhase.inCall) {
+        _phaseWatchTimer?.cancel();
+        _phaseWatchTimer = null;
+        return;
+      }
+      final cur = _pc?.connectionState;
+      if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        dlog('[ICE] phaseWatch -> SET inCall');
+        _phase = CallPhase.inCall;
+        _connectedAt = _connectedAt ?? DateTime.now();
+        _recordConnected('phaseWatch');
+        _startBilling();
+        _setProximity(true);
+        notifyListeners();
+        _phaseWatchTimer?.cancel();
+        _phaseWatchTimer = null;
+      }
+    });
   }
 
   /// Pengaman sisi PENERIMA: selama masih `connecting` (belum tersambung),
@@ -380,6 +501,35 @@ class CallSession extends _CallBase
   Future<void> _retryWithAllCandidates() async {
     if (_closed) return;
     _iceAllCandidatesTried = true;
+    if (!isCaller) {
+      // Callee TIDAK membangun ulang pc-nya sendiri — hanya caller yang
+      // men-drive offer. Membangun ulang lokal menciptakan race generasi
+      // (offer baru caller tertelan dedup di pc lama / kandidat beda
+      // ufrag) → dua sisi tak pernah sinkron. Cukup minta caller re-offer;
+      // pc lama dipertahankan: Failed ≠ Closed — offer baru menghidupkan
+      // kembali lewat ICE restart, tanpa melepas kamera/mic.
+      dlog('[ICE] callee minta fallback via ice_retry (bukan rebuild)');
+      _phase = CallPhase.connecting;
+      notifyListeners();
+      unawaited(
+        _service.sendSignal(callId, 'ice_retry').catchError((_) {}),
+      );
+      // Recheck seperti jalur caller: masih tak connect → cek dulu apakah
+      // lawan sudah menutup call (ice_retry-nya tak akan pernah dibalas),
+      // baru tawarkan tombol manual.
+      Future.delayed(const Duration(seconds: 8), () async {
+        if (_closed || _phase == CallPhase.inCall) return;
+        final st = _pc?.connectionState;
+        if (st == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          return;
+        }
+        if (await _remoteEnded()) return;
+        _iceReconnectFailed = true;
+        dlog('[ICE] still bad after ice_retry request -> tombol manual');
+        notifyListeners();
+      });
+      return;
+    }
     dlog('[ICE] fallback relay-only -> all candidates (P2P)');
     // Tutup pc lama & sinyal stale supaya negosiasi bersih.
     final old = _pc;
@@ -423,11 +573,13 @@ class CallSession extends _CallBase
     if (isCaller && !_closed) {
       await _createOffer();
     }
-    // Recheck: kalau masih tak connect setelah jendela fallback → tombol manual.
-    Future.delayed(const Duration(seconds: 8), () {
+    // Recheck: kalau masih tak connect setelah jendela fallback → cek dulu
+    // apakah lawan sudah menutup call, baru tawarkan tombol manual.
+    Future.delayed(const Duration(seconds: 8), () async {
       if (_closed || _phase == CallPhase.inCall) return;
       final st = _pc?.connectionState;
       if (st == RTCPeerConnectionState.RTCPeerConnectionStateConnected) return;
+      if (await _remoteEnded()) return;
       _iceReconnectFailed = true;
       dlog('[ICE] still bad after all-candidates fallback -> tombol manual');
       notifyListeners();
@@ -585,21 +737,65 @@ class CallSession extends _CallBase
       final res = await _service.callBillingTick(callId);
       if (_closed) return;
       _billingCharged = (res['charged_total'] as num?)?.toInt() ?? 0;
+      // Saldo sisa dari tick → segarkan UI saldo (counter header call &
+      // kartu profil) tanpa RPC tambahan.
+      final remaining = (res['remaining'] as num?)?.toInt();
+      if (remaining != null) onBalanceUpdate?.call(remaining);
       // Tarif per menit dari server → banner "N coin/menit" hidup.
       final perMin = (res['per_minute'] as num?)?.toInt();
       if (perMin != null && perMin > 0) _billingPerMin = perMin;
       if (res['can_continue'] == false) {
+        // 2026-10-31: JANGAN putus. Jeda + minta user lanjutkan/top-up.
         _billingEndedNoCoin = true;
-        _service.sendSignal(callId, 'bye');
-        _service.updateStatus(callId, 'ended');
-        _finish(CallEndReason.ended);
+        _awaitingContinue = true;
+        _billingPauseReason = res['reason'] as String?;
+        _billingFreeLimitMin =
+            (res['free_limit_min'] as num?)?.toInt() ?? _billingFreeLimitMin;
+        _stopBilling();
+        notifyListeners();
         return;
+      }
+      // Saldo cukup lagi → lanjut normal.
+      if (_awaitingContinue) {
+        _awaitingContinue = false;
+        _billingEndedNoCoin = false;
+        _billingPauseReason = null;
       }
       notifyListeners();
     } catch (e) {
       // Kegagalan tick TIDAK memutus call (jaringan buruk).
       dlog('[CALL] billing tick error: $e');
     }
+  }
+
+  /// Dipanggil UI setelah user mengisi koin: coba tagih lagi.
+  /// Return true bila panggilan bisa lanjut.
+  Future<bool> resumeBillingAfterTopup() async {
+    if (!_awaitingContinue) return true;
+    _awaitingContinue = false;
+    _billingEndedNoCoin = false;
+    await _billingTick();
+    if (_awaitingContinue) {
+      return false; // masih kurang
+    }
+    // Mulai lagi timer per menit.
+    if (!_closed && phase == CallPhase.inCall) {
+      _billingTimer?.cancel();
+      _billingTimer = Timer.periodic(
+        const Duration(seconds: 60),
+        (_) => unawaited(_billingTick()),
+      );
+    }
+    return true;
+  }
+
+  /// User memilih "Akhiri" saat koin habis.
+  void endCallNoCoin() {
+    _awaitingContinue = false;
+    _billingEndedNoCoin = true;
+    _service.sendSignal(callId, 'bye');
+    _service.updateStatus(callId, 'ended');
+    _finish(CallEndReason.ended);
   }
 
   void _stopBilling() {
@@ -628,6 +824,7 @@ class CallSession extends _CallBase
     _endReason = reason;
     _ringTimer?.cancel();
     _syncTimer?.cancel();
+    _phaseWatchTimer?.cancel();
     _stopBilling();
     _setProximity(false);
     _service.releaseCallStatus(callId);
@@ -644,6 +841,7 @@ class CallSession extends _CallBase
     _closed = true;
     _ringTimer?.cancel();
     _syncTimer?.cancel();
+    _phaseWatchTimer?.cancel();
     _stopBilling();
     _setProximity(false);
     _pendingCandidates.clear();

@@ -45,6 +45,16 @@ mixin SRandomMx {
   String get randomYou => isId ? 'Kamu' : 'You';
   String randomDuration(String d) => d;
 
+  // ── Konfirmasi keluar (back) dari layar call ──
+  // Keluar = panggilan benar-benar diakhiri (dulu back diam-diam
+  // membiarkan call jalan di background → membingungkan).
+  String get randomCallExitTitle =>
+      isId ? 'Keluar dari panggilan?' : 'Leave the call?';
+  String get randomCallExitBody => isId
+      ? 'Kalau keluar, panggilan ini akan diakhiri.'
+      : 'If you leave, this call will end.';
+  String get randomCallExitYes => isId ? 'Akhiri panggilan' : 'End call';
+
   // ── Riwayat ──
   String get randomHistoryTitle =>
       isId ? 'Riwayat Video Random' : 'Random Video History';
@@ -76,4 +86,39 @@ mixin SRandomMx {
       : 'Register to use this feature';
   String get randomErrGeneric =>
       isId ? 'Gagal memulai. Coba lagi.' : 'Could not start. Try again.';
+
+  // ── Lawan jenis otomatis + biaya match ──
+  String get randomOppositeOnly =>
+      isId ? 'Dipasangkan dengan lawan jenis' : 'Matched with the opposite gender';
+  String randomOppositeHint(String g) => isId
+      ? 'Kamu akan dipasangkan dengan $g'
+      : 'You will be matched with $g';
+  String get randomNeedCoinTitle =>
+      isId ? 'YukCoin tidak cukup' : 'Not enough YukCoin';
+  String randomNeedCoinBody(int fee) => isId
+      ? 'Match memotong $fee YukCoin saat kamu dapat pasangan. Isi YukCoin dulu, ya.'
+      : 'A match costs $fee YukCoin — charged only when you get a match. Top up first.';
+  String get randomMatchFee => isId
+      ? '−$kMatchFeeCoins YukCoin / match'
+      : '−$kMatchFeeCoins YukCoin / match';
+
+  // ── Koin habis di tengah panggilan ──
+  String get callNoCoinTitle => isId ? 'YukCoin habis' : 'Out of YukCoin';
+  String callNoCoinBody(int perMin) => isId
+      ? 'Panggilan butuh $perMin YukCoin/menit. Lanjutkan panggilan?'
+      : 'This call costs $perMin YukCoin/min. Continue the call?';
+  String get callNoCoinContinue => isId ? 'Lanjutkan' : 'Continue';
+  String get callNoCoinEnd => isId ? 'Akhiri' : 'End call';
+  String get callNoCoinTopup => isId ? 'Isi YukCoin' : 'Top up';
+  String get callNoCoinStillEmpty => isId
+      ? 'YukCoin masih belum cukup'
+      : 'Still not enough YukCoin';
+
+  // ── Batas call gratis harian habis (female) ──
+  String get callFreeLimitTitle => isId
+      ? 'Batas gratis habis'
+      : 'Free limit reached';
+  String callFreeLimitBody(int limitMin) => isId
+      ? 'Kamu sudah memakai $limitMin menit call gratis hari ini. Coba lagi besok.'
+      : 'You have used your $limitMin free call minutes today. Try again tomorrow.';
 }

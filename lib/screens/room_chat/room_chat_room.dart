@@ -217,54 +217,6 @@ mixin _RcRoomMx on _RoomChatBase {
     }
   }
 
-  @override
-  Future<void> _openRoomGiftPanel() async {
-    final scope = ProviderScope.containerOf(context, listen: false);
-    final s = scope.read(localeProvider).s;
-    final auth = scope.read(authProvider.notifier);
-    if (!auth.canUsePaid) {
-      showChatSnack(
-        context,
-        auth.profile?.isRegistered != true
-            ? s.errCoinRegisterOnly
-            : s.msgVerifyToUsePaid,
-      );
-      return;
-    }
-    final pick = await RoomGiftPanel.show(context);
-    if (pick == null || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final res = await _chat.sendRoomGift(
-        widget.room.id,
-        pick.gift.id,
-        qty: pick.qty,
-      );
-      if (res['ok'] == true) {
-        if (res['points'] != null) {
-          _pointsProv?.setPoints((res['points'] as num).toInt());
-        }
-        if (mounted) {
-          _pointsProv?.showPointsToast(
-            context,
-            s.giftSentToast(s.isId ? pick.gift.nameId : pick.gift.nameEn),
-          );
-        }
-      }
-    } catch (e) {
-      final msg = e.toString();
-      showChatSnackVia(
-        messenger,
-        mounted ? context : messenger.context,
-        msg.contains('Not enough')
-            ? s.giftInsufficient
-            : msg.contains('registered')
-            ? s.errCoinRegisterOnly
-            : s.errSendCoin,
-      );
-    }
-  }
-
   /// Pastikan viewer session jalan kalau ada orang lain yang broadcast.
   /// Menutup celah: live_uid tidak berubah (broadcast restart) atau event
   /// realtime terlewat → tanpa ini viewer harus keluar-masuk room dulu.

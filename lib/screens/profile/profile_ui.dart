@@ -7,7 +7,7 @@ class _Pc {
   static Color get bg => AppTheme.bgScreen;
   static Color get card => AppTheme.bgCard;
   static Color get cardDivider => AppTheme.divider;
-  static Color get button => AppTheme.bgInput;
+  static Color get button => AppTheme.bgCard;
   static Color get border => AppTheme.divider;
 }
 
@@ -131,8 +131,13 @@ mixin _ProfileUiMx on _ProfileBase {
           const SizedBox(width: 4),
         ],
       ),
+      // bottom: false — inset bawah SISTEM sudah ditangani AppBottomNav
+      // (ColoredBox+SafeArea di sana). Kalau ikut diambil di sini, muncul
+      // pita hitam ~50-60px antara akhir konten dan menu bawah pada HP
+      // dengan 3-button/gesture bar (keluhan: "card hitam" di bawah).
       body: SafeArea(
         top: false,
+        bottom: false,
         child: ListView(
           padding: const EdgeInsets.only(bottom: 24),
           children: [
@@ -158,7 +163,14 @@ mixin _ProfileUiMx on _ProfileBase {
             ),
             _hashtagSection(context, s),
             _actionButtons(context, s, profile),
-            if (pointsEnabled)
+            // Moderasi konten room publik (negara asal + lamaran moderator).
+            if (!isAnon) _moderationSection(context, s),
+            _friendRequestBanner(context, s),
+            _photosSection(context, s),
+            // Kartu YukCoin + tombol Top-up — diletakkan SETELAH foto (male
+            // maupun female). Tetap tampil untuk MALE walau sistem poin OFF:
+            // male butuh jalan ke top-up (Google Play).
+            if (pointsEnabled || profile?.gender == 'male')
               _pointsInfo(
                 context,
                 s,
@@ -166,11 +178,72 @@ mixin _ProfileUiMx on _ProfileBase {
                 extraPhotoSlots,
                 yukcoinV2Active,
                 isAnon: isAnon,
+                pointsOn: pointsEnabled,
+                // Female TIDAK top-up: koinnya masuk dari lawan bicara
+                // (call/gift/match). Yang dia butuh hanya lihat jumlah
+                // saldo + tarik ke DANA.
+                canTopup: profile?.gender != 'female',
               ),
-            // Moderasi konten room publik (negara asal + lamaran moderator).
-            if (!isAnon) _moderationSection(context, s),
-            _friendRequestBanner(context, s),
-            _photosSection(context, s),
+            // Menu My Level — MALE only (level dari kumulatif topup).
+            // Female/dummy tidak melihat (dummy = female → otomatis tersembunyi).
+            if (!isAnon && profile?.gender == 'male') ...[
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: const MyLevelEntryCard(),
+              ),
+            ],
+            // Menu Saldo & Misi — sejajar (kiri/kanan), khusus perempuan.
+            if (profile?.gender == 'female') ...[
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _sideCard(
+                        icon: Icons.account_balance_wallet_outlined,
+                        color: Colors.amber,
+                        title: s.saldoTitle,
+                        subtitle: s.saldoAvailable,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SaldoScreen(),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: rv.Consumer(
+                        builder: (context, ref, _) {
+                          final st = ref.watch(missionsProvider);
+                          return _sideCard(
+                            icon: Icons.emoji_events_outlined,
+                            color: Colors.orangeAccent,
+                            title: s.bonusTitle,
+                            subtitle: st.loading
+                                ? '…'
+                                : s.missionsCompletedCount(
+                                    st.completedCount,
+                                    st.mainMissions.length,
+                                  ),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const MissionsScreen(),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (!isAnon)
               _accountSection(
                 context,
@@ -187,6 +260,67 @@ mixin _ProfileUiMx on _ProfileBase {
       ),
     );
   }
+}
+
+/// Kartu menu ringkas (horizontal) untuk Saldo / Misi — dipakai berdampingan.
+/// Ikon di tengah vertikal, judul + subjudul di kanan.
+Widget _sideCard({
+  required IconData icon,
+  required Color color,
+  required String title,
+  required String subtitle,
+  required VoidCallback onTap,
+}) {
+  return Material(
+    color: _Pc.card,
+    borderRadius: BorderRadius.circular(12),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 17, color: color),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: AppText.bodyStrong.copyWith(
+                      color: AppTheme.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    style: AppText.micro.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 /// ── Judul seksi (13 w700 abu, tinggi 32) ──

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:permission_handler_platform_interface/permission_handler_platform_interface.dart';
 
+import 'package:chatyuk/core/nav_gate.dart';
 import 'package:chatyuk/models/random_match.dart';
 import 'package:chatyuk/providers/riverpod/call_provider.dart';
 import 'package:chatyuk/providers/riverpod/random_match_provider.dart';
@@ -18,6 +20,16 @@ class _FakeCall extends CallNotifier {
   Future<void> hangup() async {}
 }
 
+/// Semua izin langsung granted — tombol Match kini meminta izin kamera+mic
+/// dulu (Xiaomi/MIUI tak memunculkan dialog OS dari getUserMedia); tanpa
+/// fake ini request jatuh ke platform channel → test buntu di dialog izin.
+class _GrantAllPermissions extends PermissionHandlerPlatform {
+  @override
+  Future<Map<Permission, PermissionStatus>> requestPermissions(
+    List<Permission> permissions,
+  ) async => {for (final p in permissions) p: PermissionStatus.granted};
+}
+
 /// Layar radar: tombol Match → berubah jadi Batal saat mencari; avatar radar
 /// memakai data nyata dari server (bukan angka palsu).
 void main() {
@@ -29,6 +41,7 @@ void main() {
     svc = MockRandomMatchService();
     when(() => svc.leave()).thenAnswer((_) async {});
     when(() => svc.watchQueue()).thenAnswer((_) => const Stream<void>.empty());
+    PermissionHandlerPlatform.instance = _GrantAllPermissions();
   });
 
   /// Lepas widget tree sebelum test ditutup supaya `dispose()` (yang membatalkan
@@ -72,7 +85,10 @@ void main() {
 
     expect(find.text('Match'), findsOneWidget);
     expect(find.text('7'), findsOneWidget);
-    expect(find.text('Semua'), findsOneWidget);
+    // 2026-10-31: pilihan gender ("Semua/Cowok/Cewek") DIHAPUS — match
+    // otomatis lawan jenis, diganti badge info.
+    expect(find.text('Semua'), findsNothing);
+    expect(find.textContaining('dipasangkan'), findsOneWidget);
   });
 
   testWidgets('tekan Match → "Batal" + jumlah penunggu', (tester) async {
@@ -107,5 +123,30 @@ void main() {
 
     expect(find.text('Fitur belum aktif'), findsOneWidget);
     expect(find.text('Match'), findsOneWidget);
+  });
+
+  /// Male + koin kosong → sheet top-up langsung dari bawah (bukan dialog
+  /// perantara). `authProvider` tak di-mock → `_myGender` fallback 'male'
+  /// lewat try/catch (build menyentuh Supabase yang belum di-init).
+  testWidgets('male + no_funds → sheet top-up langsung (tanpa dialog)', (
+    tester,
+  ) async {
+    disposeAfterTest(tester);
+    var topupShown = 0;
+    NavGate.topupSheet = (_, _) => topupShown++;
+    addTearDown(() => NavGate.topupSheet = null);
+    when(() => svc.stats()).thenAnswer(
+      (_) async => (waiting: 0, online: 5, sample: const <RandomRadarUser>[]),
+    );
+    when(() => svc.join(any())).thenAnswer((_) async => {'status': 'no_funds'});
+    await pump(tester);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.text('Match'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(topupShown, 1);
+    expect(find.byType(AlertDialog), findsNothing);
   });
 }

@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/providers/riverpod/social_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
+import 'package:chatyuk/services/points_service.dart';
 import 'package:chatyuk/services/social_service.dart';
 
 import 'supabase_test_client.dart';
@@ -10,6 +12,15 @@ import 'supabase_test_client.dart';
 class MockSocialService extends Mock implements SocialService {}
 
 /// SocialNotifier uji: build() hermetic (tanpa langganan realtime/auth).
+class MockPointsService extends Mock implements PointsService {}
+
+/// PointsNotifier tanpa jaringan — `build()` tidak menembak RPC.
+class TestPoints extends PointsNotifier {
+  TestPoints(MockPointsService svc) : super(service: svc);
+  @override
+  PointsState build() => const PointsState();
+}
+
 class _TestSocial extends SocialNotifier {
   _TestSocial(SocialService svc)
       : super(service: svc, sb: fakeSupabaseClient());
@@ -43,7 +54,10 @@ void main() {
 
   SocialNotifier prov() {
     final c = ProviderContainer(
-      overrides: [socialProvider.overrideWith(() => _TestSocial(svc))],
+      overrides: [
+        socialProvider.overrideWith(() => _TestSocial(svc)),
+        pointsProvider.overrideWith(() => TestPoints(MockPointsService())),
+      ],
     );
     containers.add(c);
     return c.read(socialProvider.notifier);

@@ -643,11 +643,10 @@ mixin _RcLiveMx on _RoomChatBase {
         onSendVoice: _sendVoiceMessage,
         onSendSticker: sendStickerBytes,
         onSendStickerPath: sendStickerPath,
-        // Gift (fitur koin) hanya bila sistem koin aktif — hilang
-        // total saat dimatikan admin (ikut flag points.enabled).
-        onOpenGiftPanel: points && isPrivateRoom && _myRole != 'owner'
-            ? _openRoomGiftPanel
-            : null,
+        // Gift hanya untuk chat 1:1 (orang yang dituju). Di room/group
+        // penerimanya ambigu → fitur kirim gift tidak ditampilkan.
+        // Pesan gift lama tetap dirender read-only.
+        onOpenGiftPanel: null,
         onSendLocation: _sendLocation,
         pendingLocation: _pendingLocation,
         onCancelLocation: _pendingLocation != null

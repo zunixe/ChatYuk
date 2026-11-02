@@ -63,12 +63,9 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
 
   /// YukCoin v2 (opsional). Implementor boleh override:
   /// - [chatYukcoinV2Active] true bila fitur berbayar v2 aktif.
-  /// - [chatChargeYukcoin] potong YukCoin; return true bila berhasil.
   /// - [chatUndoMessage] jalankan undo berbayar; return {ok?}.
   /// Default: fitur v2 nonaktif, edit/undo bebas (perilaku lama).
   bool get chatYukcoinV2Active => false;
-  Future<bool> chatChargeYukcoin(String feature, int cost, String ref) async =>
-      true;
   Future<Map<String, dynamic>> chatUndoMessage(String id) async => {};
 
   /// Biaya default (dari server; angka ini hanya untuk dialog konfirmasi).
@@ -368,67 +365,12 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     if (msg == null) return;
     hideActionBar();
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    // Konfirmasi biaya.
-    final ok = await _confirmYukcoin(s, chatCostUndoMessage);
-    if (ok != true || !mounted) {
-      clearSelection();
-      return;
-    }
-    final charged = await chatChargeYukcoin(
-      'undo_message',
-      chatCostUndoMessage,
-      msg.id,
-    );
-    if (!mounted) return;
-    if (!charged) {
-      showChatSnack(context, s.yukcoinNotEnough);
-      clearSelection();
-      return;
-    }
+    // 2026-10-31: undo GRATIS ("poin hanya untuk call & gift") — tanpa
+    // dialog biaya & tanpa RPC spend (server juga no-op).
     await chatUndoMessage(msg.id);
     if (!mounted) return;
     showChatSnack(context, s.undoMessageDone);
     clearSelection();
-  }
-
-  /// Dialog konfirmasi pemakaian YukCoin.
-  Future<bool?> _confirmYukcoin(S s, int cost) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.yukcoinUseConfirm),
-        content: Text(s.yukcoinUseConfirmBody(cost)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(s.yukcoinCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s.yukcoinConfirm),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Edit pesan berbayar. Return false bila user batal / YukCoin kurang.
-  Future<bool> _chargeEditIfNeeded(String messageId) async {
-    if (!chatYukcoinV2Active) return true;
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final ok = await _confirmYukcoin(s, chatCostEditMessage);
-    if (ok != true || !mounted) return false;
-    final charged = await chatChargeYukcoin(
-      'edit_message',
-      chatCostEditMessage,
-      messageId,
-    );
-    if (!mounted) return false;
-    if (!charged) {
-      showChatSnack(context, s.yukcoinNotEnough);
-      return false;
-    }
-    return true;
   }
 
   Future<void> forwardSelected() async {
@@ -503,13 +445,12 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     chatFocusComposer();
   }
 
-  /// Dipanggil dari menu "Edit": charge YukCoin dulu (bila v2 aktif),
-  /// baru masuk mode edit. Nonaktif → langsung edit (perilaku lama).
+  /// Dipanggil dari menu "Edit". 2026-10-31: edit GRATIS — langsung masuk
+  /// mode edit tanpa charge YukCoin.
   Future<void> editSelected() async {
     final msg = singleSelected;
     if (msg == null) return;
     clearSelection();
-    if (!await _chargeEditIfNeeded(msg.id)) return;
     if (!mounted) return;
     editMessage(msg);
     // Menu popup masih beranimasi tutup (~150-250ms) saat requestFocus di
@@ -642,12 +583,13 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
                   style: TextStyle(color: AppTheme.textPrimary),
                 ),
               ),
-            // Undo berbayar (YukCoin v2) — hanya pesan teks milik sendiri.
-            if (canEdit && chatYukcoinV2Active)
+            // Undo (gratis sejak 2026-10-31) — hanya pesan teks milik sendiri.
+            // Tidak lagi digate paywall: server tidak menagih undo.
+            if (canEdit)
               PopupMenuItem(
                 value: 'undo',
                 child: Text(
-                  '${s.yukcoinFeatureUndo} · $chatCostUndoMessage',
+                  s.yukcoinFeatureUndo,
                   style: TextStyle(color: AppTheme.textPrimary),
                 ),
               ),

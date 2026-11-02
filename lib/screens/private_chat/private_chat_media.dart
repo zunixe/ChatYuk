@@ -74,19 +74,6 @@ mixin _PcMediaMx on _PrivateChatBase {
     context,
     listen: false,
   ).read(pointsProvider.notifier).yukcoinV2Active;
-  @override
-  Future<bool> chatChargeYukcoin(String feature, int cost, String ref) async {
-    try {
-      await ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(pointsProvider.notifier).spendYukcoin(feature, cost, ref: ref);
-      return true;
-    } catch (e) {
-      dlog('[PRIVATE] chargeYukcoin error: $e');
-      return false;
-    }
-  }
 
   @override
   Map<String, String> get chatReactionKnownNames => {

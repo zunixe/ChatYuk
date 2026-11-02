@@ -62,17 +62,6 @@ class GroupCard extends ConsumerWidget {
       return;
     }
 
-    // Join room berbayar butuh email terverifikasi (kecuali anon pakai bonus).
-    if (points.enabled && !auth.canUsePaid && !auth.isAnonymous) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.msgVerifyToUsePaid)));
-      return;
-    }
-
-    final joinPaid = points.roomJoinPaid;
-    final joinBonus = joinPaid * points.bonusMultiplier;
-
     // Belum member → dialog konfirmasi (+ password bila perlu)
     final pwCtrl = TextEditingController();
     final bool? confirmed;
@@ -88,19 +77,10 @@ class GroupCard extends ConsumerWidget {
             children: [
               Text('${room.icon} ${room.name}', style: AppText.bodyStrong),
               SizedBox(height: 8),
-              // Biaya join + saldo koin — sembunyikan saat sistem poin OFF (gratis diam-diam)
-              if (points.enabled) ...[
-                Text(
-                  s.paidOrBonus(joinPaid, joinBonus),
-                  style: AppText.body.copyWith(color: AppTheme.primary),
-                ),
-                Text(
-                  '${s.labelYourCoins}: ${points.points}',
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
+              Text(
+                s.labelFree,
+                style: AppText.body.copyWith(color: AppTheme.online),
+              ),
               if (room.hasPassword) ...[
                 SizedBox(height: 12),
                 TextField(
@@ -141,12 +121,6 @@ class GroupCard extends ConsumerWidget {
     // sebelum memakai context (ScaffoldMessenger/dialog poin).
     if (!context.mounted) return;
 
-    if (points.enabled &&
-        points.points < joinPaid &&
-        points.points < joinBonus) {
-      points.showOutOfPointsDialog(context, s.isId);
-      return;
-    }
     final messenger = ScaffoldMessenger.of(context);
     try {
       final res = await rooms.joinPrivateRoom(
@@ -243,11 +217,39 @@ class GroupCard extends ConsumerWidget {
     if (action == 'extend') {
       final extendPaid = points.roomExtendPaid;
       final extendBonus = extendPaid * points.bonusMultiplier;
+      // Cek per-bucket mengikuti ledger_spend_dual di server: tier paid
+      // (topup+earned) dulu, fallback bonus × multiplier.
       if (points.enabled &&
-          points.points < extendPaid &&
-          points.points < extendBonus) {
+          points.paidBalance < extendPaid &&
+          points.bonusBalance < extendBonus) {
         points.showOutOfPointsDialog(context, s.isId);
         return;
+      }
+      // Tampilkan biaya SEBELUM menagih — dulu cek saldo senyap tanpa
+      // konfirmasi, user tidak tahu berapa yang dipotong.
+      if (points.enabled) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppTheme.bgCard,
+            title: Text(s.roomExtendTitle),
+            content: Text(
+              s.roomExtendCost(extendPaid),
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(s.btnCancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(s.btnContinue),
+              ),
+            ],
+          ),
+        );
+        if (ok != true || !context.mounted) return;
       }
       try {
         final res = await rooms.extendRoom(room.id);
@@ -341,11 +343,6 @@ class GroupCard extends ConsumerWidget {
     // bukan lagi cek email runtime.
     final isAdmin = AdminGate.enabled;
     final canManage = isOwner || isAdmin;
-    final isMember =
-        ref.watch(
-          roomProvider.select((rp) => rp.memberRoomIds.contains(room.id)),
-        ) ||
-        isOwner;
     final days = _daysLeft;
 
     final card = Container(
@@ -444,20 +441,7 @@ class GroupCard extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    if (!isMember &&
-                        ProviderScope.containerOf(
-                          context,
-                          listen: false,
-                        ).read(pointsProvider.notifier).enabled) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        '${ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).roomJoinPaid} 🪙',
-                        style: AppText.caption.copyWith(
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
+
                   ],
                 ),
               ],

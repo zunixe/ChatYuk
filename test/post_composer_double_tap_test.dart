@@ -9,6 +9,8 @@ import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/models/auth_data.dart';
 import 'package:chatyuk/providers/riverpod/auth_provider.dart';
 import 'package:chatyuk/providers/riverpod/timeline_provider.dart';
+import 'package:chatyuk/providers/riverpod/points_provider.dart';
+import 'package:chatyuk/services/points_service.dart';
 import 'package:chatyuk/screens/post_composer_screen.dart';
 import 'package:chatyuk/services/timeline_service.dart';
 
@@ -17,6 +19,15 @@ import 'test_helper.dart';
 /// Guard dobel-tap composer: kasus nyata 2026-09-29 — anggi post "Destination"
 /// DUA baris selisih 124ms (ketuk kedua lolos selama `await
 /// _ensureRegistered()`, flag `_posting` belum diset).
+class MockPointsService extends Mock implements PointsService {}
+
+/// PointsNotifier tanpa jaringan — `build()` tidak menembak RPC.
+class TestPoints extends PointsNotifier {
+  TestPoints(MockPointsService svc) : super(service: svc);
+  @override
+  PointsState build() => const PointsState();
+}
+
 class MockTimelineService extends Mock implements TimelineService {}
 
 class TestAuth extends AuthNotifier {
@@ -87,6 +98,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         timelineProvider.overrideWith(() => timeline),
+        pointsProvider.overrideWith(() => TestPoints(MockPointsService())),
         authProvider.overrideWith(() => TestAuth(registeredUser())),
       ],
     );

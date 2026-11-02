@@ -147,15 +147,6 @@ class ChatNotifier extends Notifier<ChatState> {
   /// Daftar hadiah dari server (fallback katalog lokal bila gagal).
   Future<List<Map<String, dynamic>>> listGifts() => _service.listGifts();
 
-  /// Kirim hadiah di room (live) ke host (owner). Return {ok, points, qty}.
-  Future<Map<String, dynamic>> sendRoomGift(
-    String roomId,
-    String giftId, {
-    int qty = 1,
-  }) {
-    return _service.sendRoomGift(roomId, giftId, qty: qty);
-  }
-
   Future<String> startPrivateChat({
     required String myUid,
     required String otherUid,

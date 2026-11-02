@@ -9,6 +9,7 @@ import '../../services/rt_resilient.dart';
 import '../../core/app_foreground.dart';
 import '../../services/social_service.dart';
 import '../../utils.dart';
+import 'points_provider.dart';
 
 /// State sosial user aktif (immutable).
 class SocialState {
@@ -392,6 +393,8 @@ class SocialNotifier extends Notifier<SocialState> {
         }
         onFollowGraphChanged?.call();
         _emit();
+        // Misi "Tambah 3 Teman"
+        ref.read(pointsProvider.notifier).trackMission('add_friends_in_call');
         return true;
       }
       return false;

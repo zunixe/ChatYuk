@@ -10,6 +10,7 @@ import '../../core/cache/message_cache.dart';
 import '../../core/perf/perf_probe.dart';
 import '../../services/rt_resilient.dart';
 import '../../services/timeline_service.dart';
+import 'points_provider.dart';
 import '../../utils.dart';
 
 /// Cache per-scope: posts + pagination state untuk tab Semua/Mengikuti/Postinganku.
@@ -193,20 +194,34 @@ class TimelineNotifier extends Notifier<TimelineState> {
     List<Map<String, int>> imageDims = const [],
     List<String> imageBlurhashes = const [],
     String visibility = 'public',
-  }) =>
-      PerfProbe.timed(
-        'timeline.createPost',
-        () => _service.createPost(
-          text: text,
-          imagePaths: imagePaths,
-          imageDims: imageDims,
-          imageBlurhashes: imageBlurhashes,
-          visibility: visibility,
-        ),
-      );
+  }) async {
+    final res = await PerfProbe.timed(
+      'timeline.createPost',
+      () => _service.createPost(
+        text: text,
+        imagePaths: imagePaths,
+        imageDims: imageDims,
+        imageBlurhashes: imageBlurhashes,
+        visibility: visibility,
+      ),
+    );
+    if (res['ok'] == true || res['id'] != null) {
+      ref.read(pointsProvider.notifier).trackMission('create_posts');
+    }
+    return res;
+  }
 
-  Future<Map<String, dynamic>> toggleLike(String postId) =>
-      PerfProbe.timed('timeline.like', () => _service.toggleLike(postId));
+  Future<Map<String, dynamic>> toggleLike(String postId) async {
+    final res = await PerfProbe.timed(
+      'timeline.like',
+      () => _service.toggleLike(postId),
+    );
+    // Hanya hitung saat LIKE ditambah (bukan unlike).
+    if (res['liked'] == true) {
+      ref.read(pointsProvider.notifier).trackMission('like_posts');
+    }
+    return res;
+  }
   Future<Map<String, dynamic>> addComment(String postId, String text) =>
       PerfProbe.timed(
           'timeline.addComment', () => _service.addComment(postId, text));

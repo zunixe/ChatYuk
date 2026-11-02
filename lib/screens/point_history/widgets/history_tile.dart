@@ -109,6 +109,46 @@ class HistoryTile extends StatelessWidget {
         return s.pointHistoryCoinSent;
       case 'coin_received':
         return s.pointHistoryCoinReceived;
+      case 'call_audio':
+        return s.pointHistoryCallAudio;
+      case 'call_video':
+        return s.pointHistoryCallVideo;
+      case 'call_audio_income':
+      case 'call_video_income':
+      case 'private_call_income':
+      case 'match_call_income':
+        return s.pointHistoryCallIncome;
+      case 'gift_sent':
+        return s.pointHistoryGiftSent;
+      case 'gift_recv':
+        return s.pointHistoryGiftReceived;
+      case 'match_search':
+        return s.pointHistoryMatchSearch;
+      case 'topup':
+        return s.pointHistoryTopup;
+      case 'mission_reward':
+        return s.pointHistoryMissionReward;
+      case 'withdraw':
+      case 'withdrawal':
+      case 'withdraw_debit':
+      case 'withdraw_refund':
+        return s.pointHistoryWithdraw;
+      case 'photo_unlock':
+        return s.pointHistoryPhotoUnlock;
+      case 'photo_income':
+      case 'photo_unlock_income':
+        return s.pointHistoryPhotoIncome;
+      case 'subscribe':
+        return s.pointHistorySubscribe;
+      case 'subscribe_income':
+        return s.pointHistorySubscribeIncome;
+      case 'welcome_anon':
+      case 'welcome_register':
+        return s.pointHistoryWelcome;
+      case 'signup':
+        return s.pointHistorySignup;
+      case 'spend_refund':
+        return s.pointHistoryRefund;
       case 'spend_room':
         if (ref == 'create') return s.pointHistoryRoomCreate;
         if (ref == 'join') return s.pointHistoryRoomJoin;
@@ -124,6 +164,12 @@ class HistoryTile extends StatelessWidget {
         return s.pointHistoryRoomExtend;
       case 'admin_mass_bonus':
         return s.pointHistoryAdminBonus;
+      case 'post_boost':
+        return s.pointHistoryPostBoost;
+      case 'level_reward':
+        return s.pointHistoryLevelReward;
+      case 'female_bonus_reset':
+        return s.pointHistoryAdminReset;
       case 'admin_reset_all':
       case 'admin_adjust':
         return s.pointHistoryAdminReset;

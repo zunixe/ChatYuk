@@ -1,6 +1,7 @@
 // Semua string UI aplikasi dalam Bahasa Indonesia dan English.
 // Untuk tambah bahasa baru: tambah getter baru di sini.
 import '../models/legal_section.dart';
+import 'gifts.dart';
 
 part 'strings_screen_mx.dart';
 part 'strings_chat_mx.dart';

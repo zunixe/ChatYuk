@@ -447,6 +447,8 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     int extraSlots,
     bool v2, {
     bool isAnon = false,
+    bool pointsOn = true,
+    bool canTopup = true,
   }) {
     void openHistory() => Navigator.push(
       context,
@@ -512,15 +514,18 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                                 color: Colors.white,
                               ),
                             ),
-                            Text(
-                              '${s.yukcoinFeatureExtraPhoto}: +$extraSlots'
-                              '${v2 ? ' · v2' : ''}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppText.caption.copyWith(
-                                color: Colors.white.withValues(alpha: 0.85),
+                            // Info slot foto hanya relevan bila sistem
+                            // koin aktif (biaya per slot). Saat OFF, upload
+                            // foto gratis → baris ini disembunyikan.
+                            if (pointsOn)
+                              Text(
+                                '${s.extraPhotoSlotsLabel}: ${4 + extraSlots}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppText.caption.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),
@@ -531,15 +536,38 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            onPressed: _buyExtraSlots,
-                            tooltip: s.extraPhotoBuy,
-                            icon: const Icon(
-                              Icons.add_circle_outline,
-                              color: Colors.white,
-                              size: 22,
+                          // Halaman Bonus (sign-in streak + tugas) — male
+                          // saja (female tidak dapat tetesan gratis; misi
+                          // tetap terbuka lewat kartu Misi).
+                          if (canTopup)
+                            IconButton(
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const MissionsScreen(),
+                                ),
+                              ),
+                              tooltip: s.bonusTitle,
+                              icon: const Icon(
+                                Icons.redeem_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
                             ),
-                          ),
+                          // Top-up YukCoin (Google Play Billing).
+                          // Female tidak top-up — koinnya dari lawan bicara.
+                          if (canTopup)
+                            IconButton(
+                              onPressed: () => _openTopupSheet(context, s),
+                              tooltip: s.yukcoinTopup,
+                              icon: const Icon(
+                                Icons.add_shopping_cart,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                          // "Beli slot foto" DISEMBUNYIKAN: slot tambahan
+                          // sekarang gratis (poin hanya untuk call/gift).
                           IconButton(
                             onPressed: openHistory,
                             tooltip: s.pointHistoryTitle,
@@ -587,6 +615,18 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
+
+  /// Buka sheet top-up YukCoin (wiring `main.dart` → `NavGate.topupSheet`).
+  void _openTopupSheet(BuildContext context, S s) {
+    final show = NavGate.topupSheet;
+    if (show != null) {
+      show(context, s);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.yukcoinTopupSoon)),
+      );
+    }
+  }
 
   /// [9] FOOTER — Donasi + versi aplikasi.
   @override

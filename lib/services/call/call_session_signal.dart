@@ -17,10 +17,11 @@ mixin _CallSessionSignalMx on _CallBase {
         offer.type,
       );
       await _pc!.setLocalDescription(local);
+      _offerGen++;
       await _service.sendSignal(
         callId,
         'offer',
-        payload: {'sdp': local.toMap()},
+        payload: {'sdp': local.toMap(), 'gen': _offerGen},
       );
     } catch (e) {
       dlog('[CallSession] createOffer failed: $e');
@@ -59,6 +60,14 @@ mixin _CallSessionSignalMx on _CallBase {
       '[CallSession] onSignal type=${msg['type']} isCaller=$isCaller pc=${_pc != null}',
     );
     if (_closed) return;
+    // 'bye' tidak butuh pc — proses SEGERA walau pc sedang dibangun ulang
+    // (fallback all-candidates caller: pc=null → sinyal masuk _pendingSignals
+    // dan baru diproses setelah setup; call yang sudah berakhir tak boleh
+    // ikut mengantre apalagi tertelan bila rebuild gagal).
+    if (msg['type'] == 'bye') {
+      _finish(CallEndReason.ended);
+      return;
+    }
     if (_pc == null) {
       _pendingSignals.add(msg);
       return;
@@ -86,14 +95,22 @@ mixin _CallSessionSignalMx on _CallBase {
         case 'offer':
           final sdp = msg['sdp'] as Map<String, dynamic>?;
           if (sdp == null) return;
-          final existing = await _pc!.getRemoteDescription();
-          if (existing != null) {
-            // Offer duplikat (realtime + sync polling) → abaikan; memproses
-            // ulang membuat negosiasi & fase UI kacau.
-            dlog('[ICE] duplicate offer ignored');
+          final remoteSdpRaw = sdp['sdp'] as String? ?? '';
+          // Dedup berlapis: (a) gen ≤ terakhir = replay/offer generasi lama
+          // → tolak; (b) sdp identik = duplikat kirim → tolak. Offer BARU
+          // (retry/restart caller, gen naik, ufrag baru) WAJIB diproses
+          // sebagai renegosiasi di pc yang sama — ICE restart legal pada
+          // signalingState stable dan menyelamatkan call tanpa membangun
+          // ulang pc/media.
+          final offerGen = (msg['gen'] as num?)?.toInt() ?? -1;
+          if (offerGen >= 0 && offerGen <= _remoteOfferGen) {
+            dlog('[ICE] stale offer ignored (gen $offerGen <= $_remoteOfferGen)');
             return;
           }
-          final remoteSdpRaw = sdp['sdp'] as String? ?? '';
+          if (remoteSdpRaw == _lastRemoteOfferSdp) {
+            dlog('[ICE] duplicate offer ignored (same sdp)');
+            return;
+          }
           final remoteSdpMunged = applyOpusLowLatencyPrefs(remoteSdpRaw);
           await _pc!.setRemoteDescription(
             RTCSessionDescription(
@@ -101,6 +118,8 @@ mixin _CallSessionSignalMx on _CallBase {
               sdp['type'],
             ),
           );
+          _lastRemoteOfferSdp = remoteSdpRaw;
+          if (offerGen >= 0) _remoteOfferGen = offerGen;
           // Flush candidate yang sudah antri sebelum offer diproses
           for (final cand in List<Map<String, dynamic>>.from(
             _pendingCandidates,
@@ -126,13 +145,24 @@ mixin _CallSessionSignalMx on _CallBase {
           await _service.sendSignal(
             callId,
             'answer',
-            payload: {'sdp': localAnswer.toMap()},
+            payload: {'sdp': localAnswer.toMap(), 'gen': offerGen},
           );
           await _syncAll();
         case 'answer':
           final sdp = msg['sdp'] as Map<String, dynamic>?;
           if (sdp == null) return;
           final ansSdpRaw = sdp['sdp'] as String? ?? '';
+          // Answer untuk offer generasi lama (replay DB / antrean callee)
+          // tidak boleh di-apply ke sesi negosiasi terbaru — ufrag beda.
+          final ansGen = (msg['gen'] as num?)?.toInt();
+          if (ansGen != null && ansGen != _offerGen) {
+            dlog('[ICE] stale answer ignored (gen $ansGen != $_offerGen)');
+            return;
+          }
+          if (ansSdpRaw == _lastRemoteAnswerSdp) {
+            dlog('[ICE] duplicate answer ignored (same sdp)');
+            return;
+          }
           final ansSdpMunged = applyOpusLowLatencyPrefs(ansSdpRaw);
           await _pc!.setRemoteDescription(
             RTCSessionDescription(
@@ -140,6 +170,7 @@ mixin _CallSessionSignalMx on _CallBase {
               sdp['type'],
             ),
           );
+          _lastRemoteAnswerSdp = ansSdpRaw;
           for (final cand in List<Map<String, dynamic>>.from(
             _pendingCandidates,
           )) {
@@ -181,6 +212,14 @@ mixin _CallSessionSignalMx on _CallBase {
             } else {
               rethrow;
             }
+          }
+        case 'ice_retry':
+          // Callee meminta re-offer (ICE-nya sendiri gagal/Disconnected).
+          // Hanya caller yang boleh men-drive offer — jalur `reconnect()`
+          // sudah memilih fallback yang tepat (all-candidates vs restart).
+          if (isCaller && !_closed) {
+            dlog('[ICE] ice_retry dari callee -> reconnect()');
+            unawaited(reconnect());
           }
         case 'camera':
           final en = msg['enabled'];

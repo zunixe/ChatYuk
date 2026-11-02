@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme.dart';
+import '../../../config/gifts.dart';
+import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/points_provider.dart';
 import '../../../config/strings.dart';
 
@@ -22,91 +24,96 @@ class YukcoinHowTo extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // PERF: `select` record field harga (value-type) — dulu `watch` penuh →
     // widget rebuild tiap PointsProvider notify (saldo/pricing sering).
+    // Hanya harga call/video yang ditampilkan (fitur lain gratis).
     final pp = ref.watch(
       pointsProvider.select(
         (p) => (
           callAudio: p.callAudioCostPerMin,
           callVideo: p.callVideoCostPerMin,
-          filterGender: p.filterGenderCost,
-          nearby: p.nearbyCost,
-          undo: p.costUndoMessage,
-          edit: p.costEditMessage,
-          extraSlot: p.costExtraPhotoSlot,
-          ghostDaily: p.costGhostModeDaily,
         ),
       ),
     );
+    // Female tidak top-up dan tidak pernah ditagih: yang relevan untuknya
+    // hanya "Cara dapat" (income). Male melihat keduanya + harga.
+    final isFemale =
+        ref.watch(authProvider.select((a) => a.profile?.gender)) == 'female';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle(s.yukcoinHowToEarn),
         _card(
           children: [
-            _row(Icons.add_circle_outline, s.yukcoinEarnTopup, ''),
-            _row(Icons.card_giftcard, s.yukcoinEarnWelcome, ''),
-            _row(Icons.call_received, s.yukcoinEarnCallIncome, ''),
+            if (isFemale) ...[
+              _row(
+                Icons.call_outlined,
+                s.yukcoinEarnCallAudio,
+                '',
+                note: s.yukcoinEarnCallNote,
+              ),
+              _row(
+                Icons.videocam_outlined,
+                s.yukcoinEarnCallVideo,
+                '',
+                note: s.yukcoinEarnCallNote,
+              ),
+              _row(
+                Icons.people_outline,
+                s.yukcoinEarnMatch,
+                '',
+                note: s.yukcoinEarnMatchNote,
+              ),
+              _row(
+                Icons.card_giftcard,
+                s.yukcoinEarnGift,
+                '',
+                note: s.yukcoinGiftNote,
+              ),
+            ] else ...[
+              // Top-up hanya untuk male (female menerima koin, bukan beli).
+              _row(Icons.add_circle_outline, s.yukcoinEarnTopup, ''),
+              _row(Icons.card_giftcard, s.yukcoinEarnWelcome, ''),
+              _row(
+                Icons.redeem,
+                s.yukcoinEarnGift,
+                '',
+                note: s.yukcoinGiftNote,
+              ),
+            ],
           ],
         ),
-        _sectionTitle(s.yukcoinHowToSpend),
-        _card(
-          children: [
-            _row(
-              Icons.call_outlined,
-              s.yukcoinFeatureCallAudio,
-              '${pp.callAudio}',
-              trailing: s.yukcoinPerMin,
-            ),
-            _row(
-              Icons.videocam_outlined,
-              s.yukcoinFeatureCallVideo,
-              '${pp.callVideo}',
-              trailing: s.yukcoinPerMin,
-            ),
-            _row(
-              Icons.person_outline,
-              s.yukcoinFeatureFilterGender,
-              '${pp.filterGender}',
-              trailing: s.yukcoinPerDay,
-            ),
-            _row(
-              Icons.explore_outlined,
-              s.yukcoinFeatureNearby,
-              '${pp.nearby}',
-              trailing: s.yukcoinPerDay,
-            ),
-          ],
-        ),
-        if (v2Active) ...[
-          _sectionTitle(s.yukcoinHowToSpend),
+        if (!isFemale) _sectionTitle(s.yukcoinHowToSpend),
+        if (!isFemale)
           _card(
             children: [
               _row(
-                Icons.undo,
-                s.yukcoinFeatureUndo,
-                '${pp.undo}',
-                trailing: s.yukcoinPerUse,
+                Icons.call_outlined,
+                s.yukcoinFeatureCallAudio,
+                '${pp.callAudio}',
+                trailing: s.yukcoinPerMin,
               ),
               _row(
-                Icons.edit_outlined,
-                s.yukcoinFeatureEdit,
-                '${pp.edit}',
-                trailing: s.yukcoinPerUse,
+                Icons.videocam_outlined,
+                s.yukcoinFeatureCallVideo,
+                '${pp.callVideo}',
+                trailing: s.yukcoinPerMin,
               ),
               _row(
-                Icons.photo_library_outlined,
-                s.yukcoinFeatureExtraPhoto,
-                '${pp.extraSlot}',
-                trailing: s.yukcoinOnce,
+                Icons.people_outline,
+                s.yukcoinFeatureMatch,
+                '$kMatchFeeCoins',
+                trailing: s.yukcoinPerMatch,
+                note: '${s.yukcoinMatchNote} ${s.yukcoinMatchPerMinNote(pp.callVideo, kMatchFreeMinutes)}',
               ),
               _row(
-                Icons.visibility_off_outlined,
-                s.yukcoinFeatureGhost,
-                '${pp.ghostDaily}',
-                trailing: ghostActive ? s.ghostModeActive : s.yukcoinPerDay,
+                Icons.card_giftcard,
+                s.yukcoinFeatureGift,
+                '${kGiftCatalog.first.coins}–${kGiftCatalog.last.coins}',
+                trailing: s.yukcoinPerGift,
+                note: s.yukcoinGiftNote,
               ),
+              // Filter gender & cari orang sekitar GRATIS (2026-10-31).
             ],
           ),
-        ],
       ],
     );
   }
@@ -129,26 +136,52 @@ class YukcoinHowTo extends ConsumerWidget {
     child: Column(children: children),
   );
 
-  Widget _row(IconData icon, String label, String value, {String? trailing}) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: AppTheme.textSecondary),
-            const SizedBox(width: 12),
-            Expanded(child: Text(label, style: AppText.body)),
-            Text(
-              value,
-              style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: 6),
-              Text(
-                trailing,
-                style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-              ),
-            ],
-          ],
+  Widget _row(
+    IconData icon,
+    String label,
+    String value, {
+    String? trailing,
+    String? note,
+  }) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 20, color: AppTheme.textSecondary),
         ),
-      );
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: AppText.body),
+              if (note != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  note,
+                  style: AppText.caption.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          value,
+          style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
+        ),
+        if (trailing != null) ...[
+          const SizedBox(width: 6),
+          Text(
+            trailing,
+            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+          ),
+        ],
+      ],
+    ),
+  );
 }

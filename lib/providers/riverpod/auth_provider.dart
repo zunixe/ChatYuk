@@ -120,6 +120,10 @@ UserModel mergeProfileEvent({
     // pun (status/points) menimpa flag jadi default false → user anon
     // yang baru dibuat trigger langsung lolos ke MainNav.
     needsOnboarding: cur.needsOnboarding,
+    // Sama seperti needsOnboarding: `gender_locked` tidak selalu ada di
+    // payload event realtime → pertahankan nilai state lokal (jangan
+    // ditimpa default false).
+    genderLocked: pick('genderLocked', event.genderLocked, cur.genderLocked),
   );
 }
 

@@ -101,7 +101,7 @@ extension SAdminX on S {
   String get adminDeviceGender => isId ? 'Kelamin' : 'Gender';
   String get adminDeviceCity => isId ? 'Kota' : 'City';
   String get adminDeviceAge => isId ? 'Umur' : 'Age';
-  String get adminDevicePoints => isId ? 'Poin' : 'Points';
+  String get adminDevicePoints => isId ? 'YukCoin' : 'YukCoin';
   String get adminDeviceStatus => isId ? 'Status' : 'Status';
   String get adminDeviceLastLogin => isId ? 'Login terakhir' : 'Last login';
   String get adminDeviceCreated => isId ? 'Dibuat' : 'Created';
@@ -402,6 +402,75 @@ extension SAdminX on S {
   String get adminSavePointSettings =>
       isId ? 'Simpan Pengaturan' : 'Save Settings';
 
+  /// Label bilingual untuk field angka di kartu Pengaturan YukCoin.
+  /// Key = nama kolom di `app_settings` (dikirim apa adanya ke
+  /// `admin_update_point_settings`). Fallback ke key bila belum dipetakan.
+  String adminPointFieldLabel(String key) => switch (key) {
+    'call_audio_cost_per_min' => isId
+        ? 'Call audio — YukCoin / menit'
+        : 'Audio call — YukCoin / min',
+    'call_video_cost_per_min' => isId
+        ? 'Call video — YukCoin / menit'
+        : 'Video call — YukCoin / min',
+    'call_cut_pct' =>
+      isId ? 'Bagian platform dari call (%)' : 'Platform share of call (%)',
+    'photo_upload_reward' =>
+      isId ? 'Reward upload foto' : 'Photo upload reward',
+    'photo_unlock_once' =>
+      isId ? 'Buka foto: lihat sekali' : 'Photo unlock: view once',
+    'photo_unlock_perm' =>
+      isId ? 'Buka foto: permanen' : 'Photo unlock: permanent',
+    'photo_unlock_owner_pct' =>
+      isId ? '% ke pemilik foto' : '% to photo owner',
+    'cost_chat_image' => isId ? 'Biaya kirim foto' : 'Photo send cost',
+    'cost_view_once' =>
+      isId ? 'Biaya kirim view-once' : 'View-once send cost',
+    'room_create_paid' => isId ? 'Buat room' : 'Create room',
+    'room_create_pw_paid' =>
+      isId ? 'Buat room +password' : 'Create room +password',
+    'room_extend_paid' => isId ? 'Perpanjang room' : 'Extend room',
+    'bonus_price_multiplier' =>
+      isId ? 'Pengali harga tier bonus' : 'Bonus tier price multiplier',
+    'gift_cut_pct' =>
+      isId ? 'Potongan platform gift (%)' : 'Gift platform cut (%)',
+    'subscribe_cut_pct' =>
+      isId ? 'Potongan subscribe (%)' : 'Subscribe cut (%)',
+    'subscription_duration_days' =>
+      isId ? 'Durasi subscribe (hari)' : 'Subscribe duration (days)',
+    'welcome_anon_coins' =>
+      isId ? 'Welcome bonus — anon' : 'Welcome bonus — anon',
+    'welcome_register_coins' => isId
+        ? 'Welcome bonus — register email'
+        : 'Welcome bonus — email register',
+    'welcome_max_claims_per_ip_day' => isId
+        ? 'Maks klaim welcome / IP / hari'
+        : 'Max welcome claims / IP / day',
+    'withdraw_rate_idr' => isId
+        ? 'Withdraw — rate (Rp / YukCoin)'
+        : 'Withdraw — rate (IDR / YukCoin)',
+    'withdraw_min_coins' =>
+      isId ? 'Withdraw — minimum YukCoin' : 'Withdraw — minimum YukCoin',
+    'withdraw_fee_pct' => isId ? 'Withdraw — fee (%)' : 'Withdraw — fee (%)',
+    'withdraw_fee_min_idr' => isId
+        ? 'Withdraw — fee minimum (Rp)'
+        : 'Withdraw — minimum fee (IDR)',
+    'withdraw_max_per_day' =>
+      isId ? 'Withdraw — maks / hari' : 'Withdraw — max / day',
+    'withdraw_min_interval_hours' => isId
+        ? 'Withdraw — jeda antar ajuan (jam)'
+        : 'Withdraw — interval between requests (hours)',
+    'withdraw_min_account_age_hours' => isId
+        ? 'Withdraw — umur akun minimum (jam)'
+        : 'Withdraw — minimum account age (hours)',
+    'female_free_call_min_per_day' => isId
+        ? 'Call gratis female → male (menit / hari)'
+        : 'Female→male free call (min / day)',
+    'coin_tx_max_per_hour' => isId
+        ? 'Maks kirim YukCoin/gift per jam'
+        : 'Max YukCoin/gift sends per hour',
+    _ => key,
+  };
+
   String get adminViewOnMaps => isId ? 'Lihat di Maps' : 'View on Maps';
 
   String get adminTopEarners =>
@@ -412,7 +481,7 @@ extension SAdminX on S {
       isId ? 'Rata-rata YukCoin' : 'Avg YukCoin';
   String get adminTotalBalance =>
       isId ? 'Total YukCoin' : 'Total YukCoin';
-  String adminCoinAmount(int n) => isId ? '$n koin' : '$n coins';
+  String adminCoinAmount(int n) => isId ? '$n YukCoin' : '$n YukCoin';
 
   String get adminMassBonus => isId ? 'Bonus Massal YukCoin' : 'Mass YukCoin Bonus';
 
@@ -444,6 +513,8 @@ extension SAdminX on S {
       isId ? 'Orang sekitar (harian)' : 'Nearby people (daily)';
   String get adminFlagPlayTopup =>
       isId ? 'Topup YukCoin (Play Billing)' : 'YukCoin topup (Play Billing)';
+  String get adminFlagRandomCall =>
+      isId ? 'Match / Random video call' : 'Match / random video call';
 
   String get adminPublishTitle => isId ? 'Publish Fitur' : 'Publish Features';
   String get adminPublishDesc => isId
@@ -454,7 +525,7 @@ extension SAdminX on S {
       ? 'Aktif · fitur undo / edit / invisible / slot foto tampil ke user'
       : 'Active · undo / edit / invisible / photo-slot features shown to users';
   String get adminYukcoinV2Off => isId
-      ? 'Nonaktif · fitur koin generik disembunyikan dari user'
+      ? 'Nonaktif · fitur YukCoin generik disembunyikan dari user'
       : 'Inactive · generic coin features hidden from users';
 
   String get adminPointsSystem => isId ? 'Sistem YukCoin' : 'YukCoin System';
@@ -510,10 +581,10 @@ extension SAdminX on S {
   String get adminPaused => isId ? 'Dihentikan' : 'Paused';
 
   String get adminRealtimeDesc => isId
-      ? 'Saklar utama seluruh ekonomi koin (topup, gift, room, foto). '
-      'Fitur generik (undo/edit/invisible/slot) diatur di kartu tarif.'
-      : 'Master switch for the whole coin economy (topup, gift, room, photo). '
-      'Generic features (undo/edit/invisible/slots) are set in the pricing card.';
+      ? 'Saklar utama seluruh ekonomi YukCoin (topup, gift, room, foto). '
+      'Fitur generik (undo/edit/invisible/slot) gratis.'
+      : 'Master switch for the whole YukCoin economy (topup, gift, room, photo). '
+      'Generic features (undo/edit/invisible/slots) are free.';
 
   String get adminCallTitle => isId ? 'Anon Bisa Call' : 'Anon Can Call';
   String get adminCallDesc => isId
@@ -592,7 +663,50 @@ extension SAdminX on S {
   String get adminRegGenderFemale => isId ? 'Perempuan' : 'Female';
   String get adminRegGenderOther => isId ? 'Lainnya' : 'Other';
 
-  String get adminPointTab => isId ? 'Poin' : 'Points';
+  String get adminPointTab => isId ? 'YukCoin' : 'YukCoin';
+
+  // ── Withdraw (tab admin) ──
+  String get adminWithdrawTab => isId ? 'Withdraw' : 'Withdraw';
+  String get adminWithdrawFilterAll => isId ? 'Semua' : 'All';
+  String get adminWithdrawFilterPending => isId ? 'Menunggu' : 'Pending';
+  String get adminWithdrawFilterPaid => isId ? 'Dibayar' : 'Paid';
+  String get adminWithdrawFilterRejected => isId ? 'Ditolak' : 'Rejected';
+  String get adminWithdrawEmpty =>
+      isId ? 'Tidak ada pengajuan' : 'No requests';
+  String get adminWithdrawApprove => isId ? 'Setujui' : 'Approve';
+  String get adminWithdrawReject => isId ? 'Tolak' : 'Reject';
+  String get adminWithdrawNote => isId ? 'Catatan (opsional)' : 'Note (optional)';
+  String get adminWithdrawNoteHint =>
+      isId ? 'Alasan / bukti transfer' : 'Reason / transfer proof';
+  String get adminWithdrawCoins => isId ? 'YukCoin' : 'YukCoin';
+  String get adminWithdrawGross => isId ? 'Nilai' : 'Value';
+  String get adminWithdrawFee => isId ? 'Fee' : 'Fee';
+  String get adminWithdrawNet => isId ? 'Diterima' : 'Net';
+  String get adminWithdrawTo => isId ? 'Tujuan' : 'To';
+  String get adminWithdrawApproveOk =>
+      isId ? 'Withdraw disetujui' : 'Withdrawal approved';
+  String get adminWithdrawRejectOk =>
+      isId ? 'Withdraw ditolak' : 'Withdrawal rejected';
+  String adminWithdrawRejectRefund(int coins) => isId
+      ? 'Withdraw ditolak · $coins koin dikembalikan'
+      : 'Withdrawal rejected · $coins coins refunded';
+  String get adminWithdrawFail =>
+      isId ? 'Gagal memproses' : 'Failed to process';
+  String get adminWithdrawLoadFail =>
+      isId ? 'Gagal memuat data withdraw' : 'Failed to load withdrawals';
+  String get adminWithdrawSummary => isId ? 'Perlu Dicairkan' : 'To Be Paid';
+  String get adminWithdrawSummaryCount =>
+      isId ? 'Pengajuan menunggu' : 'Pending requests';
+  String get adminWithdrawSummaryCoins => isId ? 'Total YukCoin' : 'Total YukCoin';
+  String get adminWithdrawSummaryNet => isId ? 'Total transfer' : 'Total payout';
+  String get adminWithdrawSummaryFee => isId ? 'Total fee' : 'Total fee';
+  String get adminWithdrawSettings => isId ? 'Pengaturan Withdraw' : 'Withdraw Settings';
+  String get adminWithdrawRate => isId ? 'Rate (Rp/YukCoin)' : 'Rate (IDR/YukCoin)';
+  String get adminWithdrawMinCoins => isId ? 'Minimum YukCoin' : 'Minimum YukCoin';
+  String get adminWithdrawFeePct => isId ? 'Fee (%)' : 'Fee (%)';
+  String get adminWithdrawFeeMin => isId ? 'Fee minimum (Rp)' : 'Minimum fee (IDR)';
+  String get adminWithdrawSave => isId ? 'Simpan' : 'Save';
+  String get adminWithdrawSaved => isId ? 'Pengaturan tersimpan' : 'Settings saved';
 
   String get adminChatMonitor => isId ? 'Monitor Chat' : 'Chat Monitor';
 }
@@ -645,7 +759,7 @@ extension SAdminExcludeX on S {
       isId ? 'Kelola Perangkat Ter-exclude' : 'Manage Excluded Devices';
 
   String get adminPointSettingsSaved =>
-      isId ? 'Pengaturan poin tersimpan' : 'Point settings saved';
+      isId ? 'Pengaturan YukCoin tersimpan' : 'YukCoin settings saved';
 
   String adminSaveFailed(String e) =>
       isId ? 'Gagal menyimpan: $e' : 'Failed to save: $e';

@@ -48,11 +48,6 @@ mixin _UiInitMx on _UserInfoBase {
     _load();
     _loadPhotos();
     _loadSocial();
-    // Ambil nominal biaya buka foto untuk label harga.
-    ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(pointsProvider.notifier).refreshPhotoCosts();
   }
 
   /// Fallback anti-kedip: kalau belum ada b64 dari pemanggil, coba ambil
@@ -368,6 +363,14 @@ mixin _UiInitMx on _UserInfoBase {
       context,
       listen: false,
     ).read(pointsProvider.notifier);
+    // Server (subscribe_creator) wajib koin beli/penghasilan — cek saldo
+    // paid SEBELUM dialog konfirmasi, bukan setelah user setuju.
+    final paidBalance =
+        ProviderScope.containerOf(context, listen: false).read(pointsProvider).paidBalance;
+    if (paidBalance < price) {
+      points.showOutOfPointsDialog(context, s.isId);
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

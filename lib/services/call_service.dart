@@ -104,12 +104,16 @@ class CallService {
 
   /// Kolom yang BENAR-BENAR dipakai pemanggil [getCall] — semua pemanggil
   /// hanya membaca `status` (poll ringing/in-call), plus alur auto-accept
-  /// sistem yang membaca `caller_id`/`call_type`/`chat_id`.
+  /// sistem yang membaca `caller_id`/`call_type`.
   /// Dulu `select('*')`: tiap panggilan ini menarik SEMUA kolom (termasuk yang
   /// ikut bertambah saat skema berubah) dan dipanggil berulang — 8× tiap 2 dtk
   /// saat ringing + tiap 12 dtk saat in-call.
+  /// `chat_id` TIDAK ada di tabel calls (tidak ada kolomnya & tak pernah
+  /// ditulis) — menyeleksinya membuat getCall error 42703 tiap kali: status
+  /// sync & auto-accept sistem rusak senyap. ChatId diturunkan UI via
+  /// privateChatId(caller, callee) bila perlu.
   static const _callPollCols =
-      'id, status, caller_id, callee_id, call_type, chat_id';
+      'id, status, caller_id, callee_id, call_type';
 
   Future<Map<String, dynamic>?> getCall(String callId) async {
     return _sb

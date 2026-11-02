@@ -457,8 +457,10 @@ mixin _ProfileBodyMx on _ProfileBase {
                             TextButton.icon(
                               onPressed: _uploading ? null : _buyExtraSlots,
                               icon: Icon(Icons.add_circle_outline, size: 16),
+                              // Tanpa angka harga: slot tambahan sudah
+                              // gratis (server tidak lagi menagih).
                               label: Text(
-                                '${s.extraPhotoBuy} · ${ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).costExtraPhotoSlot}',
+                                s.extraPhotoBuy,
                                 style: AppText.bodySmall,
                               ),
                               style: TextButton.styleFrom(
@@ -852,8 +854,9 @@ mixin _ProfileBodyMx on _ProfileBase {
                   ),
                 ],
               ),
-            ],
+],
             SizedBox(height: 12),
+
 
             // Pengaturan — satu pintu (isi pindah ke SettingsScreen).
             ProfileSectionCard(

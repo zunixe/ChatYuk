@@ -375,6 +375,11 @@ mixin ChatSendMixin<T extends StatefulWidget>
     try {
       await sendDispatchText(text: text, reply: reply, mentions: mentions);
       sendOnSentText();
+      // Track misi: pesan ke berbagai pengguna (utama + harian)
+      pp.trackMission('message_various_users');
+      pp.trackMission('daily_message_users');
+      // Balasan pesan orang lain → misi "Membalas Pengguna"
+      if (reply != null) pp.trackMission('reply_users');
     } catch (e) {
       if (OfflineOutbox.isNetworkError(e)) {
         // Poin sudah dipotong, jangan refund — dipakai saat flush.

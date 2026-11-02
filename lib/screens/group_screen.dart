@@ -79,15 +79,19 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
         ? (withPw) {
             final paid = paidCostOf(withPw);
             return '${s.paidOrBonus(paid, paid * points.bonusMultiplier)}'
-                '  ·  ${points.points}';
+                '  ·  ${points.paidBalance}';
           }
         : null,
     onCreate: (draft) async {
       final paid = paidCostOf(draft.withPassword);
+      final bonusCost = paid * points.bonusMultiplier;
+      // Server (ledger_spend_dual): tier paid (topup+earned) dulu, fallback
+      // bonus × multiplier. Cek per-bucket — cek total bisa lolos di client
+      // lalu ditolak server.
       if (points.enabled &&
           !isAdmin &&
-          points.points < paid &&
-          points.points < paid * points.bonusMultiplier) {
+          points.paidBalance < paid &&
+          points.bonusBalance < bonusCost) {
         outOfPoints = true;
         return null; // tutup sheet → dialog koin kurang
       }

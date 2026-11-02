@@ -3,7 +3,36 @@ part of '../user_info_screen.dart';
 // Analyzer limitation: pada `part`+mixin, method yang dideklarasikan stubs di
 // base tampak 'unused' walau dipanggil lintas-mixin. Aman diabaikan.
 
-mixin _UiBuildMx on _UserInfoBase {  @override
+mixin _UiBuildMx on _UserInfoBase {
+  /// Badge level (male) — pill `Lv.X` di samping nama. Level 0 / gagal
+  /// fetch → shrink (tanpa gap). Spacing di dalam supaya tidak menyisakan
+  /// jarak saat sembunyi.
+  Widget _levelBadge(S s) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final lv = ref.watch(
+          userLevelProvider(widget.userId).select((v) => v.value ?? 0),
+        );
+        if (lv <= 0) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.amber,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              s.levelShort(lv),
+              style: AppText.label.copyWith(color: Colors.black87),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     PerfProbe.buildCount('UserInfo');
     ref.watch(themeProvider);
@@ -54,6 +83,7 @@ mixin _UiBuildMx on _UserInfoBase {  @override
               presence: presence,
               isOnline: status == 'online',
               verified: profile?.isRegistered == true,
+              levelBadge: _levelBadge(s),
               avatarBytes: _decodedAvatarBytes(),
               gallery: photos,
               galleryBytes: _galleryBytesOf,

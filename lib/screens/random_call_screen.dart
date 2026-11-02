@@ -11,11 +11,14 @@ import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/random_match_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../core/nav_guard.dart';
+import '../core/call/call_permissions.dart';
 import '../utils.dart';
 import '../widgets/chat_route.dart';
+import '../widgets/call_no_coin_dialog.dart';
 import '../widgets/gender_avatar.dart';
 
 /// Layar video call RANDOM (hasil Match). Video lawan penuh layar, kamera
@@ -33,6 +36,26 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
   Timer? _tick;
   bool _busy = false;
   String? _shownCallId;
+  bool _endNotified = false;
+
+  /// Sedang pop setelah user mengakhiri call — bypass veto PopScope
+  /// (pola yang sama dengan `_minimizing` di CallScreen).
+  bool _popping = false;
+
+  /// Dialog konfirmasi keluar sedang tampil — back beruntun tidak membuka
+  /// dua dialog.
+  bool _exitDialogShown = false;
+
+  /// Error media LOKAL saat sesi berakhir (kamera/mic gagal) — disimpan saat
+  /// fase error terdeteksi supaya pesan yang tampil "izin/kamera bermasalah",
+  /// bukan "lawan keluar" (keduanya berbeda penyebab & aksi perbaikannya).
+  CallMediaError? _endMediaError;
+
+  /// Sesi yang sedang didengarkan (CallSession adalah ChangeNotifier yang
+  /// notify saat onTrack / fase berubah). Tanpa listener ini layar hanya
+  /// tahu video sudah siap pada tick 1 detik berikutnya → video lawan yang
+  /// sebenarnya sudah live tetap tertutup backdrop sampai 1 detik penuh.
+  CallSession? _listenedSession;
 
   @override
   void initState() {
@@ -40,14 +63,94 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
     // Durasi memakai jam dinding dari `connectedAt` — tidak perlu
     // mendengarkan tiap notifikasi sesi (hemat rebuild).
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      _checkNoCoin();
+      setState(() {});
     });
   }
 
   @override
   void dispose() {
     _tick?.cancel();
+    _listenedSession?.removeListener(_onSessionChanged);
+    _listenedSession = null;
     super.dispose();
+  }
+
+  /// Sesi berubah (track masuk, fase berubah) → langsung render ulang,
+  /// supaya frame pertama video tampil seketika, bukan menunggu tick.
+  /// Notifikasi bisa datang saat frame sedang dibangun → tunda ke frame
+  /// berikutnya agar tidak memicu setState-di-tengah-build.
+  void _onSessionChanged() {
+    if (!mounted || _sessionUpdateScheduled) return;
+    _sessionUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sessionUpdateScheduled = false;
+      if (mounted) setState(() {});
+    });
+    // Jaga-jaga bila frame berikutnya tidak datang (mis. app di background
+    // saat track terakhir masuk): jadwalkan juga lewat microtask.
+    scheduleMicrotask(() {
+      if (!mounted || !_sessionUpdateScheduled) return;
+      _sessionUpdateScheduled = false;
+      setState(() {});
+    });
+  }
+
+  bool _sessionUpdateScheduled = false;
+
+  /// Pasang/ganti listener bila sesi aktif berganti (Match → Next).
+  void _bindSession(CallSession? session) {
+    if (identical(session, _listenedSession)) return;
+    _listenedSession?.removeListener(_onSessionChanged);
+    _listenedSession = session;
+    _listenedSession?.addListener(_onSessionChanged);
+  }
+
+  bool _noCoinDialogShown = false;
+
+  /// Cek apakah sesi sedang menunggu user memutuskan (koin habis).
+  void _checkNoCoin() {
+    final session = ref.read(callProvider).activeSession;
+    if (session == null) return;
+    if (!session.awaitingContinue || _noCoinDialogShown) return;
+    _noCoinDialogShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final s = ref.read(localeProvider).s;
+      // Batas gratis female habis → top-up tak bisa melanjutkan: Akhiri saja.
+      if (session.billingPauseReason == 'free_limit') {
+        await showCallFreeLimitDialog(
+          context,
+          limitMin: session.billingFreeLimitMin,
+          onEnd: () {
+            _noCoinDialogShown = false;
+            session.endCallNoCoin();
+          },
+        );
+        return;
+      }
+      final perMin = session.billingPerMinute > 0
+          ? session.billingPerMinute
+          : 20;
+      await showCallNoCoinDialog(
+        context,
+        perMinute: perMin,
+        onEnd: () {
+          _noCoinDialogShown = false;
+          session.endCallNoCoin();
+        },
+        onContinue: () async {
+          _noCoinDialogShown = false;
+          final ok = await session.resumeBillingAfterTopup();
+          if (!ok && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(s.callNoCoinStillEmpty)),
+            );
+          }
+        },
+      );
+    });
   }
 
   String _duration() {
@@ -67,7 +170,50 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     await ref.read(randomMatchProvider.notifier).hangup();
-    if (mounted) Navigator.of(context).maybePop();
+    if (!mounted) return;
+    // Rebuild dulu (PopScope canPop=true karena call sudah ended) baru
+    // pop — maybePop sebelum rebuild akan kena veto & membuka dialog lagi.
+    setState(() => _popping = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).maybePop();
+    });
+  }
+
+  /// Back / keluar dari layar call saat panggilan MASIH HIDUP → konfirmasi
+  /// dulu. Keluar berarti mengakhiri panggilan (dulu back diam-diam
+  /// membiarkan call jalan di background + banner hijau muncul di radar —
+  /// user mengira keluar sudah memutus, padahal tidak).
+  Future<void> _confirmExit() async {
+    if (_busy || _exitDialogShown || !mounted) return;
+    _exitDialogShown = true;
+    final s = ref.read(localeProvider).s;
+    final exit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(
+          s.randomCallExitTitle,
+          style: AppText.title.copyWith(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          s.randomCallExitBody,
+          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.yukcoinCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: Text(s.randomCallExitYes),
+          ),
+        ],
+      ),
+    );
+    _exitDialogShown = false;
+    if (exit == true && mounted) await _end();
   }
 
   Future<void> _reportBlock(RandomPartner p) async {
@@ -172,23 +318,90 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
     final callState = ref.watch(callProvider);
     final session = callState.activeSession;
     final partner = st.partner;
+    // Counter YukCoin: saldo live (realtime) — caller male melihat koin
+    // turun tiap tick billing, callee female melihat income masuk.
+    final coinSnap = ref.watch(
+      pointsProvider.select((p) => (coins: p.points, on: p.enabled)),
+    );
+    final charged = session?.billingChargedTotal ?? 0;
+
+    // Listener event-driven: hilangkan jeda hingga 1 detik sebelum video
+    // lawan terlihat setelah track pertama datang.
+    _bindSession(session);
 
     // Sesi berganti (Next) → reset penanda supaya overlay "mencari" tampil.
-    if (session?.callId != _shownCallId) _shownCallId = session?.callId;
+    if (session?.callId != _shownCallId) {
+      _shownCallId = session?.callId;
+      _endNotified = false;
+      _endMediaError = null;
+    }
 
+    // Teks "Menyambungkan…" hanya selama benar-benar belum ada media.
+    // Bila track sudah masuk tapi fase tertinggal, jangan tampilkan teks itu
+    // (user melihat video tetapi membaca "menyambungkan" = membingungkan).
     final connecting =
-        session == null || session.phase == CallPhase.connecting;
-    final ended =
+        session == null ||
+        (session.phase == CallPhase.connecting && !session.hasRemoteVideo);
+
+    // Lawan menutup call (atau media error): kabari provider SEKALI supaya
+    // layar menampilkan "X keluar" + Next — jangan auto-cari diam-diam.
+    final sessionEnded =
         session != null &&
         (session.phase == CallPhase.ended || session.phase == CallPhase.error);
-    final searching = st.phase == RandomMatchPhase.searching || ended;
+    if (sessionEnded && !_endNotified) {
+      _endNotified = true;
+      _endMediaError = session.mediaError;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(randomMatchProvider.notifier).onRemoteEnded();
+        }
+      });
+    }
+    // Sesi HILANG padahal fase sudah inCall (startSession pernah sukses):
+    // call sudah berakhir di mana-mana (mis. lawan end saat app di
+    // background → clearSession jalan tanpa layar tahu) → settle state,
+    // JANGAN biarkan backdrop "Menyambungkan…" tampil selamanya.
+    if (session == null &&
+        st.phase == RandomMatchPhase.inCall &&
+        !_endNotified) {
+      _endNotified = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(randomMatchProvider.notifier).onRemoteEnded();
+        }
+      });
+    }
+    final partnerEnded = st.partnerEnded;
+    // Pesan akhir: error media lokal (izin/kamera) ≠ lawan menutup call.
+    final endText = partnerEnded
+        ? (_endMediaError != null
+            ? callMediaErrorMessage(s, _endMediaError)
+            : s.randomCallPartnerLeft(partner?.nickname ?? ''))
+        : null;
+    final searching = st.phase == RandomMatchPhase.searching;
 
-    final hasRemoteVideo =
-        session != null && session.phase == CallPhase.inCall && session.hasRemoteVideo;
+    // JANGAN syaratkan `phase == inCall`: di sebagian device fase bisa
+    // tertinggal beberapa ratus ms (atau callback ICE tak pernah datang)
+    // padahal track video sudah mengalir. Track yang ada = tampilkan.
+    final hasRemoteVideo = session != null && session.hasRemoteVideo;
     final hasLocalVideo =
         session != null && session.cameraOn && session.localRenderer.srcObject != null;
 
-    return Scaffold(
+    // Panggilan masih hidup → back TIDAK boleh langsung pop: tampilkan
+    // konfirmasi (keluar = mengakhiri call). Setelah call berakhir
+    // (ended/error) back bebas.
+    final liveCall = session != null &&
+        session.phase != CallPhase.ended &&
+        session.phase != CallPhase.error;
+
+    return PopScope(
+      canPop: !liveCall || _popping,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        dlog('[NAV] back veto random-call → konfirmasi keluar');
+        _confirmExit();
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFF0E1116),
       body: Stack(
         fit: StackFit.expand,
@@ -203,7 +416,11 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
               ),
             ),
           if (!hasRemoteVideo)
-            _PartnerBackdrop(partner: partner, searching: searching || connecting),
+            _PartnerBackdrop(
+              partner: partner,
+              searching: (searching || connecting) && !partnerEnded,
+              endedText: endText,
+            ),
 
           // Info atas.
           Positioned(
@@ -214,13 +431,6 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
               bottom: false,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xCC000000), Color(0x00000000)],
-                  ),
-                ),
                 child: Row(
                   children: [
                     if (partner != null)
@@ -244,7 +454,14 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            _subtitle(s, partner, searching, connecting),
+                            _subtitle(
+                              s,
+                              partner,
+                              searching,
+                              connecting,
+                              partnerEnded,
+                              endText,
+                            ),
                             style: AppText.caption.copyWith(
                               color: Colors.white70,
                             ),
@@ -254,6 +471,23 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
                         ],
                       ),
                     ),
+                    // Counter koin: angka = sisa saldo, "−N" = terpakai
+                    // call ini. Sembunyi bila sistem koin dimatikan admin.
+                    if (coinSnap.on) ...[
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.monetization_on_outlined,
+                        color: Colors.amber,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        charged > 0
+                            ? '${coinSnap.coins} (−$charged)'
+                            : '${coinSnap.coins}',
+                        style: AppText.label.copyWith(color: Colors.white),
+                      ),
+                    ],
                     if (partner != null)
                       IconButton(
                         tooltip: s.randomCallReport,
@@ -334,43 +568,48 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (searching)
+                    if (searching || partnerEnded)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: Text(
-                          s.randomCallSearchingAgain,
+                          partnerEnded
+                              ? (endText ?? '')
+                              : s.randomCallSearchingAgain,
                           style: AppText.bodySmall.copyWith(
                             color: Colors.white70,
                           ),
                         ),
                       ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _RoundBtn(
-                          icon: session?.micOn == true
-                              ? Icons.mic_rounded
-                              : Icons.mic_off_rounded,
-                          onTap: () async {
-                            await session?.toggleMic();
-                            if (mounted) setState(() {});
-                          },
-                        ),
-                        const SizedBox(width: 14),
-                        _RoundBtn(
-                          icon: Icons.cameraswitch_rounded,
-                          onTap: () async {
-                            await session?.switchCamera();
-                          },
-                        ),
-                        const SizedBox(width: 14),
-                        _RoundBtn(
-                          icon: Icons.call_end_rounded,
-                          color: AppTheme.danger,
-                          onTap: _end,
-                        ),
-                      ],
-                    ),
+                    // Kontrol call (mic/kamera/end) disembunyikan saat lawan
+                    // sudah keluar — tidak ada lagi yang dikontrol.
+                    if (!partnerEnded)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _RoundBtn(
+                            icon: session?.micOn == true
+                                ? Icons.mic_rounded
+                                : Icons.mic_off_rounded,
+                            onTap: () async {
+                              await session?.toggleMic();
+                              if (mounted) setState(() {});
+                            },
+                          ),
+                          const SizedBox(width: 14),
+                          _RoundBtn(
+                            icon: Icons.cameraswitch_rounded,
+                            onTap: () async {
+                              await session?.switchCamera();
+                            },
+                          ),
+                          const SizedBox(width: 14),
+                          _RoundBtn(
+                            icon: Icons.call_end_rounded,
+                            color: AppTheme.danger,
+                            onTap: _end,
+                          ),
+                        ],
+                      ),
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
@@ -394,6 +633,7 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -402,7 +642,12 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
     RandomPartner? p,
     bool searching,
     bool connecting,
+    bool partnerEnded,
+    String? endText,
   ) {
+    if (partnerEnded) {
+      return endText ?? s.randomCallPartnerLeft(p?.nickname ?? '');
+    }
     if (searching) return s.randomCallSearchingAgain;
     if (connecting) return s.randomConnecting;
     final parts = <String>[_duration()];
@@ -422,7 +667,15 @@ class _PartnerBackdrop extends StatelessWidget {
   final RandomPartner? partner;
   final bool searching;
 
-  const _PartnerBackdrop({this.partner, this.searching = false});
+  /// Teks "X keluar" saat lawan menutup call — menggantikan spinner agar
+  /// user paham panggilan sudah berakhir (bukan masih mencari).
+  final String? endedText;
+
+  const _PartnerBackdrop({
+    this.partner,
+    this.searching = false,
+    this.endedText,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -439,7 +692,13 @@ class _PartnerBackdrop extends StatelessWidget {
                 gender: partner!.gender,
                 size: 96,
               ),
-            if (searching) ...[
+            if (endedText != null) ...[
+              const SizedBox(height: 18),
+              Text(
+                endedText!,
+                style: AppText.bodyStrong.copyWith(color: Colors.white),
+              ),
+            ] else if (searching) ...[
               const SizedBox(height: 18),
               const SizedBox(
                 width: 26,

@@ -7,11 +7,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../config/app_flavor.dart';
+import '../../config/gifts.dart';
+import 'auth_provider.dart';
+import 'withdraw_provider.dart';
 import '../../config/strings.dart';
 import '../../config/theme.dart';
 import '../../core/admin_gate.dart';
 import '../../core/nav_gate.dart';
+import '../../services/mission_progress_service.dart';
 import '../../services/points_service.dart';
+import 'missions_provider.dart';
 import '../../utils.dart';
 import '../../widgets/points_toast.dart';
 
@@ -21,21 +26,17 @@ class PointsState {
   final bool enabledRaw;
   final bool enabledConfirmed;
   final int bonusBalance;
+  final int topupBalance;
   final int earnedBalance;
   final bool yukcoinV2Active;
   final bool ghostMode;
   final int extraPhotoSlots;
-  final int photoUnlockOnce;
-  final int photoUnlockPerm;
   final int roomCreatePaid;
   final int roomCreatePwPaid;
-  final int roomJoinPaid;
   final int roomExtendPaid;
   final int bonusMultiplier;
   final int callAudioCostPerMin;
   final int callVideoCostPerMin;
-  final int filterGenderCost;
-  final int nearbyCost;
   final Map<String, dynamic> featureFlags;
 
   const PointsState({
@@ -43,21 +44,17 @@ class PointsState {
     this.enabledRaw = true,
     this.enabledConfirmed = false,
     this.bonusBalance = 0,
+    this.topupBalance = 0,
     this.earnedBalance = 0,
     this.yukcoinV2Active = false,
     this.ghostMode = false,
     this.extraPhotoSlots = 0,
-    this.photoUnlockOnce = 5,
-    this.photoUnlockPerm = 20,
     this.roomCreatePaid = 100,
     this.roomCreatePwPaid = 150,
-    this.roomJoinPaid = 5,
     this.roomExtendPaid = 50,
     this.bonusMultiplier = 3,
     this.callAudioCostPerMin = 6,
     this.callVideoCostPerMin = 20,
-    this.filterGenderCost = 15,
-    this.nearbyCost = 25,
     this.featureFlags = const {},
   });
 
@@ -68,21 +65,17 @@ class PointsState {
       other.enabledRaw == enabledRaw &&
       other.enabledConfirmed == enabledConfirmed &&
       other.bonusBalance == bonusBalance &&
+      other.topupBalance == topupBalance &&
       other.earnedBalance == earnedBalance &&
       other.yukcoinV2Active == yukcoinV2Active &&
       other.ghostMode == ghostMode &&
       other.extraPhotoSlots == extraPhotoSlots &&
-      other.photoUnlockOnce == photoUnlockOnce &&
-      other.photoUnlockPerm == photoUnlockPerm &&
       other.roomCreatePaid == roomCreatePaid &&
       other.roomCreatePwPaid == roomCreatePwPaid &&
-      other.roomJoinPaid == roomJoinPaid &&
       other.roomExtendPaid == roomExtendPaid &&
       other.bonusMultiplier == bonusMultiplier &&
       other.callAudioCostPerMin == callAudioCostPerMin &&
       other.callVideoCostPerMin == callVideoCostPerMin &&
-      other.filterGenderCost == filterGenderCost &&
-      other.nearbyCost == nearbyCost &&
       mapEquals(other.featureFlags, featureFlags);
 
   @override
@@ -91,28 +84,26 @@ class PointsState {
     enabledRaw,
     enabledConfirmed,
     bonusBalance,
+    topupBalance,
     earnedBalance,
     yukcoinV2Active,
     ghostMode,
     extraPhotoSlots,
-    photoUnlockOnce,
-    photoUnlockPerm,
     roomCreatePaid,
     roomCreatePwPaid,
-    roomJoinPaid,
     roomExtendPaid,
     bonusMultiplier,
     callAudioCostPerMin,
     callVideoCostPerMin,
-    filterGenderCost,
-    nearbyCost,
     Object.hashAllUnordered(
       featureFlags.entries.map((e) => Object.hash(e.key, e.value)),
     ),
   ]);
 
   bool get enabled => enabledConfirmed && enabledRaw;
-  int get paidBalance => earnedBalance;
+  /// Koin "beli" = topup + penghasilan. Bucket `bonus` (gratis) TIDAK
+  /// dihitung — server (send_gift/unlock_photo) menolak bonus.
+  int get paidBalance => topupBalance + earnedBalance;
 
   int callCostPerMin(String callType) =>
       callType == 'audio' ? callAudioCostPerMin : callVideoCostPerMin;
@@ -121,24 +112,20 @@ class PointsState {
       (featureFlags[feature] is Map) &&
       ((featureFlags[feature] as Map)['published'] == true);
   bool get callBillingPublished => featurePublished('call_billing');
-  bool get genderFilterPublished => featurePublished('gender_filter_paid');
-  bool get nearbyPaidPublished => featurePublished('nearby_paid');
   bool get playTopupPublished => featurePublished('play_topup');
   bool get topupPathOpen => playTopupPublished || yukcoinV2Active;
 
-  int get costUndoMessage => 10;
-  int get costEditMessage => 15;
-  int get costExtraPhotoSlot => 60;
-  int get costGhostModeDaily => 50;
 }
 
 /// Saldo koin + harga fitur + lifecycle online (Riverpod).
 /// Migrasi dari ChangeNotifier → Notifier. Global (persist sepanjang sesi).
 class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   final PointsService _service;
+  final MissionProgressService _missionProgress;
 
-  PointsNotifier({PointsService? service})
-    : _service = service ?? PointsService(Supabase.instance.client);
+  PointsNotifier({PointsService? service, MissionProgressService? missionProgress})
+    : _service = service ?? PointsService(Supabase.instance.client),
+      _missionProgress = missionProgress ?? MissionProgressService();
 
   var _disposed = false;
   int _points = 50;
@@ -153,30 +140,28 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   StreamSubscription<AuthState>? _authSub;
   Timer? _walletDebounce;
 
+  /// Menit online yang SUDAH dikirim ke misi (dasar hitung delta).
+  /// Tanpa ini tiap tick 30 detik mengirim kumulatif → progress dobel.
+  int _missionOnlineMinutesSent = 0;
+
+  /// Total koin terakhir yang dikirim ke misi `nyonya_1000`.
+
   int _bonusBalance = 0;
+  int _topupBalance = 0;
   int _earnedBalance = 0;
   bool _yukcoinV2Active = false;
   bool _ghostMode = false;
   int _extraPhotoSlots = 0;
 
-  final int costUndoMessage = 10;
-  final int costEditMessage = 15;
-  final int costExtraPhotoSlot = 60;
-  final int costGhostModeDaily = 50;
 
-  int _photoUnlockOnce = 5;
-  int _photoUnlockPerm = 20;
 
   int _roomCreatePaid = 100;
   int _roomCreatePwPaid = 150;
-  int _roomJoinPaid = 5;
   int _roomExtendPaid = 50;
   int _bonusMultiplier = 3;
 
   int _callAudioCostPerMin = 6;
   int _callVideoCostPerMin = 20;
-  int _filterGenderCost = 15;
-  int _nearbyCost = 25;
 
   Map<String, dynamic> _featureFlags = {};
 
@@ -227,21 +212,17 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
       enabledRaw: _enabled,
       enabledConfirmed: _enabledConfirmed,
       bonusBalance: _bonusBalance,
+      topupBalance: _topupBalance,
       earnedBalance: _earnedBalance,
       yukcoinV2Active: _yukcoinV2Active,
       ghostMode: _ghostMode,
       extraPhotoSlots: _extraPhotoSlots,
-      photoUnlockOnce: _photoUnlockOnce,
-      photoUnlockPerm: _photoUnlockPerm,
       roomCreatePaid: _roomCreatePaid,
       roomCreatePwPaid: _roomCreatePwPaid,
-      roomJoinPaid: _roomJoinPaid,
       roomExtendPaid: _roomExtendPaid,
       bonusMultiplier: _bonusMultiplier,
       callAudioCostPerMin: _callAudioCostPerMin,
       callVideoCostPerMin: _callVideoCostPerMin,
-      filterGenderCost: _filterGenderCost,
-      nearbyCost: _nearbyCost,
       featureFlags: Map.unmodifiable(_featureFlags),
     );
   }
@@ -251,30 +232,24 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   bool get enabled => _enabledConfirmed && _enabled;
   bool get enabledConfirmed => _enabledConfirmed;
   int get bonusBalance => _bonusBalance;
+  int get topupBalance => _topupBalance;
   int get earnedBalance => _earnedBalance;
-  int get paidBalance => _earnedBalance;
+  int get paidBalance => _topupBalance + _earnedBalance;
   bool get yukcoinV2Active => _yukcoinV2Active;
   bool get ghostMode => _ghostMode;
   int get extraPhotoSlots => _extraPhotoSlots;
-  int get photoUnlockOnce => _photoUnlockOnce;
-  int get photoUnlockPerm => _photoUnlockPerm;
   int get roomCreatePaid => _roomCreatePaid;
   int get roomCreatePwPaid => _roomCreatePwPaid;
-  int get roomJoinPaid => _roomJoinPaid;
   int get roomExtendPaid => _roomExtendPaid;
   int get bonusMultiplier => _bonusMultiplier;
   int get callAudioCostPerMin => _callAudioCostPerMin;
   int get callVideoCostPerMin => _callVideoCostPerMin;
-  int get filterGenderCost => _filterGenderCost;
-  int get nearbyCost => _nearbyCost;
   int callCostPerMin(String callType) =>
       callType == 'audio' ? _callAudioCostPerMin : _callVideoCostPerMin;
   bool featurePublished(String feature) =>
       (_featureFlags[feature] is Map) &&
       ((_featureFlags[feature] as Map)['published'] == true);
   bool get callBillingPublished => featurePublished('call_billing');
-  bool get genderFilterPublished => featurePublished('gender_filter_paid');
-  bool get nearbyPaidPublished => featurePublished('nearby_paid');
   bool get playTopupPublished => featurePublished('play_topup');
   bool get topupPathOpen => playTopupPublished || yukcoinV2Active;
   @visibleForTesting
@@ -293,9 +268,6 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
       _callVideoCostPerMin =
           (p['call_video_cost_per_min'] as num?)?.toInt() ??
           _callVideoCostPerMin;
-      _filterGenderCost =
-          (p['filter_gender_cost'] as num?)?.toInt() ?? _filterGenderCost;
-      _nearbyCost = (p['nearby_cost'] as num?)?.toInt() ?? _nearbyCost;
       _featureFlags = await _service.featureFlags();
       _emit();
     } catch (e) {
@@ -303,16 +275,6 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     }
   }
 
-  Future<bool> gateFeature(String feature, {String? priceFeature}) async {
-    try {
-      await _service.gateFeature(feature, priceFeature: priceFeature);
-      await refreshWallet();
-      return true;
-    } catch (e) {
-      dlog('[POINTS] gateFeature($feature) error: $e');
-      rethrow;
-    }
-  }
 
   Future<bool> ensureEnoughForCall(
     BuildContext context,
@@ -320,9 +282,19 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     bool isId,
   ) async {
     if (!_enabled || !callBillingPublished) return true;
+    // FEMALE CALLER = GRATIS (server: 30 menit/hari, ditegakkan di
+    // call_billing_tick). Jangan blokir di client — female dengan 0 koin
+    // adalah kondisi normal (koinnya datang dari lawan bicara), dan dulu
+    // dialog "YukCoin tidak cukup" membatalkan panggilannya sama sekali.
+    final myGender = ref.read(authProvider.notifier).profile?.gender;
+    if (myGender == 'female') return true;
     await refreshWallet();
     final need = callCostPerMin(callType);
-    if (_points >= need) return true;
+    // Server (charge_metered/call_billing_tick sejak 2026-11-01) HANYA
+    // menerima koin beli/penghasilan (topup+earned). Koin `bonus` ditolak
+    // — cek pakai paid, bukan total, agar dialog top-up muncul sebelum
+    // call diputus di tengah.
+    if (_topupBalance + _earnedBalance >= need) return true;
     if (!context.mounted) return false;
     final s = S(isId: isId);
     showDialog(
@@ -394,7 +366,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
       _roomCreatePaid = (p['create_paid'] as num?)?.toInt() ?? _roomCreatePaid;
       _roomCreatePwPaid =
           (p['create_pw_paid'] as num?)?.toInt() ?? _roomCreatePwPaid;
-      _roomJoinPaid = (p['join_paid'] as num?)?.toInt() ?? _roomJoinPaid;
+      // join_paid diabaikan: join room GRATIS di server sejak 2026-08-27.
       _roomExtendPaid = (p['extend_paid'] as num?)?.toInt() ?? _roomExtendPaid;
       _bonusMultiplier = (p['multiplier'] as num?)?.toInt() ?? _bonusMultiplier;
       _emit();
@@ -403,24 +375,12 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     }
   }
 
-  bool _photoCostsLoadedFlag = false;
-  Future<void> refreshPhotoCosts({bool force = false}) async {
-    if (_photoCostsLoadedFlag && !force) return;
-    try {
-      final c = await _service.photoCosts();
-      _photoUnlockOnce = c.$1;
-      _photoUnlockPerm = c.$2;
-      _photoCostsLoadedFlag = true;
-      _emit();
-    } catch (e) {
-      dlog('[POINTS] refreshPhotoCosts error: $e');
-    }
-  }
 
   Future<void> refreshWallet() async {
     try {
       final w = await _service.getWallet();
       _bonusBalance = (w['bonus'] as num?)?.toInt() ?? 0;
+      _topupBalance = (w['topup'] as num?)?.toInt() ?? 0;
       _earnedBalance = (w['earned'] as num?)?.toInt() ?? 0;
       _points = (w['total'] as num?)?.toInt() ?? _points;
       _emit();
@@ -442,19 +402,10 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     }
   }
 
-  Future<Map<String, dynamic>> spendYukcoin(
-    String feature,
-    int amount, {
-    String? ref,
-  }) => _service.spendYukcoin(feature, amount, ref: ref);
   Future<Map<String, dynamic>> undoMessage(int messageId) =>
       _service.undoMessage(messageId);
-  Future<Map<String, dynamic>> editMessage(int messageId, String newText) =>
-      _service.editMessage(messageId, newText);
   Future<Map<String, dynamic>> buyExtraPhotoSlots({int slots = 5}) =>
       _service.buyExtraPhotoSlots(slots: slots);
-  Future<Map<String, dynamic>> buyGhostMode({int days = 1}) =>
-      _service.buyGhostMode(days: days);
 
   Future<Map<String, dynamic>> leaderboard(
     String scope, {
@@ -495,13 +446,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     }
   }
 
-  void syncFromProfile(int value) {
-    if (_disposed) return;
-    if (value != _points) {
-      _points = value;
-      _emit();
-    }
-  }
+
 
   void subscribeEnabled() {
     try {
@@ -550,11 +495,28 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     await prefs.setBool(_onboardingKey, true);
   }
 
-  Future<void> showOnboardingIfNeeded(BuildContext context, dynamic s) async {
+  /// Minimum withdraw dari server (get_withdraw_config). Fallback ke nilai
+  /// default config bila provider belum dimuat — onboarding hanya tampilan.
+  int _withdrawMinCoins() {
+    try {
+      return ref.read(withdrawProvider).config.minCoins;
+    } catch (_) {
+      return 2000;
+    }
+  }
+
+  Future<void> showOnboardingIfNeeded(
+    BuildContext context,
+    dynamic s, {
+    String? gender,
+  }) async {
     await refreshEnabled();
     if (_onboardingShown || !enabled) return;
     if (!context.mounted) return;
     markOnboardingShown();
+    final isFemale = gender == 'female';
+    final callAudio = _callAudioCostPerMin;
+    final callVideo = _callVideoCostPerMin;
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -600,9 +562,30 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _onboardItem('🪙', s.pointsOnboardCoinTitle, highlight: true),
-                  _onboardItem('💬', s.pointsOnboardCoinBody),
-                  _onboardItem('📞', s.pointsOnboardCallFree),
+                  // Kopi per gender: male = apa yang DIBAYAR, female = cara
+                  // MENDAPAT. Aturan ekonominya memang asimetris (male bayar,
+                  // female menerima), jadi satu teks untuk keduanya menyesatkan.
+                  if (isFemale) ...[
+                    _onboardItem('💰', s.pointsOnboardFemaleSub,
+                        highlight: true),
+                    _onboardItem('', s.pointsOnboardFemaleCall),
+                    _onboardItem('', s.pointsOnboardFemaleGift),
+                    _onboardItem('', s.pointsOnboardFemaleMatch),
+                    _onboardItem(
+                        '',
+                        s.pointsOnboardFemaleWithdraw(
+                            _withdrawMinCoins())),
+                  ] else ...[
+                    _onboardItem('🪙', s.pointsOnboardMaleSub, highlight: true),
+                    _onboardItem('', s.pointsOnboardMaleCall(callAudio, callVideo)),
+                    _onboardItem('', s.pointsOnboardMaleMatch(kMatchFeeCoins)),
+                    _onboardItem(
+                        '',
+                        s.pointsOnboardMaleGift(
+                            kGiftCatalog.first.coins,
+                            kGiftCatalog.last.coins)),
+                    _onboardItem('', s.pointsOnboardMaleFree),
+                  ],
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -704,14 +687,46 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   }
 
   void _checkOnlineMilestones() {
-    if (!enabled) return;
     if (_sessionStart != null) {
       _todayOnlineSeconds += DateTime.now()
           .difference(_sessionStart!)
           .inSeconds;
       _sessionStart = DateTime.now();
     }
+    _trackOnlineMissions();
     _tryClaimOnlineBonus();
+  }
+
+  /// Kirim menit online ke misi — HANYA DELTA yang belum pernah dikirim.
+  /// Dulu mengirim nilai kumulatif tiap 30 detik → progress bisa 3× lipat.
+  void _trackOnlineMissions() {
+    final totalMinutes = _todayOnlineSeconds ~/ 60;
+    final delta = totalMinutes - _missionOnlineMinutesSent;
+    if (delta <= 0) return;
+    _missionOnlineMinutesSent = totalMinutes;
+
+    unawaited(_missionProgress.updateProgress(
+      'daily_online_minutes',
+      increment: delta,
+    ));
+    unawaited(_missionProgress.updateProgress(
+      'daily_online_duration',
+      increment: delta,
+    ));
+
+    // Misi jam khusus: 19:00–23:00 & 01:00–05:00 (waktu device).
+    final h = DateTime.now().hour;
+    if (h >= 19 && h < 23) {
+      unawaited(_missionProgress.updateProgress(
+        'evening_online_call',
+        increment: delta,
+      ));
+    } else if (h >= 1 && h < 5) {
+      unawaited(_missionProgress.updateProgress(
+        'night_owl_online_call',
+        increment: delta,
+      ));
+    }
   }
 
   Future<void> _tryClaimOnlineBonus() async {}
@@ -720,11 +735,46 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
 
   void resetOnlineTrackers() {
     _todayOnlineSeconds = 0;
+    _missionOnlineMinutesSent = 0;
     _sessionStart = DateTime.now();
   }
 
-  Future<void> claimDailyLogin() async {
+  /// Klaim bonus login harian (halaman Bonus, male). Server idempotent:
+  /// klaim ulang hari sama → bonus 0. Return {streak, bonus} untuk toast.
+  Future<({int streak, int bonus})> claimDailyLogin() async {
     resetOnlineTrackers();
+    if (!enabled) return (streak: 0, bonus: 0);
+    try {
+      final res = await _service.dailyLoginBonus();
+      final bonus = (res['bonus'] as num?)?.toInt() ?? 0;
+      final total = (res['total'] as num?)?.toInt() ?? 0;
+      if (total > 0) {
+        _points = total;
+        _emit();
+      }
+      // Grid streak dibaca missionsProvider — segarkan setelah klaim.
+      unawaited(ref.read(missionsProvider.notifier).refresh());
+      return (
+        streak: (res['streak'] as num?)?.toInt() ?? 0,
+        bonus: bonus,
+      );
+    } catch (e) {
+      dlog('[POINTS] claimDailyLogin error: $e');
+      return (streak: 0, bonus: 0);
+    }
+  }
+
+  /// Passthrough untuk tracking mission progress dari widgets/screen (Fase B boundary).
+  ///
+  /// Dibungkus try/catch: tracking misi adalah efek samping NON-KRITIS. Kalau
+  /// Supabase belum siap (test / cold start), jangan sampai membuat aksi
+  /// utama (kirim pesan, like, follow) ikut gagal.
+  void trackMission(String missionKey, {int increment = 1}) {
+    try {
+      unawaited(_missionProgress.updateProgress(missionKey, increment: increment));
+    } catch (e) {
+      dlog('[MISSIONS] trackMission($missionKey) dilewati: $e');
+    }
   }
 
   void checkAndShowStreakToast(BuildContext context, bool isId) {}
@@ -743,6 +793,9 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   }
 
   Future<int> deductBeforeSend(String msgType) async {
+    // 2026-10-31: pesan teks GRATIS di server (deduct_chat_point no-op).
+    // Jangan tembak RPC per pesan — hemat radio/baterai di chat aktif.
+    if (msgType == 'text') return _points;
     if (!_enabled) return _points;
     try {
       final remaining = await _service.deductChatPoint(msgType);
@@ -760,6 +813,8 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   }
 
   Future<void> refundChatPoint(String msgType) async {
+    // Teks gratis → tidak ada yang direfund (refund_chat_point juga no-op).
+    if (msgType == 'text') return;
     if (!_enabled) return;
     try {
       _points = await _service.refundChatPoint(msgType);
@@ -769,69 +824,10 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> roomReadBonus() async {
-    if (!enabled) return;
-    try {
-      _points = await _service.roomReadBonus();
-      _emit();
-    } catch (e) {
-      dlog('[POINTS] roomReadBonus error: $e');
-    }
-  }
 
-  Future<bool> oneTimeBonus(String actionKey, int bonus) async {
-    if (!enabled) return false;
-    try {
-      final old = _points;
-      _points = await _service.oneTimeBonus(actionKey, bonus);
-      _emit();
-      return _points > old;
-    } catch (e) {
-      dlog('[POINTS] oneTimeBonus error: $e');
-      return false;
-    }
-  }
 
-  Future<int> rewardPhotoSlot(int slotIndex) async {
-    if (!enabled) return 0;
-    try {
-      final old = _points;
-      _points = await _service.rewardPhotoSlot(slotIndex);
-      _emit();
-      return _points > old ? _points - old : 0;
-    } catch (e) {
-      dlog('[POINTS] rewardPhotoSlot error: $e');
-      return 0;
-    }
-  }
 
-  Future<bool> unlockPhoto(String photoId, String mode) async {
-    try {
-      final res = await _service.unlockPhoto(photoId, mode);
-      if (res['points'] != null) setPoints((res['points'] as num).toInt());
-      return res['ok'] == true;
-    } on PostgrestException catch (e) {
-      if (e.message.contains('Not enough points') ||
-          e.message.contains('Not enough topup')) {
-        throw 'topup';
-      }
-      dlog('[POINTS] unlockPhoto error: $e');
-      rethrow;
-    }
-  }
 
-  Future<bool> claimRegisterBonus() async {
-    if (!enabled) return false;
-    try {
-      final old = _points;
-      _points = await _service.registerBonus();
-      _emit();
-      return _points > old;
-    } catch (e) {
-      dlog('[POINTS] registerBonus error: $e');
-      return false;
-    }
-  }
 
   Future<Map<String, dynamic>> subscribeCreator(
     String creatorUid, {
@@ -842,11 +838,6 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     return res;
   }
 
-  Future<Map<String, dynamic>> claimReferralReward() async {
-    final res = await _service.claimReferralReward();
-    await refreshWallet();
-    return res;
-  }
 
   void showPointsToast(
     BuildContext context,

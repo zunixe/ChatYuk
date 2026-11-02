@@ -23,12 +23,14 @@ select supabase_tests.check('spend_yukcoin punya guard auth.uid()',
       and pg_get_functiondef(p.oid) like '%p_user is distinct from auth.uid()%'
   ));
 
-select supabase_tests.check('charge_metered punya guard auth.uid()',
-  exists(
-    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname = 'charge_metered'
-      and pg_get_functiondef(p.oid) like '%p_caller is distinct from auth.uid()%'
-  ));
+-- 2026-11-01: guard lama (p_caller = auth.uid()) DIGANTI proteksi lebih
+-- kuat — EXECUTE dicabut dari authenticated, jadi client tidak bisa
+-- memanggilnya sama sekali (dan tidak bisa memilih p_recipient).
+select supabase_tests.check('charge_metered tidak bisa dipanggil client',
+  not has_function_privilege('authenticated',
+    'public.charge_metered(uuid,text,text,integer,uuid)', 'EXECUTE')
+  and has_function_privilege('service_role',
+    'public.charge_metered(uuid,text,text,integer,uuid)', 'EXECUTE'));
 
 -- ── 2. Guard metadata + _impl tidak bisa dipanggil klien ────────────────────
 select supabase_tests.check('list_my_groups punya guard auth.uid()',

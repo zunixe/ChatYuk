@@ -61,7 +61,6 @@ import '../core/call/call_permissions.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../utils/mention.dart';
 import '../widgets/gift_fly_overlay.dart';
-import '../widgets/room_gift_panel.dart';
 import '../config/gifts.dart';
 import '../providers/riverpod/theme_provider.dart';
 import 'package:flutter/services.dart';
@@ -112,7 +111,6 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   late AuthNotifier _auth;
   late chat_riverpod.ChatNotifier _chat;
   int _lastMsgCount = 0;
-  PointsNotifier? _pointsProv;
   Timer? _presenceTimer;
   String? _pendingPhotoBase64;
   // ── Video (room: grup & global) — paritas private chat ──
@@ -261,7 +259,6 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   void _onGroupMenu(String v);
   Future<void> _openMembersSheet();
   Future<void> _onStartBroadcastTap();
-  Future<void> _openRoomGiftPanel();
 }
 
 class _RoomChatScreenState extends _RoomChatBase

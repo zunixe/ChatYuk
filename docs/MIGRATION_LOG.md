@@ -1,3 +1,1074 @@
+## 2026-11-02 — Audit lanjutan: pulihkan regresi + zona waktu (Fase 23)
+
+**Temuan utama:** migrasi `20261101190000_paid_only_economy.sql` (yang
+menutup jalur koin gratis → uang) menyalin `request_withdraw` dari salinan
+LAMA sehingga diam-diam membuang dua perbaikan dari `20261101180000`.
+Juga ditemukan bug zona waktu yang belum tertangani di tiga fungsi.
+
+### `20261102220000_withdraw_quota_fee_timezone_restore.sql` (APPLIED)
+1. **Kuota withdraw dipulihkan:** `AND status <> 'rejected'` dikembalikan
+   pada query kuota harian DAN cooldown. Tanpa itu, pengajuan yang ditolak
+   admin tetap memakan kuota 3/hari dan cooldown 1 jam.
+2. **Fee rounding dipulihkan:** `round((v_gross * v_fee_pct) / 100.0)`
+   (sebelumnya `greatest(... / 100, ...)` yang memotong) agar sama dengan
+   preview client — dialog konfirmasi tidak lagi selisih 1 Rp.
+3. **Zona waktu:** batas "hari" memakai awal hari Asia/Jakarta sebagai
+   `timestamptz`.
+
+### `20261102230000_economy_consistency_round2.sql` (APPLIED)
+1. `get_earnings_summary.withdrawable` kini **hanya bucket `earned`** (sama
+   dengan validasi `request_withdraw`); field baru `total_balance` untuk
+   informasi. Sebelumnya menjumlah semua bucket → layar Saldo bisa
+   melebihkan angka yang benar-benar bisa ditarik.
+2. `get_user_missions` ditambah `SET search_path TO 'public'`.
+3. `claim_mission_reward` menegakkan `missions.gender` di server (misi
+   female-only sebelumnya bisa diklaim male lewat RPC langsung).
+4. `streak_bonus_amount` dicabut dari `public, anon`.
+5. `spend_yukcoin` dicabut dari `authenticated` (permukaan mati dengan
+   semantik gift lama yang masih menerima bucket bonus).
+
+### `20261102240000_call_free_limit_timezone.sql` (APPLIED)
+1. **Bug zona waktu batas gratis female:** `answered_at >= current_date`
+   memakai UTC. Server Supabase ber-zona UTC sementara user WIB → panggilan
+   yang dijawab setelah tengah malam WIB tidak terhitung ke kuota hari itu.
+2. **Bug perbandingan tipe:** membandingkan kolom `timestamptz` dengan
+   `date` SALAH tafsir (date dibaca UTC midnight). Terbukti di test:
+   panggilan 23:29 UTC (06:29 WIB hari berikutnya) terbaca 0 menit.
+   Solusi: `(((now() AT TIME ZONE 'Asia/Jakarta')::date)::timestamp
+   AT TIME ZONE 'Asia/Jakarta')`.
+3. **Afford-check call memakai saldo PAID:** `yukcoin_total` →
+   `yukcoin_paid_total`. Sebelumnya caller bonus-only lolos cek lalu
+   `charge_metered` melempar exception di tengah tick.
+4. Nama variabel disamakan dengan pola yang diuji `call_billing_toggle_test`
+   (`points_on`).
+
+### Perbaikan client
+- Minimum withdraw 2000 (bukan 1500) di string; angka kini dari server.
+- `wdWithdrawableHint` tidak lagi menjanjikan "semua koin bisa ditarik".
+- Layar Saldo menampilkan `withdrawable` (earned) sebagai headline dan
+  `total_balance` terpisah bila berbeda.
+- 7 string paywall foto (mati) dihapus; editor admin `photo_upload_reward`
+  dan `photo_unlock_owner_pct` dihapus.
+- Header migrasi `20261101190000` yang salah tulis (copy-paste) diperbaiki.
+
+### Test
+- `economy_bonus_saldo_test.sql` diperkuat: kuota withdraw diuji dengan
+  **3 baris `rejected`** (sebelumnya 1 baris — kuota 3, jadi lolos dua-dua
+  dan assertion lulus kosong). Assertion diubah jadi positif
+  (`ok = true`), bukan sekadar "bukan DAILY_LIMIT".
+- **Verifikasi uji-regresi secara sad:** filter `status <> 'rejected'`
+  sengaja dihapus → test GAGAL; dipulihkan → test lulus. Ini membuktikan
+  test benar-benar menangkap regresi, bukan lolos kosong.
+- Coverage baru: batas gratis female 30 menit (jalur `free_limit`), batas
+  tepat minimum withdraw (min-1 vs min), misi female-only untuk male,
+  `withdrawable` vs `total_balance`.
+- Test basi untuk `unlock_photo` (fitur sudah dinonaktifkan) dihapus dari
+  `economy_money_test.sql` dan `economy_matrix_test.sql`.
+
+### Verifikasi (2026-11-02)
+- `check_migrations.sh` → **OK bersih**
+- `run_sql_tests.sh` → **51 file hijau** (termasuk
+  `economy_bonus_saldo_test.sql` 24/24, `economy_paid_only_test.sql` 27/27)
+- Migrasi & test baru sudah `git add` (ter-track, tidak di-commit)
+
+## 2026-11-02 — Sisa celah audit: precheck client + 2 titik SQL laten
+
+### `20261101210000_client_paid_precheck_hardening.sql` (APPLIED via Management API)
+Review ulang audit peredaran koin (2026-11-02) menemukan:
+- **RUSAK (efek 190000):** `ensureEnoughForCall` (`points_provider.dart`)
+  cek saldo TOTAL (`_points`) — server kini minta paid → male bonus-only
+  lolos dialog lalu call diputus. Fix client: cek `_topupBalance +
+  _earnedBalance`; room create/extend cek per-bucket
+  (`paidBalance >= paid || bonusBalance >= paid×mult`); subscribe
+  precheck `paidBalance >= price`; headline Saldo pakai `withdrawable`
+  (earned) bukan total; snackbar klaim misi male berlabel "koin bonus
+  (tidak bisa dicairkan)" + komentar by-gender.
+- **SQL laten 1:** `spend_yukcoin` masih di-grant `authenticated`
+  (client tak pernah memanggil; pemanggil sah `random_match_join` via
+  `_spend_yukcoin_core` definer) → REVOKE dari `authenticated`.
+- **SQL laten 2:** `get_earnings_summary.v_withdrawable` = SUM semua
+  bucket → filter bucket `earned` (bonus menggelembungkan "bisa ditarik").
+  Badan lain sama dengan 20261101180000.
+- **Test:** `economy_paid_only_test.sql` 27/27 (+2: grant spend_yukcoin,
+  withdrawable earned-only); Dart `test/points_call_precheck_test.dart`
+  4/4 (baru) + regresi di `points_provider_extra_test.dart` (bonus-only →
+  dialog MUNCUL); `missions_screen_test.dart` tanggal hardcode
+  '2026-11-01' → `_todayWib()` dinamis (bukan regresi — test basi saat
+  tanggal berganti). Semua suite SQL hijau; `check_migrations.sh --all`
+  OK; snapshot refresh (30 fungsi, 0 hilang); `flutter analyze` 0 error/
+  0 warning.
+- **Docs:** FEATURE_MAP (ringkasan paid-only + bucket misi + precheck
+  client), ECONOMY_TEST_MATRIX A17 (kolom bucket).
+
+## 2026-11-01 — Audit menyeluruh bonus, saldo & YukCoin (Fase 22)
+
+**Temuan:** 5 bug yang merugikan user, ~15 hal menyesatkan/tidak konsisten,
+dan sejumlah fitur mati. Semua sudah diverifikasi langsung di kode.
+
+### `20261101170000_claim_mission_coins_from_balance.sql` (APPLIED)
+**Bug:** misi bertarget koin (`nyonya_1000`) mustahil diklaim.
+`get_user_missions` (160000) menghitung `is_completed` dari saldo ledger
+tanpa menulis ke `user_missions`, tetapi `claim_mission_reward`
+mensyaratkan baris `user_missions` -> selalu `MISSION_NOT_STARTED`.
+Female dengan >= 1000 koin earned melihat tombol "Klaim +100" tetapi tidak
+mendapat apa pun (UI juga gagal senyap).
+-> Untuk misi `target_unit='coins'`, kelulusan dihitung dari saldo bucket
+`earned` (rumus sama dengan `get_user_missions`); baris `user_missions`
+dibuat bila belum ada. Klaim tetap atomik (`WHERE claimed = false`).
+
+### `20261101180000_economy_consistency_fixes.sql` (APPLIED)
+1. `get_earnings_summary`: `breakdown.match_call` & `message` di-hardcode 0
+   padahal `private_call` sudah memasukkan `match_call_income` -> income
+   match muncul di baris "Panggilan Privasi" dan baris "Panggilan Match"
+   SELALU 0. Sekarang dipisahkan.
+2. Zona waktu: `current_date`/`date_trunc('week')` memakai zona sesi DB
+   (UTC) -> "Hari Ini" reset 07:00 WIB. Dipindah ke Asia/Jakarta.
+3. `SET search_path` ditambahkan (fungsi SECURITY DEFINER tanpa itu).
+4. `request_withdraw`: kuota harian & cooldown menghitung SEMUA baris apa
+   pun statusnya -> pengajuan yang DITOLAK tetap memakan kuota 3/hari dan
+   cooldown 1 jam. Status `rejected` sekarang dikecualikan.
+5. Fee dibulatkan ke atas agar sama dengan preview client (dulu server
+   memotong -> selisih 1 Rp di dialog konfirmasi).
+
+### `20261101190000_paid_only_economy.sql` (APPLIED)
+Menutup tiga jalur koin gratis -> uang: `charge_metered` dan
+`request_withdraw` tidak lagi memakai bucket `bonus`; reward misi tidak
+lagi jatuh ke `earned` untuk gender yang tidak berhak.
+
+### `20261101200000_disable_photo_unlock.sql` (APPLIED)
+Fitur "buka foto pakai koin" DINONAKTIFKAN (keputusan produk): tidak ada
+UI yang memanggilnya, dan `user_info` justru membuang foto terkunci ->
+`photo_income` tidak pernah bisa terjadi. EXECUTE dicabut dari
+`authenticated`; tipe kolom `photo_unlock_once/perm` dinormalkan ke `int`
+(baseline membuatnya boolean -> replay bersih bisa gagal).
+
+### Perbaikan client (tanpa migrasi)
+- **Female caller tidak bisa menelepon:** `ensureEnoughForCall` memblokir
+  siapa pun dengan saldo < tarif per menit, padahal server memberi female
+  30 menit gratis/hari dan menagih 0. Sekarang female lolos.
+- **Withdraw menampilkan kode mentah:** UI memetakan `INSUFFICIENT_EARNED`
+  (mati) padahal server mengembalikan `INSUFFICIENT_BALANCE`;
+  `POINTS_DISABLED` juga tidak dipetakan. Keduanya diperbaiki, dan batas
+  (min/harian/interval/umur) kini memakai angka dari server.
+- **Admin withdraw sukses palsu:** respons RPC dibuang ->
+  `{ok:false, error:'ALREADY_PROCESSED'}` dilaporkan sebagai berhasil.
+  Sekarang respons dibaca dan jumlah refund ditampilkan saat reject.
+- **Janji "+100 daftar email"** salah untuk female -> label dibuat netral.
+- **Harga phantom:** "Beli slot foto - 60" padahal server menagih 0;
+  getter `costUndoMessage/costEditMessage/costExtraPhotoSlot/
+  costGhostModeDaily` dihapus.
+- **Minimum withdraw 1500 -> 2000** di string & default config; rate 7
+  yang di-hardcode diganti `config.rate`.
+- **Match:** ditambahkan catatan tarif per menit setelah menit gratis.
+- **Kirim koin > 1000** kini divalidasi client (dulu error mentah server).
+- **Label riwayat** untuk `post_boost`, `level_reward`,
+  `female_bonus_reset`.
+- **Harga room** ditampilkan sebelum konfirmasi (buat & perpanjang).
+- **Konsistensi saldo:** angka "bisa ditarik" selaras dengan validasi
+  server; saldo & ringkasan penghasilan di-refresh setelah withdraw;
+  layar Withdraw punya state error (dulu saldo 0 disamarkan sebagai
+  "belum ada apa-apa").
+- **Menu Undo** tidak lagi digate paywall (undo gratis).
+- **Fitur mati dibuang:** `unlock_photo` (+ string paywall foto),
+  `chatChargeYukcoin`/`spendYukcoin`, `gateFeature`, `editMessage` v2,
+  `buyGhostMode`/`isGhostMode`, `myExtraPhotoSlots`, `getYukcoin`,
+  `yukcoinV2For`, `claimReferralReward`, `rewardPhotoSlot`,
+  `roomReadBonus`, `oneTimeBonus`, `registerBonus`, `listGifts`,
+  `RoomGiftPanel`, `syncFromProfile`/`_trackNyonya`, dan string mati.
+- **Panel admin:** kolom `photo_unlock_once/perm` dihapus (fitur mati).
+
+### Verifikasi (2026-11-01)
+- `check_migrations.sh` -> **OK bersih**
+- `run_sql_tests.sh` -> **51 file hijau** (termasuk
+  `economy_bonus_saldo_test.sql` baru, 14/14)
+- `smoke_anon_register.sh` -> **OK bersih**
+- `snapshot_functions.sh` -> 30 fungsi, 0 hilang, tanpa cabang kritis hilang
+- `flutter analyze` -> 0 error / 0 warning; `flutter test` -> **2588 lulus**
+- Test `daily_login_test` diperbaiki: "kemarin" kini memakai
+  Asia/Jakarta (server ber-zona UTC, jadi `current_date - 1` bisa berbeda
+  dari hari yang dihitung fungsi).
+
+## 2026-11-01 — Audit peredaran koin + tutup 3 jalur koin gratis → uang
+
+### `20261101190000_paid_only_economy.sql` (APPLIED via Management API)
+- **Audit peredaran (live):** 521 user (474 male / 47 female).
+  Peredaran **11.081 koin** = bonus 10.093 (91%) + earned 988 +
+  topup 0. **0 top-up, 0 withdraw** — ekonomi masih pra-pendapatan
+  (`play_topup` & `call_billing` flag belum published). Bonus pernah
+  dikeluarkan: signup 11.250 · welcome_anon 100 · daily_login 75 ·
+  migrate 58 · one_time 45 · new_chat 40. Female bonus sudah dinolkan
+  (1.278 via `female_bonus_reset`). Bocor terwujud: 1 koin bonus bayar
+  call_video (≈Rp 2). `economy_invariant_check` → 0 pelanggaran.
+- **L1 (call):** `charge_metered` memakai `ledger_spend` (bonus DULU) →
+  bonus male bayar menit call → 30% net jadi `earned` female →
+  withdrawable Rp 7/koin. Fix: `ledger_spend_paid` + precheck
+  `yukcoin_paid_total`; `call_billing_tick` afford-check pakai paid
+  (bonus-only → `can_continue=false`, bukan exception).
+- **L2 (withdraw):** `request_withdraw` cek saldo TOTAL + debit
+  `ledger_spend` (bonus dulu). Fix: cek + debit HANYA bucket `earned`
+  via helper baru `ledger_spend_earned` (advisory lock, service_role).
+  Refund `admin_withdraw_process` sudah per-bucket → tak berubah.
+- **L3 (misi):** `claim_mission_reward` selalu kredit `earned` untuk
+  siapa pun (missions.gender='all' hampir semua) → male klaim misi
+  harian 10–25 koin → kirim koin/gift ke female → withdraw. Fix:
+  female → `earned`; selain female → `bonus` (non-withdrawable, tak
+  bisa ditransfer/bayar fitur).
+- **Helper baru:** `yukcoin_paid_total(uuid)` (cermin paidBalance
+  client) + `ledger_spend_earned(uuid,text,int,text)`.
+- **CATATAN URUTAN:** file ini HARUS setelah
+  `20261101180000_economy_consistency_fixes.sql` — file itu me-replace
+  `request_withdraw` dari salinan lama (masih `ledger_spend`) dan akan
+  membuka kembali L2 kalau di-apply setelah file ini. (Timestamp 180000
+  asli milik file ini dipindah ke 190000 karena bentrok dengan file
+  consistency_fixes yang muncul saat sesi berjalan.)
+- **Test:** suite baru `economy_paid_only_test.sql` 25/25 (charge
+  paid/mixed/bonus-only, tick afford, withdraw earned-only/bonus-only/
+  mixed, misi by-gender, anti-dobel). Perbaikan suite lama:
+  `economy_money_test` & `economy_hardening_test` withdraw 1500→2000
+  (ikut `withdraw_min_coins` live sejak 20261101160000 — test basi,
+  bukan regresi). Semua suite SQL hijau; `check_migrations.sh --all`
+  OK; snapshot refresh (30 fungsi, 0 hilang; diff hanya catch-up
+  marker migrasi basi + tier bonus `send_gift` yang sudah dihapus
+  20261031110005).
+
+## 2026-11-01 — Progres nyonya = saldo earned net + min withdraw 2000
+
+### `20261101160000_nyonya_progress_earned_balance.sql` (APPLIED via Management API)
+
+- **Masalah:** `nyonya_1000` memakai `v_total` (SUM amount>0 SEMUA
+  bucket = kumulatif seumur hidup) → female lama langsung
+  `is_completed` → "Klaim +100" walau saldo withdrawable masih kecil.
+- **Fix:** misi `target_unit='coins'` dihitung dari `v_earned_bal` =
+  `SUM(amount) WHERE bucket='earned'` NET — rumus sama dengan
+  `v_earned` di `request_withdraw` (koin yang benar-benar bisa
+  ditarik). Belanja/withdraw menurunkan progres. `v_total` tetap
+  untuk unlock misi harian @1200 dan output `total_coins`.
+- **Setting:** `withdraw_min_coins` 1500 → **2000** (live via UPDATE
+  di migrasi yang sama).
+- **UI:** tombol withdraw di `saldo_screen` non-aktif saat
+  `earned < minCoins` (`WithdrawState.canWithdraw`).
+- **Verifikasi:** live ChatAja earned_net=0 → progress 0 + tak
+  selesai (tampil "0/1000", bukan "Klaim +100"); pgTAP 19/19
+  (+2 asersi: kredit bonus tak dihitung, pengeluaran earned
+  menurunkan progres); widget test 22/22; gate migrasi OK;
+  snapshot refresh (0 hilang).
+
+## 2026-11-01 — Progres misi 'coins' dari ledger kumulatif (nyonya)
+
+### `20261101150000_nyonya_coins_progress.sql` (APPLIED via Management API)
+
+- **Masalah:** `nyonya_1000` ("kumpulkan 1000 koin") membaca
+  `user_missions.progress` yang TIDAK ADA penulisnya → counter 0/1000
+  selamanya walau user sudah mengumpulkan ribuan koin.
+- **Fix:** misi `target_unit='coins'` di `get_user_missions` dihitung
+  dari `v_total` = SUM(amount>0) coin_ledger (definisi sama dengan
+  unlock misi harian @1200). Retroaktif — semua female langsung
+  melihat progres benar; klaim tetap via `claim_mission_reward`.
+- **UI:** female "Tugas Pemula" menampilkan dua counter rata kanan —
+  chip koin `cur/1000` (berubah jadi tombol "Klaim +100" saat penuh)
+  + "x/y selesai". Male tetap "x/y selesai".
+- **Verifikasi:** pgTAP 17/17 (700→700/1000 belum selesai; 1100→cap
+  1000 + selesai); live female kumulatif 3646 → 1000/1000 claimable;
+  widget test 14/14; gate migrasi OK; snapshot refresh.
+
+
+## 2026-11-01 — My Level (level kumulatif topup, male only)
+
+### `20261101130000_my_level.sql` (APPLIED via Management API)
+
+- **Fitur:** halaman "My Level" ala app referensi — level dari **kumulatif
+  koin topup** (`coin_ledger` bucket `topup`, amount > 0), khusus MALE.
+  Naik level → reward koin ke bucket `bonus` (non-withdrawable, server
+  menolak bonus untuk gift → tidak bisa jadi jalur withdraw).
+- **Skema:** tabel `level_config` (tangga Lv.0=0 … Lv.10=1.000.000 + reward
+  0/50/100/150/200/300/400/500/750/1000/2000; admin ubah via SQL) dan
+  `user_level_state` (penanda reward per level sudah dicetak; client hanya
+  SELECT).
+- **RPC baru (bukan FROZEN):** `get_my_level()` — hitung level + grant reward
+  idempoten (`for update` + `reward_granted_level`; male-only + gate
+  `points_enabled`), return `{level, cumulative, next_level, next_at,
+  remaining, ladder[], just_rewarded[]}`; `get_user_level(p_user)` — badge
+  level (female/dummy → 0). Tidak menyentuh `credit_play_topup`,
+  `charge_metered`, `profile_public`.
+- **Verifikasi:** `scripts/run_sql_tests.sh my_level_test.sql` → **18/18**
+  (anon ditolak; kumulatif hanya topup positif; earned/bonus/spend tidak
+  mengubah level; reward tidak dobel saat dipanggil ulang; kill-switch
+  `points_enabled=false` menahan reward & melepasnya saat ON; reward tidak
+  masuk withdrawable). `check_migrations.sh --all` OK bersih; snapshot
+  functions di-refresh (0 fungsi hilang).
+
+## 2026-11-01 — Audit & hardening ekosistem koin (Fase 21)
+
+**Temuan audit:** 5 jalur pencetakan koin gratis + 1 bug withdraw yang
+aktif merugikan user. Semua migrasi sebelumnya SUDAH ter-apply live, jadi
+celah ini nyata (bukan draft). Diperbaiki lewat 5 migrasi.
+
+### `20261101100000_withdraw_single_debit.sql` (APPLIED via Management API)
+
+**Bug (uang nyata):** `20261031110016` membuat `request_withdraw` mendebit
+koin saat pengajuan, tapi `admin_withdraw_process` (fungsi yang benar-benar
+dipanggil app — `lib/screens/admin_withdraw_tab.dart`) MASIH mendebit lagi
+saat approve dan sebelumnya memeriksa `v_total < coin_amount`. Karena saldo
+sudah terpotong, cek itu hampir selalu gagal → `INSUFFICIENT_AT_APPROVE`,
+DAN jalur tolak tidak me-refund apa pun → **koin user hilang permanen**.
+
+1. **Satu titik debit:** tetap di `request_withdraw` (koin terkunci selama
+   pending). `admin_withdraw_process` tidak lagi mendebit.
+2. **Reject → refund penuh**, tepat sebesar baris ledger `withdraw` milik
+   pengajuan itu (reverse per bucket, ledger tetap append-only).
+3. **`FOR UPDATE` + `UPDATE ... WHERE status='pending'`** → approve ganda
+   tidak mungkin.
+4. **`pg_advisory_xact_lock('withdraw:'||uid)`** di `request_withdraw` →
+   dua pengajuan paralel tidak over-debit.
+5. **Test diperbaiki:** `economy_money_test.sql` dulu menguji
+   `admin_withdrawal_review` (fungsi legacy yang sudah di-revoke) — kini
+   menguji `admin_withdraw_process` (yang dipakai app).
+6. **Verifikasi live:** request 2000→500 (debit −1500), approve → tetap
+   500 + status `paid`; reject → kembali 2000 + status `rejected`.
+   `economy_money_test` 32/32.
+
+### `20261101100100_coin_mint_lockdown.sql` (APPLIED via Management API)
+
+1. **`credit_welcome_bonus`** — `20261031110013` memberi `GRANT` ke
+   `authenticated`, badan fungsi tidak pernah cek `auth.uid()`, dan batas
+   per-IP dilewati bila `p_ip` NULL. Siapa pun bisa memanggil berulang
+   dengan `install_id` acak → 100 koin gratis tiap panggilan.
+   → kembali **`service_role` saja** (edge fn `welcome-bonus` memakai
+   service_role, alur normal tidak berubah) + guard client hanya boleh
+   mengkredit dirinya.
+2. **`charge_metered`** — `p_recipient` input bebas client dan
+   `ledger_spend` boleh memakai bucket `bonus` → male memindahkan koin
+   gratis ke akun female miliknya sendiri sebagai `earned` (withdrawable).
+   → **`service_role` saja** (pemanggil sah: `call_billing_tick`,
+   `_spend_yukcoin_core` — keduanya SECURITY DEFINER) + validasi
+   `p_recipient` harus callee dari call tersebut.
+3. **Misi** — `update_mission_progress` menerima `p_increment` tanpa batas;
+   `user_missions` punya policy `FOR ALL USING(user_id=auth.uid())` sehingga
+   client menulis `is_completed=true` langsung. Reward masuk `earned`.
+   → increment di-clamp 1..120, policy dipisah (SELECT saja untuk client),
+     INSERT/UPDATE/DELETE dicabut, `claim_mission_reward` memakai
+     `UPDATE ... WHERE claimed=false RETURNING` (anti claim ganda).
+
+### `20261101100200_disable_room_gift.sql` (APPLIED via Management API)
+
+**Gift hanya untuk chat 1:1** (penerimanya jelas). Di room/group penerima
+ambigu → fitur kirim gift dinonaktifkan.
+
+Alasan tambahan: `send_room_gift` tidak pernah diperbarui sejak 2026-09-08 —
+masih menerima bucket `bonus`, tanpa cek registrasi, tanpa rate limit, qty
+sampai 20. Karena withdraw menjumlah semua bucket, ini jalur pencucian
+bonus → earned.
+
+- Badan fungsi kini selalu raise; EXECUTE dicabut dari semua role.
+- Client: wiring `onOpenGiftPanel` di room dihapus, `_openRoomGiftPanel`,
+  `sendRoomGift` (provider + service) dihapus. **Pesan gift lama tetap
+  dirender read-only**; group memang tidak pernah punya jalur gift.
+- `schema_sync_test` tetap lulus (fungsi masih ada).
+
+### `20261101100300_economy_integrity_hardening.sql` (APPLIED via Management API)
+
+1. **`point_events`** — RLS memang sudah aktif (koreksi: klaim "RLS inert"
+   di audit awal SALAH), TAPI grant default Supabase memberi
+   INSERT/UPDATE/DELETE ke `anon`+`authenticated`, dan hanya ada policy
+   SELECT → client bisa **memalsukan skor leaderboard mingguan** dan
+   menghapus riwayat. → grant tulis + TRUNCATE dicabut.
+2. **`profiles`** — policy `profiles_update_own` (20260829060000) terbuka
+   untuk semua kolom; penjaga `points` lama sudah dihapus. Client bisa
+   menulis `points`/`*_balance`/**`created_at`** (dipakai syarat umur akun
+   72 jam withdraw). → trigger `guard_economy_columns` mengembalikan nilai
+   lama untuk client; konteks internal (migrasi/job/service_role/test,
+   `auth.uid()` null) tidak dibatasi.
+3. **`ledger_spend`** — baca-lalu-tulis tanpa lock → dua debit paralel bisa
+   sama-sama lolos cek saldo. → `pg_advisory_xact_lock('wallet:'||user)`.
+4. **Realtime** — `profiles` & `app_settings` dikeluarkan dari publication
+   (payload WAL membawa saldo/email/`fcm_token`/`app_shared_secret`;
+   revoke per-kolom tidak melindungi WAL).
+5. **`get_earnings_summary`** — tambah guard anti-IDOR (dulu bisa membaca
+   penghasilan user lain). Kontrak JSON dipertahankan PERSIS.
+
+### `20261101100400_unlock_photo_fix.sql` (APPLIED via Management API)
+
+1. Overload `text` (20261031110005) membandingkan parameter `text` dengan
+   kolom `user_photos.id` bertipe `uuid` → **error runtime 42883**. Kini di-cast
+   eksplisit + validasi mode.
+2. Wajib koin beli (topup+earned), idempoten via `photo_unlocks`, dan tidak
+   bisa membuka foto sendiri.
+3. Overload lama (`uuid`) yang MASIH menerima bucket `bonus` dicabut dari
+   `authenticated` → hanya satu overload yang bisa dipanggil client.
+
+### Verifikasi keseluruhan (2026-11-01)
+
+- `check_migrations.sh` → **OK bersih**
+- `run_sql_tests.sh` → **seluruh suite hijau** (economy_money 32/32,
+  economy_matrix 33/33, economy_invariants 14/14, security_guards 10/10,
+  schema_sync 63/63, dll)
+- `smoke_anon_register.sh` → **OK bersih** (registrasi tidak rusak oleh
+  guard kolom `profiles`)
+- `snapshot_functions.sh` → 30 fungsi, 0 tidak ditemukan, tidak ada cabang
+  kritis hilang
+- `flutter analyze` → 0 error / 0 warning; `flutter test` → **2516 lulus**
+- Uji role `authenticated` live: `credit_welcome_bonus`, `charge_metered`,
+  `send_room_gift`, tulis `user_missions`, tulis `point_events` → **semua
+  ditolak**; tulis `profiles.points` → diabaikan.
+
+## 2026-10-31 — Audit exclusions + moderation fix (Fase 20)
+
+### `20261031110018_economy_invariant_exclusions.sql` (APPLIED via Management API)
+
+1. **`economy_audit_exclusions`** (tabel baru, RLS, service-role only) —
+   daftar putih temuan checker yang sudah diverifikasi manual. Ledger
+   TIDAK dihapus: immutable + audit trail uang harus bertahan setelah
+   akun dihapus.
+2. **Checker** kini melewati `(check_name, user_id)` yang tercatat —
+   kontrak "0 baris = sehat" berlaku lagi; pelanggaran BARU tetap muncul.
+3. **3 orphan dikenal dicatat:** `96c59b22…` (akun dihapus, +10 bonus),
+   `a2810e43…` (dummy venty, +4 net), `a8389420…` (akun dihapus, +50
+   signup) — semua bucket `bonus`, non-withdrawable.
+
+### `20261031110017_moderation_activity_requested_at.sql` (APPLIED via Management API)
+
+1. **Fix bug live:** `admin_moderation_activity` mereferensikan
+   `moderator_applications.requested_at` — kolom nyata `created_at`
+   (definisi tabel 20261026130000). Fungsi error sejak lahir; ditangkap
+   `moderator_slots_test.sql`. `country_send_permits.requested_at` benar —
+   dibiarkan.
+2. **Verifikasi:** `moderator_slots_test.sql` 17/17.
+
+## 2026-10-31 — Withdraw debit on request (Fase 19)
+
+### `20261031110016_withdraw_debit_on_request.sql` (APPLIED via Management API)
+
+1. **Lubang uang yang ditutup:** `request_withdraw` live sebelumnya membuat
+   baris `withdrawal_requests` pending **tanpa mendebit ledger** — saldo
+   user tetap utuh selama pending, dan `admin_withdrawal_review` menulis
+   `withdraw_refund` saat reject (koin gratis) / membayar tanpa pernah
+   memotong (uang keluar + koin tetap).
+2. **Fix:** injeksi debit `withdraw` −N ke `coin_ledger` (bucket `earned`)
+   saat request dibuat — atomik dalam transaksi yang sama. Reject →
+   `withdraw_refund` +N mengembalikan debit itu (bukan koin baru).
+3. **Verifikasi:** `economy_money_test.sql` § withdraw menguji debit saat
+   request + refund saat reject (saldo akhir = awal); suite lulus 32/32.
+
+## 2026-10-31 — Economy invariant checker (Fase 18)
+
+### `20261031110015_economy_invariant_check.sql` (APPLIED via Management API)
+
+1. **`economy_invariant_check(p_limit int default 100)`** — diagnostik
+   read-only SECURITY DEFINER; mengembalikan baris pelanggaran invariant
+   ledger↔profile (0 baris = sehat):
+   - `points_mismatch` — `profiles.points` ≠ sum(`coin_ledger.amount`);
+   - `phantom_balance` — kolom saldo non-nol tanpa baris ledger;
+   - `bonus_mismatch` — `bonus_balance` ≠ sum(bucket='bonus');
+   - `earned_mismatch` — `earned_balance` ≠ sum(bucket='earned');
+   - `negative_bucket` — sum per (user,bucket) < 0 (jalur debit bocor);
+   - `orphan_ledger` — baris ledger untuk user tanpa profil.
+2. **Akses:** `REVOKE` dari public/anon/authenticated, `GRANT` ke
+   `service_role` saja — fungsi mengekspos saldo semua user. Dipakai admin/
+   CI via Management API + test `economy_invariants_test.sql`.
+3. **Hasil live pertama:** 0 pelanggaran saldo/bucket — hanya 3
+   `orphan_ledger` residu lama (baris ledger untuk uid tanpa row profiles;
+   kemungkinan profil terhapus tanpa hapus auth.users — ledger immutable
+   `coin_ledger_no_delete`, didokumentasikan bukan dihapus).
+
+## 2026-10-31 — Charge-on-match (Fase 17)
+
+Keluhan user: fee match 2 koin dipotong saat klik — kalau antrean tak
+menemukan siapa pun, koin hangus sia-sia. Kini fee dipotong **tepat saat
+pair terbentuk** di server.
+
+### `20261031110014_match_charge_on_pair.sql` (APPLIED via Management API)
+
+1. **`_spend_yukcoin_core`** (fungsi internal baru) — seluruh logika debit
+   `spend_yukcoin` (flag free-pass, allowlist, female exempt, ledger,
+   `yukcoin_consumptions`, `point_events`, `platform_revenue`) TANPA auth
+   guard. Diperlukan karena `random_match_join` harus menagih **partner**
+   male saat joiner-nya female — guard `p_user = auth.uid()` menolak itu.
+   `REVOKE ... FROM public, anon, authenticated` — tak bisa dipanggil user.
+2. **`spend_yukcoin`** — wrapper tipis: auth guard + delegasi ke core
+   (perilaku dari luar identik).
+3. **`random_match_join`** —
+   - male dengan `yukcoin_total < fee` → `{"status":"no_funds"}` sebelum
+     masuk antrean (tidak menunggu percuma);
+   - kandidat partner male tak mampu bayar diskip lewat precheck saldo;
+   - fee ditagih `_spend_yukcoin_core` TEPAT sebelum `calls`/queue/pairs
+     dibuat — satu transaksi atomik (gagal pair → debit rollback);
+   - race saldo (lulus precheck, gagal charge) → kandidat berikutnya;
+   - kalau payer adalah joiner sendiri & gagal → baris antrean dihapus +
+     `no_funds`;
+   - `points_enabled=false` → free otomatis (core free-pass).
+4. **Client** — `_chargeMatchFee`/`chargeMatchSearch` dihapus; `start()` &
+   `next()` langsung join; status `no_funds` → `errorCode MATCH_NEED_COIN`
+   (dialog top-up yang sudah ada).
+
+### Test
+- pgTAP `random_match_test.sql` 20/20: +assert male saldo 0 → `no_funds`
+  tanpa baris antrean; debit `match_search −2` dari male saat matched;
+  `platform_revenue` tercatat; female tidak didebit. Flag `random_call`
+  dipaksa OFF di dalam transaksi §0 (prod sudah publish → test deterministik).
+- E2E live (dummy saldo 0): `random_match_join` → `{"status":"no_funds"}`,
+  0 baris antrean, 0 tulisan.
+- `_spend_yukcoin_core` tidak bisa dieksekusi role `authenticated`.
+
+## 2026-10-31 — Konsistensi points_enabled (Fase 16)
+
+Kill-switch `points_enabled` kini seragam mengikuti 3 semantik yang sudah
+settle: **free-pass** (aksi jalan tanpa tagih), **block** (transfer/nilai
+ke user lain), **no-credit** (earn → no-op graceful).
+
+### `20261031110013_points_enabled_consistency.sql` (APPLIED via Management API)
+
+1. **`spend_yukcoin`** — sebelumnya TAK cek flag → fee `match_search` &
+   spend `gift` tetap menagih saat poin OFF. Kini free-pass semua feature
+   (`tier:'free', free:true` — pola `unlock_photo`/`deduct_chat_point`).
+2. **`charge_metered`** — free-pass `charged:0` saat OFF (defense:
+   `call_billing_tick` sudah cek, tapi fungsi bisa dipanggil langsung).
+3. **`request_withdraw`** — `{ok:false, error:'POINTS_DISABLED'}` saat OFF
+   (block — pola error yang sama dengan `FEMALE_ONLY`; client withdraw
+   menampilkan error apa adanya).
+4. **`claim_mission_reward`** — `{error:'POINTS_DISABLED'}` saat OFF
+   (reward misi = kredit `earned` = ekonomi; `update_mission_progress`
+   dibiarkan jalan — progress bukan ekonomi, user tak kehilangan progres).
+5. **`credit_welcome_bonus`** — `{granted:false, reason:'points_disabled'}`
+   saat OFF (graceful; edge fn welcome-bonus sudah menangani granted:false).
+
+Tidak disentuh: fitur v2 gratis (`undo/edit/buy_*_v2` — kill-switch sendiri
+`yukcoin_v2_enabled`), semua reads (`get_wallet`, `get_user_missions`, …),
+fungsi admin, dan fungsi FROZEN (snapshot tidak perlu regen).
+
+**Client:** nol ubahan — `chargeMatchSearch` sudah menerima `free:true`,
+`claimReward` sudah baca `res['error']`, withdraw provider menampilkan
+error string, edge fn welcome-bonus menangani `granted:false`.
+
+**Verifikasi live:** `pg_get_functiondef` — 5 fungsi `reads_flag=true` +
+guard baru ada. ⚠️ Flag tidak diuji flip di prod (OFF = semua fitur
+berbayar gratis global); verifikasi matriks butuh window maintenance.
+
+## 2026-10-31 — Audit poin: fix inkonsistensi (Fase 15)
+
+### `20261031110012_points_fixes_audit.sql` (APPLIED via Management API)
+
+1. **`charge_metered`** — harga/cut call kini baca KOLOM
+   (`call_audio_cost_per_min`, `call_video_cost_per_min`, `call_cut_pct`)
+   yang diedit admin; `metered_pricing` JSONB hanya fallback non-call.
+   Fix split-brain: sebelumnya debit aktual pakai JSONB basi (seed 1 Okt).
+2. **Sync `metered_pricing`** dari kolom sekarang (satu kali).
+3. **Auth guard** `auth.uid()` di `update_mission_progress`,
+   `claim_mission_reward`, `get_user_missions`, `check_user_total_coins`
+   (sebelumnya siapa pun bisa tulis/baca misi uid lain).
+4. **`admin_mass_bonus`** — skip female (`gender <> 'female'`): female
+   tidak boleh punya bucket bonus.
+5. **`get_earnings_summary`** — whitelist income diselaraskan:
+   +`coin_received`, `subscribe_income`, `photo_income` (unlock_photo
+   menulis `photo_income`, bukan `photo_unlock_income`).
+6. **`spend_yukcoin`** — female gratis untuk `match_search` (parity
+   client); fee match_search dicatat ke `platform_revenue` (hangus).
+7. **`admin_update_point_settings`** — kembalikan `yukcoin_v2_enabled`
+   (hilang di rewrite 110004 → toggle admin no-op) + tambah
+   `coin_tx_max_per_hour` (dibaca send_coins/send_gift, sebelumnya tak
+   bisa diubah).
+8. **`check_user_total_coins` / `get_user_missions`** — "total koin" =
+   kumulatif kredit seumur hidup (bukan saldo bersih) → unlock misi
+   harian @1200 tidak turun saat user belanja.
+
+### Flutter
+- `call_session.dart` — tangkap `reason`+`free_limit_min` saat
+  `can_continue=false`; getter `billingPauseReason`/`billingFreeLimitMin`.
+- `call_no_coin_dialog.dart` — +`showCallFreeLimitDialog` (tanpa tombol
+  top-up: female di batas gratis tak bisa melanjutkan dengan top-up).
+- `call_screen.dart`/`random_call_screen.dart` — `reason='free_limit'`
+  → dialog batas gratis; `insufficient` → dialog koin habis.
+- `history_tile.dart` — label untuk call/gift/match/topup/mission/
+  withdraw/photo/subscribe/welcome/refund (sebelumnya "Lainnya").
+- `admin_panel_screen.dart` — hapus 4 field mati (cost_undo/edit/
+  extra_slot/ghost yang tidak dihandle RPC) + field `coin_tx_max_per_hour`.
+- `point_tab_cards.dart` — +flag `random_call` di kartu Publish.
+- `chat_selection_mixin.dart` — undo/edit gratis: hapus dialog biaya +
+  charge RPC; label menu tanpa harga.
+- `profile_photos.dart` — dialog slot foto "gratis" (bukan harga 60).
+- `private_chat_message.dart` — track `daily_receive_gift` dedup per
+  message id (sebelumnya 1 RPC per render bubble).
+- `points_provider.dart` — `deductBeforeSend`/`refundChatPoint` skip
+  RPC untuk 'text' (gratis — hemat 1 RPC per pesan teks).
+
+## 2026-10-31 — Match berbayar + lawan jenis otomatis (Fase 14)
+
+Keputusan user: klik Match/Next = **−2 poin** (hangus), match **menit ke-1
+gratis**, menit ke-2+ tarif video 20/menit, **female gratis**. Pilihan gender
+dihapus — otomatis lawan jenis.
+
+### `20261031110011_match_paid_opposite_gender.sql` (APPLIED)
+
+1. **`spend_yukcoin`** — allowlist ditambah `match_search`
+   (`gift`,`gift_sent`,`match_search`). Fitur lain tetap gratis.
+2. **`random_match_join`** — `v_want` dipaksa lawan jenis:
+   `male → female`, `female → male` (selain itu pakai argumen).
+3. **`random_match_stats`** — `sample`, `v_online`, `v_waiting` difilter
+   lawan jenis + field baru `opposite_gender`.
+4. **`call_billing_tick`** — `kind='random'`:
+   `billable_minutes = greatest(0, elapsed_sec/60 - 1)` → **0–119 s = 0 koin**;
+   respons +`free_seconds_left`.
+
+### Flutter
+- `random_match_service.dart` — +`chargeMatchSearch()` (RPC `spend_yukcoin`
+  fitur `match_search`, 2 poin).
+- `random_match_provider.dart` — +`_chargeMatchFee()` (female gratis,
+  guard try/catch agar test/klien belum siap tidak memblokir); dipanggil di
+  `start()` & `next()`. `onRemoteEnded()` TIDAK dikenai biaya.
+- `random_match_screen.dart` — `_GenderChips` + `_Chip` **dihapus**, diganti
+  badge **"Kamu akan dipasangkan dengan Cowok/Cewek"**. Error
+  `MATCH_NEED_COIN` → dialog "Koin tidak cukup" + tombol **Isi Koin**
+  (`NavGate.topupSheet`).
+- `lib/widgets/call_no_coin_dialog.dart` (BARU) — dialog "Koin habis" saat
+  call berjalan: **Lanjutkan/Isi Koin** atau **Akhiri**.
+- `call_session.dart` — +`awaitingContinue`, +`resumeBillingAfterTopup()`,
+  +`endCallNoCoin()`. `_billingTick` saat `can_continue=false` **TIDAK lagi
+  memutus panggilan** — dijeda + dialog.
+- `call_screen.dart` & `random_call_screen.dart` — cek `awaitingContinue` tiap
+  detik → tampilkan dialog.
+- `strings_random_mx.dart` — +10 string ID/EN.
+
+### Verifikasi
+- `spend_yukcoin` memuat `match_search` ✅
+- `random_match_join` memuat paksa lawan jenis ✅
+- `random_match_stats` memuat `opposite_gender` ✅
+- `call_billing_tick` memuat aturan "menit ke-1 GRATIS" untuk match ✅
+- `check_migrations.sh --all` → OK bersih
+- `flutter analyze` → 0 error/0 warning; `flutter test` → 2435 lolos
+- APK profile terinstall di HP
+
+## 2026-10-31 — Poin hanya untuk call/video/match/gift (Fase 13)
+
+**Keputusan user:** poin HANYA berkurang untuk **call, video call, match
+(video), dan gift**. Fitur lain gratis: filter gender, cari orang sekitar,
+undo pesan, edit pesan, slot foto tambahan, mode hantu.
+
+### `20261031110010_points_only_calls_gifts.sql` (APPLIED)
+
+1. **`call_billing_tick`** — hapus cabang `if c.kind = 'random' then ...
+   gratis`. Match sekarang **ditagih** dengan tarif `call_video`
+   (20 koin/menit), split 70% platform / 30% callee seperti video call biasa.
+   `unit_cost` juga memakai `call_video_cost_per_min` untuk match.
+
+2. **`gate_feature`** — langsung `return { ok:true, charged:0, free:true }`.
+   Fitur akses-harian (filter gender, nearby) tidak pernah memotong poin lagi.
+
+3. **`spend_yukcoin`** — hanya `gift`/`gift_sent` yang didebit. Fitur lain
+   (`extra_photo_slots`, `ghost_mode`, `undo_message`, `edit_message`) →
+   `{ tier:'free', charged:0 }` tanpa menyentuh ledger.
+
+### Flutter
+- `lib/screens/point_history/widgets/yukcoin_how_to.dart` — daftar "Cara
+  pakai" hanya Audio call, Video call (hapus filter gender, nearby, undo,
+  edit, slot foto, ghost).
+- `lib/screens/privacy_settings_screen.dart` — blok **mode hantu dihapus**
+  (+ `_buyGhost`, variabel terkait, import points_provider).
+- `lib/screens/profile/profile_ui2.dart` — tombol **"Beli slot foto"
+  disembunyikan** (slot tambahan kini gratis).
+- `lib/screens/profile/profile_ui.dart` — kartu YukCoin (kuning) tetap
+  tampil untuk male walau `points_enabled=false` → jalur top-up tetap ada.
+  Tombol **Top-up** (ikon keranjang) ditambahkan di kartu kuning.
+
+### Catatan top-up
+`AppFlavor.topupEnabled` = `true` HANYA untuk build `play` (kebijakan Google
+Play: digital goods wajib Play Billing). Build `apkpure`/`admin` tidak
+menampilkan transaksi — sheet menampilkan "Top-up segera hadir".
+
+### Verifikasi live
+- `gate_feature('gender_filter')` → `charged: 0, free: true` ✅
+- `spend_yukcoin(...,'extra_photo_slots',60)` → `charged: 0, free: true` ✅
+- `spend_yukcoin(...,'ghost_mode',50)` → gratis ✅
+- `spend_yukcoin(...,'undo_message',10)` → gratis ✅
+- `call_billing_tick` memuat tarif `call_video` untuk `kind='random'`;
+  baris "Random video call: GRATIS" sudah **hilang** ✅
+- `flutter analyze` → 0 error/0 warning; `flutter test` → 2435 lolos
+
+## 2026-10-31 — Nolkan bonus koin female (Fase 12)
+
+**Aturan final:** bonus pendaftaran (`signup` 50 koin) **hanya untuk MALE**.
+Female tidak punya koin gratis — penghasilan murni dari aktivitas male
+(`earned`).
+
+### `20261031110008_zero_female_bonus.sql` (APPLIED)
+- RPC `admin_zero_female_bonus(p_dry_run bool)` — idempoten, admin/service_role
+  saja. Menghitung bonus per female, lalu menyisipkan entri **kompensasi
+  negatif** (`type='female_bonus_reset'`) karena `coin_ledger` melarang
+  DELETE/UPDATE (audit trail). Trigger `trg_coin_ledger_balance` otomatis
+  menyesuaikan `profiles.bonus_balance` + `points`.
+- Hanya bucket `bonus` disentuh; `earned` & `topup` TIDAK berubah.
+
+### Hasil
+| Item | Nilai |
+|---|---|
+| Female terdampak | **26** (dari 48) |
+| Total bonus dinolkan | **1.285 koin** |
+| Entri kompensasi | 26 |
+| Female dengan bonus > 0 setelah | **0** |
+
+Contoh — `ChatAja`: `bonus 0`, `earned 37`, `topup 21`, `points 58`
+(sebelumnya `bonus 7`, `points 65`).
+
+### Catatan rincian bonus female sebelum reset
+`signup` 1.200 · `welcome_anon` 100 · `test_bonus` 100 · `mission_reward` 10 ·
+`new_chat` 10 · `photo_upload` 10 · `one_time` 5 · `room_read` 4 ·
+`spend_chat` −1 · `withdraw` −153.
+
+### Guard yang sudah ada (mencegah terulang)
+- `credit_welcome_bonus` → male only (`female_no_bonus`)
+- `claim_mission_reward` → bucket `earned`
+- `send_gift` & `unlock_photo` → tolak koin `bonus`
+
+## 2026-10-31 — Fix gender lock tidak muncul di UI (Fase 11)
+
+### `20261031110007_profile_public_gender_locked.sql` (APPLIED)
+- RPC `profile_public` **tidak mengirim `gender_locked`** → `UserModel.genderLocked`
+  selalu `false` → dropdown gender tetap editable walau server menolak.
+  Ditambahkan `'gender_locked', coalesce(r.gender_locked, false)`.
+
+### Flutter
+- `lib/providers/riverpod/auth_provider.dart` — `applyProfileEvent`
+  **tidak meneruskan `genderLocked`**: setiap event realtime (status/points)
+  menimpa nilainya jadi default `false`. Ditambahkan `pick('genderLocked', ...)`
+  (pola sama seperti `needsOnboarding`).
+
+### Verifikasi di HP (Huawei 24129PN74G, wireless 46589)
+- Sebelum: Edit Profil menampilkan **"Laki-laki"** (padahal DB `female`) dan
+  dropdown **editable**.
+- Sesudah: menampilkan **"Perempuan"** + teks **"Gender tidak dapat diubah"**,
+  dropdown **read-only** (ikon gembok).
+- Penyebab label salah: cache profil lokal (`profile:` di SQLite) menyimpan
+  payload lama tanpa `gender_locked`; `pm clear` + install ulang menyelesaikan.
+- `flutter analyze` → 0 error.
+
+## 2026-10-31 — Lock gender permanen (Fase 10)
+
+Keputusan user: gender dipilih SEKALI, **tidak bisa diubah** setelahnya.
+Gender menentukan seluruh ekonomi (female: misi/penghasilan/withdraw; male:
+bayar koin), jadi tanpa lock: male bisa topup → pindah female → withdraw →
+platform rugi.
+
+### `20261031110006_gender_lock.sql` (APPLIED)
+- `profiles.gender_locked boolean NOT NULL DEFAULT false`.
+- Trigger `trg_guard_gender_lock` + fungsi `guard_gender_lock()`:
+  - gender tidak berubah → lolos, TAPI `gender_locked` dipulihkan dari nilai
+    lama (client DILARANG membuka kunci sendiri lewat RLS terbuka);
+  - admin (`is_chatyuk_admin`) → boleh koreksi + tetap terkunci;
+  - `old.gender_locked` → gender **dikembalikan ke nilai lama** (revert senyap,
+    update kolom lain pada baris sama tetap berhasil — pola `guard_country_lock`);
+  - perubahan pertama → otomatis `gender_locked = true`.
+- **Backfill retroaktif:** user dengan riwayat `coin_ledger` / `user_missions` /
+  `withdrawal_requests` → dikunci. Hasil: **229 terkunci, 294 belum** dari 523.
+- `REVOKE UPDATE (gender_locked) ... FROM authenticated, anon` (lapis kedua;
+  `-- SAFE:` dengan daftar fitur terdampak).
+
+### Flutter
+- `lib/models/user_model.dart` — +`genderLocked` (baca `gender_locked`).
+- `lib/services/auth_service_profile.dart` — `registerProfile()` kirim
+  `gender_locked: true` (registrasi langsung kunci).
+- `lib/widgets/gender_lock_dialog.dart` (BARU) — dialog konfirmasi
+  "Pastikan Gender Sudah Benar" (tanpa penjelasan hak gender), dipakai bersama
+  registrasi & edit profil.
+- `lib/screens/entry_screen.dart` & `register_screen.dart` — konfirmasi gender
+  SEBELUM submit registrasi.
+- `lib/screens/profile/profile_photos.dart` — dropdown gender jadi **read-only**
+  (ikon gembok + "Gender tidak dapat diubah") saat `genderLocked`; bila belum
+  terkunci & gender diubah → dialog konfirmasi; snackbar khusus
+  "Gender tersimpan dan tidak dapat diubah lagi".
+- `lib/config/strings_points_mx.dart` — ±8 string ID/EN.
+
+### Verifikasi live (simulasi JWT)
+- User terkunci ubah gender → **tetap female** ✅
+- User belum terkunci ubah gender → **berubah + gender_locked=true** ✅
+- Client paksa `gender_locked=false` → **tetap true** ✅
+- Update kolom lain (`about`) pada user terkunci → **berhasil**, lock tetap ✅
+- `check_migrations.sh --all` → **OK bersih**
+- `flutter analyze` → 0 error; `flutter test` → 2431 lolos
+
+## 2026-10-31 — Female: SEMUA koin withdrawable + tutup bocor (Fase 9)
+
+Keputusan user: "female koinnya harusnya semua bisa di withdrawal" — tidak ada
+lagi bucket `bonus` yang menganggur untuk female.
+
+### `20261031110005_female_withdraw_all.sql` (APPLIED)
+
+**Tutup jalur bocor (WAJIB sebelum membuka withdraw-all):**
+
+1. **`send_gift` (FROZEN, header `-- menyentuh:` ada)** — ditemukan **BUG BESAR**:
+   tier `bonus` memberi penerima `bonus_price = n × mult` (= **3× nilai gift**)
+   TANPA potongan platform. Koin gratis male jadi saldo female → kalau bisa
+   ditarik = rugi **Rp 2.100 per gift 100 koin**.
+   → Tier `bonus` **DIHAPUS**. Gift wajib pakai koin `topup`/`earned`
+   (error `22023` kalau tidak cukup). Penerima SELALU bucket `earned` + cut 30%.
+
+2. **`unlock_photo`** — tier `bonus` mengredit pemilik foto ke bucket `bonus`.
+   → Tier `bonus` **DIHAPUS**. Unlock foto wajib koin beli; pemilik selalu
+   bucket `earned`.
+
+**Buka withdraw-all untuk female:**
+
+3. **`request_withdraw`** — validasi terhadap **TOTAL saldo** (semua bucket),
+   bukan hanya `earned`. Error `INSUFFICIENT_EARNED` → `INSUFFICIENT_BALANCE`.
+
+4. **`admin_withdraw_process`** — debit **PROPORSIONAL** dari ketiga bucket
+   (`bonus`, `topup`, `earned`) sesuai porsi saldo, dengan koreksi pembulatan
+   agar tidak melebihi saldo bucket. Return rincian `debited`.
+
+5. **`get_earnings_summary`** — `withdrawable` = **total saldo**.
+
+**Flutter:**
+- `saldo_screen.dart` — `_BalanceCard` headline = **total saldo**; chip
+  "🔒 Tidak bisa ditarik" **dihapus**; teks hint jadi "Semua koin kamu bisa
+  ditarik ke DANA".
+- `strings_points_mx.dart` — hint diperbarui.
+
+### Kenapa aman (platform tidak rugi)
+Setelah tutup bocor, female HANYA menerima bucket `earned`, yang sumbernya:
+- 30% call male (platform sudah ambil 70%)
+- 70% gift male (platform sudah ambil 30%)
+- 60% unlock foto male (platform sudah ambil 40%)
+- reward misi (dibiayani cut platform)
+
+Koin gratis (`bonus`) tidak lagi bisa masuk ke female → "semua withdrawable"
+tidak menciptakan kebocoran baru.
+
+### Verifikasi live (Management API, simulasi JWT)
+- Saldo uji: bonus 160 + topup 500 + earned 905 = **1.565**
+- `request_withdraw(1500)` → gross Rp 10.500, fee Rp 1.000, **net Rp 9.500** ✅
+- `admin_withdraw_process(approve)` → `debited: {bonus 153, topup 479, earned 868}`
+  (proporsional), saldo 1.565 → **65** ✅
+- `send_gift` memuat guard `Gift membutuhkan koin beli/penghasilan` ✅
+- Snapshot `functions.sql` di-regenerate (FROZEN `send_gift` & `deduct_chat_point`);
+  `check_migrations.sh --all` → **OK bersih**
+- `flutter analyze` → 0 error; `flutter test` → 2431 lolos
+- Terverifikasi di HP: "Saldo Bisa Ditarik **65 🪙** — Semua koin kamu bisa
+  ditarik ke DANA", tanpa chip terkunci
+
+## 2026-10-31 — Auth listener + build & verifikasi device (Fase 7 sisa & 8)
+
+### Fase 7 sisa — provider tidak lagi stale saat ganti user
+- `missions_provider.dart`, `earnings_provider.dart`, `withdraw_provider.dart`:
+  tambah listener `onAuthStateChange` (signedIn / signedOut / initialSession /
+  tokenRefreshed) → `refresh()`. Dulu provider global menyimpan data user
+  SEBELUMNYA setelah logout → login akun lain.
+- Semua listener di-cancel di `ref.onDispose`.
+
+### Fase 8 — verifikasi end-to-end di device (Huawei 24129PN74G)
+APK profile `1.2.74` (177,6 MB) terinstall. Semua layar dibuka & diverifikasi:
+
+| Layar | Hasil |
+|---|---|
+| Profil (ChatAja, female) | Card **Saldo** & **Misi** sejajar, rata, padding atas benar |
+| Saldo | "Saldo Saya 65 🪙", **"Saldo Bisa Ditarik 5 🪙"** (= bucket `earned`), tombol Withdraw, rincian penghasilan (Tugas 15, Bonus 50), statistik aktivitas |
+| Withdraw | Saldo withdrawable 5 🪙 ≈ Rp 35, kalkulator, form DANA, riwayat kosong |
+| Misi | 12 misi utama dengan reward (`+10`, `+5`, dst) & progress `0/60`, `0/3`; **banner "Misi Harian Terkunci — 65 / 1200 koin"** + 6 misi harian tampil redup/terkunci |
+
+### Status akhir
+- `flutter analyze` → **0 error**
+- `flutter test` → **2431 lolos, 0 gagal**
+- 18/18 misi terhubung ke aksi app
+- Withdraw: request → approve → debit `earned` (teruji, `bonus` tidak tersentuh)
+- Ekonomi: chat teks gratis, call/gift/foto berbayar, female tanpa bonus koin,
+  withdraw hanya dari `earned` @ Rp 7 (margin platform ~82%)
+
+## 2026-10-31 — Wiring tracking misi 18/18 (Fase 6)
+
+### Semua misi kini terhubung ke aksi app
+
+| Misi | Lokasi tracking |
+|---|---|
+| `message_various_users`, `daily_message_users`, `reply_users` | `lib/mixins/chat_send_mixin.dart` |
+| `upload_photos` | `lib/mixins/chat_photo_send_mixin.dart` (foto & video) |
+| `private_calls`, `call_minutes`, `daily_private_call_duration` | `lib/screens/call_screen.dart` (`_tick`) |
+| `match_calls`, `daily_match_calls` | `lib/providers/riverpod/random_match_provider.dart` |
+| `create_posts`, `like_posts` | `lib/providers/riverpod/timeline_provider.dart` |
+| `add_friends_in_call` | `lib/providers/riverpod/social_provider.dart` |
+| `daily_receive_gift` | `lib/widgets/private_chat_message.dart` (hanya penerima) |
+| `daily_online_minutes`, `daily_online_duration` | `lib/providers/riverpod/points_provider.dart` |
+| `evening_online_call` (19-23), `night_owl_online_call` (01-05) | `lib/providers/riverpod/points_provider.dart` |
+| `nyonya_1000` (total kumulatif) | `lib/providers/riverpod/points_provider.dart` |
+
+### Perbaikan dari review (Fase 7)
+- **Dobel hitung online DIPERBAIKI:** dulu tiap tick 30 detik mengirim menit
+  KUMULATIF → progress bisa 3× lipat. Sekarang kirim hanya **delta**
+  (`_missionOnlineMinutesSent`). Pola sama dipakai untuk menit panggilan
+  (`_missionCallMinutesSent`) dan `nyonya_1000` (`_nyonyaLastSent`).
+- **Dead code dihapus:** `lib/widgets/missions/missions_list.dart` (memicu gagal
+  `strings_test`) & `findMission()`.
+- **`PointsService` & `MissionProgressService` lazy client:** konstruksi tidak
+  lagi menyentuh `Supabase.instance` → test tanpa inisialisasi Supabase lolos.
+- **`trackMission`/`updateProgress` dibungkus guard:** tracking misi adalah efek
+  samping NON-KRITIS — kalau Supabase belum siap, aksi utama (kirim pesan, like,
+  follow, call) TIDAK ikut gagal.
+- **Provider stale saat ganti user:** `missionsProvider`/`earningsProvider`/
+  `withdrawProvider` memakai `NotifierProvider` biasa + refresh manual saat
+  layar dibuka (`refresh()`), jadi data user baru dimuat ulang.
+
+### Verifikasi
+- `flutter analyze` → 0 error.
+- `flutter test` → **2431 lolos, 0 gagal**.
+- 18/18 misi terhubung (dicek otomatis terhadap daftar `missions` di DB).
+
+## 2026-10-31 — Admin Panel Withdraw (Fase 5)
+
+### `20261031110004_admin_point_settings_withdraw.sql` (APPLIED)
+- **FIX BUG KRITIS pre-existing:** `admin_update_point_settings` merujuk 18 kolom
+  yang SUDAH DIHAPUS dari `app_settings` (`bonus_registered`, `bonus_rated`,
+  `bonus_shared`, `bonus_profile`, `bonus_first_photo`, `bonus_room_read`,
+  `bonus_new_chat`, `bonus_invited`, `bonus_first_room`, `bonus_referral`,
+  `bonus_online_5min/30min/60min/120min`, `room_reads_daily_limit`,
+  `new_chats_daily_limit`, `share_click_reward`, `share_click_cap_daily`) →
+  SETIAP pemanggilan gagal `42703`. **Akibatnya admin tidak bisa menyimpan
+  pengaturan poin sama sekali.** Semua rujukan mati dibuang, kolom yang masih
+  ada dipertahankan, dan ditambah:
+  - `withdraw_rate_idr`, `withdraw_min_coins`, `withdraw_fee_pct`,
+    `withdraw_fee_min_idr`, `withdraw_max_per_day`,
+    `withdraw_min_interval_hours`, `withdraw_min_account_age_hours`
+  - `female_free_call_min_per_day`
+  - `gift_cut_pct` (sebelumnya tidak tersimpan lewat fungsi ini)
+
+### Flutter (admin)
+- `lib/screens/admin_withdraw_tab.dart` — tab **Withdraw** di admin panel:
+  - **Kartu ringkasan "Perlu Dicairkan"** (gradient oranye): jumlah pengajuan
+    menunggu, **total Rupiah yang harus ditransfer**, total koin, total fee.
+    Ringkasan SELALU dihitung dari filter `pending` walau admin sedang melihat
+    filter lain (paid/rejected/all).
+  - Filter status: Menunggu / Dibayar / Ditolak / Semua.
+  - Kartu per pengajuan: user + email, nominal (koin, nilai, fee, diterima),
+    tujuan DANA + nama pemilik, tanggal, catatan admin.
+  - Tombol **Setujui** (debit `earned` + status `paid`) / **Tolak** (status
+    `rejected`), dengan dialog catatan opsional.
+- `lib/screens/admin_panel_screen.dart` — `_AdminTab` +`withdraw` (setelah
+  `point`), TabController 14 → 15, label & body via `switch` (satu sumber
+  kebenaran). `_pointFields` +8 field withdraw & batas call gratis female.
+- `lib/config/strings_admin.dart` — +±30 string ID/EN.
+- `test/admin_panel_tab_order_test.dart` — urutan enum diupdate (+`withdraw`).
+
+### Verifikasi
+- `admin_update_point_settings` (simulasi JWT admin) → semua field withdraw
+  tersimpan dengan benar; sebelumnya **gagal total** dengan `42703`.
+- `flutter analyze` → 0 error; `flutter test` → 2431 lolos, 0 gagal.
+- APK admin `1.2.74-admin` (113,5 MB) terinstall di HP.
+
+## 2026-10-31 — Withdraw Flutter + Saldo/Misi (Fase 3 & 4)
+
+### `20261031110003_withdraw_config.sql` (APPLIED)
+- RPC `get_withdraw_config()` — rate, min koin, fee pct, fee min, limit/hari,
+  interval, umur akun. Dipakai kalkulator preview di app.
+
+### Flutter (baru)
+- `lib/models/withdraw_request.dart` — `WithdrawRequest`, `WithdrawAccount`,
+  `WithdrawStatus`, `WithdrawQuote` (kalkulator fee).
+- `lib/providers/riverpod/withdraw_provider.dart` — `WithdrawState`,
+  `WithdrawConfig`, `WithdrawNotifier` (load config + akun + riwayat, request,
+  simpan akun). Provider TIDAK autoDispose → refresh manual saat buka layar.
+- `lib/widgets/withdraw/dana_form.dart` — form nomor DANA + nama pemilik,
+  validasi client `^(08|62)[0-9]{8,13}$`, normalisasi `62xx` → `0xx`.
+- `lib/screens/withdraw_screen.dart` — kartu saldo withdrawable (gradient hijau
+  saat cukup, abu saat belum), kalkulator real-time (gross/fee/net), form DANA,
+  riwayat ber-status, dialog konfirmasi sebelum submit.
+- `lib/screens/saldo_screen.dart` — +kartu **"Saldo Bisa Ditarik"** (`earned`)
+  dengan tombol Withdraw → `WithdrawScreen`; fix `saldoMessageReply` &
+  `saldoOnlineDuration` agar pakai sumber data benar.
+- `lib/providers/riverpod/earnings_provider.dart` — +field `withdrawable`.
+- `lib/providers/riverpod/missions_provider.dart` — klaim misi sukses →
+  `ref.invalidate(earningsProvider)` (reward misi masuk bucket `earned`).
+
+### Perbaikan dari review (Fase 7, sebagian)
+- **Dead code dihapus:** `lib/widgets/missions/missions_list.dart` (tak dipakai,
+  memicu gagal `strings_test` karena hardcode Indonesia) & `findMission()`.
+- **`MissionProgressService` lazy client:** konstruksi tidak lagi menyentuh
+  `Supabase.instance` → test tanpa inisialisasi Supabase lolos (8 test
+  `chat_outbox_flow_test` sebelumnya gagal karena ini).
+
+### Verifikasi
+- `flutter analyze` → **0 error** (41 info/warning pre-existing).
+- `flutter test` → **2431 lolos, 0 gagal**.
+
+## 2026-10-31 — Withdraw ke DANA (Fase 2)
+
+### `20261031110002_withdraw.sql` (APPLIED)
+- `app_settings`: +`withdraw_fee_pct` (5), +`withdraw_fee_min_idr` (1000),
+  `withdraw_min_coins` 1000 → **1500** (Rp 10.500, di atas biaya admin).
+- `withdrawal_requests` (REUSE dari fitur finansial lama, kosong): +`gross_idr`,
+  +`fee_idr`. Kolom yang dipakai: `coin_amount`, `rate`, `gross_idr`, `fee_idr`,
+  `payout_idr` (net), `status` (pending/paid/rejected), `pay_method` ('ewallet'),
+  `pay_account` (nomor DANA), `pay_holder` (nama).
+- Tabel BARU `withdraw_accounts` — akun DANA tersimpan per user (RLS own-only).
+- RPC: `save_withdraw_account`, `get_withdraw_account`, `request_withdraw`,
+  `admin_withdraw_process`, `get_withdraw_history`, `admin_withdraw_list`.
+- `get_earnings_summary`: +field `withdrawable` (saldo bucket `earned`).
+
+### Aturan withdraw
+- **Hanya FEMALE** (`FEMALE_ONLY`) — male tidak punya bucket `earned`.
+- **Sumber HANYA bucket `earned`** — koin gratis (`bonus`) & topup tidak bisa
+  ditarik. Ini kunci anti-rugi: platform sudah ambil cut (70% call / 30% gift /
+  40% unlock foto) SEBELUM koin masuk `earned`.
+- Minimum 1.500 koin · umur akun 72 jam · maks 3×/hari · interval 1 jam.
+- Nomor DANA dinormalisasi (`62xx` → `0xx`, strip non-digit), validasi
+  `^(08|62)[0-9]{8,13}$`.
+- Fee: `max(gross × 5%, Rp 1.000)` → net = gross − fee.
+- **Manual approve** oleh admin (`zunixe@gmail.com`); approve melakukan debit
+  bucket `earned` (trigger `trg_coin_ledger_balance` urus saldo).
+
+### Verifikasi live (Management API, simulasi JWT)
+- `request_withdraw(2000)` → gross Rp 14.000, fee Rp 1.000, **net Rp 13.000**,
+  nomor `0812-3456-7890` → `081234567890`, status `pending` ✅
+- `admin_withdraw_process(approve)` → status `paid`; `earned_balance` 2000 → **0**,
+  `bonus_balance` **tetap 50**, `points` 2050 → **50** (hanya earned didebit) ✅
+- Guard: `INSUFFICIENT_EARNED`, `BELOW_MINIMUM` (min 1500), `NOT_ADMIN` (non-admin
+  panggil `admin_withdraw_process`) ✅
+- Ledger akhir konsisten: bonus +60, earned +5, points +65 (artefak test yang
+  tidak bisa dihapus karena trigger `coin_ledger_no_delete`).
+
+## 2026-10-31 — Ekonomi koin berbasis gender + misi female + withdraw (Fase 1)
+
+Keputusan user: **male bayar, female gratis & penghasil**. Chat teks gratis untuk
+semua gender; hanya foto (3) & view-once (5) yang berbayar. Female tidak pernah
+mendapat koin gratis — penghasilannya murni dari aktivitas male (bucket `earned`).
+Reward misi female masuk bucket `earned` (withdrawable).
+
+### `20261031100001_gender_points_missions.sql` (APPLIED)
+- Tabel `missions` (master, 18 misi) + `user_missions` (progress per user).
+- RPC: `update_mission_progress`, `claim_mission_reward`, `get_user_missions`,
+  `check_user_total_coins`.
+- RLS: `missions` public-SELECT, `user_missions` own-only (keduanya tabel BARU).
+
+### `20261031100002_mission_fixes.sql` (APPLIED)
+- Fix `get_user_missions`: kolom `coin_ledger.kind` → `type`/`bucket` (skema asli).
+- Fix `claim_mission_reward`: hapus UPDATE `profiles.points` manual (trigger
+  `trg_coin_ledger_balance` sudah auto) → dulu DOBEL hitung.
+- Fix `update_mission_progress`: UPSERT `INSERT ... ON CONFLICT` + unique index
+  `COALESCE(period_date,'1970-01-01')` (dulu tidak pernah INSERT baris baru).
+
+### `20261031100003_earnings_summary.sql` (APPLIED)
+- RPC `get_earnings_summary(p_user_id)` — total/mingguan/harian + breakdown
+  (gift, misi, bonus, lainnya) + statistik call (jumlah, durasi, rata-rata match,
+  tingkat menjawab).
+
+### `20261031110001_coin_economy_gender.sql` (APPLIED)
+- `app_settings` +`female_free_call_min_per_day` (default 30).
+- `deduct_chat_point` (**FROZEN**, header `-- menyentuh:` ada): chat TEKS → **0**
+  (gratis). Foto 3 & view-once 5 tetap berbayar.
+- `call_billing_tick`: caller **female → GRATIS** dengan batas menit/hari
+  (dihitung server-side dari `calls`, anti-tamper). Lewat batas → `can_continue:false`,
+  `reason:'free_limit'`.
+- `charge_metered`: callee **male → income 0** (platform ambil 100%). Hanya
+  female yang dikreditkan bucket `earned`.
+- `credit_welcome_bonus`: **male only** — female dapat `granted:false`,
+  `reason:'female_no_bonus'`.
+- `claim_mission_reward`: reward misi → bucket **`earned`** (bukan `bonus`).
+
+### Verifikasi live (Management API)
+- `deduct_chat_point` memuat `else 0 end` ✅
+- `credit_welcome_bonus` memuat `female_no_bonus` ✅
+- `call_billing_tick` memuat `free_limit` ✅
+- `charge_metered` memuat `v_recipient_gender` ✅
+- Klaim misi `like_posts` (+5): `earned_balance` 0→5, `bonus_balance` tetap 50,
+  `points` 50→55, ledger `bucket='earned'` ✅ (tidak dobel)
+- Snapshot `functions.sql` di-regenerate — diff `deduct_chat_point` hanya
+  +1 komentar & `else c_text` → `else 0` (0 cabang hilang).
+- Versi `20261031100001`, `20261031100003`, `20261031110001` dicatat di
+  `supabase_migrations.schema_migrations`.
+
 ## 2026-10-27 (lanjutan 4) — SATU negara, lock 7 hari, moderator dicabut saat pindah
 
 Keputusan user: satu negara saja (ikut profil), tidak bisa diganti 7 hari,
@@ -3306,3 +4377,36 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
   apply pada 8 assert); suite pgTAP lain hijau kecuali
   `moderator_slots_test.sql` (gagal karena kolom `requested_at` belum ada —
   berasal dari commit fitur moderasi sesi lain, tidak terkait fitur ini).
+
+## 2026-11-01 — random_match_matched_with_fix
+- **File:** `20261101110000_random_match_matched_with_fix.sql` (apply via Management API).
+- **Isi:** `random_match_join` — baris PARTNER di antrean di-set
+  `matched_with = q.user_id` (uid-nya sendiri) → sisi menunggu membaca profil
+  sendiri sebagai "partner" (nama di layar call match tampil nama sendiri di
+  kedua HP; otherUid chat setelah call salah). Koreksi: baris partner kini
+  `matched_with = me` (uid joiner). Baris joiner tak berubah.
+- **Verifikasi:** `random_match_test.sql` 23/23 (4 asersi baru: matched_with
+  kedua baris + ping sisi menunggu mengembalikan partner yang benar).
+
+## 2026-11-01 — daily_login_streak_v2 (halaman Bonus male)
+- **File:** `20261101120000_daily_login_streak_v2.sql` (apply via Management API).
+- **Isi:** `daily_login_bonus` diaktifkan ulang (dulu stub no-op oleh
+  20261001010000): MALE only, gate `points_enabled`, idempotent harian,
+  kredit `ledger_credit` bucket `bonus` (non-withdrawable) — kolom
+  `profiles.points` TIDAK disentuh. `streak_bonus_amount` dikembalikan ke
+  tier 25/30/35/40/45/50/100 (dulu dinolkan). `get_user_missions` diperluas
+  field `login_streak`/`last_login_date`/`gender` untuk grid sign-in.
+- **Verifikasi live:** klaim admin (male) streak 1 → +25 bucket bonus,
+  total 1000; re-claim hari sama → bonus 0 (idempotent). Snapshot 30 fungsi
+  direfresh (menangkap versi live migrasi terdokumentasi sebelumnya),
+  `check_migrations --all` OK bersih.
+
+## 2026-11-01 — mission_gender_filter
+- **File:** `20261101140000_mission_gender_filter.sql` (apply via Management API).
+- **Isi:** kolom `missions.gender` ('all' default) — `nyonya_1000` →
+  `female` + judul dirapikan 'Misi Nyonya' (suffix "0/1000" dobel dengan
+  label progres UI dihapus). `get_user_missions` memfilter misi
+  `gender='all'` atau cocok gender user (main & daily).
+- **Verifikasi:** live — male admin → nyonya_1000 absen;
+  `daily_login_test.sql` 15/15 (male tanpa nyonya, female dengan judul
+  bersih); `check_migrations --all` OK bersih.

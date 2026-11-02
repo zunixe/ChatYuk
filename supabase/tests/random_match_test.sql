@@ -17,6 +17,12 @@ update public.profiles set lat = -6.21, lon = 106.81
 create temp table _rm (k text primary key, v text) on commit drop;
 grant all on _rm to service_role;
 
+-- Deterministik: paksa flag OFF dulu (prod mungkin sudah publish random_call;
+-- transaksi rollback → state prod tak berubah setelah test).
+update public.app_settings
+   set feature_flags = feature_flags - 'random_call'
+ where id = 'global';
+
 -- ── 0. Sebelum fitur dipublish: admin/anon ditolak, user biasa ditolak ──
 select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a1', true);
 do $$
@@ -33,6 +39,21 @@ select supabase_tests.check('fitur belum dipublish → FEATURE_DISABLED',
 update public.app_settings
    set feature_flags = feature_flags || '{"random_call":{"published":true}}'::jsonb
  where id = 'global';
+
+-- ── 0b. Charge-on-match: male tanpa saldo ditolak masuk antrean ──
+insert into _rm values ('a_broke', public.random_match_join('all')::text);
+select supabase_tests.check('male saldo 0 → no_funds (tidak masuk antrean)',
+  (select v::jsonb->>'status' from _rm where k = 'a_broke') = 'no_funds');
+select supabase_tests.check('male saldo 0 → tidak ada baris antrean',
+  not exists(select 1 from public.random_match_queue
+              where user_id = 'd0c1e000-0000-4000-8000-0000000000a1'));
+
+-- Danai dummy male via ledger (trigger menyinkron profiles.points).
+insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
+values
+ ('d0c1e000-0000-4000-8000-0000000000a1','bonus','topup',100,'test-fund'),
+ ('d0c1e000-0000-4000-8000-0000000000a3','bonus','topup',100,'test-fund'),
+ ('d0c1e000-0000-4000-8000-0000000000a4','bonus','topup',100,'test-fund');
 
 -- ── 1. A menunggu, B masuk → langsung matched (tanpa ringing) ──
 insert into _rm values ('a_join', public.random_match_join('all')::text);
@@ -55,6 +76,35 @@ select supabase_tests.check('peserta = A & B',
 select supabase_tests.check('kedua baris antrean menunjuk call yang sama',
   (select count(*) from public.random_match_queue
     where matched_call_id = (select (v::jsonb->>'call_id')::uuid from _rm where k = 'b_join')) = 2);
+select supabase_tests.check('fee match_search −2 didebit dari A (male) saat pair',
+  exists(select 1 from public.coin_ledger
+          where user_id = 'd0c1e000-0000-4000-8000-0000000000a1'
+            and type = 'match_search' and amount = -2));
+select supabase_tests.check('fee match_search dicatat platform_revenue',
+  exists(select 1 from public.platform_revenue
+          where source = 'match_search' and amount = 2
+            and from_user = 'd0c1e000-0000-4000-8000-0000000000a1'));
+select supabase_tests.check('B (female) TIDAK didebit untuk match_search',
+  not exists(select 1 from public.coin_ledger
+          where user_id = 'd0c1e000-0000-4000-8000-0000000000a2'
+            and type = 'match_search'));
+
+-- matched_with: baris PARTNER harus menunjuk JOINER (dulu bug: di-set uid
+-- sendiri → sisi menunggu membaca profil sendiri sebagai "partner").
+select supabase_tests.check('antrean A (partner) matched_with = B (joiner)',
+  (select matched_with from public.random_match_queue
+    where user_id = 'd0c1e000-0000-4000-8000-0000000000a1')
+  = 'd0c1e000-0000-4000-8000-0000000000a2'::uuid);
+select supabase_tests.check('antrean B (joiner) matched_with = A (partner)',
+  (select matched_with from public.random_match_queue
+    where user_id = 'd0c1e000-0000-4000-8000-0000000000a2')
+  = 'd0c1e000-0000-4000-8000-0000000000a1'::uuid);
+select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a1', true);
+insert into _rm values ('a_ping', public.random_match_ping()::text);
+select supabase_tests.check('ping A → matched & partner = B (bukan diri sendiri)',
+  (select v::jsonb->>'status' from _rm where k = 'a_ping') = 'matched'
+  and (select v::jsonb->'partner'->>'uid' from _rm where k = 'a_ping')
+      = 'd0c1e000-0000-4000-8000-0000000000a2');
 
 -- ── 2. Riwayat: call random TIDAK menulis bubble ke private chat ──
 update public.calls

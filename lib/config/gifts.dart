@@ -27,3 +27,13 @@ GiftItem? giftById(String id) {
   }
   return null;
 }
+
+/// Biaya pencarian match (YukCoin) — dipotong SEKALI saat pasangan terbentuk,
+/// bukan saat tombol Match diklik. HARUS sama dengan `v_fee` di
+/// `random_match_join` (supabase/migrations/20261031110014_match_charge_on_pair.sql);
+/// server tetap sumber kebenaran, ini hanya untuk tampilan.
+const int kMatchFeeCoins = 2;
+
+/// Menit gratis pertama untuk match video (server: 20261031110011 —
+/// `c.kind = 'random'` → menit ke-1 gratis). Hanya untuk tampilan.
+const int kMatchFreeMinutes = 1;

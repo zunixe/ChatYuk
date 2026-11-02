@@ -404,6 +404,14 @@ class _SendCoinDialogState extends State<_SendCoinDialog> {
                           ).showSnackBar(SnackBar(content: Text(s.errCoinMin)));
                           return;
                         }
+                        // Server menolak > 1000 (send_coins). Validasi di
+                        // client supaya user tidak dapat error mentah.
+                        if (amount > 1000) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(s.errCoinMax)),
+                          );
+                          return;
+                        }
                         if (widget.pointsEnabled &&
                             amount > widget.paidBalance) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -439,8 +447,6 @@ Future<GiftItem?> showGiftPickerSheet(
   BuildContext context, {
   required bool pointsEnabled,
   required int paidBalance,
-  required int bonusBalance,
-  required int bonusMultiplier,
 }) {
   final s = ProviderScope.containerOf(
     context,
@@ -490,9 +496,9 @@ Future<GiftItem?> showGiftPickerSheet(
                 itemCount: kGiftCatalog.length,
                 itemBuilder: (ctx, i) {
                   final g = kGiftCatalog[i];
-                  final afford =
-                      g.coins <= paidBalance ||
-                      (g.coins * bonusMultiplier) <= bonusBalance;
+                  // Server (send_gift) hanya menerima topup+earned —
+                  // bucket `bonus` gratis ditolak, jadi jangan dihitung.
+                  final afford = g.coins <= paidBalance;
                   return InkWell(
                     onTap: afford ? () => Navigator.pop(ctx, g) : null,
                     borderRadius: BorderRadius.circular(12),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/admin_gate.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../config/theme.dart';
 import 'point_history/widgets/history_tile.dart';
@@ -110,6 +111,9 @@ class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
   Widget build(BuildContext context) {
     ref.watch(themeProvider);
     final s = ref.watch(localeProvider).s;
+    final currentGender = ref.watch(
+      authProvider.select((a) => a.profile?.gender),
+    );
     // PERF: `watch` penuh → seluruh riwayat rebuild tiap PointsProvider
     // notify (refresh berkala). `select` snapshot nilai yang dirender;
     // aksi dipanggil via `read`.
@@ -141,10 +145,13 @@ class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
                     child: YukcoinHeader(
                       s: s,
                       total: pointsSnap.total,
+                      // Female tidak top-up: koinnya masuk dari lawan bicara
+                      // (call/gift/match) — cukup lihat saldo + tarik dana.
                       showTopup:
-                          AppFlavor.topupEnabled ||
-                          AdminGate.enabled ||
-                          pointsSnap.topup,
+                          currentGender != 'female' &&
+                          (AppFlavor.topupEnabled ||
+                              AdminGate.enabled ||
+                              pointsSnap.topup),
                     ),
                   ),
                   // Cara dapat & cara pakai.

@@ -15,6 +15,7 @@ import '../config/gifts.dart';
 import '../models/message_model.dart';
 import '../config/strings.dart';
 import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../core/chat/chat_location.dart';
 import '../widgets/location_bubble.dart';
 import 'app_gesture.dart';
@@ -38,6 +39,20 @@ part 'message/bubble_reaction_badge.dart';
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
 // ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.
 String cacheKeyFor(String chatId) => 'private_$chatId';
+
+/// Dedup track misi "Terima Hadiah" per id pesan — bubble gift di-render
+/// ulang setiap scroll/rebuild; tanpa dedup tiap render = 1 RPC misi.
+/// Bounded: setelah 500 entri, buang yang paling lama.
+final Set<String> _giftMissionTracked = <String>{};
+void _trackGiftMissionOnce(BuildContext context, String msgId) {
+  if (!_giftMissionTracked.add(msgId)) return;
+  if (_giftMissionTracked.length > 500) {
+    _giftMissionTracked.remove(_giftMissionTracked.first);
+  }
+  ProviderScope.containerOf(context, listen: false)
+      .read(pointsProvider.notifier)
+      .trackMission('daily_receive_gift');
+}
 
 /// Ikon jenis pesan untuk penanda "dihapus" di monitor admin — supaya admin
 /// tahu pesan apa yang dihapus (teks/gambar/video/suara/lokasi/panggilan).
@@ -759,6 +774,17 @@ class MessageBubble extends StatelessWidget {
                                     color: AppTheme.textSecondary,
                                   ),
                                 ),
+                                // Misi harian "Terima Hadiah" — hanya untuk
+                                // penerima (bukan pengirim). Dedup per id:
+                                // bubble di-render ulang saat scroll →
+                                // tanpa dedup setiap render = 1 RPC.
+                                if (!isMe)
+                                  Builder(
+                                    builder: (context) {
+                                      _trackGiftMissionOnce(context, msg.id);
+                                      return const SizedBox.shrink();
+                                    },
+                                  ),
                               ],
                             );
                           },

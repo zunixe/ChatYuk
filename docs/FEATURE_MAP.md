@@ -343,18 +343,114 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | Lapis | Lokasi |
 |---|---|
 | UI | `lib/screens/point_history_screen.dart` (+ `point_history/widgets/*`: topup_sheet, yukcoin_header, history_tile), `donate_screen.dart` |
-| Provider | `lib/providers/points_provider.dart` |
+| Provider | `lib/providers/riverpod/points_provider.dart` |
 | Service | `lib/services/points_service.dart`, `lib/services/topup_service.dart` (Play Billing) |
 | Edge fn | `welcome-bonus` (klaim bonus, IP server-side), `play-topup-verify` (verifikasi pembelian Play) |
-| SQL engine | `charge_metered()` (potong+split generik), `call_billing_tick()` (tagih call/menit), `gate_feature()` (akses harian: filter gender, nearby), `credit_welcome_bonus()` (bonus anto-farming), `credit_play_topup()` (topup), `feature_enabled_for()`/`admin_set_feature_flag()` (publish) |
-| Fitur berbayar | call (`call_billing`), filter gender (`gender_filter_paid`), orang sekitar (`nearby_paid`), topup (`play_topup`) |
+| SQL engine | `charge_metered()` (potong+split generik), `call_billing_tick()` (tagih call/menit), `credit_welcome_bonus()` (bonus anto-farming), `credit_play_topup()` (topup), `feature_enabled_for()`/`admin_set_feature_flag()` (publish) |
+| Fitur berbayar | call (`call_billing`), match video (fee 2 koin + tarif/menit), gift 1:1, kirim koin, buat/perpanjang room, subscribe creator, promosi postingan, topup (`play_topup`) |
+| Fitur GRATIS | chat teks, filter gender, cari orang sekitar, undo pesan, edit pesan, slot foto tambahan, mode hantu, buka foto (fitur DINONAKTIFKAN) |
 | Test | `test/points_provider_test.dart`, `test/points_service_io_test.dart`, `test/flow_points_test.dart` |
+
+### My Level (2026-11-01 — male only)
+
+Level dari **kumulatif koin topup** (`coin_ledger` bucket `topup`, amount > 0).
+Naik level → reward koin ke bucket `bonus` (non-withdrawable, tak bisa gift,
+tidak feed-forward ke level) — dicetak server, idempoten per level.
+
+| Lapis | Lokasi |
+|---|---|
+| UI | `lib/screens/my_level_screen.dart` (+ `my_level/widgets/*`: privileges, rule table); entry male-only di `profile/profile_ui.dart` (`_myLevelEntry`); badge `Lv.X` di `user_info` (`_levelBadge`, hanya bila level > 0) |
+| Provider | `lib/providers/riverpod/my_level_provider.dart` (`myLevelProvider`, `userLevelProvider`) |
+| Service | `lib/services/points_service.dart` (`getMyLevel`, `getUserLevel`) |
+| SQL | tabel `level_config` (tangga: Lv.1=700 … Lv.10=1.000.000 + reward), `user_level_state` (penanda reward), RPC `get_my_level()` (hitung + grant reward idempoten, male-only, gate `points_enabled`), `get_user_level(p_user)` (badge) |
+| Test | `supabase/tests/my_level_test.sql` (18 assert), `test/my_level_screen_test.dart`, `test/profile_my_level_entry_test.dart` |
+
+**Invariant:** level tidak pernah turun (kumulatif); reward hanya MALE +
+`points_enabled` tidak false; reward = bucket `bonus` (tidak bisa ditarik);
+`user_level_state` client hanya SELECT (tulis via RPC definer).
 
 **Invariant:** coin hanya dari topup/bonus/income (tidak ada faucet gratis);
 nelp ditagih server dari `calls.answered_at` (afford-guard → saldo tak minus);
 welcome bonus idempoten per `install_id` + limit IP/hari; `charge_metered`
 hanya `service_role` (user tak bisa mendebit orang lain); saldo = cache ledger
 `profiles.points`.
+
+### Audit lanjutan 2026-11-02 (menuntaskan sisa temuan)
+
+- **Withdraw — kuota & fee dipulihkan:** migrasi `20261101190000` (menutup
+  jalur koin gratis → uang) tanpa sengaja menyalin `request_withdraw` dari
+  versi lama sehingga membuang dua perbaikan: (a) pengajuan berstatus
+  `rejected` kembali menghitung kuota 3/hari dan cooldown 1 jam;
+  (b) fee kembali memotong (pembagian integer) sedangkan client membulatkan
+  → selisih 1 Rp. Dipulihkan di `20261102220000`.
+- **Zona waktu — tiga tempat:** `request_withdraw`, `call_billing_tick`
+  (batas gratis female 30 menit/hari), dan `get_earnings_summary` memakai
+  zona sesi DB (UTC). Server Supabase ber-zona UTC sementara user WIB, jadi
+  "hari" bisa beda. Selain itu, membandingkan kolom `timestamptz` dengan
+  `date` SALAH tafsir (date dibaca sebagai UTC midnight) — panggilan yang
+  dijawab 23:29 UTC (06:29 WIB hari berikutnya) tidak terhitung. Semua
+  dipindah ke awal hari Asia/Jakarta sebagai `timestamptz`
+  (`20261102220000`, `20261102230000`, `20261102240000`).
+- **Afford-check call memakai saldo PAID:** `call_billing_tick` dulu cek
+  `yukcoin_total` (semua bucket) lalu memanggil `charge_metered` yang hanya
+  menerima topup+earned → caller bonus-only bisa melempar exception di
+  tengah tick. Sekarang afford-check memakai `yukcoin_paid_total`.
+- **Angka "bisa ditarik" jujur:** `get_earnings_summary.withdrawable` kini
+  hanya bucket `earned` (sama seperti validasi `request_withdraw`);
+  `total_balance` baru ditambahkan untuk informasi. Layar Saldo menampilkan
+  keduanya terpisah.
+- **Misi female-only ditegakkan di server:** `claim_mission_reward` sekarang
+  memeriksa `missions.gender`, bukan hanya filter UI.
+- **Minimum withdraw 2000** (bukan 1500) di string dan default config;
+  angka kini dibaca dari server.
+- **Fitur buka foto DINONAKTIFKAN** (`unlock_photo` dicabut EXECUTE-nya) —
+  tidak ada UI yang memanggilnya dan `user_info` justru membuang foto
+  terkunci, jadi `photo_income` tidak pernah bisa terjadi.
+
+### Hardening 2026-11-01 (audit ekosistem koin)
+
+- **Gift HANYA untuk chat 1:1.** Di room/group penerimanya ambigu →
+  `send_room_gift` dinonaktifkan total (EXECUTE dicabut dari semua role,
+  wiring client dihapus). Pesan gift lama tetap dirender read-only.
+- **RPC pencetak koin wajib `service_role`:** `credit_welcome_bonus`
+  (hanya edge fn `welcome-bonus`) dan `charge_metered` (hanya
+  `call_billing_tick` / `_spend_yukcoin_core`). Client tidak bisa
+  memanggilnya sama sekali.
+- **Misi tidak bisa dipalsukan:** `update_mission_progress` meng-clamp
+  `p_increment` ke 1..120; client hanya boleh SELECT `user_missions`
+  (tulis lewat RPC definer); `claim_mission_reward` atomik
+  (`WHERE claimed = false`).
+- **Withdraw satu titik debit:** didebit di `request_withdraw`; approve
+  tidak mendebit lagi; reject me-refund penuh per bucket.
+- **`profiles`:** trigger `guard_economy_columns` mengembalikan nilai lama
+  bila client mencoba menulis `points`/`*_balance`/`created_at`.
+- **`point_events`:** client hanya SELECT (INSERT/UPDATE/DELETE/TRUNCATE
+  dicabut) → skor leaderboard mingguan tidak bisa dipalsukan.
+- **Realtime:** `profiles` & `app_settings` dikeluarkan dari publication
+  (membocorkan saldo/email/`fcm_token`/`app_shared_secret` lewat payload WAL).
+- **`ledger_spend`** memakai `pg_advisory_xact_lock` per user (anti
+  double-spend paralel).
+- **Semua jalur income WAJIB koin beli/penghasilan** (audit peredaran
+  2026-11-01, migrasi `20261101190000_paid_only_economy.sql`):
+  `charge_metered` (call) pakai `ledger_spend_paid` + precheck
+  `yukcoin_paid_total`; `call_billing_tick` afford-check pakai saldo
+  paid (bonus-only → `can_continue=false`). Gift/unlock foto/subscribe/
+  kirim koin sudah paid-only sejak sebelumnya. Koin `bonus` (welcome,
+  streak harian, level reward, mass bonus) TIDAK bisa jadi uang.
+- **Withdraw HANYA bucket `earned`** (`request_withdraw` cek + debit
+  earned-only via `ledger_spend_earned`); UI gate `canWithdraw` =
+  `earnedBalance >= minCoins`.
+- **Reward misi by-gender** (`claim_mission_reward`): female → bucket
+  `earned` (withdrawable); selain female → `bonus` (non-withdrawable).
+  Snackbar klaim misi male berlabel "koin bonus (tidak bisa dicairkan)".
+- **Precheck client disamakan dengan server** (2026-11-02, migrasi
+  `20261101210000_client_paid_precheck_hardening.sql`):
+  `ensureEnoughForCall` cek paid (bukan total); room create/extend cek
+  per-bucket (`paidBalance >= paid || bonusBalance >= paid×mult`);
+  subscribe precheck `paidBalance >= price`; headline Saldo pakai
+  `withdrawable` (earned) bukan total; `spend_yukcoin` dicabut dari
+  `authenticated`; `get_earnings_summary.withdrawable` = earned saja.
+
 
 ---
 
@@ -440,8 +536,10 @@ dijawab. Konsumen WAJIB baca `sess.status`, bukan `sess.call.status`
 2. `call_history_insert()` **melewati** `kind='random'` → tidak ada bubble
    "Call ended" ke chat orang asing (kalau dilewati ini, tiap Next membuat chat
    baru).
-3. `call_billing_tick()` mengembalikan biaya 0 untuk `kind='random'` (gratis
-   dulu; tarif menyusul lewat `app_settings`).
+3. `call_billing_tick()` untuk `kind='random'`: **menit ke-1 gratis** (120
+   detik), lalu ditagih `call_video_cost_per_min` seperti video call biasa.
+   Caller FEMALE gratis 30 menit/hari (`female_free_call_min_per_day`).
+   Afford-check memakai saldo PAID (topup+earned), bukan total.
 4. Matching menghormati: blokir dua arah, ghost mode, `admin_excluded_uids`,
    privacy presence/foto, dan pasangan yang sama ≤10 menit (`random_match_pairs`).
 5. Gender harus cocok **dua arah** (saya ingin X & lawan ingin gender saya).

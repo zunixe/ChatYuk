@@ -10,6 +10,7 @@ import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../core/nav_guard.dart';
 import '../providers/riverpod/auth_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/room_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/theme_provider.dart';
@@ -283,6 +284,29 @@ class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScree
     super.dispose();
   }
 
+  /// Baris biaya pembuatan grup (dari server via pointsProvider).
+  Widget _costLine(S s) {
+    final points = ref.watch(pointsProvider);
+    if (!points.enabled) return const SizedBox.shrink();
+    final paid = points.roomCreatePaid;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          Icon(Icons.monetization_on_outlined,
+              size: 16, color: AppTheme.textSecondary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              s.paidOrBonus(paid, paid * points.bonusMultiplier),
+              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _create() async {
     if (_creating) return;
     final name = _nameCtrl.text.trim();
@@ -361,6 +385,9 @@ class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScree
                         ),
                     ],
                   ),
+                  // Biaya dibuat grup — dulu tidak ditampilkan sama sekali
+                  // padahal server menagih room_create_paid.
+                  _costLine(s),
                   const Spacer(),
                   SizedBox(
                     width: double.infinity,

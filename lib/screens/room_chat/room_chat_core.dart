@@ -652,7 +652,6 @@ mixin _RcCoreMx on _RoomChatBase {
     _msgsHandle = msgsHandle;
     _msgsStream = msgsHandle.stream;
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
-    _pointsProv = scope.read(pointsProvider.notifier);
     _msgsSub = _msgsStream.listen(_onMessagesForGift);
     // Kandidat mention room global butuh daftar user online walau strip
     // horizontal sedang disembunyikan — simpan snapshot di _lastRoomUsers.

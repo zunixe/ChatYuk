@@ -680,6 +680,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       await _reviewAfterSend(videoMsgId);
       photoFirstBonus(pp);
       photoOnSent(isOnce ? 'video_once' : 'video');
+      pp.trackMission('upload_photos');
       outboxScrollToBottom();
     } catch (e) {
       if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
@@ -933,6 +934,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       await _reviewAfterSend(msgId);
       if (kind == 'image') photoFirstBonus(pp);
       photoOnSent(kind);
+      pp.trackMission('upload_photos');
       photoClearViewTimer();
       outboxScrollToBottom();
     } catch (e) {

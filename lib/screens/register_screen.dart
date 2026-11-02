@@ -11,6 +11,7 @@ import '../main.dart';
 import 'login_screen.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../widgets/profile_form_card.dart';
+import '../widgets/gender_lock_dialog.dart';
 import '../widgets/auth_header.dart';
 import '../providers/riverpod/location_provider.dart';
 
@@ -158,6 +159,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       }
       return;
     }
+    // Konfirmasi gender — dipilih SEKALI, terkunci permanen di server.
+    if (!await confirmGenderLock(context, gender: _gender, isRegister: true)) {
+      return;
+    }
+    if (!mounted) return;
     if (nickname.length < 3) {
       if (profileOnly) {
         _popupError(s.errNicknameShort);

@@ -12,7 +12,9 @@ void main() {
     expect(localizeLastMessage('[Stiker]', en), '[Sticker]');
     expect(localizeLastMessage('[Pesan suara]', en), '[Voice message]');
     expect(localizeLastMessage('[Foto]', en), '[Photo]');
-    expect(localizeLastMessage('[Koin]', en), '[Coin]');
+    // Label lama '[Koin]' di DB dipetakan ke kosakata baru 'YukCoin'.
+    expect(localizeLastMessage('[Koin]', en), '[YukCoin]');
+    expect(localizeLastMessage('[Koin]', id), '[YukCoin]');
     expect(localizeLastMessage('[Stiker]', id), '[Stiker]');
   });
 

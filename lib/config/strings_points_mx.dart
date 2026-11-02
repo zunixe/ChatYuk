@@ -4,23 +4,26 @@ mixin SPointsMx {
   /// Kontrak dari class S (mixin tak punya field).
   bool get isId;
   String get pointsTitle => isId ? 'YukCoin' : 'YukCoin';
-  String get pointsBalance => isId ? 'Poin' : 'Points';
+  String get pointsBalance => isId ? 'YukCoin' : 'YukCoin';
   String onlineMilestone(int minutes) =>
       isId ? 'Online $minutes menit' : 'Online $minutes min';
-  String get outOfPointsTitle => isId ? '😢 Poin Habis!' : '😢 Out of Points!';
+  String get outOfPointsTitle => isId ? '😢 YukCoin Habis!' : '😢 Out of YukCoin!';
   String get pointsSafe => isId ? '✅ Aman selamanya' : '✅ Safe forever';
   String get pointsAnonymousLose => isId
-      ? 'Poin akan hilang kalau kamu logout atau ganti HP'
-      : 'Points will be lost if you logout or switch phones';
+      ? 'YukCoin akan hilang kalau kamu logout atau ganti HP'
+      : 'YukCoin will be lost if you logout or switch phones';
+  // Netral (tanpa janji jumlah): bonus daftar hanya untuk male — female
+  // ditolak server. User anonim yang melihat label ini belum memilih
+  // gender, jadi menjanjikan "+100" akan menyesatkan.
   String get pointsRegisterBonusLabel =>
-      isId ? '+100 daftar email' : '+100 register email';
+      isId ? 'Daftar pakai email' : 'Register with email';
   // Parameterized (Dart tak dukung %d — pakai fungsi)
-  String pointsDeduct(int n) => isId ? '-$n Poin' : '-$n Points';
+  String pointsDeduct(int n) => isId ? '-$n YukCoin' : '-$n YukCoin';
   String pointsGain(int n, String reason) =>
-      isId ? '+$n Poin — $reason' : '+$n Points — $reason';
+      isId ? '+$n YukCoin — $reason' : '+$n YukCoin — $reason';
   String pointsStreakToast(int day, int n) => isId
-      ? '🔥 Streak $day hari — +$n Poin'
-      : '🔥 $day-day streak — +$n Points';
+      ? '🔥 Streak $day hari — +$n YukCoin'
+      : '🔥 $day-day streak — +$n YukCoin';
   String pointsMoreMessages(int n) =>
       isId ? '≈ $n pesan lagi' : '≈ $n more messages';
   // Alasan bonus (dipakai pointsGain)
@@ -187,22 +190,8 @@ mixin SPointsMx {
       : 'Unshared photo and text will be lost.';
   String get storyDiscardYes => isId ? 'Buang' : 'Discard';
   String get storyKeepEditing => isId ? 'Lanjut' : 'Keep editing';
-  // ── Foto terkunci (paywall) ──
-  String get photoLockedTitle => isId ? 'Foto Terkunci' : 'Locked Photo';
-  String get photoLockedHint =>
-      isId ? 'Buka foto ini untuk melihatnya' : 'Unlock this photo to view it';
-  String photoUnlockOnce(int c) =>
-      isId ? 'Lihat sekali · $c YukCoin' : 'View once · $c YukCoin';
-  String photoUnlockPerm(int c) =>
-      isId ? 'Buka permanen · $c YukCoin' : 'Unlock forever · $c YukCoin';
-  String get photoUnlockNeedTopup => isId
-      ? 'YukCoin tidak cukup. Dapatkan dari bonus harian & aktivitas.'
-      : 'Not enough YukCoin. Earn from daily bonuses & activities.';
-  String get photoUnlockFailed =>
-      isId ? 'Gagal membuka foto' : 'Failed to unlock photo';
-  String get photoUnlockedToast => isId ? 'Foto terbuka' : 'Photo unlocked';
   // ── History Poin ──
-  String get pointHistoryTitle => isId ? 'History Poin' : 'Point History';
+  String get pointHistoryTitle => isId ? 'Riwayat YukCoin' : 'YukCoin History';
   String get pointHistoryEmpty =>
       isId ? 'Belum ada transaksi' : 'No transactions yet';
   String get pointHistoryCredit => isId ? 'Masuk' : 'In';
@@ -240,9 +229,32 @@ mixin SPointsMx {
   String get pointHistoryRoomIncome => isId ? 'Pendapatan room' : 'Room income';
   String get pointHistoryRoomExtend => isId ? 'Perpanjang room' : 'Extend room';
   String get pointHistoryAdminBonus => isId ? 'Bonus admin' : 'Admin bonus';
-  String get pointHistoryAdminReset => isId ? 'Reset poin' : 'Points reset';
+  String get pointHistoryAdminReset => isId ? 'Reset YukCoin' : 'YukCoin reset';
+  String get pointHistoryPostBoost => isId ? 'Promosi postingan' : 'Post boost';
+  String get pointHistoryLevelReward => isId ? 'Hadiah level' : 'Level reward';
+  String get pointHistoryCallAudio => isId ? 'Call audio' : 'Audio call';
+  String get pointHistoryCallVideo => isId ? 'Call video' : 'Video call';
+  String get pointHistoryCallIncome => isId ? 'Pendapatan call' : 'Call income';
+  String get pointHistoryGiftSent => isId ? 'Kirim hadiah' : 'Gift sent';
+  String get pointHistoryGiftReceived => isId ? 'Terima hadiah' : 'Gift received';
+  String get pointHistoryMatchSearch =>
+      isId ? 'Cari match' : 'Match search';
+  String get pointHistoryTopup => isId ? 'Isi YukCoin' : 'Top up';
+  String get pointHistoryMissionReward =>
+      isId ? 'Hadiah misi' : 'Mission reward';
+  String get pointHistoryWithdraw =>
+      isId ? 'Tarik saldo' : 'Withdrawal';
+  String get pointHistoryPhotoUnlock => isId ? 'Buka foto' : 'Unlock photo';
+  String get pointHistoryPhotoIncome =>
+      isId ? 'Pendapatan foto' : 'Photo income';
+  String get pointHistorySubscribe => isId ? 'Subscribe' : 'Subscribe';
+  String get pointHistorySubscribeIncome =>
+      isId ? 'Pendapatan subscribe' : 'Subscribe income';
+  String get pointHistoryWelcome => isId ? 'Bonus selamat datang' : 'Welcome bonus';
+  String get pointHistorySignup => isId ? 'Bonus daftar' : 'Sign-up bonus';
+  String get pointHistoryRefund => isId ? 'Refund' : 'Refund';
   String get pointHistoryOther =>
-      isId ? 'Transaksi poin' : 'Points transaction';
+      isId ? 'Transaksi YukCoin' : 'YukCoin transaction';
   // ── Wallet (saldo koin) ──
   String get walletBucketBonus => isId ? 'YukCoin bonus' : 'Bonus YukCoin';
   String get walletBucketTopup => isId ? 'YukCoin' : 'YukCoin';
@@ -255,10 +267,19 @@ mixin SPointsMx {
   String get yukcoinMyBalance => isId ? 'Saldo kamu' : 'Your balance';
   String get yukcoinHowToEarn => isId ? 'Cara dapat YukCoin' : 'How to earn YukCoin';
   // Overhaul 2026-10: tidak ada bonus gratis — coin dari topup/welcome.
-  String get yukcoinEarnTopup => isId ? 'Top-up (beli koin)' : 'Top-up (buy coins)';
+  String get yukcoinEarnTopup => isId ? 'Top-up (beli YukCoin)' : 'Top-up (buy YukCoin)';
   String get yukcoinEarnWelcome => isId ? 'Bonus pendaftaran' : 'Sign-up bonus';
-  String get yukcoinEarnCallIncome =>
-      isId ? 'Terima panggilan' : 'Receive calls';
+  String get yukcoinEarnCallAudio =>
+      isId ? 'Terima panggilan audio' : 'Take audio calls';
+  String get yukcoinEarnCallVideo =>
+      isId ? 'Terima panggilan video' : 'Take video calls';
+  String get yukcoinEarnCallNote =>
+      isId ? 'Penelepon membayar per menit' : 'The caller pays per minute';
+  String get yukcoinEarnMatch => isId ? 'Ikut match video' : 'Join video match';
+  String get yukcoinEarnMatchNote =>
+      isId ? 'Kamu tidak ditagih' : 'You are never charged';
+  String get yukcoinEarnGift =>
+      isId ? 'Terima hadiah di chat berdua' : 'Receive gifts in one-to-one chats';
   String get yukcoinFeatureCallAudio =>
       isId ? 'Panggilan audio' : 'Audio call';
   String get yukcoinFeatureCallVideo =>
@@ -267,35 +288,91 @@ mixin SPointsMx {
       isId ? 'Filter gender' : 'Gender filter';
   String get yukcoinFeatureNearby =>
       isId ? 'Cari orang sekitar' : 'Find people nearby';
-  String get yukcoinPerMin => isId ? 'koin/menit' : 'coins/min';
+  String get yukcoinPerMin => isId ? 'YukCoin/menit' : 'YukCoin/min';
+  String get yukcoinFeatureMatch =>
+      isId ? 'Cari pasangan (match)' : 'Find a match';
+  String get yukcoinFeatureGift =>
+      isId ? 'Kirim hadiah di chat' : 'Send a gift in chat';
+  String get yukcoinPerMatch => isId ? 'YukCoin/match' : 'YukCoin/match';
+  String get yukcoinPerGift => isId ? 'YukCoin/hadiah' : 'YukCoin/gift';
+  String get yukcoinMatchNote => isId
+      ? 'Dipotong sekali saat dapat pasangan — bukan saat menekan Match.'
+      : 'Charged once when you get a match — not when you tap Match.';
+  // Match video juga ditagih tarif per menit setelah masa gratis.
+  String yukcoinMatchPerMinNote(int perMin, int freeMin) => isId
+      ? 'Lanjutannya $perMin YukCoin/menit setelah $freeMin menit gratis.'
+      : 'Then $perMin YukCoin/min after the first $freeMin free minutes.';
+  String get yukcoinGiftNote => isId
+      ? 'Hanya untuk chat berdua. Sebagian nilai hadiah jadi milik penerima.'
+      : 'One-to-one chats only. Part of the gift value goes to the receiver.';
   String get yukcoinHowToSpend =>
       isId ? 'Cara pakai YukCoin' : 'How to spend YukCoin';
   String get yukcoinTopup => isId ? 'Isi YukCoin' : 'Top up YukCoin';
   String get yukcoinPickPackage =>
-      isId ? 'Pilih paket koin' : 'Pick a coin package';
+      isId ? 'Pilih paket YukCoin' : 'Pick a YukCoin package';
   // Overhaul coin (2026-10): tidak ada poin gratis — coin hanya dari topup.
   String get pointsOutOfCoinBody => isId
-      ? 'Koinmu habis. Isi koin lewat top-up untuk lanjut menelepon & memakai fitur.'
-      : 'You are out of coins. Top up to keep calling and using features.';
+      ? 'YukCoin kamu habis. Isi YukCoin lewat top-up untuk lanjut menelepon, match video, atau kirim hadiah.'
+      : 'You are out of YukCoin. Top up to keep calling, video matching, or sending gifts.';
+  // ── Onboarding MALE: apa saja yang memakai YukCoin ──
+  String get pointsOnboardMaleTitle =>
+      isId ? 'YukCoin kamu dipakai untuk ini' : 'What your YukCoin pays for';
+  String get pointsOnboardMaleSub => isId
+      ? 'Isi dulu lewat top-up, lalu pakai untuk:'
+      : 'Top up first, then spend it on:';
+  String pointsOnboardMaleCall(int audio, int video) => isId
+      ? '🪙 $audio/menit audio · $video/menit video'
+      : '🪙 $audio/min audio · $video/min video';
+  String pointsOnboardMaleMatch(int fee) => isId
+      ? '🪙 $fee YC per match — dipotong saat dapat pasangan'
+      : '🪙 $fee YC per match — charged when you get a match';
+  String pointsOnboardMaleGift(int min, int max) => isId
+      ? '🪙 $min–$max YC per hadiah, hanya di chat berdua'
+      : '🪙 $min–$max YC per gift, one-to-one chats only';
+  String get pointsOnboardMaleFree => isId
+      ? 'Gratis: chat teks, filter gender, cari orang sekitar'
+      : 'Free: text chat, gender filter, find people nearby';
+
+  // ── Onboarding FEMALE: cara MENDAPAT YukCoin ──
+  String get pointsOnboardFemaleTitle =>
+      isId ? 'Dapat YukCoin dari lawan bicara' : 'Earn YukCoin from your callers';
+  String get pointsOnboardFemaleSub => isId
+      ? 'Kamu tidak perlu top-up. YukCoin masuk saat mereka memakai fitur berbayar ke kamu:'
+      : 'No top-up needed. YukCoin comes in when others pay to reach you:';
+  String get pointsOnboardFemaleCall => isId
+      ? '📞 Terima panggilan audio & video'
+      : '📞 Take audio & video calls';
+  String get pointsOnboardFemaleGift => isId
+      ? '🎁 Terima hadiah di chat berdua'
+      : '🎁 Receive gifts in one-to-one chats';
+  String get pointsOnboardFemaleMatch => isId
+      ? '👥 Ikut match video — kamu tidak ditagih'
+      : '👥 Join video match — you are never charged';
+  String pointsOnboardFemaleWithdraw(int min) => isId
+      ? '💰 Tarik ke DANA lewat menu Saldo (min. $min YukCoin)'
+      : '💰 Cash out to DANA from the Saldo menu (min. $min coins)';
+
   String get pointsOnboardCoinTitle =>
-      isId ? 'Koin untuk menelepon' : 'Coins for calling';
+      isId ? 'YukCoin untuk menelepon' : 'YukCoin for calling';
+  // 2026-10-31: koin HANYA untuk call/video/match/gift. Filter, cari orang
+  // sekitar, undo, edit, slot foto, dan mode hantu GRATIS.
   String get pointsOnboardCoinBody => isId
-      ? 'Isi koin lewat top-up. Pakai koin untuk menelepon (audio/video), filter, dan cari orang sekitar.'
-      : 'Top up to get coins. Use them for calls (audio/video), filters, and finding people nearby.';
+      ? 'Isi YukCoin lewat top-up. YukCoin dipakai untuk menelepon (audio/video), match video, dan kirim hadiah. Fitur lain gratis.'
+      : 'Top up to get YukCoin. YukCoin is used for calls (audio/video), video match, and sending gifts. Everything else is free.';
   String get pointsOnboardCallFree => isId
-      ? 'Menelepon (audio/video) pakai koin'
-      : 'Calling (audio/video) uses coins';
+      ? 'Menelepon (audio/video) pakai YukCoin'
+      : 'Calling (audio/video) uses YukCoin';
   String callCostPerMin(int coins) => isId
-      ? '🪙 $coins koin/menit'
-      : '🪙 $coins coins/min';
+      ? '🪙 $coins YukCoin/menit'
+      : '🪙 $coins YukCoin/min';
   String get callEndedNoCoin => isId
-      ? 'Koin habis — panggilan diakhiri'
-      : 'Out of coins — call ended';
+      ? 'YukCoin habis — panggilan diakhiri'
+      : 'Out of YukCoin — call ended';
   // Edukasi: coin dipakai untuk nelp (ditampilkan saat saldo tak cukup).
-  String get callNeedCoinTitle => isId ? '🪙 Koin untuk menelepon' : '🪙 Coins for calling';
+  String get callNeedCoinTitle => isId ? '🪙 YukCoin untuk menelepon' : '🪙 YukCoin for calling';
   String callNeedCoinBody(int need) => isId
-      ? 'Untuk menelepon kamu butuh minimal $need koin (1 menit pertama). Isi koin lewat top-up untuk mulai menelepon.'
-      : 'You need at least $need coins to call (first minute). Top up to start calling.';
+      ? 'Untuk menelepon kamu butuh minimal $need YukCoin (1 menit pertama). Isi YukCoin lewat top-up untuk mulai menelepon.'
+      : 'You need at least $need YukCoin to call (first minute). Top up to start calling.';
   String get yukcoinTopupSoon =>
       isId ? 'Top-up segera hadir' : 'Top-up coming soon';
   String get yukcoinEarnLogin => isId ? 'Login harian' : 'Daily login';
@@ -335,7 +412,16 @@ mixin SPointsMx {
   String get undoMessageDone => isId ? 'Pesan dibatalkan' : 'Message undone';
   String get editMessageHint =>
       isId ? 'Tulis pesan baru...' : 'Write new message...';
-  String get extraPhotoBuy => isId ? 'Beli +5 slot foto' : 'Buy +5 photo slots';
+  // Slot foto = kapasitas galeri profil (default 4 foto).
+  String get extraPhotoSlotsLabel =>
+      isId ? 'Slot foto' : 'Photo slots';
+  String get extraPhotoBuy => isId
+      ? 'Tambah 5 slot foto (galeri profil)'
+      : 'Add 5 photo slots (profile gallery)';
+  // 2026-10-31: slot foto GRATIS (keputusan "poin hanya call & gift").
+  String get extraPhotoFreeBody => isId
+      ? 'Tambah 5 slot foto gratis?'
+      : 'Add 5 photo slots for free?';
 
   // ── Gift (hadiah) ──
   String get giftTitle => isId ? 'Kirim Hadiah' : 'Send Gift';
@@ -360,9 +446,9 @@ mixin SPointsMx {
       isId ? 'Belum ada data peringkat' : 'No leaderboard data yet';
   String get lbUnranked => isId ? 'Belum masuk peringkat' : 'Not ranked yet';
   String get lbWeeklyHint =>
-      isId ? 'Poin didapat 7 hari terakhir' : 'Points earned in last 7 days';
+      isId ? 'YukCoin didapat 7 hari terakhir' : 'YukCoin earned in last 7 days';
   String get lbAllTimeHint =>
-      isId ? 'Total saldo poin' : 'Total points balance';
+      isId ? 'Total saldo YukCoin' : 'Total YukCoin balance';
   // ── Top Aktif (leaderboard keaktifan: pesan + reaksi) ──
   String get topActiveTitle => isId ? 'Top Aktif' : 'Top Active';
   String get topActiveTooltip =>
@@ -522,6 +608,222 @@ mixin SPointsMx {
   String liveViewerCount(int count) => 'LIVE · $count';
   String get googleSignInFailed =>
       isId ? 'Google sign in gagal: ' : 'Google sign in failed: ';
+
+  // ── Misi (Missions) ──
+  String get missionsTitle => isId ? 'Misi' : 'Missions';
+  String get missionsMainTitle => isId ? 'Misi Utama' : 'Main Missions';
+  String get missionsDailyTitle => isId ? 'Misi Harian' : 'Daily Missions';
+  String get missionsLockedHint =>
+      isId ? 'Kumpulkan 1200 YukCoin untuk membuka' : 'Collect 1200 YukCoin to unlock';
+  String get missionsUnlockTitle =>
+      isId ? 'Misi Harian Terkunci' : 'Daily Missions Locked';
+  String missionsUnlockProgress(int n) =>
+      isId ? '$n / 1200 YukCoin' : '$n / 1200 YukCoin';
+  String missionsCompletedCount(int n, int total) =>
+      isId ? '$n/$total selesai' : '$n/$total completed';
+  String missionClaim(int n) => isId ? 'Klaim Hadiah $n' : 'Claim Reward $n';
+  String missionCompleted(String status) =>
+      isId ? 'Selesai!' : 'Complete!';
+  String missionLocked(String status) =>
+      isId ? 'Terkunci' : 'Locked';
+
+  // ── Halaman Bonus (ala Vava, male) ──
+  String get bonusTitle => isId ? 'Bonus' : 'Bonus';
+  String get bonusSignInRewards =>
+      isId ? 'Hadiah Masuk Harian' : 'Sign in rewards';
+  String bonusDay(int n) => isId ? 'Hari $n' : 'Day $n';
+  String get bonusSignIn => isId ? 'Masuk Harian' : 'Sign in';
+  String get bonusSignInDone => isId ? 'Sudah klaim hari ini' : 'Claimed today';
+  String bonusStreakToast(int coins) =>
+      isId ? '+$coins YukCoin — masuk harian!' : '+$coins YukCoin — signed in!';
+  String get bonusStreakToastZero =>
+      isId ? 'Sudah klaim hari ini, kembali besok' : 'Already claimed, come back tomorrow';
+  String get bonusBeginnerTasks =>
+      isId ? 'Tugas Pemula' : 'Beginner Tasks';
+  String get bonusDailyBonus => isId ? 'Bonus Harian' : 'Daily Bonus';
+  String get bonusDailyNote => isId
+      ? 'Tugas direset setiap hari. Klaim hadiahmu segera setelah tugas selesai.'
+      : 'Tasks reset daily. Claim your rewards promptly after completing the tasks.';
+  String bonusTaskProgress(int cur, int target) =>
+      isId ? '($cur/$target)' : '($cur/$target)';
+  String bonusCounterProgress(int cur, int target) =>
+      isId ? '$cur/$target' : '$cur/$target';
+  String bonusRewardCoins(int n) => isId ? '+$n' : '+$n';
+  // 2026-11-01: reward misi male masuk bucket `bonus` — tidak bisa
+  // dicairkan atau bayar fitur. Label eksplisit agar tidak salah kira.
+  String bonusRewardCoinsNonWithdrawable(int n) => isId
+      ? '+$n koin bonus (tidak bisa dicairkan)'
+      : '+$n bonus coins (cannot be withdrawn)';
+  String get bonusClaim => isId ? 'Klaim' : 'Claim';
+  String get bonusClaimed => isId ? 'Diklaim' : 'Claimed';
+  String get bonusGo => isId ? 'Mulai' : 'Go';
+  String get bonusLocked => isId ? 'Terkunci' : 'Locked';
+
+  // ── Saldo (layar penghasilan) ──
+  String get saldoTitle => isId ? 'Saldo' : 'Balance';
+  String get saldoMy => isId ? 'Saldo Saya' : 'My Balance';
+  String get saldoAvailable => isId ? 'YukCoin tersedia' : 'Available YukCoin';
+  String get saldoEarnings => isId ? 'Penghasilan' : 'Earnings';
+  String get saldoTotal => isId ? 'Penghasilan Total' : 'Total Earnings';
+  String get saldoTotalHint => isId
+      ? 'Total yang pernah kamu terima (bukan saldo saat ini)'
+      : 'Total you have ever earned (not current balance)';
+  String get saldoWeekly => isId ? 'Minggu Ini' : 'This Week';
+  String get saldoToday => isId ? 'Hari Ini' : 'Today';
+  String get saldoBreakdown => isId ? 'Rincian Penghasilan' : 'Earnings Breakdown';
+  String get saldoPrivateCall => isId ? 'Panggilan Privasi' : 'Private Calls';
+  String get saldoMatchCall => isId ? 'Panggilan Match' : 'Match Calls';
+  String get saldoMessage => isId ? 'Pesan' : 'Messages';
+  String get saldoGift => isId ? 'Hadiah' : 'Gifts';
+  String get saldoMission => isId ? 'Tugas' : 'Tasks';
+  String get saldoBonus => isId ? 'Bonus' : 'Bonus';
+  String get saldoOther => isId ? 'Lainnya' : 'Others';
+  String get saldoStats => isId ? 'Statistik Aktivitas' : 'Activity Stats';
+  String get saldoVideoCallCount =>
+      isId ? 'Jumlah Panggilan Video' : 'Video Calls';
+  String get saldoVideoCallDuration =>
+      isId ? 'Durasi Panggilan Video' : 'Video Call Duration';
+  String get saldoAvgMatch =>
+      isId ? 'Rata-rata Panggilan Match' : 'Avg Match Call';
+  String get saldoAnswerRate =>
+      isId ? 'Tingkat Menjawab Panggilan Pribadi' : 'Private Call Answer Rate';
+  String get saldoMessageReply => isId ? 'Balasan Pesan' : 'Message Replies';
+  String get saldoOnlineDuration => isId ? 'Durasi Daring' : 'Online Duration';
+  String get saldoLoadFail =>
+      isId ? 'Gagal memuat data saldo' : 'Failed to load balance data';
+  String get saldoUnitTimes => isId ? 'kali' : 'times';
+  String get saldoUnitMin => isId ? 'menit' : 'min';
+  String get saldoUnitPct => '%';
+  String saldoCoins(int n) => '$n YukCoin';
+
+  // ── Withdraw (tarik saldo ke DANA) ──
+  String get wdTitle => isId ? 'Withdraw' : 'Withdraw';
+  String get wdWithdrawable => isId ? 'Saldo Bisa Ditarik' : 'Withdrawable Balance';
+  // 2026-11-02: hanya koin PENGHASILAN (bucket earned) yang bisa ditarik.
+  // Koin bonus (gratis) menaikkan saldo total tapi tidak bisa dicairkan.
+  String get wdWithdrawableHint => isId
+      ? 'Hanya YukCoin penghasilan yang bisa ditarik ke DANA'
+      : 'Only earned YukCoin can be withdrawn to DANA';
+  String get wdTotalBalance => isId ? 'Total Saldo' : 'Total Balance';
+  String get wdNotWithdrawable =>
+      isId ? 'Tidak bisa ditarik' : 'Not withdrawable';
+  String get wdAmountLabel => isId ? 'Jumlah YukCoin' : 'YukCoin Amount';
+  // Angka dari server (get_withdraw_config) supaya tidak basi kalau admin
+  // mengubah withdraw_min_coins.
+  String wdAmountHint(int min) => isId
+      ? 'Min. $min YukCoin'
+      : 'Minimum $min YukCoin';
+  String get wdMaxAmount => isId ? 'Semua' : 'All';
+  String get wdCalcTitle => isId ? 'Rincian' : 'Breakdown';
+  String get wdCalcGross => isId ? 'Nilai YukCoin' : 'YukCoin value';
+  String get wdCalcFee => isId ? 'Biaya withdraw' : 'Withdrawal fee';
+  String get wdCalcNet => isId ? 'Diterima di DANA' : 'Received in DANA';
+  String get wdRate => isId ? 'Rate' : 'Rate';
+  String get wdDanaTitle => isId ? 'Akun DANA' : 'DANA Account';
+  String get wdDanaNumber => isId ? 'Nomor DANA' : 'DANA number';
+  String get wdDanaNumberHint => isId ? '08xx / 62xx' : '08xx / 62xx';
+  String get wdDanaName => isId ? 'Nama Pemilik' : 'Account holder';
+  String get wdDanaNameHint => isId ? 'Nama sesuai akun DANA' : 'Name on the DANA account';
+  String get wdDanaSave => isId ? 'Simpan Akun' : 'Save Account';
+  String get wdDanaSaved => isId ? 'Akun DANA tersimpan' : 'DANA account saved';
+  String get wdSubmit => isId ? 'Ajukan Withdraw' : 'Request Withdraw';
+  String get wdSubmitting => isId ? 'Mengirim…' : 'Submitting…';
+  String get wdHistory => isId ? 'Riwayat Withdraw' : 'Withdraw History';
+  String get wdHistoryEmpty =>
+      isId ? 'Belum ada withdraw' : 'No withdrawals yet';
+  String get wdStatusPending => isId ? 'Menunggu' : 'Pending';
+  String get wdStatusPaid => isId ? 'Dibayar' : 'Paid';
+  String get wdStatusRejected => isId ? 'Ditolak' : 'Rejected';
+  String get wdFemaleOnly =>
+      isId ? 'Withdraw hanya untuk akun perempuan' : 'Withdrawal is for female accounts only';
+  // Angka diambil dari server (get_withdraw_config) supaya tidak basi
+  // kalau admin mengubah withdraw_min_coins.
+  String wdBelowMin(int min) => isId
+      ? 'Minimal $min YukCoin untuk withdraw'
+      : 'Minimum $min coins to withdraw';
+  String get wdPointsDisabled => isId
+      ? 'Sistem koin sedang dimatikan. Coba lagi nanti.'
+      : 'The coin system is currently disabled. Try again later.';
+  String get wdInsufficient => isId
+      ? 'Saldo bisa ditarik tidak cukup'
+      : 'Not enough withdrawable balance';
+  String wdDailyLimit(int max) => isId
+      ? 'Maksimal $max withdraw per hari'
+      : 'Maximum $max withdrawals per day';
+  String wdTooSoon(int hours) => isId
+      ? 'Tunggu $hours jam antara withdraw'
+      : 'Wait $hours hour(s) between withdrawals';
+  String wdAccountTooNew(int hours) => isId
+      ? 'Akun harus berumur minimal $hours jam'
+      : 'Account must be at least $hours hours old';
+  String get wdInvalidNumber =>
+      isId ? 'Nomor DANA tidak valid' : 'Invalid DANA number';
+  String get wdInvalidName =>
+      isId ? 'Nama pemilik minimal 3 huruf' : 'Holder name must be 3+ characters';
+  String get wdNoAccount =>
+      isId ? 'Isi akun DANA dulu' : 'Fill in your DANA account first';
+  String get wdSuccess => isId
+      ? 'Withdraw diajukan! Menunggu persetujuan admin.'
+      : 'Withdrawal requested! Awaiting admin approval.';
+  String get wdReviewNote => isId ? 'Catatan admin' : 'Admin note';
+  String get wdConfirmTitle => isId ? 'Ajukan Withdraw?' : 'Request Withdrawal?';
+  String wdConfirmBody(int coins, int net) => isId
+      ? 'Tarik $coins YukCoin dan terima Rp $net ke DANA?'
+      : 'Withdraw $coins coins and receive Rp $net to DANA?';
+  String get wdConfirmYes => isId ? 'Ya, Ajukan' : 'Yes, Request';
+  String get wdLoadFail =>
+      isId ? 'Gagal memuat data withdraw' : 'Failed to load withdrawal data';
+
+  // ── Lock gender (dipilih sekali, tidak bisa diubah) ──
+  String get genderLockTitle =>
+      isId ? 'Pastikan Gender Sudah Benar' : 'Make Sure Your Gender Is Correct';
+  String get genderLockWarning => isId
+      ? 'Gender hanya bisa dipilih SEKALI dan TIDAK DAPAT diubah setelah disimpan.'
+      : 'Gender can only be chosen ONCE and CANNOT be changed after saving.';
+  String genderLockCurrent(String g) =>
+      isId ? 'Pilihan kamu: $g' : 'Your choice: $g';
+  String get genderLockConfirmYes => isId ? 'Ya, Simpan' : 'Yes, Save';
+  String get genderLockConfirmRegister => isId ? 'Ya, Daftar' : 'Yes, Register';
+  String get genderLockSaved => isId
+      ? 'Gender tersimpan dan tidak dapat diubah lagi'
+      : 'Gender saved and can no longer be changed';
+  String get genderLockedNotice =>
+      isId ? 'Gender tidak dapat diubah' : 'Gender cannot be changed';
+  String get genderCancel => isId ? 'Batal' : 'Cancel';
+
+  // ── My Level (male only — level dari kumulatif topup) ──
+  String get myLevelTitle => isId ? 'My Level' : 'My Level';
+  String get myLevelSubtitle =>
+      isId ? 'Level & privilege kamu' : 'Your level & privileges';
+  String get myLevelPrivileges => isId ? 'Privileges' : 'Privileges';
+  String get myLevelRule => isId ? 'Aturan Level' : 'Level Rule';
+  String get myLevelRuleDesc => isId
+      ? 'Level naik sesuai total kumulatif top-up YukCoin'
+      : 'Level up according to cumulative YukCoin top-up amount';
+  String myLevelTopupMore(String coins, int level) => isId
+      ? 'Top up $coins 🪙 lagi untuk naik ke Lv.$level'
+      : 'Top up $coins 🪙 more to reach Lv.$level';
+  String get myLevelMaxLevel =>
+      isId ? 'Kamu di level tertinggi 🔥' : 'You reached the top level 🔥';
+  String myLevelReward(int coins) =>
+      isId ? 'Naik level dapat +$coins 🪙' : 'Level up grants +$coins 🪙';
+  String get myLevelPrivBadge => isId ? 'Badge Level' : 'Level Badge';
+  String get myLevelPrivBadgeDesc => isId
+      ? 'Badge level tampil di profil kamu'
+      : 'Your level badge shows on your profile';
+  String get myLevelPrivReward => isId ? 'Bonus Koin' : 'Coin Bonus';
+  String get myLevelPrivNone => isId
+      ? 'Belum ada privilege di level ini — top up untuk mulai'
+      : 'No privileges at this level yet — top up to get started';  String myLevelPrivRewardDesc(int coins) => isId
+      ? 'Dapat +$coins 🪙 saat naik ke level ini'
+      : 'Get +$coins 🪙 when reaching this level';
+  String get myLevelColLevel => isId ? 'Level' : 'Level';
+  String get myLevelColTopup => isId ? 'Top Up 🪙' : 'Top Up 🪙';
+  String get myLevelColReward => isId ? 'Bonus' : 'Bonus';
+  String get myLevelCtaTopup => isId ? 'Isi YukCoin' : 'Top Up YukCoin';
+  String get myLevelLoadFail =>
+      isId ? 'Gagal memuat level' : 'Failed to load level';
+  String levelShort(int n) => 'Lv.$n';
 
   // ── Admin Chat Monitor ──
 }

@@ -19,6 +19,7 @@ void main() {
     'globalSetting',
     'overview',
     'point',
+    'withdraw',
     'chatMonitor',
     'roomMonitor',
     'dummy',

@@ -1,3 +1,18 @@
+> ⚠️ **USANG / SUPERSEDED (sejak 2026-11-01).**
+> Dokumen ini menjelaskan ekonomi LAMA yang sudah tidak berlaku:
+> poin gratis (login harian +25, bonus online 5/30/60/120), chat teks −1,
+> foto −3, dan faucet harian — semuanya **DIHAPUS** oleh overhaul koin
+> (2026-10-01) dan audit Fase 21 (2026-11-01).
+>
+> **Sumber kebenaran sekarang:**
+> - `docs/FEATURE_MAP.md` §5 (Poin/Ekonomi) — aturan aktif + hardening.
+> - `docs/MIGRATION_LOG.md` — 2026-11-01 (Fase 21), 2026-10-31 (Fase 16–20).
+> - `supabase/snapshots/functions.sql` — definisi fungsi yang live.
+>
+> Simpan dokumen ini hanya sebagai catatan sejarah.
+
+---
+
 # Rencana Peningkatan Sistem Poin ChatYuk
 
 Audit sistem poin: 3 bug (poin user hilang diam-diam) + peningkatan retensi

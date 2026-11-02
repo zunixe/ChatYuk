@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../config/strings.dart';
 import '../models/privacy_settings.dart';
 import '../providers/riverpod/locale_provider.dart';
-import '../providers/riverpod/points_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/riverpod/privacy_provider.dart';
 import 'privacy_settings/widgets/privacy_exclusions_sheet.dart';
@@ -256,18 +255,6 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
   Widget build(BuildContext context) {
     final s = ref.watch(localeProvider).s;
     final p = ref.watch(privacyProvider).settings;
-    // PERF (§26b): dulu 3× `watch<PointsProvider>()` → SELURUH halaman
-    // privasi rebuild tiap PointsProvider notify (refresh beberapa kali saat
-    // buka: get_points_enabled/get_wallet/yukcoin_v2_status) → lag saat masuk.
-    // Sekarang `select` field yang dirender saja.
-    final (:yukcoinV2Active, :ghostMode) = ref.watch(
-      pointsProvider.select(
-        (pp) => (
-          yukcoinV2Active: pp.yukcoinV2Active,
-          ghostMode: pp.ghostMode,
-        ),
-      ),
-    );
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.privacyTitle)),
@@ -343,65 +330,11 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
               ),
             ],
           ),
-          // Ghost mode (YukCoin v2) — beli sehari untuk sembunyikan presence.
-          if (yukcoinV2Active) ...[
-            const SizedBox(height: 12),
-            _PrivacyCard(
-              children: [
-                _PrivacySwitchTile(
-                  icon: Icons.visibility_off_outlined,
-                  title: s.yukcoinFeatureGhost,
-                  subtitle: ghostMode
-                      ? s.ghostModeActive
-                      : '${s.ghostModeDesc} (${ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).costGhostModeDaily})',
-                  value: ghostMode,
-                  onChanged: (v) => _buyGhost(v),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     );
   }
 
-  /// Beli ghost mode 1 hari (YukCoin). Bila sudah aktif, tombol = perpanjang.
-  Future<void> _buyGhost(bool want) async {
-    if (!want) return; // tidak bisa mematikan lebih awal (habis sendiri)
-    final pp = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.ghostModeBuy),
-        content: Text(s.yukcoinUseConfirmBody(pp.costGhostModeDaily)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(s.yukcoinCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s.yukcoinConfirm),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    try {
-      await pp.buyGhostMode(days: 1);
-      await pp.refreshYukcoinV2();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.ghostModeActive)));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.yukcoinNotEnough)));
-    }
-  }
 }
 
 /// Kartu yang sama dengan halaman Notifikasi (bgCard + radius 14).
