@@ -16,6 +16,7 @@ import '../widgets/gender_avatar.dart';
 import '../widgets/call_permission_dialog.dart';
 import 'random_call_history_screen.dart';
 import '../providers/riverpod/match_pricing_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import 'random_call_screen.dart';
 
 /// Layar utama Random Video Call: radar orang sekitar + tombol Match.
@@ -172,6 +173,21 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
           // dialog perantara). `no_funds` server hanya untuk male; bila
           // gender lain entah kenapa kena, tetap dialog penjelasan.
           if (_myGender == 'male') {
+            // Saldo bonus terlihat (mis. 31) tapi match butuh koin BELI →
+            // jelaskan dulu, kalau tidak user bingung "koin ada kok disuruh isi".
+            // Pelengkap saja — gagal baca saldo tidak boleh menahan sheet.
+            try {
+              final pts = ref.read(pointsProvider);
+              final mp =
+                  ref.read(matchPricingProvider).value ?? const MatchPricing();
+              if (pts.bonusBalance > 0) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(s.randomBonusNotUsable(
+                      pts.bonusBalance, mp.searchCoins + mp.connectCoins)),
+                  duration: const Duration(seconds: 5),
+                ));
+              }
+            } catch (_) {}
             NavGate.topupSheet?.call(context, s);
           } else {
             _showNeedCoinDialog(s);

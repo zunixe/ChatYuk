@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/withdraw_request.dart';
+import '../providers/riverpod/earnings_provider.dart';
 import '../providers/riverpod/kyc_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/withdraw_provider.dart';
@@ -38,6 +39,13 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
 
   WithdrawQuote get _quote => ref.read(withdrawProvider).config.quote(_amount);
 
+  /// Bisa ditarik sekarang = earned dikurangi masa tahan (get_earnings_summary).
+  /// Ringkasan belum termuat → fallback saldo earned (server tetap menolak).
+  int _available(WithdrawState state) {
+    final e = ref.read(earningsProvider);
+    return e.loading ? state.earnedBalance : e.withdrawable;
+  }
+
   Future<void> _submit() async {
     final s = ref.read(localeProvider).s;
     final state = ref.read(withdrawProvider);
@@ -47,8 +55,14 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
       _snack(s.wdBelowMin(state.config.minCoins), error: true);
       return;
     }
-    if (coins > state.earnedBalance) {
-      _snack(s.wdInsufficient, error: true);
+    if (coins > _available(state)) {
+      final held = ref.read(earningsProvider).held;
+      _snack(
+        held > 0
+            ? s.wdHeld(_available(state), state.config.holdDays)
+            : s.wdInsufficient,
+        error: true,
+      );
       return;
     }
 
@@ -142,6 +156,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
       'DAILY_AMOUNT_LIMIT' =>
         s.wdDailyAmount(_detailInt('remaining', cfg.maxCoinsPerDay)),
       'UNDER_REVIEW' => s.wdUnderReview,
+      'DANA_IN_USE' => s.wdDanaInUse,
       _ => s.wdErrGeneric,
     };
   }
@@ -214,7 +229,9 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                     submitting: state.submitting,
                     onChanged: () => setState(() {}),
                     onMax: () {
-                      _amountCtrl.text = '${state.earnedBalance}';
+                      // Maks = yang BENAR-BENAR bisa ditarik (setelah masa
+                      // tahan), bukan seluruh saldo earned.
+                      _amountCtrl.text = '${_available(state)}';
                       setState(() {});
                     },
                     onSubmit: _submit,

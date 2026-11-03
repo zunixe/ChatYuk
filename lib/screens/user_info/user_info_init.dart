@@ -416,7 +416,7 @@ mixin _UiInitMx on _UserInfoBase {
     if (confirmed != true || !mounted) return;
     setState(() => _busySocial = true);
     try {
-      await points.subscribeCreator(widget.userId);
+      await points.subscribeCreator(widget.userId, expectedPrice: price);
       if (!mounted) return;
       setState(() => _subscribed = true);
       points.refreshWallet();
@@ -425,7 +425,9 @@ mixin _UiInitMx on _UserInfoBase {
       ).showSnackBar(SnackBar(content: Text(s.subscribeSuccess)));
     } catch (e) {
       final msg = e.toString();
-      final show = msg.contains('registered')
+      final show = msg.contains('PRICE_CHANGED')
+          ? s.subscribePriceChanged
+          : msg.contains('registered')
           ? s.subscribeNeedRegister
           : msg.contains('Not enough paid') || msg.contains('Not enough')
           ? s.subscribeNeedPaid

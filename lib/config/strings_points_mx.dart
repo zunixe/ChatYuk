@@ -799,6 +799,9 @@ mixin SPointsMx {
   String get wdUnderReview => isId
       ? 'Akun sedang ditinjau admin. Withdraw dibuka kembali setelah selesai.'
       : 'Your account is under admin review. Withdrawals reopen once it is done.';
+  String get wdDanaInUse => isId
+      ? 'Nomor DANA ini sudah dipakai akun lain'
+      : 'This DANA number is already used by another account';
   String get wdErrGeneric => isId
       ? 'Gagal memproses. Coba lagi.'
       : 'Something went wrong. Please try again.';
@@ -824,10 +827,10 @@ mixin SPointsMx {
   String get genderCancel => isId ? 'Batal' : 'Cancel';
 
   // ── My Level (male only — level dari kumulatif topup) ──
-  String get myLevelTitle => isId ? 'My Level' : 'My Level';
+  String get myLevelTitle => isId ? 'Level Saya' : 'My Level';
   String get myLevelSubtitle =>
       isId ? 'Level & privilege kamu' : 'Your level & privileges';
-  String get myLevelPrivileges => isId ? 'Privileges' : 'Privileges';
+  String get myLevelPrivileges => isId ? 'Keistimewaan' : 'Privileges';
   String get myLevelRule => isId ? 'Aturan Level' : 'Level Rule';
   String get myLevelRuleDesc => isId
       ? 'Level naik sesuai total kumulatif top-up YukCoin'
@@ -841,17 +844,18 @@ mixin SPointsMx {
       isId ? 'Naik level dapat +$coins 🪙' : 'Level up grants +$coins 🪙';
   String get myLevelPrivBadge => isId ? 'Badge Level' : 'Level Badge';
   String get myLevelPrivBadgeDesc => isId
-      ? 'Badge level tampil di profil kamu'
-      : 'Your level badge shows on your profile';
+      ? 'Badge level tampil di info profil kamu'
+      : 'Your level badge shows on your profile info';
   String get myLevelPrivReward => isId ? 'Bonus Koin' : 'Coin Bonus';
   String get myLevelPrivNone => isId
       ? 'Belum ada privilege di level ini — top up untuk mulai'
-      : 'No privileges at this level yet — top up to get started';  String myLevelPrivRewardDesc(int coins) => isId
+      : 'No privileges at this level yet — top up to get started';
+  String myLevelPrivRewardDesc(int coins) => isId
       ? 'Dapat +$coins 🪙 saat naik ke level ini'
       : 'Get +$coins 🪙 when reaching this level';
   String get myLevelColLevel => isId ? 'Level' : 'Level';
-  String get myLevelColTopup => isId ? 'Top Up 🪙' : 'Top Up 🪙';
-  String get myLevelColReward => isId ? 'Bonus' : 'Bonus';
+  String get myLevelColTopup => isId ? 'Isi Ulang 🪙' : 'Top Up 🪙';
+  String get myLevelColReward => isId ? 'Hadiah' : 'Bonus';
   String get myLevelCtaTopup => isId ? 'Isi YukCoin' : 'Top Up YukCoin';
   String get myLevelLoadFail =>
       isId ? 'Gagal memuat level' : 'Failed to load level';

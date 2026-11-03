@@ -58,7 +58,7 @@ class MyLevelEntryCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      lv.loading ? '…' : s.levelShort(lv.level),
+                      lv.loading && lv.ladder.isEmpty ? '' : s.levelShort(lv.level),
                       style: AppText.micro.copyWith(
                         color: AppTheme.textSecondary,
                       ),

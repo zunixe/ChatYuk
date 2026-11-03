@@ -836,8 +836,10 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   Future<Map<String, dynamic>> subscribeCreator(
     String creatorUid, {
     int periods = 1,
+    int? expectedPrice,
   }) async {
-    final res = await _service.subscribeCreator(creatorUid, periods: periods);
+    final res = await _service.subscribeCreator(creatorUid,
+        periods: periods, expectedPrice: expectedPrice);
     await refreshWallet();
     return res;
   }

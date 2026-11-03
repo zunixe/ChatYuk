@@ -39,8 +39,8 @@ void main() {
   });
 
   test('string My Level bilingual (isId ? … : …)', () {
-    expect(strings, contains("isId ? 'My Level' : 'My Level'"));
-    expect(strings, contains("isId ? 'Privileges' : 'Privileges'"));
+    expect(strings, contains("isId ? 'Level Saya' : 'My Level'"));
+    expect(strings, contains("isId ? 'Keistimewaan' : 'Privileges'"));
     expect(strings, contains("isId ? 'Aturan Level' : 'Level Rule'"));
     expect(strings, contains("isId ? 'Badge Level' : 'Level Badge'"));
     expect(strings, contains("isId ? 'Bonus Koin' : 'Coin Bonus'"));

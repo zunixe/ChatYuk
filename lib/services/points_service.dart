@@ -419,8 +419,10 @@ class PointsService {
   Future<Map<String, dynamic>> subscribeCreator(
     String creatorUid, {
     int periods = 1,
+    int? expectedPrice,
   }) async {
-    return subscribeCreatorRpc(_sb, creatorUid, periods: periods);
+    return subscribeCreatorRpc(_sb, creatorUid,
+        periods: periods, expectedPrice: expectedPrice);
   }
 
   /// Klaim reward referral-install (sekali per referred).

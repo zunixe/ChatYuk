@@ -212,6 +212,9 @@ mixin SSocialMx {
   String get subscribeFansHint => isId
       ? 'Berlangganan untuk mendukung kreator ini. Dibayar pakai YukCoin.'
       : 'Subscribe to support this creator. Paid with YukCoin.';
+  String get subscribePriceChanged => isId
+      ? 'Harga langganan baru saja berubah. Buka profil lagi untuk melihat harga terbaru.'
+      : 'The subscription price just changed. Reopen the profile to see the latest price.';
   String get subscribeCreatorHint => isId
       ? 'Jadilah kreator: pasang harga langganan bulanan. Fans yang subscribe memberimu penghasilan.'
       : 'Become a creator: set a monthly subscription price. Fans who subscribe become your income.';

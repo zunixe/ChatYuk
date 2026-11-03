@@ -43,6 +43,16 @@ class _MyLevelScreenState extends ConsumerState<MyLevelScreen> {
   Widget build(BuildContext context) {
     final s = ref.watch(localeProvider).s;
     final st = ref.watch(myLevelProvider);
+    // Hadiah naik level → tampilkan sekali lalu tandai sudah dilihat.
+    ref.listen(myLevelProvider.select((v) => v.justRewarded), (_, next) {
+      if (next.isEmpty) return;
+      final coins = next.fold<int>(
+          0, (a, r) => a + ((r['coins'] as num?)?.toInt() ?? 0));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.myLevelReward(coins))),
+      );
+      ref.read(myLevelProvider.notifier).consumeRewarded();
+    });
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -95,9 +105,7 @@ class MyLevelHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final next = st.nextLevel;
     final nextAt = st.nextAt;
-    final progress = (nextAt == null || nextAt <= 0)
-        ? 1.0
-        : (st.cumulative / nextAt).clamp(0.0, 1.0);
+    final progress = st.progress;
 
     return Container(
       width: double.infinity,
@@ -164,10 +172,7 @@ class MyLevelHeroCard extends StatelessWidget {
           Text(
             next == null || nextAt == null
                 ? s.myLevelMaxLevel
-                : s.myLevelTopupMore(
-                    formatPoints((nextAt - st.cumulative).clamp(0, nextAt)),
-                    next,
-                  ),
+                : s.myLevelTopupMore(formatPoints(st.remaining), next),
             style: AppText.caption.copyWith(
               color: Colors.white.withValues(alpha: 0.95),
             ),
