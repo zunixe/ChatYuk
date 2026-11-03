@@ -298,10 +298,10 @@ mixin SPointsMx {
   String get yukcoinMatchNote => isId
       ? 'Dipotong sekali saat dapat pasangan — bukan saat menekan Match.'
       : 'Charged once when you get a match — not when you tap Match.';
-  // Match video juga ditagih tarif per menit setelah masa gratis.
-  String yukcoinMatchPerMinNote(int perMin, int freeMin) => isId
-      ? 'Lanjutannya $perMin YukCoin/menit setelah $freeMin menit gratis.'
-      : 'Then $perMin YukCoin/min after the first $freeMin free minutes.';
+  // Match video: 30 dtk gratis → biaya konek → tarif per menit.
+  String yukcoinMatchPerMinNote(int perMin, int freeSec, int connectFee) => isId
+      ? '${freeSec}s gratis, lalu $connectFee YukCoin biaya konek + $perMin/menit.'
+      : '${freeSec}s free, then $connectFee connect fee + $perMin/min.';
   String get yukcoinGiftNote => isId
       ? 'Hanya untuk chat berdua. Sebagian nilai hadiah jadi milik penerima.'
       : 'One-to-one chats only. Part of the gift value goes to the receiver.';
@@ -504,6 +504,7 @@ mixin SPointsMx {
   String get mFirstPhoto => isId ? 'Kirim foto pertama' : 'Send first photo';
   String get mFirstRoomChat => isId ? 'Chat room pertama' : 'First room chat';
   String get btnRetry => isId ? 'Coba Lagi' : 'Retry';
+  String get btnLater => isId ? 'Nanti' : 'Later';
   String get btnRefresh => isId ? 'Segarkan' : 'Refresh';
   String get msgServerError =>
       isId ? 'Gagal terhubung ke server' : 'Failed to connect to server';
@@ -732,6 +733,9 @@ mixin SPointsMx {
   String get wdDanaNameHint => isId ? 'Nama sesuai akun DANA' : 'Name on the DANA account';
   String get wdDanaSave => isId ? 'Simpan Akun' : 'Save Account';
   String get wdDanaSaved => isId ? 'Akun DANA tersimpan' : 'DANA account saved';
+  // Estimasi nilai fiat di kartu YukCoin profil — koin earned ≈ nilai fiat.
+  String walletEstFiat(String coins, String fiat) =>
+      isId ? 'Bisa ditarik: $coins ≈ $fiat' : 'Withdrawable: $coins ≈ $fiat';
   String get wdSubmit => isId ? 'Ajukan Withdraw' : 'Request Withdraw';
   String get wdSubmitting => isId ? 'Mengirim…' : 'Submitting…';
   String get wdHistory => isId ? 'Riwayat Withdraw' : 'Withdraw History';
@@ -771,6 +775,12 @@ mixin SPointsMx {
   String get wdSuccess => isId
       ? 'Withdraw diajukan! Menunggu persetujuan admin.'
       : 'Withdrawal requested! Awaiting admin approval.';
+  String get wdKycRequired => isId
+      ? 'Withdraw butuh verifikasi identitas (KYC) yang disetujui dulu'
+      : 'Withdrawal requires an approved identity verification (KYC) first';
+  String wdDanaCooldown(int hours) => isId
+      ? 'Nomor DANA baru bisa diganti $hours jam setelah pergantian terakhir'
+      : 'DANA number can only be changed $hours hours after the last change';
   String get wdReviewNote => isId ? 'Catatan admin' : 'Admin note';
   String get wdConfirmTitle => isId ? 'Ajukan Withdraw?' : 'Request Withdrawal?';
   String wdConfirmBody(int coins, int net) => isId

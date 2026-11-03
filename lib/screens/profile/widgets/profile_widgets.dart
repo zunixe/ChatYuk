@@ -316,6 +316,19 @@ String formatPoints(int n) {
   return buf.toString();
 }
 
+/// Perkiraan IDR→USD untuk estimasi nilai withdraw user non-Indonesia.
+/// Bukan kurs live — cukup untuk gambaran kasar (≈ Rp16.000/US$).
+const double kIdrPerUsdEstimate = 16000;
+
+/// Estimasi nilai fiat dari koin: Rp untuk pengguna Indonesia, US$ selainnya.
+String formatFiatEstimate(int idrAmount, {required bool isId}) {
+  if (isId) return 'Rp${formatPoints(idrAmount)}';
+  final usd = idrAmount / kIdrPerUsdEstimate;
+  return usd >= 100
+      ? '\$${usd.toStringAsFixed(0)}'
+      : '\$${usd.toStringAsFixed(2)}';
+}
+
 /// Item grid aksi cepat profil.
 class ProfileActionItem {
   final IconData icon;

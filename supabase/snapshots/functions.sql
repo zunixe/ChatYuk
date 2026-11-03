@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-11-02T23:56:44Z
+-- Timestamp: 2026-11-03T12:46:33Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -986,7 +986,7 @@ begin
   return coalesce(tot, 0);
 end; $function$
 
--- snapshot-fn: send_coins @ 20260816030000_coin_economy_v2.sql
+-- snapshot-fn: send_coins @ 20261107000000_econ_antifraud_phaseb.sql
 CREATE OR REPLACE FUNCTION public.send_coins(p_chat_id text, p_receiver_id uuid, p_amount integer)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -996,6 +996,7 @@ AS $function$
 declare
   uid uuid := auth.uid(); am_registered boolean; remaining int;
   my_name text; my_gender text; points_on boolean; tx_max int;
+  v_cut_pct int; v_cut int; v_net int;
 begin
   if uid is null then raise exception 'Not authenticated'; end if;
 
@@ -1031,18 +1032,33 @@ begin
   -- Hanya koin belian (topup+earned) — koin bonus TIDAK bisa ditransfer.
   remaining := public.ledger_spend_paid(uid, 'coin_sent', p_amount, p_chat_id);
 
-  -- Penerima selalu dapat 'earned' (bisa dicairkan setelah KYC).
-  perform public.ledger_credit(p_receiver_id, 'earned', 'coin_received', p_amount,
-    p_chat_id, jsonb_build_object('from', uid));
+  -- B1: potongan platform (default 30%). Penerima menerima NET ke
+  -- `earned` — masih bisa di-withdraw, tapi hasil "pencucian" send_coins
+  -- kini dipotong seperti gift sehingga refund-fraud tidak lagi gratis.
+  select coalesce(coin_send_cut_pct, 30) into v_cut_pct
+    from app_settings where id = 'global';
+  v_cut := (p_amount * v_cut_pct) / 100;
+  v_net := p_amount - v_cut;
+
+  perform public.ledger_credit(p_receiver_id, 'earned', 'coin_received', v_net,
+    p_chat_id, jsonb_build_object('from', uid,
+      'gross', p_amount, 'cut', v_cut, 'pct', v_cut_pct));
+
+  if v_cut > 0 then
+    insert into platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
+    values ('coin_send_cut', v_cut, uid, p_receiver_id, p_chat_id,
+            jsonb_build_object('gross', p_amount, 'pct', v_cut_pct));
+  end if;
 
   insert into public.point_events (user_id, event, amount)
-    values (uid, 'coin_sent', -p_amount), (p_receiver_id, 'coin_received', p_amount);
+    values (uid, 'coin_sent', -p_amount), (p_receiver_id, 'coin_received', v_net);
 
   insert into public.private_messages (chat_id, sender_id, sender_name, sender_gender, text, type, image_data)
     values (p_chat_id, uid, coalesce(my_name, 'Anon'), coalesce(my_gender, 'other'),
             p_amount::text, 'coin', '');
 
-  return jsonb_build_object('ok', true, 'points', coalesce(remaining, 0));
+  return jsonb_build_object('ok', true, 'points', coalesce(remaining, 0),
+    'sent', p_amount, 'received', v_net, 'cut_pct', v_cut_pct);
 end; $function$
 
 -- snapshot-fn: send_gift @ 20261031110005_female_withdraw_all.sql

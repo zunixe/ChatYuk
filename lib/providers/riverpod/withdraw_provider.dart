@@ -17,15 +17,21 @@ class WithdrawConfig {
   final int maxPerDay;
   final int minIntervalHours;
   final int minAccountAgeHours;
+  final bool requireKyc;
+  final int danaChangeCooldownHours;
 
   const WithdrawConfig({
     this.rate = 7,
-    this.minCoins = 2000,
+    // Default fallback HARUS selaras default server `request_withdraw`
+    // (withdraw_min_coins = 1500) — nilai live selalu dari get_withdraw_config.
+    this.minCoins = 1500,
     this.feePct = 5,
     this.feeMinIdr = 1000,
     this.maxPerDay = 3,
     this.minIntervalHours = 1,
     this.minAccountAgeHours = 72,
+    this.requireKyc = true,
+    this.danaChangeCooldownHours = 168,
   });
 
   WithdrawQuote quote(int coins) =>
@@ -88,8 +94,12 @@ class WithdrawNotifier extends Notifier<WithdrawState> {
     // Ganti user → muat ulang saldo withdrawable + akun DANA + riwayat.
     _authSub?.cancel();
     _authSub = _sb.auth.onAuthStateChange.listen((s) {
+      if (s.event == AuthChangeEvent.signedOut) {
+        // Riwayat/akun withdraw user lama jangan bocor ke user berikutnya.
+        state = const WithdrawState(loading: false);
+        return;
+      }
       if (s.event == AuthChangeEvent.signedIn ||
-          s.event == AuthChangeEvent.signedOut ||
           s.event == AuthChangeEvent.initialSession ||
           s.event == AuthChangeEvent.tokenRefreshed) {
         refresh();
@@ -108,6 +118,10 @@ class WithdrawNotifier extends Notifier<WithdrawState> {
   }
 
   Future<void> _loadAll() async {
+    if (_sb.auth.currentUser == null) {
+      state = const WithdrawState(loading: false);
+      return;
+    }
     try {
       final cfg = await _sb.rpc('get_withdraw_config');
       final config = WithdrawConfig(
@@ -118,6 +132,9 @@ class WithdrawNotifier extends Notifier<WithdrawState> {
         maxPerDay: _i(cfg['max_per_day']),
         minIntervalHours: _i(cfg['min_interval_hours']),
         minAccountAgeHours: _i(cfg['min_account_age_hours']),
+        requireKyc: cfg['require_kyc'] != false,
+        danaChangeCooldownHours:
+            _i(cfg['dana_change_cooldown_hours']),
       );
 
       final accRes = await _sb.rpc('get_withdraw_account');

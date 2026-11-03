@@ -133,7 +133,7 @@ void main() {
   ) async {
     disposeAfterTest(tester);
     var topupShown = 0;
-    NavGate.topupSheet = (_, _) => topupShown++;
+    NavGate.topupSheet = (_, _) async => topupShown++;
     addTearDown(() => NavGate.topupSheet = null);
     when(() => svc.stats()).thenAnswer(
       (_) async => (waiting: 0, online: 5, sample: const <RandomRadarUser>[]),

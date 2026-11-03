@@ -4558,3 +4558,80 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
   dipertahankan saat rebuild all-candidates (kamera tak re-init → PiP tak
   blink); chip "Menyambungkan ulang" di UI.
 - Applied via Management API; match_billing_test 26/26; full SQL hijau.
+
+## 20261106000000_econ_leak_lockdown.sql
+- Fase A review ekonomi (audit): tutup kebocoran uang server-side.
+- A1 REVOKE: `_charge_metered_core(6-arg)` dari public/anon/authenticated —
+  sebelumnya anon+auth bisa execute (drain koin user lain). `touch_call`
+  dicabut dari anon; `yukcoin_paid_total` dicabut dari authenticated
+  (klien tak pernah panggil langsung; SECURITY DEFINER internal tetap jalan).
+- A2 `call_billing_tick`: `FOR UPDATE` row lock pada calls; guard call
+  ended (`v_ended` dari ended_at/status terminal) — elapsed di-cap ke
+  ended_at, tick pasca-ended → `can_continue=false, ended=true`, nol
+  tagihan baru; recipient read-only (tak lagi memicu charge ke payer —
+  income_total tetap dikembalikan untuk UI); `v_caller_gender` dari
+  c.caller_id.
+- A3 trigger `calls_client_guard_trg` (BEFORE INSERT/UPDATE, hanya saat
+  current_user='authenticated'): insert klien dipaksa kind='direct' +
+  status='ringing' + answered_at/media_connected_at NULL; update klien
+  ditolak bila mengubah kind/answered_at/media_connected_at/caller/callee.
+  Status/ended_at tetap boleh (alur answer/hangup normal). Definer RPC
+  (current_user=postgres) tak kena.
+- A4 idempotensi: unique index (user_id,feature,ref_id,minute) di
+  yukcoin_consumptions; advisory lock per-user di ledger_spend_paid +
+  _spend_yukcoin_core; trigger coin_ledger_nonneg_trg menolak debit yang
+  menjadikan bucket negatif.
+- A5: cron `economy-invariant-daily` (25 3 * * * → economy_invariant_cron);
+  reversal admin_test_grant di akun male terdaftar (-580, sisa yang masih
+  ada — ledger append-only, grant asli tidak dihapus).
+- Test: `econ_lockdown_test.sql` 20/20; update match_billing (female tick
+  read-only → male tick menagih), random_match (tick pasca-ended),
+  points_test & economy_invariants (nonneg guard). Full suite SQL hijau;
+  smoke_anon_register OK; snapshot diff = timestamp saja.
+
+## 20261107000000_econ_antifraud_phaseb.sql + 20261107010000_dana_cooldown_save_account.sql
+- Fase B (keputusan user): send_coins dipotong seperti gift, tanpa hold
+  earned, KYC penuh + cooldown DANA + tx_id.
+- app_settings baru: `coin_send_cut_pct` (30), `withdraw_require_kyc`
+  (true), `withdraw_dana_change_cooldown_hours` (168).
+- send_coins (FROZEN, body dari live): penerima terima NET ke `earned`
+  (gross−cut), cut → platform_revenue `coin_send_cut`; respons tambah
+  `sent/received/cut_pct`. snapshot send_coins di-refresh.
+- request_withdraw: gate KYC (`kyc_requests.approved` → KYC_REQUIRED)
+  dipasang SETELAH validasi murah; cooldown ganti nomor DANA →
+  DANA_CHANGE_COOLDOWN + `cooldown_until`; `updated_at` withdraw_accounts
+  hanya maju saat nomor berubah. Cooldown juga di save_withdraw_account
+  (migrasi 010000 — sebelumnya bypass lewat layar ubah akun).
+- admin_withdraw_process: signature baru (…, p_tx_id) — approve WAJIB
+  tx_id (TX_ID_REQUIRED) dan kolom tx_id terisi; reject tetap tanpa tx_id.
+  Admin tab: field "ID Transaksi" di dialog approve.
+- get_withdraw_config: + require_kyc, dana_change_cooldown_hours,
+  coin_send_cut_pct; klien: WithdrawConfig + error KYC/DANA cooldown
+  bilingual (withdraw_screen).
+- Test: `econ_antifraud_test.sql` 19/19; update economy_money (net 14+cut6,
+  KYC seed), hardening/paid_only/bonus_saldo (KYC seed); full suite hijau.
+
+## Fase C — perbaikan klien (tanpa migrasi; dart saja)
+- `call_session.dart`: `_awaitingContinue` HANYA untuk payer (recipient
+  read-only → tak pernah lihat dialog Isi YukCoin); `income_total` tak
+  di-reset ke +0 saat pause (field absen di respons pause); auto-hangup
+  60 dtk saat jeda koin (`_pauseTimer` → `endCallNoCoin`); error tick
+  terekam di `billingTickError` → banner koin berubah oranye + ikon seru.
+- `nav_gate.dart`/`topup_sheet.dart`: `topupSheet` kini `Future<void>` —
+  dialog koin-habis MENUNGGU sheet topup tertutup sebelum resume billing
+  (`call_no_coin_dialog.dart` await → `resumeBillingAfterTopup`).
+- `call_screen.dart`/`random_call_screen.dart`: `_checkNoCoin` guard
+  `session.isBillingPayer` (defense di sisi UI).
+- `random_match_provider.dart`: `_joinAgain` gagal → `_fail` (dulu error
+  ditelan → state nyangkut 'searching').
+- `gifts.dart`: `kMatchFreeMinutes=1` DIHAPUS → `kMatchFreeSeconds=30` +
+  `kMatchConnectFeeCoins=10` (selaras billing hibrida server).
+  `yukcoinMatchPerMinNote(perMin, freeSec, connectFee)`.
+- `earnings_provider.dart`/`withdraw_provider.dart`: reset state saat
+  signedOut + uid null (data user lama tak bocor ke akun berikutnya).
+- `withdraw_provider.dart`: fallback `minCoins` 2000→1500 (selaras server).
+- `profile_ui2.dart`/`profile_ui.dart`/`profile_screen.dart`: estimasi
+  fiat earned (`showFiatEst`) hanya untuk female (earned male selalu 0).
+- String hardcode dibersihkan: 'Coba lagi'→s.btnRetry (withdraw_screen),
+  'Nanti'→s.btnLater (baru), 'Tutup'→s.btnClose (points_provider).
+- flutter analyze 0; flutter test 2594/2594; boundary OK.

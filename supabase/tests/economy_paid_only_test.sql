@@ -150,6 +150,11 @@ select supabase_tests.check('L1: tick paid → female +18 earned (30% dari 60)',
 
 -- ════ 6. request_withdraw: earned cukup → sukses ════
 -- withdraw_min_coins live = 2000 (20261101160000).
+-- Fase B: withdraw wajib KYC approved.
+insert into public.kyc_requests (user_id, status, full_name, id_number,
+                                 id_photo, selfie_photo)
+values ('ec05e000-0000-4000-8000-0000000000a3', 'approved',
+        '[TEST] F3', '3201xxxx', 'x', 'x');
 select set_config('request.jwt.claim.sub',
                   'ec05e000-0000-4000-8000-0000000000a3', true);
 insert into _po values ('w1',

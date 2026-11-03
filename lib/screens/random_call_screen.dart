@@ -126,9 +126,11 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
   bool _noCoinDialogShown = false;
 
   /// Cek apakah sesi sedang menunggu user memutuskan (koin habis).
+  /// Dialog HANYA untuk payer (male) — recipient tak bisa apa-apa.
   void _checkNoCoin() {
     final session = ref.read(callProvider).activeSession;
     if (session == null) return;
+    if (!session.isBillingPayer) return;
     if (!session.awaitingContinue || _noCoinDialogShown) return;
     _noCoinDialogShown = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -522,9 +524,14 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
                     // call ini. Sembunyi bila sistem koin dimatikan admin.
                     if (coinSnap.on) ...[
                       const SizedBox(width: 8),
-                      const Icon(
-                        Icons.monetization_on_outlined,
-                        color: Colors.amber,
+                      // Tick billing gagal → angka bisa basi; tandai kecil.
+                      Icon(
+                        session?.billingTickError != null
+                            ? Icons.error_outline
+                            : Icons.monetization_on_outlined,
+                        color: session?.billingTickError != null
+                            ? Colors.orange
+                            : Colors.amber,
                         size: 16,
                       ),
                       const SizedBox(width: 4),

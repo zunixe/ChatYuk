@@ -8,8 +8,10 @@ import '../../../providers/riverpod/topup_provider.dart';
 
 /// Bottom sheet pilih paket topup YukCoin (Google Play Billing).
 /// Harga & paket dari server (topup_packages) + product dari Play.
-void showTopupSheet(BuildContext context, S s) {
-  showModalBottomSheet<void>(
+/// Future selesai saat sheet tertutup — pemanggil (mis. dialog koin habis
+/// di call) bisa mengecek saldo baru setelahnya.
+Future<void> showTopupSheet(BuildContext context, S s) {
+  return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: AppTheme.bgCard,

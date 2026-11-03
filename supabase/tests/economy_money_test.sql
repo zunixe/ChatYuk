@@ -82,17 +82,22 @@ select supabase_tests.check('gift saldo bonus-only → ditolak (koin beli saja)'
   (select v from _mn where k='gift_bonus') like '%koin beli%',
   (select v from _mn where k='gift_bonus'));
 
--- ════ 3. SEND_COINS transfer penuh (tanpa cut) ════
+-- ════ 3. SEND_COINS — potongan platform 30% (Fase B, coin_send_cut_pct) ════
 select set_config('request.jwt.claim.sub', 'ec03e000-0000-4000-8000-0000000000a1', true);
 select public.send_coins('[TEST]-mn-m1f1',
   'ec03e000-0000-4000-8000-0000000000a3', 20);
-select supabase_tests.check('send_coins 20: pengirim topup −20, penerima earned +20',
+select supabase_tests.check('send_coins 20: pengirim −20, penerima NET 14 (30% cut)',
   exists (select 1 from public.coin_ledger
           where user_id='ec03e000-0000-4000-8000-0000000000a1'
             and bucket='topup' and type='coin_sent' and amount=-20)
   and exists (select 1 from public.coin_ledger
           where user_id='ec03e000-0000-4000-8000-0000000000a3'
-            and bucket='earned' and type='coin_received' and amount=20));
+            and bucket='earned' and type='coin_received' and amount=14));
+select supabase_tests.check('send_coins 20: platform_revenue coin_send_cut 6',
+  exists (select 1 from public.platform_revenue
+          where source='coin_send_cut' and amount=6
+            and from_user='ec03e000-0000-4000-8000-0000000000a1'
+            and to_user='ec03e000-0000-4000-8000-0000000000a3'));
 
 -- ════ 4. RATE LIMIT coin_tx_max_per_hour ════
 -- m1 sudah punya 2 tx (gift_sent + coin_sent). Set max=3 → 1 lagi lolos,
@@ -139,6 +144,11 @@ select supabase_tests.check('subscribe: baris subscription +30 hari',
             and expires_at > now() + interval '29 days'));
 
 -- ════ 6. WITHDRAW: fee math + DEBIT saat request + REFUND saat reject ════
+-- Fase B: withdraw wajib KYC approved → berikan a3 KYC approved dulu.
+insert into public.kyc_requests (user_id, status, full_name, id_number,
+                                 id_photo, selfie_photo)
+values ('ec03e000-0000-4000-8000-0000000000a3', 'approved',
+        '[TEST] F1', '3201xxxx', 'x', 'x');
 select set_config('request.jwt.claim.sub', 'ec03e000-0000-4000-8000-0000000000a3', true);
 insert into _mn values ('wd',
   public.request_withdraw(2000, '081234567890', '[TEST] Dana')::text);
@@ -170,11 +180,11 @@ select supabase_tests.check('withdraw reject → withdraw_refund +2000 earned',
   exists (select 1 from public.coin_ledger
           where user_id='ec03e000-0000-4000-8000-0000000000a3'
             and bucket='earned' and type='withdraw_refund' and amount=2000));
--- f1 = 2000 awal + 7 gift_recv + 20 coin_received + 5 rate-limit = 2032
+-- f1 = 2000 awal + 7 gift_recv + 14 coin_received (20−cut6) + 4 (5−cut1) = 2025
 -- (dihitung ulang setelah refund; bagian ini ada SEBELUM §7/§8).
-select supabase_tests.check('withdraw reject → saldo kembali 2032',
+select supabase_tests.check('withdraw reject → saldo kembali 2025',
   (select coalesce(sum(amount),0) from public.coin_ledger
-    where user_id='ec03e000-0000-4000-8000-0000000000a3') = 2032);
+    where user_id='ec03e000-0000-4000-8000-0000000000a3') = 2025);
 
 -- ════ 7. UNLOCK_PHOTO — FITUR DINONAKTIFKAN 2026-11-01 ════
 -- Test lama dihapus: `unlock_photo` sudah dicabut EXECUTE-nya dari

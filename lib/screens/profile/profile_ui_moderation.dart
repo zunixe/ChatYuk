@@ -74,59 +74,61 @@ mixin _ProfileUiModerationMx on _ProfileBase {
         _sectionTitle(s.moderationTitle),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Card(
-            margin: EdgeInsets.zero,
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: _Pc.card,
+              borderRadius: BorderRadius.circular(14),
+            ),
             child: Column(
               children: [
                 // ── Negara asal ──
-                ListTile(
-                  leading: const Icon(Icons.public_rounded),
-                  title: Text(s.moderationCountryTitle),
-                  subtitle: Text(
-                    home.isEmpty
-                        ? s.moderationCountryHint
-                        : '$home · ${s.moderationCountryHint}',
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                _linkRow(
+                  icon: Icons.public_rounded,
+                  title: s.moderationCountryTitle,
+                  subtitle: home.isEmpty
+                      ? s.moderationCountryHint
+                      : '$home · ${s.moderationCountryHint}',
                   onTap: () => _pickHomeCountry(context, s, isAdmin: isAdmin),
                 ),
                 // ── Lamaran (user biasa) / status admin ──
                 if (isAdmin) ...[
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.verified_user_outlined),
-                    title: Text(s.moderationAdminAllCountries),
+                  Divider(height: 1, color: _Pc.cardDivider),
+                  _linkRow(
+                    icon: Icons.verified_user_outlined,
+                    title: s.moderationAdminAllCountries,
+                    subtitle: '',
+                    onTap: () {},
                   ),
                 ] else ...[
                   if (_hasPending || (_eligible && _slotOpen)) ...[
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.shield_outlined),
-                      title: Text(s.moderationApply),
-                      subtitle: Text(_hasPending
+                    Divider(height: 1, color: _Pc.cardDivider),
+                    _linkRow(
+                      icon: Icons.shield_outlined,
+                      title: s.moderationApply,
+                      subtitle: _hasPending
                           ? s.moderationApplyPending
-                          : s.moderationApplyHint),
-                      trailing: const Icon(Icons.chevron_right_rounded),
+                          : s.moderationApplyHint,
                       onTap: () => _applyModerator(context, s, home),
                     ),
                   ],
                   if (_canOpenConsole && home.isNotEmpty) ...[
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.back_hand_outlined),
-                      title: Text(s.moderationResign),
-                      trailing: const Icon(Icons.chevron_right_rounded),
+                    Divider(height: 1, color: _Pc.cardDivider),
+                    _linkRow(
+                      icon: Icons.back_hand_outlined,
+                      title: s.moderationResign,
+                      subtitle: '',
                       onTap: () => _resignModerator(context, s),
                     ),
                   ],
                 ],
                 // ── Konsol: moderator negara / admin (negara dipilih di layar) ──
                 if (_canOpenConsole && (home.isNotEmpty || isAdmin)) ...[
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.fact_check_outlined),
-                    title: Text(s.moderationOpenConsole),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                  Divider(height: 1, color: _Pc.cardDivider),
+                  _linkRow(
+                    icon: Icons.fact_check_outlined,
+                    title: s.moderationOpenConsole,
+                    subtitle: '',
                     onTap: () => _openConsoleFromProfile(context, s, home),
                   ),
                 ],

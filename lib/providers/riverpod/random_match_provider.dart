@@ -206,7 +206,10 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
         _fail('MATCH_NEED_COIN');
       }
     } catch (e) {
+      // Dulu error ditelan → state nyangkut 'searching' selamanya dan
+      // Next terlihat macet. Gagal jelas supaya UI menawarkan coba lagi.
       dlog('[RandomMatch] rejoin error: $e');
+      _fail(_errorCodeOf(e));
     } finally {
       _busy = false;
     }

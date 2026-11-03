@@ -184,8 +184,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   bool _noCoinDialogShown = false;
 
   /// Koin habis di tengah panggilan → jeda + dialog lanjut/top-up.
+  /// Dialog HANYA untuk payer — recipient (female) tak bisa apa-apa.
   void _checkNoCoin() {
     if (!_session.awaitingContinue || _noCoinDialogShown) return;
+    if (!_session.isBillingPayer) return;
     _noCoinDialogShown = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -457,9 +459,18 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   padding: const EdgeInsets.only(top: 12),
                   child: Column(
                     children: [
-                      Text(
-                        widget.remoteName,
-                        style: AppText.headline.copyWith(color: Colors.white),
+                      Padding(
+                        // Ruang kiri untuk chip koin di pojok — nama panjang
+                        // terpotong ellipsis, bukan menutup/menabrak chip.
+                        padding: const EdgeInsets.symmetric(horizontal: 96),
+                        child: Text(
+                          widget.remoteName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style:
+                              AppText.headline.copyWith(color: Colors.white),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       // Durasi ikut ValueNotifier → hanya Text ini yang
@@ -473,17 +484,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                           style: AppText.body.copyWith(color: Colors.white70),
                         ),
                       ),
-                      // Banner billing: caller melihat saldo + (−N) terpakai,
-                      // callee melihat saldo + (+N) pendapatan live. Sembunyi
-                      // saat sistem koin dimatikan admin.
-                      if (coinsOn && _session.phase == CallPhase.inCall) ...[
-                        const SizedBox(height: 6),
-                        _BillingBanner(
-                          session: _session,
-                          isId: s.isId,
-                          coins: coinBalance,
-                        ),
-                      ],
+                      // Banner billing dipindah ke pojok kiri atas (Positioned
+                      // terpisah di bawah) supaya tidak menutup wajah lawan.
                       // ICE blip → sambung-ulang berjalan di balik layar; fase
                       // tetap inCall (video tidak blank), cukup beri tahu.
                       if (_session.isReconnecting &&
@@ -496,6 +498,25 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                 ),
               ),
             ),
+
+            // Banner billing di pojok kiri atas — tidak menutup video.
+            // Caller: saldo + (−N) terpakai; callee: saldo + (+N) pendapatan.
+            // Sembunyi saat sistem koin dimatikan admin.
+            if (coinsOn && _session.phase == CallPhase.inCall)
+              Positioned(
+                top: 0,
+                left: 0,
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12, left: 12),
+                    child: _BillingBanner(
+                      session: _session,
+                      isId: s.isId,
+                      coins: coinBalance,
+                    ),
+                  ),
+                ),
+              ),
 
             // Kontrol bawah — SafeArea + padding agar tidak ketutup gesture bar Xiaomi
             if (inCall)
@@ -664,6 +685,8 @@ class _BillingBanner extends StatelessWidget {
                 ? s.callCostPerMin(session.billingPerMinute)
                 : '$coins'))
         : '$coins (+$income)';
+    // Tick billing gagal (jaringan/server) → angka bisa basi; tandai kecil.
+    final tickStale = session.billingTickError != null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
@@ -673,16 +696,18 @@ class _BillingBanner extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.monetization_on_outlined,
-            color: Colors.amber,
+          Icon(
+            tickStale
+                ? Icons.error_outline
+                : Icons.monetization_on_outlined,
+            color: tickStale ? Colors.orange : Colors.amber,
             size: 16,
           ),
           const SizedBox(width: 4),
           Text(
             text,
             style: AppText.caption.copyWith(
-              color: Colors.amber,
+              color: tickStale ? Colors.orange : Colors.amber,
               fontWeight: FontWeight.w700,
             ),
           ),

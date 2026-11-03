@@ -25,6 +25,8 @@ class NavGate {
   })? incomingCallBuilder;
 
   /// Tampilkan sheet topup YukCoin. Diisi `main.dart` → `showTopupSheet`.
-  /// Null → provider menampilkan snack "segera hadir" (fallback).
-  static void Function(BuildContext context, S s)? topupSheet;
+  /// Future selesai saat sheet tertutup → pemanggil bisa lanjutkan aksi
+  /// yang butuh saldo (mis. resume billing call). Null → provider
+  /// menampilkan snack "segera hadir" (fallback).
+  static Future<void> Function(BuildContext context, S s)? topupSheet;
 }

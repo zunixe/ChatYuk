@@ -34,6 +34,12 @@ GiftItem? giftById(String id) {
 /// server tetap sumber kebenaran, ini hanya untuk tampilan.
 const int kMatchFeeCoins = 2;
 
-/// Menit gratis pertama untuk match video (server: 20261031110011 —
-/// `c.kind = 'random'` → menit ke-1 gratis). Hanya untuk tampilan.
-const int kMatchFreeMinutes = 1;
+/// Masa gratis match video (detik) sebelum billing jalan — model hibrida
+/// 20261103: 30 dtk gratis → biaya konek [kMatchConnectFeeCoins] →
+/// tarif per menit. Hanya untuk tampilan; server sumber kebenaran.
+const int kMatchFreeSeconds = 30;
+
+/// Biaya konek (YukCoin) yang ditagih saat masa gratis 30 dtk habis.
+/// HARUS sama dengan `metered_pricing->'match_call'->>'unit_cost'`
+/// di server (default 10). Hanya untuk tampilan.
+const int kMatchConnectFeeCoins = 10;

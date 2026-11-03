@@ -102,15 +102,30 @@ values ('ec06e000-0000-4000-8000-0000000000c2'::uuid,
         'ec06e000-0000-4000-8000-0000000000f1',
         'ec06e000-0000-4000-8000-0000000000a1',
         'random', 'video', 'answered', now() - interval '45 seconds');
--- Tick datang dari device FEMALE (caller) — server tetap menagih male.
+-- Tick datang dari device FEMALE (caller) — sejak lockdown A2c recipient
+-- READ-ONLY: tidak lagi memicu tagihan ke male (menutup celah "female terus
+-- tick call lama → koin male terkuras").
 select set_config('request.jwt.claim.sub',
                   'ec06e000-0000-4000-8000-0000000000f1', true);
 insert into _mb values ('f1',
   public.call_billing_tick('ec06e000-0000-4000-8000-0000000000c2')::text);
-select supabase_tests.check('MB: female-caller tick → can_continue=true',
-  (select (v::jsonb->>'can_continue')::boolean from _mb where k='f1') = true,
+select supabase_tests.check('MB: female-caller tick → read-only, can_continue',
+  (select (v::jsonb->>'can_continue')::boolean from _mb where k='f1') = true
+  and (select (v::jsonb->>'billed_minutes')::int from _mb where k='f1') = 0
+  and (select (v::jsonb->>'charged_total')::int from _mb where k='f1') = 0,
   (select v from _mb where k='f1'));
-select supabase_tests.check('MB: female-caller → MALE tetap tertagih 30',
+select supabase_tests.check('MB: tick recipient TIDAK menagih male',
+  (select coalesce(sum(-amount),0) from public.coin_ledger
+    where user_id='ec06e000-0000-4000-8000-0000000000a1'
+      and amount < 0
+      and ref_id='ec06e000-0000-4000-8000-0000000000c2') = 0);
+
+-- Tick dari device MALE (payer) — baru di sini tagihan jatuh: 10 + 20 = 30.
+select set_config('request.jwt.claim.sub',
+                  'ec06e000-0000-4000-8000-0000000000a1', true);
+insert into _mb values ('fc_m',
+  public.call_billing_tick('ec06e000-0000-4000-8000-0000000000c2')::text);
+select supabase_tests.check('MB: male tick → MALE tertagih 30',
   (select coalesce(sum(-amount),0) from public.coin_ledger
     where user_id='ec06e000-0000-4000-8000-0000000000a1'
       and amount < 0

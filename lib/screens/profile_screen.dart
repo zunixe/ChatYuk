@@ -24,6 +24,7 @@ import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/online_users_provider.dart';
 import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/missions_provider.dart';
+import '../providers/riverpod/withdraw_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../utils.dart';
@@ -158,8 +159,15 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
     bool isAnon,
     bool pointsOn,
     bool canTopup,
+    bool showFiatEst,
   });
   Widget _moderationSection(BuildContext context, S s);
+  Widget _linkRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  });
   Widget _footer(BuildContext context, S s);
   Future<void> _editProfile();
   Future<void> _saveAbout();

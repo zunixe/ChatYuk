@@ -132,8 +132,12 @@ class EarningsNotifier extends Notifier<EarningsState> {
     // Ganti user → muat ulang ringkasan penghasilan.
     _authSub?.cancel();
     _authSub = _sb.auth.onAuthStateChange.listen((s) {
+      if (s.event == AuthChangeEvent.signedOut) {
+        // Data penghasilan user lama jangan bocor ke user berikutnya.
+        state = const EarningsState(loading: false);
+        return;
+      }
       if (s.event == AuthChangeEvent.signedIn ||
-          s.event == AuthChangeEvent.signedOut ||
           s.event == AuthChangeEvent.initialSession ||
           s.event == AuthChangeEvent.tokenRefreshed) {
         refresh();
@@ -168,7 +172,10 @@ class EarningsNotifier extends Notifier<EarningsState> {
 
   Future<void> refresh() async {
     final uid = _sb.auth.currentUser?.id;
-    if (uid == null) return;
+    if (uid == null) {
+      state = const EarningsState(loading: false);
+      return;
+    }
     state = state.copyWith(loading: true, error: null);
     await _load(uid);
   }

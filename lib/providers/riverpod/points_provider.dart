@@ -313,7 +313,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text(
-              isId ? 'Nanti' : 'Later',
+              s.btnLater,
               style: const TextStyle(color: Colors.white70),
             ),
           ),
@@ -916,7 +916,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text(
-              isId ? 'Tutup' : 'Close',
+              s.btnClose,
               style: const TextStyle(color: Colors.white70),
             ),
           ),

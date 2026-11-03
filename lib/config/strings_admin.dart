@@ -678,6 +678,11 @@ extension SAdminX on S {
   String get adminWithdrawNote => isId ? 'Catatan (opsional)' : 'Note (optional)';
   String get adminWithdrawNoteHint =>
       isId ? 'Alasan / bukti transfer' : 'Reason / transfer proof';
+  String get adminWithdrawTxId =>
+      isId ? 'ID Transaksi / bukti transfer' : 'Transaction ID / transfer proof';
+  String get adminWithdrawTxIdHint => isId
+      ? 'Nomor referensi DANA / mutasi (wajib untuk approve)'
+      : 'DANA reference / statement number (required to approve)';
   String get adminWithdrawCoins => isId ? 'YukCoin' : 'YukCoin';
   String get adminWithdrawGross => isId ? 'Nilai' : 'Value';
   String get adminWithdrawFee => isId ? 'Fee' : 'Fee';

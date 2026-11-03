@@ -196,6 +196,7 @@ class _AdminWithdrawTabState extends ConsumerState<AdminWithdrawTab> {
     decimalDigits: 0,
   );
   final _noteCtrl = TextEditingController();
+  final _txIdCtrl = TextEditingController();
 
   String _filter = 'pending';
   List<_Req> _items = [];
@@ -217,6 +218,7 @@ class _AdminWithdrawTabState extends ConsumerState<AdminWithdrawTab> {
   @override
   void dispose() {
     _noteCtrl.dispose();
+    _txIdCtrl.dispose();
     super.dispose();
   }
 
@@ -283,7 +285,7 @@ class _AdminWithdrawTabState extends ConsumerState<AdminWithdrawTab> {
 
   Future<void> _process(_Req req, bool approve) async {
     final s = ref.read(localeProvider).s;
-    final note = await showDialog<String>(
+    final res0 = await showDialog<({String note, String txId})>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
@@ -301,6 +303,17 @@ class _AdminWithdrawTabState extends ConsumerState<AdminWithdrawTab> {
               style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 10),
+            // Bukti transfer — server menolak approve tanpa tx_id.
+            if (approve)
+              TextField(
+                controller: _txIdCtrl,
+                style: AppText.body.copyWith(color: AppTheme.textPrimary),
+                decoration: InputDecoration(
+                  labelText: s.adminWithdrawTxId,
+                  hintText: s.adminWithdrawTxIdHint,
+                ),
+              ),
+            if (approve) const SizedBox(height: 10),
             TextField(
               controller: _noteCtrl,
               maxLines: 2,
@@ -323,14 +336,22 @@ class _AdminWithdrawTabState extends ConsumerState<AdminWithdrawTab> {
                   approve ? const Color(0xFF2ECC71) : AppTheme.danger,
               foregroundColor: Colors.white,
             ),
-            onPressed: () => Navigator.pop(ctx, _noteCtrl.text.trim()),
+            onPressed: () => Navigator.pop(
+                ctx,
+                (
+                  note: _noteCtrl.text.trim(),
+                  txId: _txIdCtrl.text.trim(),
+                )),
             child: Text(approve ? s.adminWithdrawApprove : s.adminWithdrawReject),
           ),
         ],
       ),
     );
-    if (note == null) return;
+    if (res0 == null) return;
+    final noteText = res0.note;
+    final txId = res0.txId;
     _noteCtrl.clear();
+    _txIdCtrl.clear();
 
     setState(() => _processingId = req.id);
     try {
@@ -342,7 +363,8 @@ class _AdminWithdrawTabState extends ConsumerState<AdminWithdrawTab> {
         params: {
           'p_request_id': req.id,
           'p_approve': approve,
-          'p_note': note.isEmpty ? null : note,
+          'p_note': noteText.isEmpty ? null : noteText,
+          'p_tx_id': txId.isEmpty ? null : txId,
         },
       );
       if (!mounted) return;

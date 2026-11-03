@@ -378,6 +378,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
+  @override
   Widget _linkRow({
     required IconData icon,
     required String title,
@@ -404,20 +405,21 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: AppTextSize.s15,
-                      fontWeight: FontWeight.w600,
                       color: AppTheme.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 1),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: AppTextSize.s12,
-                      color: AppTheme.textSecondary,
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: AppTextSize.s125,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -449,6 +451,7 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     bool isAnon = false,
     bool pointsOn = true,
     bool canTopup = true,
+    bool showFiatEst = false,
   }) {
     void openHistory() => Navigator.push(
       context,
@@ -514,6 +517,34 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                                 color: Colors.white,
                               ),
                             ),
+                            // Estimasi fiat koin EARNED (yang bisa ditarik):
+                            // Rp untuk pengguna Indonesia, US$ selainnya.
+                            // Rate dari server (get_withdraw_config) — bukan
+                            // angka hardcode. Female only — `earned` male
+                            // selalu 0 (male tak punya pendapatan call).
+                            if (pointsOn && showFiatEst)
+                              rv.Consumer(
+                                builder: (_, ref2, _) {
+                                  final wd = ref2.watch(withdrawProvider);
+                                  final gross =
+                                      wd.earnedBalance * wd.config.rate;
+                                  return Text(
+                                    s.walletEstFiat(
+                                      '${formatPoints(wd.earnedBalance)} 🪙',
+                                      formatFiatEstimate(
+                                        gross,
+                                        isId: s.isId,
+                                      ),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppText.caption.copyWith(
+                                      color: Colors.white
+                                          .withValues(alpha: 0.85),
+                                    ),
+                                  );
+                                },
+                              ),
                             // Info slot foto hanya relevan bila sistem
                             // koin aktif (biaya per slot). Saat OFF, upload
                             // foto gratis → baris ini disembunyikan.

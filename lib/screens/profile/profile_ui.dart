@@ -183,6 +183,10 @@ mixin _ProfileUiMx on _ProfileBase {
                 // (call/gift/match). Yang dia butuh hanya lihat jumlah
                 // saldo + tarik ke DANA.
                 canTopup: profile?.gender != 'female',
+                // Estimasi fiat hanya bermakna untuk female — bucket
+                // `earned` (yang bisa di-withdraw) hanya terisi dari
+                // pendapatan call. Untuk male selalu 0 → sembunyikan.
+                showFiatEst: profile?.gender == 'female',
               ),
             // Menu My Level — MALE only (level dari kumulatif topup).
             // Female/dummy tidak melihat (dummy = female → otomatis tersembunyi).
@@ -643,8 +647,7 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
                     Text(
                       s.labelAbout,
                       style: TextStyle(
-                        fontSize: AppTextSize.s12,
-                        fontWeight: FontWeight.w700,
+                        fontSize: AppTextSize.s125,
                         color: AppTheme.textSecondary,
                       ),
                     ),
@@ -899,11 +902,18 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Row(
         children: [
-          Expanded(child: _actionBtn(s.btnEditProfile, onTap: _editProfile)),
+          Expanded(
+            child: _actionBtn(
+              s.btnEditProfile,
+              icon: Icons.edit_outlined,
+              onTap: _editProfile,
+            ),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: _actionBtn(
               s.btnShareApp,
+              icon: Icons.person_add_alt,
               onTap: () async {
                 await Share.share(s.msgShareApp);
               },
@@ -948,7 +958,11 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
     );
   }
 
-  Widget _actionBtn(String label, {required VoidCallback onTap}) {
+  Widget _actionBtn(
+    String label, {
+    required VoidCallback onTap,
+    IconData? icon,
+  }) {
     return SizedBox(
       height: 40,
       child: Material(
@@ -958,15 +972,26 @@ mixin _ProfileUiSectionsMx on _ProfileBase {
           borderRadius: BorderRadius.circular(10),
           onTap: onTap,
           child: Center(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: AppTextSize.s14,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 16, color: AppTheme.textPrimary),
+                  const SizedBox(width: 6),
+                ],
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppTextSize.s14,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

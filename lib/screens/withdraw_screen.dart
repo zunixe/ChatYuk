@@ -107,6 +107,8 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
       'INVALID_NAME' => s.wdInvalidName,
       'NO_ACCOUNT' => s.wdNoAccount,
       'FEMALE_ONLY' => s.wdFemaleOnly,
+      'KYC_REQUIRED' => s.wdKycRequired,
+      'DANA_CHANGE_COOLDOWN' => s.wdDanaCooldown(cfg.danaChangeCooldownHours),
       _ => code,
     };
   }
@@ -586,7 +588,13 @@ class _ErrorView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            FilledButton(onPressed: onRetry, child: const Text('Coba lagi')),
+            FilledButton(
+              onPressed: onRetry,
+              child: Text(
+                S(isId: Localizations.localeOf(context).languageCode == 'id')
+                    .btnRetry,
+              ),
+            ),
           ],
         ),
       ),

@@ -131,6 +131,11 @@ values ('ec05e000-0000-4000-8000-0000000000c2','earned','test_seed',9000,'gw-wd-
 insert into public.withdraw_accounts(user_id, dana_number, dana_name)
 values ('ec05e000-0000-4000-8000-0000000000c2','081234567890','[TEST] Dana')
 on conflict (user_id) do update set dana_number = excluded.dana_number;
+-- Fase B: withdraw wajib KYC approved.
+insert into public.kyc_requests (user_id, status, full_name, id_number,
+                                 id_photo, selfie_photo)
+values ('ec05e000-0000-4000-8000-0000000000c2', 'approved',
+        '[TEST] C2', '3201xxxx', 'x', 'x');
 
 -- ISI KUOTA PENUH dengan baris `rejected`: kalau filter
 -- `status <> 'rejected'` hilang, request baru akan kena DAILY_LIMIT.

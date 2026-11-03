@@ -102,7 +102,7 @@ class YukcoinHowTo extends ConsumerWidget {
                 s.yukcoinFeatureMatch,
                 '$kMatchFeeCoins',
                 trailing: s.yukcoinPerMatch,
-                note: '${s.yukcoinMatchNote} ${s.yukcoinMatchPerMinNote(pp.callVideo, kMatchFreeMinutes)}',
+                note: '${s.yukcoinMatchNote} ${s.yukcoinMatchPerMinNote(pp.callVideo, kMatchFreeSeconds, kMatchConnectFeeCoins)}',
               ),
               _row(
                 Icons.card_giftcard,

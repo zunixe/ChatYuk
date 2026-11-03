@@ -82,8 +82,13 @@ select supabase_tests.check('saldo tanpa ledger → phantom_balance',
             and user_id = 'ec01e000-0000-4000-8000-0000000000a2'));
 
 -- ── 7. Bucket negatif → negative_bucket ──
+-- Sejak lockdown A4 guard nonneg menolak debit yang menjadikan bucket negatif;
+-- invariant checker tetap safety-net untuk korupsi/manual edit → buat kondisi
+-- itu dengan men-disable trigger sesaat (rollback membatalkan semuanya).
+alter table public.coin_ledger disable trigger coin_ledger_nonneg_trg;
 insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
 values ('ec01e000-0000-4000-8000-0000000000a3','earned','spend_chat',-25,'test-inv');
+alter table public.coin_ledger enable trigger coin_ledger_nonneg_trg;
 select supabase_tests.check('bucket earned negatif → negative_bucket',
   exists (select 1 from public.economy_invariant_check(5000)
           where check_name = 'negative_bucket'

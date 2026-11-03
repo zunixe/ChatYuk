@@ -68,11 +68,13 @@ Future<bool> showCallNoCoinDialog(
     return false;
   }
 
-  // Buka sheet top-up (bila tersedia), lalu coba lanjut.
+  // Buka sheet top-up dan TUNGGU sampai tertutup — baru coba resume
+  // billing. Dulu `onContinue` dipanggil langsung sebelum user sempat
+  // beli → tick resume selalu gagal "saldo masih kurang".
   if (context.mounted) {
     final show = NavGate.topupSheet;
     if (show != null) {
-      show(context, s);
+      await show(context, s);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.yukcoinTopupSoon)),

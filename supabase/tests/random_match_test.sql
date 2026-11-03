@@ -148,15 +148,18 @@ select supabase_tests.check('random_call_history memuat call tadi (durasi 20 dtk
           where h.call_id = (select (v::jsonb->>'call_id')::uuid from _rm where k = 'b_join')
             and h.duration_sec >= 20));
 
--- ── 3. Billing random <30 dtk = gratis (model 20261103: konek 10 @30s) ──
+-- ── 3. Billing setelah call 'ended' — lockdown A2b: nol tagihan baru,
+--        can_continue=false, ended=true (tick pasca-hangup mati total) ──
 select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a2', true);
 insert into _rm values ('bill', public.call_billing_tick(
   (select (v::jsonb->>'call_id')::uuid from _rm where k = 'b_join'))::text);
-select supabase_tests.check('billing random <30s: tidak ditagih & masih gratis',
+select supabase_tests.check('billing setelah ended: nol tagihan & can_continue=false',
   (select (v::jsonb->>'charged_total')::int = 0
       and (v::jsonb->>'billed_minutes')::int = 0
-      and (v::jsonb->>'can_continue')::boolean
-     from _rm where k = 'bill'));
+      and (v::jsonb->>'can_continue')::boolean = false
+      and (v::jsonb->>'ended')::boolean = true
+     from _rm where k = 'bill'),
+  (select v from _rm where k = 'bill'));
 
 -- ── 4. Pasangan yang sama tidak dipasangkan lagi ≤10 menit ──
 delete from public.random_match_queue;

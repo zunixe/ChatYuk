@@ -100,6 +100,11 @@ update public.profiles set gender = 'female', created_at = now() - interval '10 
 insert into public.coin_ledger(user_id, bucket, type, amount, ref_id)
 values ('ec04e000-0000-4000-8000-0000000000b2', 'earned', 'test_seed', 2000, 'gw-seed');
 
+-- Fase B: withdraw wajib KYC approved.
+insert into public.kyc_requests (user_id, status, full_name, id_number,
+                                 id_photo, selfie_photo)
+values ('ec04e000-0000-4000-8000-0000000000b2', 'approved',
+        '[TEST] WdRefund', '3201xxxx', 'x', 'x');
 select set_config('request.jwt.claim.sub',
                   'ec04e000-0000-4000-8000-0000000000b2', true);
 insert into _gw(key, val)

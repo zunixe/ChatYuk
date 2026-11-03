@@ -63,7 +63,7 @@ void main() {
       (t) async {
     var continued = 0;
     var sheetShown = 0;
-    NavGate.topupSheet = (ctx, s) => sheetShown++;
+    NavGate.topupSheet = (ctx, s) async => sheetShown++;
 
     await pumpAndCall(t, onContinue: () async => continued++);
 

@@ -157,10 +157,16 @@ abstract class _CallBase extends ChangeNotifier {
   // Penelepon didebit per menit oleh server (call_billing_tick) — server
   // otoritatif dari calls.answered_at. Client hanya PEMICU tick tiap menit.
   Timer? _billingTimer;
+  /// Auto-hangup saat call dijeda karena koin habis — tanpa ini panggilan
+  /// jalan terus GRATIS selamanya sampai salah satu pihak hangup manual.
+  Timer? _pauseTimer;
   int _billingPerMin = 0;
   int _billingCharged = 0;
   int _billingIncome = 0;
   bool _billingEndedNoCoin = false;
+  /// Error tick terakhir (jaringan/server) — untuk indikator kecil di UI.
+  String? _billingTickError;
+  String? get billingTickError => _billingTickError;
   /// Saldo habis di tengah panggilan → panggilan DIJEDA (bukan diputus) dan
   /// UI menampilkan dialog "lanjutkan + isi koin". Di-set oleh _billingTick.
   bool _awaitingContinue = false;
@@ -793,8 +799,13 @@ class CallSession extends _CallBase
     try {
       final res = await _service.callBillingTick(callId);
       if (_closed) return;
+      _billingTickError = null;
       _billingCharged = (res['charged_total'] as num?)?.toInt() ?? 0;
-      _billingIncome = (res['income_total'] as num?)?.toInt() ?? 0;
+      // income_total TIDAK selalu ada di respons (pause/error payer) —
+      // jangan reset ke 0: pendapatan female adalah total kumulatif.
+      if (res['income_total'] != null) {
+        _billingIncome = (res['income_total'] as num).toInt();
+      }
       // Saldo sisa dari tick → segarkan UI saldo (counter header call &
       // kartu profil) tanpa RPC tambahan.
       final remaining = (res['remaining'] as num?)?.toInt();
@@ -804,25 +815,40 @@ class CallSession extends _CallBase
       if (perMin != null && perMin > 0) _billingPerMin = perMin;
       if (res['can_continue'] == false) {
         // 2026-10-31: JANGAN putus. Jeda + minta user lanjutkan/top-up.
-        _billingEndedNoCoin = true;
-        _awaitingContinue = true;
-        _billingPauseReason = res['reason'] as String?;
-        _billingFreeLimitMin =
-            (res['free_limit_min'] as num?)?.toInt() ?? _billingFreeLimitMin;
-        _stopBilling();
+        // Hanya sisi PAYER yang menjeda+dialog — recipient (female) tak
+        // perlu dan tak bisa apa-apa (server memberi respons read-only).
+        // 'ended' = call sudah selesai → bukan jeda koin.
+        if (isBillingPayer && res['ended'] != true) {
+          _billingEndedNoCoin = true;
+          _awaitingContinue = true;
+          _billingPauseReason = res['reason'] as String?;
+          _billingFreeLimitMin =
+              (res['free_limit_min'] as num?)?.toInt() ?? _billingFreeLimitMin;
+          _stopBilling();
+          // Auto-hangup 60 dtk bila user tak melanjutkan — panggilan yang
+          // dijeda tidak boleh jalan gratis selamanya.
+          _pauseTimer?.cancel();
+          _pauseTimer = Timer(const Duration(seconds: 60), () {
+            if (_awaitingContinue && !_closed) endCallNoCoin();
+          });
+        }
         notifyListeners();
         return;
       }
       // Saldo cukup lagi → lanjut normal.
       if (_awaitingContinue) {
+        _pauseTimer?.cancel();
         _awaitingContinue = false;
         _billingEndedNoCoin = false;
         _billingPauseReason = null;
       }
       notifyListeners();
     } catch (e) {
-      // Kegagalan tick TIDAK memutus call (jaringan buruk).
+      // Kegagalan tick TIDAK memutus call (jaringan buruk) — tapi catat
+      // supaya UI bisa menandai status billing tak terbarui.
+      _billingTickError = e.toString();
       dlog('[CALL] billing tick error: $e');
+      notifyListeners();
     }
   }
 
@@ -830,11 +856,17 @@ class CallSession extends _CallBase
   /// Return true bila panggilan bisa lanjut.
   Future<bool> resumeBillingAfterTopup() async {
     if (!_awaitingContinue) return true;
+    _pauseTimer?.cancel();
     _awaitingContinue = false;
     _billingEndedNoCoin = false;
     await _billingTick();
     if (_awaitingContinue) {
-      return false; // masih kurang
+      // Masih kurang → mulai ulang penghitung auto-hangup.
+      _pauseTimer?.cancel();
+      _pauseTimer = Timer(const Duration(seconds: 60), () {
+        if (_awaitingContinue && !_closed) endCallNoCoin();
+      });
+      return false;
     }
     // Mulai lagi timer per menit.
     if (!_closed && phase == CallPhase.inCall) {
@@ -849,6 +881,7 @@ class CallSession extends _CallBase
 
   /// User memilih "Akhiri" saat koin habis.
   void endCallNoCoin() {
+    _pauseTimer?.cancel();
     _awaitingContinue = false;
     _billingEndedNoCoin = true;
     _service.sendSignal(callId, 'bye');
@@ -859,6 +892,11 @@ class CallSession extends _CallBase
   void _stopBilling() {
     _billingTimer?.cancel();
     _billingTimer = null;
+  }
+
+  void _stopPauseTimer() {
+    _pauseTimer?.cancel();
+    _pauseTimer = null;
   }
 
   // ── Proximity (audio call) ──
@@ -884,6 +922,7 @@ class CallSession extends _CallBase
     _syncTimer?.cancel();
     _phaseWatchTimer?.cancel();
     _stopBilling();
+    _stopPauseTimer();
     _setProximity(false);
     _service.releaseCallStatus(callId);
     _phase = CallPhase.ended;
@@ -901,6 +940,7 @@ class CallSession extends _CallBase
     _syncTimer?.cancel();
     _phaseWatchTimer?.cancel();
     _stopBilling();
+    _stopPauseTimer();
     _setProximity(false);
     _pendingCandidates.clear();
     _pendingSignals.clear();

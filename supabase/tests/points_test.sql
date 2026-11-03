@@ -86,8 +86,11 @@ begin
     on conflict do nothing;
   perform set_config('request.jwt.claims',
     json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
+  -- Lockdown: debit ledger yang menjadikan bucket negatif ditolak guard
+  -- nonneg — beri kredit dulu supaya spend -5 sah.
   insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
-    values (v_uid, 'earned', 'spend_chat', -5, 'text', '{}'::jsonb);
+    values (v_uid, 'earned', 'gift_recv', 10, 'seed', '{}'::jsonb),
+           (v_uid, 'earned', 'spend_chat', -5, 'text', '{}'::jsonb);
   perform public.refund_chat_point('text');
   perform public.refund_chat_point('text');
   perform public.refund_chat_point('text');
