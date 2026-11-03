@@ -1,6 +1,6 @@
 -- SNAPSHOT SEMUA fungsi public (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh --all
--- Timestamp: 2026-11-03T23:32:04Z
+-- Timestamp: 2026-11-03T23:56:59Z
 
 -- snapshot-fn: _anon_gate_insert
 CREATE OR REPLACE FUNCTION public._anon_gate_insert()
@@ -14447,8 +14447,11 @@ begin
   -- Pair boleh didebit dari bucket bonus (_spend_yukcoin_core), tapi biaya
   -- KONEK + menit lewat charge_metered menolak bonus → male bonus-only yang
   -- lolos precheck lama dijamin call-nya mati di detik 30 (insufficient).
+  -- 2026-11-10 (keputusan user): fee match boleh dibayar koin BONUS; call
+  -- gratis 30 dtk, setelah itu konek + menit wajib koin beli (billing
+  -- menjeda & minta top-up). Jadi precheck cukup total (bonus+beli) >= fee.
   if v_gender = 'male' and v_points_on
-     and public.yukcoin_paid_total(me) < v_fee + v_connect then
+     and public.yukcoin_total(me) < v_fee then
     return jsonb_build_object('status', 'no_funds');
   end if;
 
@@ -14482,7 +14485,7 @@ begin
        and (v_want = 'all' or rq.gender = v_want)
        and (rq.want_gender = 'all' or rq.want_gender = v_gender)
        and (rq.gender <> 'male' or not v_points_on
-            or public.yukcoin_paid_total(rq.user_id) >= v_fee + v_connect)
+            or public.yukcoin_total(rq.user_id) >= v_fee)
        and not (rq.user_id = any (v_tried))
        and not exists (
          select 1 from public.blocks b

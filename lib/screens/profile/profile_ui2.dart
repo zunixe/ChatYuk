@@ -517,6 +517,8 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                                 color: Colors.white,
                               ),
                             ),
+                            if (pointsOn)
+                              const YukcoinBucketsLine(showHint: false),
                             // Estimasi fiat koin EARNED (yang bisa ditarik):
                             // Rp untuk pengguna Indonesia, US$ selainnya.
                             // Rate dari server (get_withdraw_config) — bukan

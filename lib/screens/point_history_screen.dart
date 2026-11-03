@@ -121,6 +121,9 @@ class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
       pointsProvider.select(
         (p) => (
           total: p.points,
+          bonus: p.bonusBalance,
+          paid: p.topupBalance,
+          earned: p.earnedBalance,
           topup: p.topupPathOpen,
           v2: p.yukcoinV2Active,
           ghost: p.ghostMode,
@@ -145,6 +148,11 @@ class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
                     child: YukcoinHeader(
                       s: s,
                       total: pointsSnap.total,
+                      buckets: (
+                        bonus: pointsSnap.bonus,
+                        topup: pointsSnap.paid,
+                        earned: pointsSnap.earned,
+                      ),
                       // Female tidak top-up: koinnya masuk dari lawan bicara
                       // (call/gift/match) — cukup lihat saldo + tarik dana.
                       showTopup:

@@ -48,6 +48,7 @@ import '../widgets/gender_lock_dialog.dart';
 import 'package:share_plus/share_plus.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
+import '../widgets/yukcoin_buckets_line.dart';
 import 'moderation_screen.dart';
 
 part 'profile/profile_core.dart';

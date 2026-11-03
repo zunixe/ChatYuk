@@ -1,3 +1,14 @@
+## 2026-11-10 (b) — Koin bonus untuk fee match (APPLIED 2026-11-04 via API)
+
+### `20261110030000_match_bonus_fee.sql`
+Keputusan user: koin BONUS boleh membayar fee match; call gratis 30 detik;
+lewat itu konek + menit wajib koin isi ulang (billing menjeda + top-up).
+- `random_match_join`: precheck diri & kandidat = `yukcoin_total >= fee`
+  (dulu `yukcoin_paid_total >= fee + konek` → akun bonus-only tak bisa match).
+- Klien: kartu YukCoin profil & header menampilkan rincian Bonus / Isi ulang /
+  Penghasilan + penjelasan (dulu hanya total → user mengira bonus bisa semua).
+Test: `random_match_test` 0c disesuaikan (bonus-only boleh antre).
+
 ## 2026-11-10 — Review ulang ekonomi + level (APPLIED 2026-11-04 via API)
 
 ### `20261110000000_econ_lockdown_phase1.sql`

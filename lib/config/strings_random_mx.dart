@@ -95,9 +95,6 @@ mixin SRandomMx {
       : 'You will be matched with $g';
   String get randomNeedCoinTitle =>
       isId ? 'YukCoin tidak cukup' : 'Not enough YukCoin';
-  String randomBonusNotUsable(int bonus, int need) => isId
-      ? 'YukCoin bonus ($bonus) tidak bisa dipakai untuk match & video call. Butuh minimal $need YukCoin hasil isi ulang.'
-      : 'Bonus YukCoin ($bonus) can\'t be used for match & video calls. You need at least $need topped-up YukCoin.';
   String randomNeedCoinBody(int fee) => isId
       ? 'Match memotong $fee YukCoin saat kamu dapat pasangan. Isi YukCoin dulu, ya.'
       : 'A match costs $fee YukCoin — charged only when you get a match. Top up first.';

@@ -58,27 +58,19 @@ values
  ('d0c1e000-0000-4000-8000-0000000000a3','topup','topup',100,'test-fund'),
  ('d0c1e000-0000-4000-8000-0000000000a4','topup','topup',100,'test-fund');
 
--- ── 0c. Precheck paid (20261104): male BONUS-only ≥ pair fee tapi paid
---    < pair+konek → no_funds; kandidat male bonus-only juga diskip. ──
+-- ── 0c. (20261110) Fee match boleh dibayar BONUS: male bonus-only ≥ fee
+--    boleh masuk antrean (call gratis 30 dtk; konek + menit tetap wajib
+--    koin beli — diuji di match_billing_test). ──
 insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
 values
- ('d0c1e000-0000-4000-8000-0000000000a5','bonus','topup',100,'test-fund-bonus'),
- ('d0c1e000-0000-4000-8000-0000000000a6','bonus','topup',100,'test-fund-bonus');
+ ('d0c1e000-0000-4000-8000-0000000000a5','bonus','topup',100,'test-fund-bonus');
 select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a5', true);
 insert into _rm values ('e_bonus', public.random_match_join('all')::text);
-select supabase_tests.check('male bonus-only (paid 0) → no_funds',
-  (select v::jsonb->>'status' from _rm where k = 'e_bonus') = 'no_funds');
-select supabase_tests.check('male bonus-only → tidak masuk antrean',
-  not exists(select 1 from public.random_match_queue
-              where user_id = 'd0c1e000-0000-4000-8000-0000000000a5'));
--- Kandidat male bonus-only di antrean → diskip oleh joiner female.
-insert into public.random_match_queue
-  (user_id, gender, want_gender, pinged_at)
-values ('d0c1e000-0000-4000-8000-0000000000a6', 'male', 'female', now());
-select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a2', true);
-insert into _rm values ('b_skip', public.random_match_join('all')::text);
-select supabase_tests.check('kandidat male paid < pair+konek → diskip (waiting)',
-  (select v::jsonb->>'status' from _rm where k = 'b_skip') = 'waiting');
+select supabase_tests.check('male bonus-only (paid 0) → boleh antre (waiting)',
+  (select v::jsonb->>'status' from _rm where k = 'e_bonus') = 'waiting');
+select supabase_tests.check('male bonus-only → masuk antrean',
+  exists(select 1 from public.random_match_queue
+          where user_id = 'd0c1e000-0000-4000-8000-0000000000a5'));
 delete from public.random_match_queue;
 select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a1', true);
 

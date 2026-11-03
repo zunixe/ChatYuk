@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
+import '../../../widgets/yukcoin_buckets_line.dart';
 import 'topup_sheet.dart';
 
 /// Header saldo YukCoin: satu angka besar + tombol top-up (Play only).
@@ -9,11 +10,15 @@ class YukcoinHeader extends StatelessWidget {
   final int total;
   final bool showTopup;
 
+  /// Rincian per jenis koin (null = tidak ditampilkan).
+  final ({int bonus, int topup, int earned})? buckets;
+
   const YukcoinHeader({
     super.key,
     required this.s,
     required this.total,
     this.showTopup = false,
+    this.buckets,
   });
 
   @override
@@ -64,6 +69,15 @@ class YukcoinHeader extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.85),
             ),
           ),
+          if (buckets != null) ...[
+            const SizedBox(height: 8),
+            YukcoinBucketsText(
+              s: s,
+              bonus: buckets!.bonus,
+              topup: buckets!.topup,
+              earned: buckets!.earned,
+            ),
+          ],
           if (showTopup) ...[
             const SizedBox(height: 14),
             SizedBox(

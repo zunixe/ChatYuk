@@ -261,6 +261,12 @@ mixin SPointsMx {
   String get walletBucketEarned => isId ? 'YukCoin hadiah' : 'Gift YukCoin';
   String get walletTitle => isId ? 'Dompet YukCoin' : 'YukCoin Wallet';
   String get walletTotal => isId ? 'Total YukCoin' : 'Total YukCoin';
+  String get walletBonus => isId ? 'Bonus' : 'Bonus';
+  String get walletPaid => isId ? 'Isi ulang' : 'Topped up';
+  String get walletEarned => isId ? 'Penghasilan' : 'Earnings';
+  String get walletBucketsHint => isId
+      ? 'Bonus: fee match & 30 detik pertama call. Video call lanjutan, gift, kirim koin & langganan pakai koin isi ulang/penghasilan.'
+      : 'Bonus: match fee & the first 30 seconds of a call. Longer video calls, gifts, coin transfers & subscriptions use topped-up/earned coins.';
 
   // ── YukCoin v2 (halaman & fitur berbayar) ──
   String get yukcoinTitle => isId ? 'YukCoin' : 'YukCoin';
