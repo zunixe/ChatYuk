@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/riverpod/earnings_provider.dart';
+import '../providers/riverpod/kyc_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/withdraw_provider.dart';
 import '../utils.dart';
+import 'kyc_screen.dart';
 import 'withdraw_screen.dart';
 
 /// Layar Saldo — tampilkan saldo YukCoin + rincian penghasilan + statistik.
@@ -24,8 +26,10 @@ class SaldoScreen extends ConsumerWidget {
         earned: w.earnedBalance,
         loading: w.loading,
         rate: w.config.rate,
+        requireKyc: w.config.requireKyc,
       ),
     ));
+    final kyc = ref.watch(kycProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -49,19 +53,24 @@ class SaldoScreen extends ConsumerWidget {
                     rate: wd.rate,
                   ),
                   const SizedBox(height: 10),
-                  // Tombol withdraw SELALU terbuka — di dalamnya ada
-                  // gerbang KYC + form akun DANA + riwayat, yang semuanya
-                  // berguna SEBELUM saldo mencapai minimum (submit sendiri
-                  // tetap digerbangi BELOW_MINIMUM di server).
+                  // KYC bisa dimulai SEKARANG walau saldo belum cukup —
+                  // tombol terpisah, tidak bergantung minimum withdraw.
+                  if (wd.requireKyc && !kyc.isApproved && !kyc.loading)
+                    _SaldoKycCard(s: s, kyc: kyc),
+                  // Tombol withdraw TERKUNCI di bawah minimum — membuka
+                  // layar withdraw (isi DANA/riwayat) hanya saat saldo
+                  // sudah cukup, supaya user tak mengira bisa menarik.
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const WithdrawScreen(),
-                        ),
-                      ),
+                      onPressed: wd.can
+                          ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const WithdrawScreen(),
+                                ),
+                              )
+                          : null,
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF2ECC71),
                         foregroundColor: Colors.white,
@@ -169,6 +178,74 @@ class SaldoScreen extends ConsumerWidget {
   }
 
   String _coins(int n) => '$n 🪙';
+}
+
+/// Kartu KYC di layar Saldo — pintu verifikasi yang SELALU aktif walau
+/// saldo belum mencapai minimum withdraw. Menampilkan status terkini
+/// (none/rejected → tombol buka form; pending → status ditinjau).
+class _SaldoKycCard extends StatelessWidget {
+  final S s;
+  final KycState kyc;
+  const _SaldoKycCard({required this.s, required this.kyc});
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = kyc.isPending;
+    final (icon, color, text) = switch (kyc.status) {
+      'pending' => (
+          Icons.hourglass_top_outlined,
+          Colors.orange,
+          s.kycPendingBody,
+        ),
+      'rejected' => (
+          Icons.error_outline,
+          AppTheme.danger,
+          kyc.rejectReason != null && kyc.rejectReason!.isNotEmpty
+              ? '${s.kycRejectedTitle} — ${s.kycRejectedReason(kyc.rejectReason!)}'
+              : s.kycRejectedTitle,
+        ),
+      _ => (
+          Icons.verified_user_outlined,
+          AppTheme.primary,
+          s.kycBannerWithdraw,
+        ),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                text,
+                style:
+                    AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
+              ),
+            ),
+            if (!pending) ...[
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const KycScreen()),
+                ),
+                child: Text(s.kycVerifyNow),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _BalanceCard extends StatelessWidget {
