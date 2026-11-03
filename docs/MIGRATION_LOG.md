@@ -4635,3 +4635,14 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - String hardcode dibersihkan: 'Coba lagi'→s.btnRetry (withdraw_screen),
   'Nanti'→s.btnLater (baru), 'Tutup'→s.btnClose (points_provider).
 - flutter analyze 0; flutter test 2594/2594; boundary OK.
+
+## 20261108000000_kyc_grant_authenticated.sql (APPLIED)
+- Fungsi KYC dibuat tanpa grant — ACL live hanya postgres+service_role →
+  klien mendapat `permission denied for function` saat membuka layar KYC.
+- GRANT execute ke `authenticated`: `submit_kyc`, `get_my_kyc`,
+  `admin_kyc_list`, `admin_kyc_review` (admin_* tetap guard
+  `auth.email()='zunixe@gmail.com'` di dalam body — non-admin tetap
+  Unauthorized). `anon` tetap tanpa akses.
+- Assert baru di `econ_lockdown_test.sql` (25/25): 4 fungsi executable
+  authenticated, submit_kyc tidak executable anon.
+- Verifikasi live `has_function_privilege` = true×4 / anon false.

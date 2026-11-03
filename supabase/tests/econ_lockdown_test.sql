@@ -256,6 +256,24 @@ select supabase_tests.check('LK: cron economy-invariant-daily terjadwal',
 select supabase_tests.check('LK: economy_invariant_cron jalan (return int ≥ 0)',
   public.economy_invariant_cron() >= 0);
 
+-- ════ KYC grants (20261108000000) — klien butuh submit/get_my_kyc; ════
+-- admin_* bisa dieksekusi authenticated (guard email di dalam fungsi).
+select supabase_tests.check('LK: submit_kyc executable authenticated',
+  has_function_privilege('authenticated',
+    'public.submit_kyc(text,text,text,text,text,date)', 'execute') = true);
+select supabase_tests.check('LK: get_my_kyc executable authenticated',
+  has_function_privilege('authenticated',
+    'public.get_my_kyc()', 'execute') = true);
+select supabase_tests.check('LK: admin_kyc_list executable authenticated',
+  has_function_privilege('authenticated',
+    'public.admin_kyc_list(text)', 'execute') = true);
+select supabase_tests.check('LK: admin_kyc_review executable authenticated',
+  has_function_privilege('authenticated',
+    'public.admin_kyc_review(uuid,boolean,text)', 'execute') = true);
+select supabase_tests.check('LK: submit_kyc TIDAK executable anon',
+  has_function_privilege('anon',
+    'public.submit_kyc(text,text,text,text,text,date)', 'execute') = false);
+
 select set_config('request.jwt.claim.sub', '', true);
 select supabase_tests.report() as result;
 rollback;

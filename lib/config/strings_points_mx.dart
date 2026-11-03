@@ -790,6 +790,68 @@ mixin SPointsMx {
   String get wdLoadFail =>
       isId ? 'Gagal memuat data withdraw' : 'Failed to load withdrawal data';
 
+  // ── KYC (verifikasi identitas untuk withdraw) ──
+  String get kycTitle => isId ? 'Verifikasi Identitas' : 'Identity Verification';
+  String get kycIntroTitle => isId
+      ? 'Verifikasi identitas untuk bisa withdraw'
+      : 'Verify your identity to enable withdrawals';
+  String get kycIntroBody => isId
+      ? 'Siapkan KTP / Paspor / SIM asli. Foto dokumen & selfie kamu hanya dilihat admin untuk verifikasi dan TIDAK dibagikan ke pengguna lain.'
+      : 'Have your real KTP / Passport / Driver\u2019s License ready. Your document & selfie photos are only seen by admins for verification and are NEVER shared with other users.';
+  String get kycDocType => isId ? 'Jenis Dokumen' : 'Document Type';
+  String get kycDocKtp => isId ? 'KTP' : 'KTP (Indonesian ID)';
+  String get kycDocPassport => isId ? 'Paspor' : 'Passport';
+  String get kycDocSim => isId ? 'SIM' : 'Driver\u2019s License';
+  String get kycPhotoId => isId ? 'Foto Dokumen' : 'Document Photo';
+  String get kycPhotoIdHint => isId
+      ? 'Foto dokumen ASLI (bukan fotokopi/screenshot). Keempat sudut terlihat, teks terbaca jelas, tanpa pantulan cahaya.'
+      : 'Photo of the ORIGINAL document (no photocopy/screenshot). All four corners visible, text readable, no glare.';
+  String get kycPhotoSelfie => isId ? 'Foto Selfie' : 'Selfie Photo';
+  String get kycPhotoSelfieHint => isId
+      ? 'Selfie wajah jelas tanpa masker/kacamata hitam — dipakai admin untuk mencocokkan dengan foto di dokumen.'
+      : 'Clear selfie without mask/sunglasses — used by admins to match the face on your document.';
+  String get kycTapToAdd => isId ? 'Ketuk untuk ambil foto' : 'Tap to take photo';
+  String get kycCamera => isId ? 'Kamera' : 'Camera';
+  String get kycGallery => isId ? 'Galeri' : 'Gallery';
+  String get kycRetake => isId ? 'Ambil Ulang' : 'Retake';
+  String get kycFullName => isId ? 'Nama Lengkap (sesuai dokumen)' : 'Full Name (as on document)';
+  String get kycIdNumber => isId ? 'Nomor Dokumen (NIK/No. Paspor/SIM)' : 'Document Number (NIK/Passport/License)';
+  String get kycBirthDate => isId ? 'Tanggal Lahir' : 'Date of Birth';
+  String get kycPickDate => isId ? 'Pilih tanggal' : 'Pick date';
+  String get kycSubmit => isId ? 'Kirim Verifikasi' : 'Submit Verification';
+  String get kycSubmitting => isId ? 'Mengirim…' : 'Submitting…';
+  String get kycErrPhotos =>
+      isId ? 'Foto dokumen & selfie wajib diisi' : 'Document & selfie photos are required';
+  String get kycErrName =>
+      isId ? 'Nama lengkap minimal 3 huruf' : 'Full name must be 3+ characters';
+  String get kycErrNumber =>
+      isId ? 'Nomor dokumen minimal 8 karakter' : 'Document number must be 8+ characters';
+  String get kycErrBirth =>
+      isId ? 'Pilih tanggal lahir dulu' : 'Pick your date of birth first';
+  String get kycErrGeneric => isId
+      ? 'Gagal mengirim verifikasi. Coba lagi.'
+      : 'Failed to submit verification. Please try again.';
+  String get kycErrDuplicate => isId
+      ? 'Verifikasi sudah pernah dikirim'
+      : 'Verification was already submitted';
+  String get kycPendingTitle => isId ? 'Sedang Ditinjau' : 'Under Review';
+  String get kycPendingBody => isId
+      ? 'Verifikasi kamu sedang ditinjau admin. Withdraw terbuka otomatis setelah disetujui.'
+      : 'Your verification is being reviewed by an admin. Withdrawals unlock automatically once approved.';
+  String get kycApprovedTitle => isId ? 'Terverifikasi' : 'Verified';
+  String get kycApprovedBody => isId
+      ? 'Identitas kamu sudah terverifikasi. Kamu bisa withdraw kapan saja.'
+      : 'Your identity is verified. You can withdraw anytime.';
+  String get kycRejectedTitle => isId ? 'Verifikasi Ditolak' : 'Verification Rejected';
+  String kycRejectedReason(String reason) => isId
+      ? 'Alasan: $reason'
+      : 'Reason: $reason';
+  String get kycResubmit => isId ? 'Kirim Ulang' : 'Resubmit';
+  String get kycBannerWithdraw => isId
+      ? 'Verifikasi identitas dulu untuk bisa withdraw'
+      : 'Verify your identity first to enable withdrawals';
+  String get kycVerifyNow => isId ? 'Verifikasi Sekarang' : 'Verify Now';
+
   // ── Lock gender (dipilih sekali, tidak bisa diubah) ──
   String get genderLockTitle =>
       isId ? 'Pastikan Gender Sudah Benar' : 'Make Sure Your Gender Is Correct';

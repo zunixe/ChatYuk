@@ -6,9 +6,11 @@ import 'package:intl/intl.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/withdraw_request.dart';
+import '../providers/riverpod/kyc_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/withdraw_provider.dart';
 import '../widgets/withdraw/dana_form.dart';
+import 'kyc_screen.dart';
 
 /// Layar Withdraw — tarik koin `earned` ke akun DANA.
 class WithdrawScreen extends ConsumerStatefulWidget {
@@ -86,8 +88,30 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
       _amountCtrl.clear();
       _snack(s.wdSuccess);
     } else {
-      _snack(_errorText(err), error: true);
+      // KYC_REQUIRED → beri jalan langsung ke halaman verifikasi, bukan
+      // hanya teks error yang menggantung tanpa tindakan.
+      if (err == 'KYC_REQUIRED') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_errorText(err)),
+            backgroundColor: AppTheme.danger,
+            action: SnackBarAction(
+              label: s.kycVerifyNow,
+              onPressed: _openKyc,
+            ),
+          ),
+        );
+      } else {
+        _snack(_errorText(err), error: true);
+      }
     }
+  }
+
+  void _openKyc() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const KycScreen()),
+    );
   }
 
   String _errorText(String code) {
@@ -156,6 +180,12 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
                 children: [
+                  // Banner KYC — withdraw digerbangi verifikasi identitas
+                  // (require_kyc). Ditampilkan bila belum approved: none →
+                  // CTA verifikasi, pending → status ditinjau, rejected →
+                  // CTA kirim ulang. Approved → banner hilang.
+                  if (state.config.requireKyc)
+                    _KycBanner(s: s, onOpen: _openKyc),
                   _WithdrawableCard(
                     s: s,
                     earned: state.earnedBalance,
@@ -595,6 +625,73 @@ class _ErrorView extends StatelessWidget {
                     .btnRetry,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Banner status KYC di atas kartu saldo — terlihat saat `require_kyc`
+/// aktif dan verifikasi belum approved. Pending → status (tanpa CTA);
+/// none/rejected → CTA buka halaman verifikasi.
+class _KycBanner extends ConsumerWidget {
+  final S s;
+  final VoidCallback onOpen;
+  const _KycBanner({required this.s, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final kyc = ref.watch(kycProvider);
+    if (kyc.isApproved) return const SizedBox.shrink();
+
+    final pending = kyc.isPending;
+    final (icon, color, text) = switch (kyc.status) {
+      'pending' => (
+          Icons.hourglass_top_outlined,
+          Colors.orange,
+          s.kycPendingBody,
+        ),
+      'rejected' => (
+          Icons.error_outline,
+          AppTheme.danger,
+          kyc.rejectReason != null && kyc.rejectReason!.isNotEmpty
+              ? '${s.kycRejectedTitle} — ${s.kycRejectedReason(kyc.rejectReason!)}'
+              : s.kycRejectedTitle,
+        ),
+      _ => (
+          Icons.verified_user_outlined,
+          AppTheme.primary,
+          s.kycBannerWithdraw,
+        ),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                text,
+                style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
+              ),
+            ),
+            if (!pending) ...[
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: onOpen,
+                child: Text(s.kycVerifyNow),
+              ),
+            ],
           ],
         ),
       ),

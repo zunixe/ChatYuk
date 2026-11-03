@@ -39,6 +39,7 @@ import '../providers/riverpod/theme_provider.dart';
 import '../widgets/app_gesture.dart';
 import '../main.dart' show localNotifications, resumeWarmup;
 import '../providers/riverpod/admin_provider.dart';
+import 'admin_kyc_tab.dart';
 import 'admin_moderation_tab.dart';
 
 class AdminPanelScreen extends ConsumerStatefulWidget {
@@ -68,6 +69,7 @@ enum _AdminTab {
   timeline,
   docs,
   moderation,
+  kyc,
   marketing,
 }
 
@@ -152,7 +154,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _tabCtrl = TabController(length: 15, vsync: this);
+    _tabCtrl = TabController(length: 16, vsync: this);
     _tabCtrl.addListener(_onTabChanged);
     final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
     Future.microtask(() => admin.fetchStats());
@@ -445,6 +447,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
         _AdminTab.timeline => s.adminTimelineTab,
         _AdminTab.docs => s.adminDocsTab,
         _AdminTab.moderation => s.adminModerationTab,
+        _AdminTab.kyc => s.adminKycTab,
         _AdminTab.marketing => s.adminMarketingTab,
       };
 
@@ -476,6 +479,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
         _AdminTab.timeline => const AdminTimelineTab(),
         _AdminTab.docs => const AdminDocsTab(),
         _AdminTab.moderation => const AdminModerationTab(),
+        _AdminTab.kyc => const AdminKycTab(),
         _AdminTab.marketing => const AdminMarketingTab(),
       };
 
