@@ -163,8 +163,6 @@ mixin _ProfileUiMx on _ProfileBase {
             ),
             _hashtagSection(context, s),
             _actionButtons(context, s, profile),
-            // Moderasi konten room publik (negara asal + lamaran moderator).
-            if (!isAnon) _moderationSection(context, s),
             _friendRequestBanner(context, s),
             _photosSection(context, s),
             // Kartu YukCoin + tombol Top-up — diletakkan SETELAH foto (male
@@ -248,6 +246,9 @@ mixin _ProfileUiMx on _ProfileBase {
                 ),
               ),
             ],
+            // Moderasi konten room publik (negara asal + lamaran moderator)
+            // — di antara kartu YukCoin dan seksi Akun.
+            if (!isAnon) _moderationSection(context, s),
             if (!isAnon)
               _accountSection(
                 context,

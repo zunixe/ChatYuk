@@ -6,6 +6,7 @@ import '../config/theme.dart';
 import '../providers/riverpod/earnings_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/withdraw_provider.dart';
+import '../utils.dart';
 import 'withdraw_screen.dart';
 
 /// Layar Saldo — tampilkan saldo YukCoin + rincian penghasilan + statistik.
@@ -22,6 +23,7 @@ class SaldoScreen extends ConsumerWidget {
         min: w.config.minCoins,
         earned: w.earnedBalance,
         loading: w.loading,
+        rate: w.config.rate,
       ),
     ));
 
@@ -44,23 +46,22 @@ class SaldoScreen extends ConsumerWidget {
                     s: s,
                     withdrawable: state.withdrawable,
                     totalBalance: state.totalBalance,
+                    rate: wd.rate,
                   ),
                   const SizedBox(height: 10),
-                  // Tombol withdraw — saldo withdrawable sudah jadi angka
-                  // utama di kartu atas. Non-aktif sampai saldo earned
-                  // mencapai withdraw_min_coins (gerbang sama dengan
-                  // request_withdraw di server).
+                  // Tombol withdraw SELALU terbuka — di dalamnya ada
+                  // gerbang KYC + form akun DANA + riwayat, yang semuanya
+                  // berguna SEBELUM saldo mencapai minimum (submit sendiri
+                  // tetap digerbangi BELOW_MINIMUM di server).
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: wd.can
-                          ? () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const WithdrawScreen(),
-                                ),
-                              )
-                          : null,
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const WithdrawScreen(),
+                        ),
+                      ),
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF2ECC71),
                         foregroundColor: Colors.white,
@@ -174,11 +175,13 @@ class _BalanceCard extends StatelessWidget {
   final S s;
   final int withdrawable;
   final int totalBalance;
+  final int rate;
 
   const _BalanceCard({
     required this.s,
     required this.withdrawable,
     this.totalBalance = 0,
+    this.rate = 7,
   });
 
   /// 2026-11-01: yang bisa ditarik HANYA bucket `earned` (request_withdraw
@@ -223,6 +226,16 @@ class _BalanceCard extends StatelessWidget {
             s.wdWithdrawableHint,
             style: AppText.caption.copyWith(
               color: Colors.white.withValues(alpha: 0.85),
+            ),
+          ),
+          // Estimasi nilai fiat dari rate server (get_withdraw_config) —
+          // gambaran kasar sebelum withdraw; bukan janji payout.
+          const SizedBox(height: 4),
+          Text(
+            '≈ ${formatFiatEstimate(withdrawable * rate, isId: s.isId)}',
+            style: AppText.caption.copyWith(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontWeight: FontWeight.w600,
             ),
           ),
           // Total semua bucket ditampilkan terpisah supaya tidak tertukar

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
-import '../../profile/widgets/profile_widgets.dart' show formatPoints;
+import '../../../utils.dart' show formatPoints;
 
 /// Seksi Privileges My Level: chip tab Lv.0–Lv.10 (horizontal) + daftar
 /// privilege level terpilih (badge level + bonus koin naik level).

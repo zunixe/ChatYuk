@@ -372,3 +372,28 @@ String compactCount(int n) {
   if (s.endsWith('.0')) s = s.substring(0, s.length - 2);
   return '$s$unit';
 }
+
+/// Format angka dengan pemisah ribuan (1000 -> 1.000).
+String formatPoints(int n) {
+  final digits = n.toString();
+  final buf = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    buf.write(digits[i]);
+    final rem = digits.length - 1 - i;
+    if (rem > 0 && rem % 3 == 0) buf.write('.');
+  }
+  return buf.toString();
+}
+
+/// Perkiraan IDR→USD untuk estimasi nilai withdraw user non-Indonesia.
+/// Bukan kurs live — cukup untuk gambaran kasar (≈ Rp16.000/US$).
+const double kIdrPerUsdEstimate = 16000;
+
+/// Estimasi nilai fiat dari koin: Rp untuk pengguna Indonesia, US$ selainnya.
+String formatFiatEstimate(int idrAmount, {required bool isId}) {
+  if (isId) return 'Rp${formatPoints(idrAmount)}';
+  final usd = idrAmount / kIdrPerUsdEstimate;
+  return usd >= 100
+      ? '\$${usd.toStringAsFixed(0)}'
+      : '\$${usd.toStringAsFixed(2)}';
+}

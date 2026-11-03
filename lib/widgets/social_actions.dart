@@ -77,8 +77,12 @@ Future<bool> cancelFriendRequestFor(
 ) async {
   try {
     final outbox = await sp.friendRequestOutbox();
+    // Hanya baris PENDING yang bisa dibatalkan — outbox memuat seluruh
+    // riwayat; mengambil baris non-pending → server menolak (not_pending).
     final req = outbox.firstWhere(
-      (e) => '${e['uid']}' == targetUid,
+      (e) =>
+          '${e['uid']}' == targetUid &&
+          '${e['status'] ?? 'pending'}' == 'pending',
       orElse: () => const {},
     );
     final id = (req['id'] as num?)?.toInt() ?? 0;

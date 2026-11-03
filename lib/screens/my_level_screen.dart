@@ -9,7 +9,7 @@ import '../core/nav_gate.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/my_level_provider.dart';
 import '../providers/riverpod/points_provider.dart';
-import 'profile/widgets/profile_widgets.dart' show formatPoints;
+import '../utils.dart' show formatPoints;
 import 'my_level/widgets/my_level_widgets.dart';
 
 /// Layar My Level (MALE only) — level dari kumulatif topup YukCoin.

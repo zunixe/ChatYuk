@@ -288,12 +288,13 @@ class SocialNotifier extends Notifier<SocialState> {
       _subscribed
         ..clear()
         ..addAll((results[2] as List).map((e) => '${e['uid']}'));
+      // HANYA outbox (request yang saya kirim) — inbox (results[4]) berisi
+      // request orang lain KE saya; memasukkannya membuat ikon cancel muncul
+      // untuk request milik orang lain → cancelFriendRequest selalu
+      // "not_found"/gagal (bug: tap Batalkan pada pengirim request masuk).
       final pending = <String>{
         for (final e in (results[3] as List))
           if (e['status'] == null || e['status'] == 'pending') '${e['uid']}',
-        for (final e in (results[4] as List))
-          if (e['status'] == null || e['status'] == 'pending')
-            '${e['uid'] ?? e['from_id']}',
       };
       _pendingFriendRequests
         ..clear()
