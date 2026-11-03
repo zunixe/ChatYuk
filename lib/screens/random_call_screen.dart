@@ -57,6 +57,22 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
   /// sebenarnya sudah live tetap tertutup backdrop sampai 1 detik penuh.
   CallSession? _listenedSession;
 
+  // ── PiP kamera sendiri (pola CallScreen) ──
+  /// Posisi bubble (null = default kanan atas di bawah info bar).
+  Offset? _pipPos;
+
+  /// Ukuran bubble — bisa di-resize dari pojok kanan bawah.
+  Size _pipSize = const Size(96, 132);
+
+  /// Layar besar ⇄ bubble ditukar (double tap di mana pun).
+  bool _swapped = false;
+
+  bool _resizing = false;
+  Size _resizeStartSize = Size.zero;
+  Offset _resizeStartLocal = Offset.zero;
+
+  void _toggleSwap() => setState(() => _swapped = !_swapped);
+
   @override
   void initState() {
     super.initState();
@@ -324,6 +340,12 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
       pointsProvider.select((p) => (coins: p.points, on: p.enabled)),
     );
     final charged = session?.billingChargedTotal ?? 0;
+    // Pendapatan live sisi penerima (female): income_total dari cabang
+    // info-only call_billing_tick — tanpa menagih siapa pun.
+    final income = session?.billingIncome ?? 0;
+    final isPayer = session?.isBillingPayer ?? true;
+    // Sisa masa gratis (dari connect media — sama dengan jangkar server).
+    final freeSec = session?.billingFreeSecondsLeft ?? 0;
 
     // Listener event-driven: hilangkan jeda hingga 1 detik sebelum video
     // lawan terlihat setelah track pertama datang.
@@ -407,14 +429,24 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
         fit: StackFit.expand,
         children: [
           // Video lawan — SELALU di-mount supaya audio remote tetap berbunyi
-          // walau video belum/tidak ada (pola CallScreen).
+          // walau video belum/tidak ada (pola CallScreen). Double tap di
+          // fullscreen → tukar dengan bubble kecil.
           if (session != null)
             RepaintBoundary(
               child: RTCVideoView(
-                session.remoteRenderer,
+                _swapped && hasRemoteVideo
+                    ? session.localRenderer
+                    : session.remoteRenderer,
+                mirror: _swapped && hasRemoteVideo,
                 objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
               ),
             ),
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onDoubleTap: hasLocalVideo && hasRemoteVideo
+                ? _toggleSwap
+                : null,
+          ),
           if (!hasRemoteVideo)
             _PartnerBackdrop(
               partner: partner,
@@ -471,6 +503,21 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
                         ],
                       ),
                     ),
+                    // Countdown gratis: selama 30 detik pertama match,
+                    // call belum menagih — user lihat sisa waktu gratis.
+                    if (coinSnap.on && freeSec > 0 && !partnerEnded) ...[
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.timer_outlined,
+                        color: AppTheme.quickTimeline,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        s.randomCallFreeLeft(freeSec),
+                        style: AppText.label.copyWith(color: Colors.white),
+                      ),
+                    ],
                     // Counter koin: angka = sisa saldo, "−N" = terpakai
                     // call ini. Sembunyi bila sistem koin dimatikan admin.
                     if (coinSnap.on) ...[
@@ -482,9 +529,11 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        charged > 0
-                            ? '${coinSnap.coins} (−$charged)'
-                            : '${coinSnap.coins}',
+                        isPayer
+                            ? (charged > 0
+                                ? '${coinSnap.coins} (−$charged)'
+                                : '${coinSnap.coins}')
+                            : '${coinSnap.coins} (+$income)',
                         style: AppText.label.copyWith(color: Colors.white),
                       ),
                     ],
@@ -503,26 +552,112 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
             ),
           ),
 
-          // Kamera sendiri (PiP).
+          // Kamera sendiri (PiP) — BISA digeser, di-resize dari pojok
+          // kanan bawah, dan double tap untuk tukar dengan video besar
+          // (pola CallScreen). Default: KANAN ATAS di bawah info bar.
           if (hasLocalVideo)
-            Positioned(
-              top: MediaQuery.paddingOf(context).top + 70,
-              right: 12,
-              child: RepaintBoundary(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: SizedBox(
-                    width: 96,
-                    height: 132,
-                    child: RTCVideoView(
-                      session.localRenderer,
-                      mirror: true,
-                      objectFit:
-                          RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+            Builder(
+              builder: (ctx) {
+                final mq = MediaQuery.of(ctx);
+                const minW = 70.0;
+                const minH = 100.0;
+                const handle = 44.0;
+                final maxW = mq.size.width * 0.6;
+                final maxH = mq.size.height * 0.6;
+                final w = _pipSize.width.clamp(minW, maxW);
+                final h = _pipSize.height.clamp(minH, maxH);
+                _pipPos ??= Offset(
+                  mq.size.width - w - 12,
+                  mq.padding.top + 70,
+                );
+                final pos = Offset(
+                  _pipPos!.dx.clamp(8.0, mq.size.width - w - 8),
+                  _pipPos!.dy.clamp(8.0, mq.size.height - h - 8),
+                );
+                return Positioned(
+                  left: pos.dx,
+                  top: pos.dy,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onDoubleTap: hasRemoteVideo ? _toggleSwap : null,
+                    onPanStart: (d) {
+                      _resizing =
+                          d.localPosition.dx > w - handle &&
+                          d.localPosition.dy > h - handle;
+                      _resizeStartSize = Size(w, h);
+                      _resizeStartLocal = d.localPosition;
+                    },
+                    onPanUpdate: (d) {
+                      setState(() {
+                        if (_resizing) {
+                          _pipSize = Size(
+                            (_resizeStartSize.width +
+                                    d.localPosition.dx -
+                                    _resizeStartLocal.dx)
+                                .clamp(minW, maxW),
+                            (_resizeStartSize.height +
+                                    d.localPosition.dy -
+                                    _resizeStartLocal.dy)
+                                .clamp(minH, maxH),
+                          );
+                        } else {
+                          _pipPos = Offset(
+                            (_pipPos!.dx + d.delta.dx).clamp(
+                              8.0,
+                              mq.size.width - w - 8,
+                            ),
+                            (_pipPos!.dy + d.delta.dy).clamp(
+                              8.0,
+                              mq.size.height - h - 8,
+                            ),
+                          );
+                        }
+                      });
+                    },
+                    onPanEnd: (_) => _resizing = false,
+                    child: Container(
+                      width: w,
+                      height: h,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: RepaintBoundary(
+                              child: RTCVideoView(
+                                _swapped && hasRemoteVideo
+                                    ? session.remoteRenderer
+                                    : session.localRenderer,
+                                mirror: !(_swapped && hasRemoteVideo),
+                                objectFit: RTCVideoViewObjectFit
+                                    .RTCVideoViewObjectFitCover,
+                              ),
+                            ),
+                          ),
+                          // Handle resize di pojok kanan bawah.
+                          const Align(
+                            alignment: Alignment.bottomRight,
+                            child: Icon(
+                              Icons.open_in_full_rounded,
+                              size: 22,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
 
           // Aksi cepat (follow / chat) — hanya saat tersambung.

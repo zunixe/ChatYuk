@@ -279,6 +279,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     final s = ref.watch(localeProvider).s;
     // Toggle admin OFF → semua yang berhubungan koin sembunyi (banner tarif).
     final coinsOn = ref.watch(pointsProvider.select((p) => p.enabled));
+    // Saldo live — tick billing sudah memuat `remaining` tiap respons,
+    // jadi counter ini bergerak selama call tanpa RPC tambahan.
+    final coinBalance = ref.watch(pointsProvider.select((p) => p.points));
     final isVideo = widget.callType == 'video';
     final inCall = _session.phase == CallPhase.inCall;
     final showRemoteVideo = inCall && isVideo && _session.hasRemoteVideo;
@@ -470,13 +473,23 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                           style: AppText.body.copyWith(color: Colors.white70),
                         ),
                       ),
-                      // Banner billing: tarif koin/menit (caller). Sembunyi
+                      // Banner billing: caller melihat saldo + (−N) terpakai,
+                      // callee melihat saldo + (+N) pendapatan live. Sembunyi
                       // saat sistem koin dimatikan admin.
-                      if (coinsOn &&
-                          _session.phase == CallPhase.inCall &&
-                          _session.billingPerMinute > 0) ...[
+                      if (coinsOn && _session.phase == CallPhase.inCall) ...[
                         const SizedBox(height: 6),
-                        _BillingBanner(session: _session, isId: s.isId),
+                        _BillingBanner(
+                          session: _session,
+                          isId: s.isId,
+                          coins: coinBalance,
+                        ),
+                      ],
+                      // ICE blip → sambung-ulang berjalan di balik layar; fase
+                      // tetap inCall (video tidak blank), cukup beri tahu.
+                      if (_session.isReconnecting &&
+                          _session.phase == CallPhase.inCall) ...[
+                        const SizedBox(height: 6),
+                        _ReconnectChip(isId: s.isId),
                       ],
                     ],
                   ),
@@ -626,11 +639,64 @@ class _RemoteFallback extends StatelessWidget {
 
 
 
-/// Banner billing call: sisa kuota gratis, atau tarif koin/menit setelahnya.
+/// Banner billing call: caller melihat saldo + total tertagih (−N), callee
+/// (penerima) melihat saldo + pendapatan (+N). Tarif/menit tetap tampil
+/// selama tick pertama belum mengembalikan angka tagihan.
 class _BillingBanner extends StatelessWidget {
   final CallSession session;
   final bool isId;
-  const _BillingBanner({required this.session, required this.isId});
+  final int coins;
+  const _BillingBanner({
+    required this.session,
+    required this.isId,
+    required this.coins,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S(isId: isId);
+    final charged = session.billingChargedTotal;
+    final income = session.billingIncome;
+    final text = session.isBillingPayer
+        ? (charged > 0
+            ? '$coins (−$charged)'
+            : (session.billingPerMinute > 0
+                ? s.callCostPerMin(session.billingPerMinute)
+                : '$coins'))
+        : '$coins (+$income)';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.monetization_on_outlined,
+            color: Colors.amber,
+            size: 16,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: AppText.caption.copyWith(
+              color: Colors.amber,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Chip kecil "menyambungkan ulang" saat ICE restart/fallback berjalan —
+/// fase tetap inCall sehingga video tidak dibuang (anti blank).
+class _ReconnectChip extends StatelessWidget {
+  final bool isId;
+  const _ReconnectChip({required this.isId});
 
   @override
   Widget build(BuildContext context) {
@@ -641,12 +707,23 @@ class _BillingBanner extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(
-        s.callCostPerMin(session.billingPerMinute),
-        style: AppText.caption.copyWith(
-          color: Colors.amber,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white70,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            s.callReconnecting,
+            style: AppText.caption.copyWith(color: Colors.white70),
+          ),
+        ],
       ),
     );
   }

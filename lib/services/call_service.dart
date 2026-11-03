@@ -181,9 +181,14 @@ class CallService {
 
   /// Heartbeat peserta call (fire-and-forget) — dipakai admin monitor
   /// untuk membedakan call hidup vs zombie.
-  void touchCall(String callId) {
+  /// `connected=true` sekaligus men-stamp `calls.media_connected_at`
+  /// (sekali — jangkar billing match "gratis 30 detik dari media nyambung").
+  void touchCall(String callId, {bool connected = false}) {
     _sb
-        .rpc('touch_call', params: {'p_call_id': callId})
+        .rpc(
+          'touch_call',
+          params: {'p_call_id': callId, 'p_connected': connected},
+        )
         .then((_) {})
         .catchError((_) {});
   }

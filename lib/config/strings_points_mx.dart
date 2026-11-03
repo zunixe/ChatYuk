@@ -362,6 +362,8 @@ mixin SPointsMx {
   String get pointsOnboardCallFree => isId
       ? 'Menelepon (audio/video) pakai YukCoin'
       : 'Calling (audio/video) uses YukCoin';
+  String get callReconnecting =>
+      isId ? 'Menyambungkan ulang…' : 'Reconnecting…';
   String callCostPerMin(int coins) => isId
       ? '🪙 $coins YukCoin/menit'
       : '🪙 $coins YukCoin/min';
@@ -678,6 +680,10 @@ mixin SPointsMx {
   String get saldoMission => isId ? 'Tugas' : 'Tasks';
   String get saldoBonus => isId ? 'Bonus' : 'Bonus';
   String get saldoOther => isId ? 'Lainnya' : 'Others';
+  // Hint di bawah tombol withdraw non-aktif — kapan tombol hidup.
+  String saldoWdLocked(int min, int need) => isId
+      ? 'Aktif saat saldo withdrawable mencapai $min 🪙 (kurang $need lagi)'
+      : 'Unlocks at $min 🪙 ($need to go)';
   String get saldoStats => isId ? 'Statistik Aktivitas' : 'Activity Stats';
   String get saldoVideoCallCount =>
       isId ? 'Jumlah Panggilan Video' : 'Video Calls';

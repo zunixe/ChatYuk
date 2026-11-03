@@ -330,12 +330,18 @@ class CallNotifier extends Notifier<CallState> with WidgetsBindingObserver {
       // Sedang di call → tandai busy (caller melihat status busy).
       // Fire-and-forget: JANGAN tahan callback realtime — dulu `await` di
       // sini menunda semua event panggilan berikutnya.
-      if (_activeCallId != callId) {
-        unawaited(_service.updateStatus(callId, 'busy').catchError((_) {}));
+      if (_activeCallId == callId) return;
+      // Registrasi BASI: layar incoming dari call yang sudah berakhir tak
+      // tertutup (event 'canceled' terlewat) → _activeCallId nyangkut dan
+      // SEMUA call berikutnya kena busy selamanya. Tanpa sesi aktif, cek
+      // status call lama dulu: terminal → lepas + lanjut berdering.
+      if (_activeSession == null) {
+        unawaited(_releaseStaleAndRing(row));
+        return;
       }
+      unawaited(_service.updateStatus(callId, 'busy').catchError((_) {}));
       return;
     }
-    if (_activeCallId == callId) return;
 
     final nav = navigatorKey.currentState;
     if (nav == null) return;
@@ -363,6 +369,34 @@ class CallNotifier extends Notifier<CallState> with WidgetsBindingObserver {
         callType: callType,
       ),
     );
+  }
+
+  /// Lepas `_activeCallId` basi (layar incoming yatim dari call yang sudah
+  /// terminal) lalu proses ulang event incoming yang tertahan. Kalau call
+  /// lama ternyata masih hidup → pertahankan dan tandai yang baru busy.
+  Future<void> _releaseStaleAndRing(Map<String, dynamic> row) async {
+    final staleId = _activeCallId;
+    final callId = row['id'] as String?;
+    if (staleId == null || callId == null) return;
+    try {
+      final stale = await _service.getCall(staleId);
+      final st = stale?['status'] as String?;
+      final terminal = st == null ||
+          st == 'ended' ||
+          st == 'canceled' ||
+          st == 'declined' ||
+          st == 'busy' ||
+          st == 'missed';
+      if (!terminal) {
+        // Call lama benar-benar masih hidup → busy seperti biasa.
+        unawaited(_service.updateStatus(callId, 'busy').catchError((_) {}));
+        return;
+      }
+    } catch (_) {
+      // Jaringan gagal → jangan blokir dering; anggap basi & lanjut.
+    }
+    unregisterCall(staleId);
+    _onIncoming(row);
   }
 
   Future<void> _showSystemIncoming({
@@ -534,6 +568,8 @@ class CallNotifier extends Notifier<CallState> with WidgetsBindingObserver {
     required String notifDesc,
     required String chatId,
     List<Map<String, dynamic>> pendingSignals = const [],
+    bool? billingPayer,
+    int billingFreeGraceSec = 0,
   }) async {
     final session = CallSession(
       callId: callId,
@@ -544,6 +580,8 @@ class CallNotifier extends Notifier<CallState> with WidgetsBindingObserver {
       myName: myName,
       myGender: myGender,
       pendingSignals: pendingSignals,
+      billingPayer: billingPayer,
+      billingFreeGraceSec: billingFreeGraceSec,
     );
     dlog(
       '[PROVIDER] startSession#${session.hashCode} call=$callId mode=$mode isCaller=$isCaller (prev=${_activeSession?.hashCode})',

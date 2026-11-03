@@ -47,6 +47,9 @@ mixin _CallSessionSignalMx on _CallBase {
       PerfProbe.record('call.offerToConnected', now.difference(offerAt));
     }
     dlog('[PERF] call connected via $source');
+    // Stamp jangkar billing (sekali per sesi): untuk call match, server
+    // menghitung "gratis 30 detik" dari momen media ini — bukan dari pair.
+    _service.touchCall(callId, connected: true);
     unawaited(_sampleAudioRtt());
   }
 

@@ -42,6 +42,12 @@ class _FakeCall extends CallNotifier {
   /// melempar supaya test lama menguji jalur error tanpa sesi riil).
   CallSession? session;
 
+  /// billingPayer terakhir yang diteruskan provider → assert payer=male.
+  bool? lastBillingPayer;
+
+  /// Grace gratis yang diteruskan provider → assert 30 untuk call match.
+  int lastBillingFreeGraceSec = 0;
+
   @override
   CallState build() => const CallState();
 
@@ -60,7 +66,11 @@ class _FakeCall extends CallNotifier {
     required String notifDesc,
     required String chatId,
     List<Map<String, dynamic>> pendingSignals = const [],
+    bool? billingPayer,
+    int billingFreeGraceSec = 0,
   }) async {
+    lastBillingPayer = billingPayer;
+    lastBillingFreeGraceSec = billingFreeGraceSec;
     startSessionCalls++;
     if (session != null) return session!;
     throw StateError('stop-here');
@@ -138,6 +148,18 @@ void main() {
     expect(c.read(randomMatchProvider).partner, isNull);
   });
 
+  test('join → matched = billing grace 30 dtk diteruskan ke sesi', () async {
+    fakeCall.session = MockCallSession();
+    when(() => svc.join(any())).thenAnswer((_) async => matchedPayload());
+    final c = make();
+    final n = c.read(randomMatchProvider.notifier);
+    await n.start();
+    expect(c.read(randomMatchProvider).phase, RandomMatchPhase.inCall);
+    // Grace "gratis 30 detik" harus sampai ke CallSession supaya header bisa
+    // countdown — server menjangkar ke media_connected_at (momen yang sama).
+    expect(fakeCall.lastBillingFreeGraceSec, 30);
+  });
+
   test('join → matched = sesi dimulai & fase inCall + data lawan', () async {
     when(() => svc.join(any())).thenAnswer((_) async => matchedPayload());
     final c = make();
@@ -149,7 +171,9 @@ void main() {
     expect(fakeCall.startSessionCalls, 1);
     expect(st.partner?.nickname, 'Rina');
     expect(st.partner?.distanceKm, 3.4);
-    expect(st.callId, 'call-1');
+    // _fail kini membersihkan callId — callId basi membuat 'matched' telat
+    // dari call mati lolos dedup & membuka sesi kedua.
+    expect(st.callId, isNull);
   });
 
   test('join → no_funds = idle + MATCH_NEED_COIN (fee saat pair, bukan klik)',

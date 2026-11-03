@@ -121,4 +121,8 @@ mixin SRandomMx {
   String callFreeLimitBody(int limitMin) => isId
       ? 'Kamu sudah memakai $limitMin menit call gratis hari ini. Coba lagi besok.'
       : 'You have used your $limitMin free call minutes today. Try again tomorrow.';
+
+  // ── Countdown gratis 30 detik awal call match ──
+  String randomCallFreeLeft(int sec) =>
+      isId ? 'Gratis ${sec}s' : 'Free ${sec}s';
 }

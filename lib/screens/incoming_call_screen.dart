@@ -46,6 +46,7 @@ class IncomingCallScreen extends ConsumerStatefulWidget {
 class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
   CallNotifier get _service => ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
   StreamSubscription<String>? _statusSub;
+  Timer? _statusPoll;
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   String _callerName = '';
   bool _busy = false;
@@ -93,6 +94,20 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
         _close();
       }
     });
+    // Jaring pengaman: event 'canceled' realtime bisa terlewat (race
+    // subscribe / sinyal jelek) → layar ring tak pernah tertutup dan
+    // _activeCallId nyangkut → semua call berikutnya kena busy selamanya.
+    // Poll status berkala selama layar terbuka; terminal → tutup diri.
+    _statusPoll = Timer.periodic(const Duration(seconds: 4), (_) async {
+      try {
+        final row = await _service.getCall(widget.callId);
+        if (!mounted) return;
+        final st = row?['status'] as String?;
+        if (st != null && st != 'ringing' && st != 'answered') {
+          _close();
+        }
+      } catch (_) {}
+    });
   }
 
   Future<void> _startRingtone() async {
@@ -130,6 +145,7 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
     if (!_accepted) ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).unregisterCall(widget.callId);
     ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).unbindIncomingScreen(widget.callId);
     _statusSub?.cancel();
+    _statusPoll?.cancel();
     // Bersihkan channel status sharing bila tak ada sesi yang memakai
     // (decline/missed tanpa CallSession) — aman bila sesi aktif.
     _service.releaseCallStatus(widget.callId);

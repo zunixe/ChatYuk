@@ -1,6 +1,6 @@
 -- SNAPSHOT SEMUA fungsi public (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh --all
--- Timestamp: 2026-10-24T15:51:34Z
+-- Timestamp: 2026-11-02T23:56:42Z
 
 -- snapshot-fn: _anon_gate_insert
 CREATE OR REPLACE FUNCTION public._anon_gate_insert()
@@ -45,12 +45,131 @@ CREATE OR REPLACE FUNCTION public._are_friends(a uuid, b uuid)
  SET search_path TO 'public'
 AS $function$
   select exists (
-    select 1 from public.friend_requests fr
-    where fr.status = 'accepted'
-      and ((fr.from_id = a and fr.to_id = b)
-        or (fr.from_id = b and fr.to_id = a))
+    select 1
+    from public.follows f1
+    join public.follows f2
+      on f1.followee_id = f2.follower_id
+     and f1.follower_id = f2.followee_id
+    where f1.follower_id = a
+      and f1.followee_id = b
   )
 $function$
+
+-- snapshot-fn: _charge_metered_core
+CREATE OR REPLACE FUNCTION public._charge_metered_core(p_caller uuid, p_feature text, p_ref text, p_units integer DEFAULT 1, p_recipient uuid DEFAULT NULL::uuid, p_ledger_type text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  cfg jsonb; unit_cost int; cut_pct int;
+  total int; cut int; net int; remaining int; balance int;
+  v_recipient_gender text;
+  v_callee uuid;
+  v_call_caller uuid;
+  v_call_kind text;
+  -- Tipe ledger yang ditulis (spend/income/revenue). Default = p_feature
+  -- (perilaku lama); match per-menit memakai 'match_call' supaya income
+  -- female masuk 'match_call_income', bukan 'call_video_income'.
+  v_ltype text := coalesce(nullif(p_ledger_type, ''), p_feature);
+begin
+  -- Akses dijaga GRANT: EXECUTE dicabut dari authenticated — hanya
+  -- dipanggil fungsi definer internal (call_billing_tick) & service_role.
+  if p_caller is null then raise exception 'Not authenticated'; end if;
+  if (select points_enabled from app_settings where id = 'global') is false then
+    return jsonb_build_object('ok', true, 'charged', 0,
+      'remaining', public.yukcoin_total(p_caller));
+  end if;
+
+  if p_units is null or p_units <= 0 then
+    return jsonb_build_object('ok', true, 'charged', 0,
+      'remaining', public.yukcoin_total(p_caller));
+  end if;
+
+  -- GUARD: untuk call, penerima income WAJIB pihak female call tersebut.
+  -- Private → callee. Random → peserta mana pun (female bisa caller).
+  -- Tanpa ini male bisa menyalurkan koin ke akun female miliknya sendiri.
+  if p_feature in ('call_audio','call_video','match_call') then
+    select c.callee_id, c.caller_id, c.kind into v_callee, v_call_caller, v_call_kind
+      from public.calls c
+     where c.id::text = p_ref;
+    if v_callee is not null and p_recipient is not null then
+      if v_call_kind = 'random' then
+        if p_recipient <> v_callee and p_recipient <> v_call_caller then
+          raise exception 'Forbidden: penerima bukan peserta call ini'
+            using errcode = '42501';
+        end if;
+      elsif p_recipient <> v_callee then
+        raise exception 'Forbidden: penerima bukan callee call ini'
+          using errcode = '42501';
+      end if;
+    end if;
+  end if;
+
+  if p_feature = 'call_audio' then
+    select call_audio_cost_per_min, call_cut_pct into unit_cost, cut_pct
+      from app_settings where id = 'global';
+  elsif p_feature = 'call_video' then
+    select call_video_cost_per_min, call_cut_pct into unit_cost, cut_pct
+      from app_settings where id = 'global';
+  else
+    select metered_pricing -> p_feature into cfg
+      from app_settings where id = 'global';
+    if cfg is null then
+      raise exception 'Unknown metered feature: %', p_feature;
+    end if;
+    unit_cost := (cfg->>'unit_cost')::int;
+    cut_pct   := (cfg->>'cut_pct')::int;
+  end if;
+  unit_cost := coalesce(unit_cost, 0);
+  cut_pct   := coalesce(cut_pct, 0);
+
+  total := unit_cost * p_units;
+  if total <= 0 then
+    return jsonb_build_object('ok', true, 'charged', 0,
+      'remaining', public.yukcoin_total(p_caller));
+  end if;
+
+  -- Call WAJIB pakai koin beli/penghasilan. Koin gratis (`bonus`) tidak
+  -- boleh membayar menit call — 30% net-nya menjadi `earned` female
+  -- (withdrawable) = koin gratis berubah jadi uang.
+  balance := public.yukcoin_paid_total(p_caller);
+  if balance < total then
+    raise exception 'Koin beli/penghasilan tidak cukup (top-up dulu)'
+      using errcode = '22023';
+  end if;
+
+  remaining := public.ledger_spend_paid(p_caller, v_ltype, total, p_ref);
+
+  cut := (total * cut_pct) / 100;
+  net := total - cut;
+  -- HANYA FEMALE yang dapat income.
+  if p_recipient is not null and p_recipient <> p_caller and net > 0 then
+    select gender into v_recipient_gender from public.profiles where id = p_recipient;
+    if v_recipient_gender = 'female' then
+      perform public.ledger_credit(p_recipient, 'earned', v_ltype || '_income',
+        net, p_ref, jsonb_build_object('from', p_caller, 'feature', p_feature,
+        'gross', total, 'cut', cut));
+      insert into public.point_events (user_id, event, amount, metadata)
+        values (p_recipient, v_ltype || '_income', net,
+                jsonb_build_object('from', p_caller, 'ref', p_ref));
+    end if;
+  end if;
+
+  if cut > 0 then
+    insert into platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
+      values (v_ltype, cut, p_caller, p_recipient, p_ref,
+              jsonb_build_object('gross', total, 'net', net, 'pct', cut_pct));
+  end if;
+
+  insert into public.point_events (user_id, event, amount, metadata)
+    values (p_caller, v_ltype, -total,
+            jsonb_build_object('units', p_units, 'ref', p_ref));
+
+  return jsonb_build_object('ok', true, 'charged', total, 'cut', cut,
+    'net', net, 'remaining', remaining, 'caller', p_caller);
+end; $function$
 
 -- snapshot-fn: _email_is_admin
 CREATE OR REPLACE FUNCTION public._email_is_admin()
@@ -110,6 +229,124 @@ begin
 end;
 $function$
 
+-- snapshot-fn: _spend_yukcoin_core
+CREATE OR REPLACE FUNCTION public._spend_yukcoin_core(p_user uuid, p_feature text, p_amount integer, p_ref text DEFAULT NULL::text, p_meta jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  e int; b int; t int; need int; take int; tier text;
+begin
+  -- INTERNAL ONLY — dipanggil dari fungsi trusted SECURITY DEFINER
+  -- (mis. random_match_join). Auth gate ada di wrapper spend_yukcoin.
+  -- REVOKE dari public/anon/authenticated di bagian grant.
+  if p_amount is null or p_amount <= 0 then
+    return jsonb_build_object(
+      'tier', 'noop',
+      'remaining', public.yukcoin_total(p_user)
+    );
+  end if;
+
+  -- Kill-switch ekonomi: points_enabled=false → free (pola 110013).
+  if (select points_enabled from app_settings where id = 'global') is false then
+    return jsonb_build_object('tier', 'free', 'charged', 0,
+      'remaining', public.yukcoin_total(p_user), 'free', true);
+  end if;
+
+  -- 2026-10-31: hanya GIFT + biaya pencarian MATCH yang memotong poin.
+  -- undo, edit, slot foto, mode hantu, filter, nearby → GRATIS.
+  if p_feature not in ('gift','gift_sent','match_search') then
+    return jsonb_build_object('tier', 'free', 'charged', 0,
+      'remaining', public.yukcoin_total(p_user), 'free', true);
+  end if;
+
+  -- Audit: female tidak pernah keluar koin.
+  if p_feature = 'match_search'
+     and (select gender from public.profiles where id = p_user) = 'female' then
+    return jsonb_build_object('tier', 'free', 'charged', 0,
+      'remaining', public.yukcoin_total(p_user), 'free', true);
+  end if;
+
+  select coalesce(sum(amount) filter (where bucket = 'earned'), 0),
+         coalesce(sum(amount) filter (where bucket = 'bonus'), 0),
+         coalesce(sum(amount) filter (where bucket = 'topup'), 0)
+    into e, b, t
+    from public.coin_ledger
+   where user_id = p_user;
+
+  -- 2026-11-04b: `match_search` = fee ke platform (tanpa penerima) → seluruh
+  -- bucket boleh dipakai termasuk `topup` (tadinya terlewat → user topup-
+  -- only tak bisa match). 'gift'/'gift_sent' tetap earned+bonus.
+  if p_feature = 'match_search' then
+    if (b + t + e) < p_amount then
+      raise exception 'YukCoin tidak cukup';
+    end if;
+    need := p_amount;
+    -- bonus → topup → earned: koin gratis terbakar duluan.
+    take := least(b, need);
+    if take > 0 then
+      insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
+        values (p_user, 'bonus', p_feature, -take, p_ref, coalesce(p_meta, '{}'::jsonb));
+      need := need - take;
+    end if;
+    if need > 0 then
+      take := least(t, need);
+      if take > 0 then
+        insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
+          values (p_user, 'topup', p_feature, -take, p_ref, coalesce(p_meta, '{}'::jsonb));
+        need := need - take;
+      end if;
+    end if;
+    if need > 0 then
+      insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
+        values (p_user, 'earned', p_feature, -need, p_ref, coalesce(p_meta, '{}'::jsonb));
+      need := 0;
+    end if;
+    tier := case when b >= p_amount then 'bonus'
+                 when b + t >= p_amount then 'mixed' else 'mixed' end;
+  else
+    if (e + b) < p_amount then
+      raise exception 'YukCoin tidak cukup';
+    end if;
+
+    need := p_amount;
+    take := least(e, need);
+    if take > 0 then
+      insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
+        values (p_user, 'earned', p_feature, -take, p_ref, coalesce(p_meta, '{}'::jsonb));
+      need := need - take;
+    end if;
+    if need > 0 then
+      take := least(b, need);
+      if take > 0 then
+        insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
+          values (p_user, 'bonus', p_feature, -take, p_ref, coalesce(p_meta, '{}'::jsonb));
+        need := need - take;
+      end if;
+    end if;
+    tier := case when e >= p_amount then 'earned' else 'mixed' end;
+  end if;
+
+  insert into public.yukcoin_consumptions(user_id, feature, cost, ref_id, metadata)
+    values (p_user, p_feature, p_amount, p_ref, coalesce(p_meta, '{}'::jsonb));
+  insert into public.point_events(user_id, event, amount, metadata)
+    values (p_user, p_feature, -p_amount,
+            jsonb_build_object('feature', p_feature, 'ref', p_ref, 'tier', tier));
+
+  -- Audit: fee pencarian match hangus (tidak ada penerima) → revenue platform.
+  if p_feature = 'match_search' then
+    insert into public.platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
+      values ('match_search', p_amount, p_user, null, p_ref,
+              jsonb_build_object('kind', 'search_fee'));
+  end if;
+
+  return jsonb_build_object('tier', tier, 'charged', p_amount,
+    'remaining', public.yukcoin_total(p_user));
+end;
+$function$
+
 -- snapshot-fn: _viewer_is_registered
 CREATE OR REPLACE FUNCTION public._viewer_is_registered()
  RETURNS boolean
@@ -118,6 +355,20 @@ CREATE OR REPLACE FUNCTION public._viewer_is_registered()
  SET search_path TO 'public'
 AS $function$
   select coalesce((select is_registered from public.profiles where id = auth.uid()), false)
+$function$
+
+-- snapshot-fn: active_moderator_count
+CREATE OR REPLACE FUNCTION public.active_moderator_count(p_country text)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select count(*)::int
+    from public.country_moderators
+   where scope = 'country'
+     and scope_value = p_country
+     and revoked_at is null;
 $function$
 
 -- snapshot-fn: activity_leaderboard
@@ -1879,6 +2130,39 @@ begin
 end;
 $function$
 
+-- snapshot-fn: admin_ghost_users
+CREATE OR REPLACE FUNCTION public.admin_ghost_users()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  arr jsonb;
+begin
+  -- Guard SAMA dengan RPC admin lain (mis. admin_stats_users_page).
+  if coalesce(auth.email(), '') != 'zunixe@gmail.com'
+     and auth.role() != 'service_role' then
+    raise exception 'Unauthorized';
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'uid', p.id,
+    'nickname', p.nickname,
+    'status', p.status,
+    'last_seen', p.last_seen,
+    'ghost_expires_at', g.expires_at,
+    'ghost_sisa_jam', round(extract(epoch from (g.expires_at - now()))/3600.0, 1)
+  ) order by g.expires_at desc), '[]'::jsonb)
+  into arr
+  from public.ghost_mode_active g
+  join public.profiles p on p.id = g.user_id
+  where g.expires_at > now();
+
+  return arr;
+end;
+$function$
+
 -- snapshot-fn: admin_gift_revenue
 CREATE OR REPLACE FUNCTION public.admin_gift_revenue()
  RETURNS jsonb
@@ -2473,7 +2757,9 @@ AS $function$
 declare affected int := 0; u uuid;
 begin
   if coalesce(auth.email(),'') != 'zunixe@gmail.com' then raise exception 'Unauthorized'; end if;
-  for u in select id from profiles where is_registered = true loop
+  -- Audit 2026-10-31: skip female — bonus hanya untuk male (female = earned).
+  for u in select id from profiles where is_registered = true
+           and coalesce(gender, '') <> 'female' loop
     perform public.ledger_credit(u, 'bonus', 'admin_mass_bonus', bonus);
     affected := affected + 1;
   end loop;
@@ -2481,6 +2767,128 @@ begin
     values (auth.uid(), 'admin_mass_bonus', bonus, jsonb_build_object('affected_users', affected));
   return jsonb_build_object('affected', affected, 'bonus', bonus);
 end; $function$
+
+-- snapshot-fn: admin_moderation_activity
+CREATE OR REPLACE FUNCTION public.admin_moderation_activity()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+begin
+  if not public.is_chatyuk_admin(me) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  return jsonb_build_object(
+    'permits', (select count(*) from public.country_send_permits
+                 where status = 'pending'),
+    'permits_at', (select max(requested_at) from public.country_send_permits
+                    where status = 'pending'),
+    'applications', (select count(*) from public.moderator_applications
+                      where status = 'pending'),
+    'applications_at', (select max(created_at)
+                          from public.moderator_applications
+                         where status = 'pending'),
+    'reports', (select count(*) from public.reports
+                 where status = 'open' and message_id is not null),
+    'reports_at', (select max(created_at) from public.reports
+                    where status = 'open' and message_id is not null),
+    'reviews', (select count(*) from public.messages
+                 where needs_review = true
+                   and coalesce(is_deleted, false) = false),
+    'reviews_at', (select max(created_at) from public.messages
+                    where needs_review = true
+                      and coalesce(is_deleted, false) = false),
+    'mods_at', (select max(created_at) from public.moderator_actions
+                 where action in ('grant_permit', 'revoke_permit')),
+    'mods_last', (
+      select jsonb_build_object(
+               'country', ma.scope_value,
+               'action', ma.action,
+               'note', ma.note,
+               'nickname', coalesce(tp.nickname, '?'),
+               'created_at', ma.created_at)
+        from public.moderator_actions ma
+        left join public.profiles tp on tp.id = ma.target_uid
+       where ma.action in ('grant_permit', 'revoke_permit')
+       order by ma.created_at desc
+       limit 1
+    )
+  );
+end;
+$function$
+
+-- snapshot-fn: admin_moderation_overview
+CREATE OR REPLACE FUNCTION public.admin_moderation_overview()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  v_permits jsonb;
+  v_apps jsonb;
+  v_reports jsonb;
+  v_reviews jsonb;
+begin
+  if not public.is_chatyuk_admin(me) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'country', s.country, 'uid', s.uid, 'nickname', pr.nickname,
+           'reason', s.reason, 'requested_at', s.requested_at,
+           'user_country', pr.country)
+         order by s.requested_at desc), '[]'::jsonb)
+    into v_permits
+    from public.country_send_permits s
+    left join public.profiles pr on pr.id = s.uid
+   where s.status = 'pending';
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'country', a.scope_value, 'uid', a.uid, 'nickname', pr.nickname,
+           'reason', a.reason, 'created_at', a.created_at)
+         order by a.created_at desc), '[]'::jsonb)
+    into v_apps
+    from public.moderator_applications a
+    left join public.profiles pr on pr.id = a.uid
+   where a.scope = 'country' and a.status = 'pending';
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'country', ro.country, 'room_id', ro.id,
+           'message_id', r.message_id, 'reports', r.n,
+           'reason_code', max(r.reason_code), 'last_at', max(r.created_at))
+         order by max(r.created_at) desc), '[]'::jsonb)
+    into v_reports
+    from public.reports r
+    join public.messages m on m.id::text = r.message_id
+    join public.rooms ro on ro.id = m.room_id
+   where r.message_id is not null and r.status = 'open'
+   group by ro.country, ro.id, r.message_id;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'country', ro.country, 'room_id', ro.id,
+           'message_id', m.id::text, 'type', m.type,
+           'sender_name', m.sender_name, 'created_at', m.created_at)
+         order by m.created_at desc), '[]'::jsonb)
+    into v_reviews
+    from public.messages m
+    join public.rooms ro on ro.id = m.room_id
+   where m.needs_review = true and coalesce(m.is_deleted, false) = false
+   limit 100;
+
+  return jsonb_build_object(
+    'permits', v_permits,
+    'applications', v_apps,
+    'reports', v_reports,
+    'reviews', v_reviews
+  );
+end;
+$function$
 
 -- snapshot-fn: admin_push_update
 CREATE OR REPLACE FUNCTION public.admin_push_update()
@@ -3004,6 +3412,43 @@ begin
 end;
 $function$
 
+-- snapshot-fn: admin_search_users
+CREATE OR REPLACE FUNCTION public.admin_search_users(p_query text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  q  text := trim(coalesce(p_query, ''));
+begin
+  if not public.is_chatyuk_admin(me) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if length(q) < 2 then
+    return '[]'::jsonb;
+  end if;
+
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'uid', p.id, 'nickname', p.nickname,
+             'country', p.country,
+             'messages', (select count(*) from public.messages m
+                          where m.sender_id = p.id))
+           order by p.nickname)
+      from (
+        select pr.id, pr.nickname, pr.country
+          from public.profiles pr
+         where pr.nickname ilike '%' || q || '%'
+            or pr.id::text = q
+         order by pr.nickname
+         limit 20
+      ) p
+  ), '[]'::jsonb);
+end;
+$function$
+
 -- snapshot-fn: admin_set_chat_org
 CREATE OR REPLACE FUNCTION public.admin_set_chat_org(p_pinned text[] DEFAULT NULL::text[], p_categories text[] DEFAULT NULL::text[], p_map jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
@@ -3032,6 +3477,89 @@ begin
     'category_list', to_jsonb(coalesce(v.category_list, '{}')),
     'category_map', coalesce(v.category_map, '{}'::jsonb)
   );
+end;
+$function$
+
+-- snapshot-fn: admin_set_country
+CREATE OR REPLACE FUNCTION public.admin_set_country(p_uid uuid, p_country text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me        uuid := auth.uid();
+  v_country text := nullif(btrim(coalesce(p_country, '')), '');
+begin
+  if not public.is_chatyuk_admin(me) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if p_uid is null then
+    raise exception 'uid_required' using errcode = '22023';
+  end if;
+  if v_country is null then
+    raise exception 'country_required' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.profiles where id = p_uid) then
+    raise exception 'profile_not_found' using errcode = 'P0002';
+  end if;
+
+  perform set_config('chatyuk.country_ok', '1', true);
+  update public.profiles
+     set country = v_country,
+         country_changed_at = now()
+   where id = p_uid;
+  perform set_config('chatyuk.country_ok', '', true);
+
+  insert into public.moderator_actions
+    (scope, scope_value, uid, target_uid, action, note)
+  values ('country', v_country, me, p_uid, 'grant_permit',
+          'admin_set_country:' || v_country);
+
+  return jsonb_build_object('ok', true, 'uid', p_uid, 'country', v_country);
+end;
+$function$
+
+-- snapshot-fn: admin_set_country_moderator
+CREATE OR REPLACE FUNCTION public.admin_set_country_moderator(p_country text, p_uid uuid, p_grant boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+begin
+  if not public.is_chatyuk_admin(me) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  if p_grant then
+    perform pg_advisory_xact_lock(hashtext('modslot:' || p_country));
+    if public.active_moderator_count(p_country)
+       - (case when public.is_country_moderator(p_country, p_uid)
+               then 1 else 0 end)
+       >= 2 then
+      return jsonb_build_object('ok', false, 'error', 'slots_full', 'max', 2);
+    end if;
+
+    insert into public.country_moderators (scope, scope_value, uid, granted_by, source)
+    values ('country', p_country, p_uid, me, 'admin')
+    on conflict (scope, scope_value, uid) do update
+      set revoked_at = null, granted_by = me, granted_at = now();
+  else
+    update public.country_moderators
+       set revoked_at = now()
+     where scope = 'country' and scope_value = p_country
+       and uid = p_uid and revoked_at is null;
+  end if;
+
+  insert into public.moderator_actions (scope, scope_value, uid, target_uid, action, note)
+  values ('country', p_country, me, p_uid,
+          case when p_grant then 'grant_permit' else 'revoke_permit' end,
+          'admin_set_moderator');
+
+  return jsonb_build_object('ok', true, 'granted', p_grant);
 end;
 $function$
 
@@ -3984,6 +4512,11 @@ begin
     'author_gender', p.author_gender,
     'text', p.text,
     'image_path', p.image_path,
+    'images', p.images,
+    'image_w', p.image_w,
+    'image_h', p.image_h,
+    'image_dims', p.image_dims,
+    'image_blurhashes', p.image_blurhashes,
     'visibility', p.visibility,
     'like_count', p.like_count,
     'comment_count', p.comment_count,
@@ -4061,53 +4594,54 @@ begin
     raise exception 'Unauthorized';
   end if;
   update app_settings set
-    -- Foto
+    -- Foto berbayar
     photo_upload_reward    = coalesce((p->>'photo_upload_reward')::int, photo_upload_reward),
     photo_unlock_once      = coalesce((p->>'photo_unlock_once')::int, photo_unlock_once),
     photo_unlock_perm      = coalesce((p->>'photo_unlock_perm')::int, photo_unlock_perm),
     photo_unlock_owner_pct = coalesce((p->>'photo_unlock_owner_pct')::int, photo_unlock_owner_pct),
-    -- Bonus lama (dipertahankan agar form tidak error; faucet sudah no-op)
-    bonus_registered       = coalesce((p->>'bonus_registered')::int, bonus_registered),
-    bonus_rated            = coalesce((p->>'bonus_rated')::int, bonus_rated),
-    bonus_shared           = coalesce((p->>'bonus_shared')::int, bonus_shared),
-    bonus_profile          = coalesce((p->>'bonus_profile')::int, bonus_profile),
-    bonus_first_photo      = coalesce((p->>'bonus_first_photo')::int, bonus_first_photo),
-    bonus_room_read        = coalesce((p->>'bonus_room_read')::int, bonus_room_read),
-    bonus_new_chat         = coalesce((p->>'bonus_new_chat')::int, bonus_new_chat),
-    bonus_invited          = coalesce((p->>'bonus_invited')::int, bonus_invited),
-    bonus_first_room       = coalesce((p->>'bonus_first_room')::int, bonus_first_room),
-    bonus_referral         = coalesce((p->>'bonus_referral')::int, bonus_referral),
-    bonus_online_5min      = coalesce((p->>'bonus_online_5min')::int, bonus_online_5min),
-    bonus_online_30min     = coalesce((p->>'bonus_online_30min')::int, bonus_online_30min),
-    bonus_online_60min     = coalesce((p->>'bonus_online_60min')::int, bonus_online_60min),
-    bonus_online_120min    = coalesce((p->>'bonus_online_120min')::int, bonus_online_120min),
+    -- Pengali harga tier bonus (koin gratis = 1/multiplier dari koin beli)
     bonus_price_multiplier = coalesce((p->>'bonus_price_multiplier')::int, bonus_price_multiplier),
-    -- Tarif call BARU
+    -- Tarif call
     call_audio_cost_per_min = coalesce((p->>'call_audio_cost_per_min')::int, call_audio_cost_per_min),
     call_video_cost_per_min = coalesce((p->>'call_video_cost_per_min')::int, call_video_cost_per_min),
-    call_free_minutes_daily = coalesce((p->>'call_free_minutes_daily')::int, call_free_minutes_daily),
     call_cut_pct            = coalesce((p->>'call_cut_pct')::int, call_cut_pct),
     -- Fitur berbayar lain
     filter_gender_cost      = coalesce((p->>'filter_gender_cost')::int, filter_gender_cost),
     nearby_cost             = coalesce((p->>'nearby_cost')::int, nearby_cost),
-    -- Room
+    -- Room berbayar
     room_create_paid        = coalesce((p->>'room_create_paid')::int, room_create_paid),
     room_create_pw_paid     = coalesce((p->>'room_create_pw_paid')::int, room_create_pw_paid),
     room_join_paid          = coalesce((p->>'room_join_paid')::int, room_join_paid),
     room_extend_paid        = coalesce((p->>'room_extend_paid')::int, room_extend_paid),
-    room_reads_daily_limit  = coalesce((p->>'room_reads_daily_limit')::int, room_reads_daily_limit),
-    new_chats_daily_limit   = coalesce((p->>'new_chats_daily_limit')::int, new_chats_daily_limit),
+    -- Gift & subscribe
     subscribe_cut_pct       = coalesce((p->>'subscribe_cut_pct')::int, subscribe_cut_pct),
     subscription_duration_days = coalesce((p->>'subscription_duration_days')::int, subscription_duration_days),
+    gift_cut_pct            = coalesce((p->>'gift_cut_pct')::int, gift_cut_pct),
     -- Biaya chat
     cost_chat_text          = coalesce((p->>'cost_chat_text')::int, cost_chat_text),
     cost_chat_image         = coalesce((p->>'cost_chat_image')::int, cost_chat_image),
     cost_view_once          = coalesce((p->>'cost_view_once')::int, cost_view_once),
     -- Share / reengage
     share_url               = coalesce(p->>'share_url', share_url),
-    share_click_reward      = coalesce((p->>'share_click_reward')::int, share_click_reward),
-    share_click_cap_daily   = coalesce((p->>'share_click_cap_daily')::int, share_click_cap_daily),
     reengage_enabled        = coalesce((p->>'reengage_enabled')::boolean, reengage_enabled),
+    -- Kill-switch fitur YukCoin v2 (undo/edit/ghost/slot foto — kini gratis).
+    yukcoin_v2_enabled      = coalesce((p->>'yukcoin_v2_enabled')::boolean, yukcoin_v2_enabled),
+    -- Welcome bonus user baru (anti-farming per install/IP)
+    welcome_anon_coins      = coalesce((p->>'welcome_anon_coins')::int, welcome_anon_coins),
+    welcome_register_coins  = coalesce((p->>'welcome_register_coins')::int, welcome_register_coins),
+    welcome_max_claims_per_ip_day = coalesce((p->>'welcome_max_claims_per_ip_day')::int, welcome_max_claims_per_ip_day),
+    -- ── Withdraw (tarik saldo `earned` ke DANA) ──
+    withdraw_rate_idr       = coalesce((p->>'withdraw_rate_idr')::int, withdraw_rate_idr),
+    withdraw_min_coins      = coalesce((p->>'withdraw_min_coins')::int, withdraw_min_coins),
+    withdraw_fee_pct        = coalesce((p->>'withdraw_fee_pct')::int, withdraw_fee_pct),
+    withdraw_fee_min_idr    = coalesce((p->>'withdraw_fee_min_idr')::int, withdraw_fee_min_idr),
+    withdraw_max_per_day    = coalesce((p->>'withdraw_max_per_day')::int, withdraw_max_per_day),
+    withdraw_min_interval_hours = coalesce((p->>'withdraw_min_interval_hours')::int, withdraw_min_interval_hours),
+    withdraw_min_account_age_hours = coalesce((p->>'withdraw_min_account_age_hours')::int, withdraw_min_account_age_hours),
+    -- ── Batas call gratis female → male (menit / hari) ──
+    female_free_call_min_per_day = coalesce((p->>'female_free_call_min_per_day')::int, female_free_call_min_per_day),
+    -- ── Anti-fraud: maks transaksi kirim koin/gift per jam ──
+    coin_tx_max_per_hour    = coalesce((p->>'coin_tx_max_per_hour')::int, coin_tx_max_per_hour),
     updated_at = now()
   where id = 'global';
   return (select to_jsonb(a) from app_settings a where id = 'global');
@@ -4235,6 +4769,136 @@ begin
 end;
 $function$
 
+-- snapshot-fn: admin_withdraw_list
+CREATE OR REPLACE FUNCTION public.admin_withdraw_list(p_status text DEFAULT 'pending'::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_admin_email text := coalesce(auth.email(), '');
+    result jsonb;
+    v_total int;
+BEGIN
+    IF v_admin_email <> 'zunixe@gmail.com' THEN
+        RAISE EXCEPTION 'NOT_ADMIN: hanya admin';
+    END IF;
+
+    IF p_status IS NULL OR p_status = '' OR p_status = 'all' THEN
+        SELECT count(*) INTO v_total FROM public.withdrawal_requests;
+    ELSE
+        SELECT count(*) INTO v_total FROM public.withdrawal_requests
+         WHERE status = p_status;
+    END IF;
+
+    SELECT jsonb_build_object(
+        'total', v_total,
+        'requests', coalesce((
+            SELECT jsonb_agg(row_to_json(w) ORDER BY w.created_at DESC)
+            FROM (
+                SELECT r.id, r.user_id, r.coin_amount, r.rate, r.gross_idr,
+                       r.fee_idr, r.payout_idr, r.status, r.pay_method,
+                       r.pay_account, r.pay_holder, r.admin_note, r.tx_id,
+                       r.created_at, r.reviewed_at,
+                       p.nickname, p.email
+                  FROM public.withdrawal_requests r
+                  JOIN public.profiles p ON p.id = r.user_id
+                 WHERE (p_status IS NULL OR p_status = '' OR p_status = 'all'
+                        OR r.status = p_status)
+                 ORDER BY r.created_at DESC
+                 LIMIT greatest(1, least(coalesce(p_limit, 50), 200))
+                OFFSET greatest(0, coalesce(p_offset, 0))
+            ) w
+        ), '[]'::jsonb)
+    ) INTO result;
+
+    RETURN result;
+END;
+$function$
+
+-- snapshot-fn: admin_withdraw_process
+CREATE OR REPLACE FUNCTION public.admin_withdraw_process(p_request_id uuid, p_approve boolean, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_admin_email text := coalesce(auth.email(), '');
+    v_req record;
+    v_taken record;
+    v_refunded bigint := 0;
+    v_new_points int;
+BEGIN
+    IF v_admin_email <> 'zunixe@gmail.com' THEN
+        RAISE EXCEPTION 'NOT_ADMIN: hanya admin';
+    END IF;
+
+    -- Kunci baris + wajib masih pending → approve/reject ganda ditolak.
+    SELECT * INTO v_req
+      FROM public.withdrawal_requests
+     WHERE id = p_request_id
+       FOR UPDATE;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'NOT_FOUND');
+    END IF;
+    IF v_req.status <> 'pending' THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'ALREADY_PROCESSED',
+            'status', v_req.status);
+    END IF;
+
+    IF NOT p_approve THEN
+        -- Koin sudah didebit saat request → kembalikan PERSIS sebesar baris
+        -- ledger 'withdraw' milik pengajuan ini (reverse per bucket).
+        FOR v_taken IN
+            SELECT bucket, (-sum(amount))::int AS amt
+              FROM public.coin_ledger
+             WHERE user_id = v_req.user_id
+               AND type = 'withdraw'
+               AND ref_id = v_req.id::text
+             GROUP BY bucket
+            HAVING -sum(amount) > 0
+        LOOP
+            PERFORM public.ledger_credit(v_req.user_id, v_taken.bucket,
+                'withdraw_refund', v_taken.amt, v_req.id::text,
+                jsonb_build_object('reason', 'reject', 'note', p_note));
+            v_refunded := v_refunded + v_taken.amt;
+        END LOOP;
+
+        UPDATE public.withdrawal_requests
+        SET status = 'rejected',
+            admin_note = nullif(trim(coalesce(p_note, '')), ''),
+            reviewed_by = (SELECT id FROM public.profiles WHERE email = v_admin_email LIMIT 1),
+            reviewed_at = now(),
+            updated_at = now()
+        WHERE id = p_request_id AND status = 'pending';
+
+        RETURN jsonb_build_object('ok', true, 'status', 'rejected',
+            'refunded', v_refunded);
+    END IF;
+
+    -- Approve: TIDAK ada debit. Koin sudah keluar di request_withdraw.
+    UPDATE public.withdrawal_requests
+    SET status = 'paid',
+        admin_note = nullif(trim(coalesce(p_note, '')), ''),
+        reviewed_by = (SELECT id FROM public.profiles WHERE email = v_admin_email LIMIT 1),
+        reviewed_at = now(),
+        updated_at = now()
+    WHERE id = p_request_id AND status = 'pending';
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'ALREADY_PROCESSED');
+    END IF;
+
+    SELECT points INTO v_new_points FROM public.profiles WHERE id = v_req.user_id;
+
+    RETURN jsonb_build_object('ok', true, 'status', 'paid',
+        'coins', v_req.coin_amount, 'net_idr', v_req.payout_idr,
+        'remaining_points', v_new_points, 'debited', 0);
+END;
+$function$
+
 -- snapshot-fn: admin_withdrawal_list
 CREATE OR REPLACE FUNCTION public.admin_withdrawal_list(p_status text DEFAULT 'pending'::text)
  RETURNS jsonb
@@ -4296,6 +4960,60 @@ begin
 
   return jsonb_build_object('ok', true, 'status', p_action);
 end; $function$
+
+-- snapshot-fn: admin_zero_female_bonus
+CREATE OR REPLACE FUNCTION public.admin_zero_female_bonus(p_dry_run boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_admin text := coalesce(auth.email(), '');
+  rec record;
+  v_sum_bonus bigint := 0;
+  v_users int := 0;
+  v_applied int := 0;
+begin
+  if v_admin <> 'zunixe@gmail.com'
+     and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role'
+     and auth.uid() is not null then
+    raise exception 'NOT_ADMIN: hanya admin';
+  end if;
+
+  for rec in
+    select p.id, p.nickname,
+           coalesce((select sum(amount) from public.coin_ledger
+                      where user_id = p.id and bucket = 'bonus'), 0) as bonus
+      from public.profiles p
+     where p.gender = 'female'
+     order by p.id
+  loop
+    if rec.bonus > 0 then
+      v_users := v_users + 1;
+      v_sum_bonus := v_sum_bonus + rec.bonus;
+      if not p_dry_run then
+        insert into public.coin_ledger
+          (user_id, bucket, type, amount, ref_id, metadata)
+        values
+          (rec.id, 'bonus', 'female_bonus_reset', -rec.bonus,
+           'female_bonus_reset_20261031',
+           jsonb_build_object('reason', 'female harus tanpa bonus koin',
+                              'before', rec.bonus,
+                              'nickname', rec.nickname));
+        v_applied := v_applied + 1;
+      end if;
+    end if;
+  end loop;
+
+  return jsonb_build_object(
+    'dry_run', p_dry_run,
+    'users_affected', v_users,
+    'total_bonus_zeroed', v_sum_bonus,
+    'entries_inserted', v_applied
+  );
+end;
+$function$
 
 -- snapshot-fn: ai_log_reply
 CREATE OR REPLACE FUNCTION public.ai_log_reply(p_chat_id text, p_trigger_msg_id bigint, p_sender_id uuid, p_dummy_uid uuid, p_proactive boolean, p_stage text, p_decision text, p_detail jsonb DEFAULT '{}'::jsonb)
@@ -4890,6 +5608,99 @@ begin
 end;
 $function$
 
+-- snapshot-fn: apply_country_moderator
+CREATE OR REPLACE FUNCTION public.apply_country_moderator(p_country text, p_reason text DEFAULT ''::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me        uuid := auth.uid();
+  v_created timestamptz;
+  v_msgs    integer;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  if coalesce(p_country, '') = '' then
+    raise exception 'country_required' using errcode = '22023';
+  end if;
+
+  if public.is_country_moderator(p_country, me) then
+    return jsonb_build_object('ok', true, 'already_moderator', true);
+  end if;
+
+  -- SIAPA CEPAT DIA DAPAT: kunci per-negara supaya 2 lamaran serentak tidak
+  -- sama-sama lolos cek slot lalu membusukkan batas 2 moderator.
+  perform pg_advisory_xact_lock(hashtext('modslot:' || p_country));
+
+  if public.active_moderator_count(p_country) >= 2 then
+    return jsonb_build_object('ok', false, 'error', 'slots_full', 'max', 2);
+  end if;
+
+  -- ADMIN: langsung diangkat (tanpa syarat kontribusi), tetap hormati slot.
+  if public.is_chatyuk_admin(me) then
+    insert into public.country_moderators
+      (scope, scope_value, uid, source, granted_by)
+    values ('country', p_country, me, 'admin', me)
+    on conflict (scope, scope_value, uid) do update
+      set revoked_at = null, granted_by = me, granted_at = now();
+
+    insert into public.moderator_actions
+      (scope, scope_value, uid, target_uid, action, note)
+    values ('country', p_country, me, me, 'grant_permit',
+            'admin_self_appoint');
+
+    return jsonb_build_object('ok', true, 'already_moderator', true);
+  end if;
+
+  select p.created_at into v_created from public.profiles p where p.id = me;
+  if v_created is null then
+    raise exception 'profile_missing' using errcode = '42501';
+  end if;
+  if v_created > now() - interval '7 days' then
+    return jsonb_build_object('ok', false, 'error', 'account_too_new',
+      'min_days', 7,
+      'have_days', floor(extract(epoch from now() - v_created) / 86400)::int);
+  end if;
+
+  select count(*)
+    into v_msgs
+    from public.messages m
+    join public.rooms r on r.id = m.room_id
+   where m.sender_id = me
+     and r.is_private = false
+     and r.country = p_country;
+
+  if v_msgs < 50 then
+    return jsonb_build_object('ok', false, 'error', 'not_enough_messages',
+      'need', 50, 'have', v_msgs);
+  end if;
+
+  -- Slot terbuka & syarat terpenuhi → LANGSUNG DITETAPKAN (bukan menunggu).
+  insert into public.country_moderators
+    (scope, scope_value, uid, source, granted_by)
+  values ('country', p_country, me, 'application', me)
+  on conflict (scope, scope_value, uid) do update
+    set revoked_at = null, granted_by = me, granted_at = now();
+
+  insert into public.moderator_actions
+    (scope, scope_value, uid, target_uid, action, note)
+  values ('country', p_country, me, me, 'grant_permit', 'auto_grant_fcfs');
+
+  -- Tutup lamaran lama miliknya di negara ini (kalau ada) agar tidak
+  -- menggantung sebagai pending.
+  update public.moderator_applications
+     set status = 'approved', decided_by = me, decided_at = now(),
+         decision_note = 'auto_grant_fcfs'
+   where uid = me and scope = 'country' and scope_value = p_country
+     and status = 'pending';
+
+  return jsonb_build_object('ok', true, 'granted', true);
+end;
+$function$
+
 -- snapshot-fn: approve_join_request
 CREATE OR REPLACE FUNCTION public.approve_join_request(p_room_id text, p_uid uuid)
  RETURNS jsonb
@@ -5139,101 +5950,232 @@ AS $function$
 declare
   me uuid := auth.uid();
   c record;
-  feat text; unit_cost int; cut_pct int;
+  v_all boolean; v_anon boolean; points_on boolean;
+  v_free_limit int; v_free_used int;
+  v_caller_gender text;
+  v_callee_gender text;
+  feat text; unit_cost int;
   elapsed_sec int; billable_minutes int; already_billed int; to_bill int;
-  afford int; charge_n int;
-  remaining int;
-  points_on boolean;
+  remaining int; v_paid int; afford int; charge_n int;
+  v_payer uuid; v_recipient uuid;
+  v_income int;
+  v_connect_cost int := 0;
+  v_connect_billed boolean := false;
+  v_free_seconds_left int := 0;
+  v_anchor timestamptz;
+  v_day_start timestamptz :=
+    (((now() AT TIME ZONE 'Asia/Jakarta')::date)::timestamp
+       AT TIME ZONE 'Asia/Jakarta');
 begin
   if me is null then raise exception 'Not authenticated'; end if;
-
-  -- Master toggle koin (admin "Sistem poin") PALING ATAS — jalur OFF
-  -- tak menyentuh config/billing, call gratis total.
-  select points_enabled into points_on from app_settings where id = 'global';
+  if not public.feature_enabled_for('random_call') then
+    raise exception 'FEATURE_DISABLED';
+  end if;
+  select coalesce(call_all_enabled, true), coalesce(call_anon_enabled, false),
+         coalesce(points_enabled, true)
+    into v_all, v_anon, points_on
+    from app_settings where id = 'global';
+  if not v_all then raise exception 'CALL_DISABLED'; end if;
+  select gender into v_caller_gender from public.profiles where id = me;
+  if not v_anon and not exists (
+    select 1 from public.profiles p where p.id = me and p.is_registered) then
+    raise exception 'CALL_REGISTERED_ONLY';
+  end if;
   if points_on is false then
-    return jsonb_build_object(
-      'ok', true, 'can_continue', true,
+    return jsonb_build_object('ok', true, 'can_continue', true,
       'billed_minutes', 0, 'charged_total', 0, 'per_minute', 0,
       'remaining', public.yukcoin_total(me));
   end if;
-
-  -- Gerbang fitur publish — jalur OFF tak menyentuh config/billing.
   if not public.feature_enabled_for('call_billing') then
-    return jsonb_build_object(
-      'ok', true, 'can_continue', true,
+    return jsonb_build_object('ok', true, 'can_continue', true,
       'billed_minutes', 0, 'charged_total', 0, 'per_minute', 0,
       'remaining', public.yukcoin_total(me));
   end if;
-
   select * into c from public.calls where id = p_call_id;
   if not found then raise exception 'Call not found'; end if;
-  if c.caller_id <> me then raise exception 'Only caller can be billed'; end if;
+  -- Gender CALLER yang sebenarnya (bukan pemanggil tick): tick kini boleh
+  -- dari kedua peserta — pakai `me` di sini dulu membuat callee-tick random
+  -- salah resolve payer dan private callee-tick kena cabang free-female.
+  select gender into v_caller_gender from public.profiles where id = c.caller_id;
+  -- Private: kedua peserta boleh tick — caller menagih, callee baca info.
+  -- Pihak ketiga tetap ditolak.
+  if c.kind is distinct from 'random' and c.caller_id <> me
+     and c.callee_id <> me then
+    raise exception 'Only caller can be billed';
+  end if;
+  if c.kind = 'random' and me <> c.caller_id and me <> c.callee_id then
+    raise exception 'Only participants';
+  end if;
 
-  feat := case c.call_type when 'audio' then 'call_audio' else 'call_video' end;
-  select case c.call_type
-           when 'audio' then call_audio_cost_per_min
-           else call_video_cost_per_min end
+  -- ── Payer & recipient ──
+  -- Random: pihak MALE membayar, pihak FEMALE menerima split (kebalikan
+  -- dari asumsi caller=payer lama — caller match = siapa yang join kedua,
+  -- murni kebetulan sisi signaling, bukan ekonomi). Private: caller bayar.
+  if c.kind = 'random' then
+    select gender into v_callee_gender from public.profiles where id = c.callee_id;
+    if v_caller_gender = 'male' then
+      v_payer := c.caller_id;
+    elsif v_callee_gender = 'male' then
+      v_payer := c.callee_id;
+    else
+      v_payer := c.caller_id;
+    end if;
+    v_recipient := case when v_payer = c.caller_id then c.callee_id
+                        else c.caller_id end;
+  else
+    v_payer := c.caller_id;
+    v_recipient := c.callee_id;
+  end if;
+
+  if me <> v_payer and me <> v_recipient then
+    raise exception 'Only participants';
+  end if;
+  -- Pendapatan live pemanggil tick (0 untuk payer — dia tidak menerima
+  -- income). Sumber kebenaran = ledger yang ditulis _charge_metered_core.
+  select coalesce(sum(amount),0) into v_income
+    from public.coin_ledger
+   where user_id = me and ref_id = p_call_id::text
+     and type like '%\_income' escape '\';
+
+  -- ── Caller FEMALE = GRATIS (batas menit/hari) — private saja ──
+  -- Random TIDAK gratis walau caller female: payer-nya tetap male.
+  if c.kind is distinct from 'random' and v_caller_gender = 'female' then
+    select coalesce(female_free_call_min_per_day, 30) into v_free_limit
+      from app_settings where id = 'global';
+    select coalesce(sum(ceil(extract(epoch from
+             (coalesce(cc.ended_at, now()) - cc.answered_at)) / 60)), 0)
+      into v_free_used
+      from public.calls cc
+      join public.profiles pp on pp.id = cc.callee_id
+     where cc.caller_id = c.caller_id
+       and cc.callee_id <> me
+       and pp.gender = 'male'
+       and cc.answered_at is not null
+       and cc.answered_at >= v_day_start;
+    if v_free_used >= v_free_limit then
+      return jsonb_build_object('ok', true, 'can_continue', false,
+        'billed_minutes', 0, 'charged_total', 0, 'per_minute', 0,
+        'remaining', public.yukcoin_total(me),
+        'reason', 'free_limit',
+        'income_total', v_income,
+        'free_used_min', v_free_used, 'free_limit_min', v_free_limit);
+    end if;
+    return jsonb_build_object('ok', true, 'can_continue', true,
+      'billed_minutes', 0, 'charged_total', 0, 'per_minute', 0,
+      'remaining', public.yukcoin_total(me),
+      'income_total', v_income,
+        'free_used_min', v_free_used, 'free_limit_min', v_free_limit);
+  end if;
+
+  feat := case when c.kind = 'random' then 'call_video'
+               when c.call_type = 'audio' then 'call_audio'
+               else 'call_video' end;
+  select case when c.kind = 'random' then call_video_cost_per_min
+              when c.call_type = 'audio' then call_audio_cost_per_min
+              else call_video_cost_per_min end
     into unit_cost
     from app_settings where id = 'global';
   unit_cost := coalesce(unit_cost, 0);
-  cut_pct := coalesce((select call_cut_pct from app_settings where id='global'), 70);
-
-  -- Belum dijawab → belum ada tagihan.
   if c.answered_at is null then
     return jsonb_build_object('ok', true, 'can_continue', true,
       'billed_minutes', 0, 'charged_total', 0, 'per_minute', unit_cost,
       'remaining', public.yukcoin_total(me));
   end if;
+  v_anchor := case when c.kind = 'random'
+                   then coalesce(c.media_connected_at, c.answered_at)
+                   else c.answered_at end;
+  elapsed_sec := greatest(0, floor(extract(epoch from (now() - v_anchor)))::int);
 
-  -- Detik berjalan SERVER-SIDE dari answered_at (anti-tamper client).
-  elapsed_sec := greatest(0, floor(extract(epoch from (now() - c.answered_at)))::int);
+  if c.kind = 'random' then
+    billable_minutes := case when elapsed_sec >= 30
+                        then 1 + (elapsed_sec - 30) / 60 else 0 end;
+    v_free_seconds_left := greatest(0, 30 - elapsed_sec);
+  else
+    billable_minutes := (elapsed_sec + 59) / 60;
+  end if;
 
-  -- Menit berbayar = ceil(elapsed / 60). Menit pertama tetap ditagih penuh
-  -- saat detik 1..60 (pembulatan ke atas) → tidak ada celah gratis.
-  billable_minutes := (elapsed_sec + 59) / 60;
-
-  -- Sudah ditagih berapa menit untuk call ini (idempoten).
   select count(*) into already_billed
     from public.yukcoin_consumptions
-    where user_id = me and feature = feat and ref_id = p_call_id::text;
-
+    where user_id = v_payer and feature = feat and ref_id = p_call_id::text;
   to_bill := greatest(0, billable_minutes - already_billed);
+  v_paid := public.yukcoin_paid_total(v_payer);
   remaining := public.yukcoin_total(me);
 
-  if to_bill > 0 then
-    if remaining < unit_cost then
-      return jsonb_build_object('ok', true, 'can_continue', false,
-        'billed_minutes', already_billed,
-        'charged_total', already_billed * unit_cost, 'per_minute', unit_cost,
-        'remaining', remaining, 'reason', 'insufficient');
-    end if;
-
-    -- Tagih sebanyak yang sanggup (afford-guard → saldo tak pernah minus).
-    afford := remaining / greatest(unit_cost, 1);
-    charge_n := least(to_bill, afford);
-    if charge_n > 0 then
-      perform public.charge_metered(me, feat, p_call_id::text, charge_n, c.callee_id);
+  if c.kind = 'random' and elapsed_sec >= 30 then
+    select coalesce((metered_pricing->'match_call'->>'unit_cost')::int, 10)
+      into v_connect_cost from app_settings where id = 'global';
+    select exists (
+      select 1 from public.yukcoin_consumptions
+       where user_id = v_payer and feature = 'match_call'
+         and ref_id = p_call_id::text
+    ) into v_connect_billed;
+    if not v_connect_billed then
+      if v_paid < v_connect_cost then
+        return jsonb_build_object('ok', true, 'can_continue', false,
+          'billed_minutes', already_billed,
+          'charged_total', already_billed * unit_cost,
+          'per_minute', unit_cost,
+          'remaining', remaining, 'reason', 'insufficient',
+          'free_seconds_left', 0);
+      end if;
+      perform public._charge_metered_core(v_payer, 'match_call',
+        p_call_id::text, 1, v_recipient);
       insert into public.yukcoin_consumptions(user_id, feature, cost, ref_id, metadata)
-        select me, feat, unit_cost, p_call_id::text,
-               jsonb_build_object('minute', already_billed + g, 'call_type', c.call_type)
-        from generate_series(1, charge_n) g;
-      already_billed := already_billed + charge_n;
+        values (v_payer, 'match_call', v_connect_cost, p_call_id::text,
+                jsonb_build_object('kind', 'random', 'connect', true));
+      v_connect_billed := true;
+      v_paid := public.yukcoin_paid_total(v_payer);
       remaining := public.yukcoin_total(me);
     end if;
+  end if;
 
-    if charge_n < to_bill or remaining < unit_cost then
+  if to_bill > 0 then
+    if v_paid < unit_cost then
       return jsonb_build_object('ok', true, 'can_continue', false,
         'billed_minutes', already_billed,
-        'charged_total', already_billed * unit_cost, 'per_minute', unit_cost,
-        'remaining', remaining, 'reason', 'insufficient');
+        'charged_total', already_billed * unit_cost
+          + (case when v_connect_billed then v_connect_cost else 0 end),
+        'per_minute', unit_cost,
+        'remaining', remaining, 'reason', 'insufficient',
+        'free_seconds_left', 0);
+    end if;
+    afford := v_paid / greatest(unit_cost, 1);
+    charge_n := least(to_bill, afford);
+    if charge_n > 0 then
+      perform public._charge_metered_core(v_payer, feat, p_call_id::text,
+        charge_n, v_recipient,
+        case when c.kind = 'random' then 'match_call' else null end);
+      insert into public.yukcoin_consumptions(user_id, feature, cost, ref_id, metadata)
+        select v_payer, feat, unit_cost, p_call_id::text,
+               jsonb_build_object('minute', already_billed + g,
+                                  'call_type', c.call_type,
+                                  'kind', coalesce(c.kind, 'private'))
+        from generate_series(1, charge_n) g;
+      already_billed := already_billed + charge_n;
+      v_paid := public.yukcoin_paid_total(v_payer);
+      remaining := public.yukcoin_total(me);
+    end if;
+    if charge_n < to_bill or v_paid < unit_cost then
+      return jsonb_build_object('ok', true, 'can_continue', false,
+        'billed_minutes', already_billed,
+        'charged_total', already_billed * unit_cost
+          + (case when v_connect_billed then v_connect_cost else 0 end),
+        'per_minute', unit_cost,
+        'remaining', remaining, 'reason', 'insufficient',
+        'free_seconds_left', 0);
     end if;
   end if;
 
   return jsonb_build_object('ok', true, 'can_continue', true,
     'billed_minutes', already_billed,
-    'charged_total', already_billed * unit_cost, 'per_minute', unit_cost,
-    'remaining', remaining);
-end; $function$
+    'charged_total', already_billed * unit_cost
+      + (case when v_connect_billed then v_connect_cost else 0 end),
+    'per_minute', unit_cost,
+    'remaining', remaining,
+    'income_total', v_income,
+    'free_seconds_left', v_free_seconds_left);
+end;
+$function$
 
 -- snapshot-fn: call_free_limit_sec
 CREATE OR REPLACE FUNCTION public.call_free_limit_sec()
@@ -5264,6 +6206,10 @@ declare
 begin
   if new.status not in ('ended','failed','canceled','declined','missed','busy') then return new; end if;
   if old.status = new.status then return new; end if;
+  -- Random video call: TIDAK menulis bubble "Call ended" ke private chat
+  -- (tidak ada chat yang disepakati dengan orang asing; tiap "Next" akan
+  -- membuat chat baru). Riwayatnya dibaca lewat random_call_history().
+  if new.kind = 'random' then return new; end if;
 
   select case when new.caller_id::text < new.callee_id::text
          then new.caller_id::text || '_' || new.callee_id::text
@@ -5385,6 +6331,74 @@ begin
   end loop;
 end; $function$
 
+-- snapshot-fn: can_send_room_media
+CREATE OR REPLACE FUNCTION public.can_send_room_media(p_room text, p_uid uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_private   boolean;
+  v_country   text;
+  v_home      text;
+  v_min_days  integer;
+  v_min_msgs  integer;
+  v_created   timestamptz;
+  v_msgs      integer;
+begin
+  if p_uid is null or p_room is null then
+    return false;
+  end if;
+
+  select r.is_private, r.country into v_private, v_country
+    from public.rooms r where r.id = p_room;
+  if v_private is null then
+    return false;
+  end if;
+
+  if v_private then
+    return true;
+  end if;
+
+  if public.is_chatyuk_admin(p_uid) then
+    return true;
+  end if;
+  if public.is_country_moderator(v_country, p_uid) then
+    return true;
+  end if;
+
+  -- LINTAS NEGARA: country beda dengan negara room → wajib izin approved.
+  select country into v_home from public.profiles where id = p_uid;
+  if coalesce(v_home, '') <> '' and v_home <> coalesce(v_country, '') then
+    if not exists (
+      select 1 from public.country_send_permits p
+       where p.uid = p_uid and p.country = v_country and p.status = 'approved'
+    ) then
+      return false;
+    end if;
+  end if;
+
+  select coalesce(media_trust_min_days, 3), coalesce(media_trust_min_msgs, 20)
+    into v_min_days, v_min_msgs from public.app_settings where id = 'global';
+
+  select p.created_at into v_created from public.profiles p where p.id = p_uid;
+  if v_created is null then
+    return false;
+  end if;
+  if v_created > now() - make_interval(days => v_min_days) then
+    return false;
+  end if;
+
+  select count(*) into v_msgs
+    from public.messages m
+    join public.rooms r2 on r2.id = m.room_id
+   where m.sender_id = p_uid and r2.is_private = false;
+
+  return v_msgs >= v_min_msgs;
+end;
+$function$
+
 -- snapshot-fn: cancel_friend_request
 CREATE OR REPLACE FUNCTION public.cancel_friend_request(p_request_id bigint)
  RETURNS jsonb
@@ -5414,6 +6428,10 @@ begin
   end if;
 
   delete from public.friend_requests where id = p_request_id;
+  -- Follow yang dibuat oleh request ini ikut ditarik.
+  if req.auto_follow then
+    delete from public.follows where follower_id = me and followee_id = req.to_id;
+  end if;
 
   return jsonb_build_object('ok', true);
 end;
@@ -5426,70 +6444,14 @@ CREATE OR REPLACE FUNCTION public.charge_metered(p_caller uuid, p_feature text, 
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare
-  cfg jsonb; unit_cost int; cut_pct int;
-  total int; cut int; net int; remaining int; balance int;
 begin
-  -- GUARD KEAMANAN (2026-10-22): user hanya boleh menagih DIRINYA sendiri.
-  -- call_billing_tick sudah mengisi p_caller := auth.uid() → tetap jalan.
+  -- GUARD KEAMANAN: user hanya boleh menagih DIRINYA sendiri.
+  -- call_billing_tick memakai _charge_metered_core untuk cross-payer.
   if auth.uid() is not null and p_caller is distinct from auth.uid() then
     raise exception 'Forbidden: tidak boleh menagih user lain'
       using errcode = '42501';
   end if;
-  if p_caller is null then raise exception 'Not authenticated'; end if;
-  if p_units is null or p_units <= 0 then
-    return jsonb_build_object('ok', true, 'charged', 0,
-      'remaining', public.yukcoin_total(p_caller));
-  end if;
-
-  select metered_pricing -> p_feature into cfg
-    from app_settings where id = 'global';
-  if cfg is null then
-    raise exception 'Unknown metered feature: %', p_feature;
-  end if;
-  unit_cost := coalesce((cfg->>'unit_cost')::int, 0);
-  cut_pct   := coalesce((cfg->>'cut_pct')::int, 0);
-
-  total := unit_cost * p_units;
-  if total <= 0 then
-    return jsonb_build_object('ok', true, 'charged', 0,
-      'remaining', public.yukcoin_total(p_caller));
-  end if;
-
-  balance := public.yukcoin_total(p_caller);
-  if balance < total then
-    raise exception 'YukCoin tidak cukup';
-  end if;
-
-  -- Potong dari saldo penelepon (semua bucket boleh dipakai — ekosistem
-  -- coin tertutup: coin dari topup & dari income call sama-sama bisa dipakai).
-  remaining := public.ledger_spend(p_caller, p_feature, total, p_ref);
-
-  -- Split ke penerima (mis. pemilik call). Platform ambil cut_pct.
-  cut := (total * cut_pct) / 100;
-  net := total - cut;
-  if p_recipient is not null and p_recipient <> p_caller and net > 0 then
-    perform public.ledger_credit(p_recipient, 'earned', p_feature || '_income',
-      net, p_ref, jsonb_build_object('from', p_caller, 'feature', p_feature,
-      'gross', total, 'cut', cut));
-    insert into public.point_events (user_id, event, amount, metadata)
-      values (p_recipient, p_feature || '_income', net,
-              jsonb_build_object('from', p_caller, 'ref', p_ref));
-  end if;
-
-  -- Catat revenue platform (cut).
-  if cut > 0 then
-    insert into public.platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
-      values (p_feature, cut, p_caller, p_recipient, p_ref,
-              jsonb_build_object('gross', total, 'net', net, 'pct', cut_pct));
-  end if;
-
-  insert into public.point_events (user_id, event, amount, metadata)
-    values (p_caller, p_feature, -total,
-            jsonb_build_object('units', p_units, 'ref', p_ref));
-
-  return jsonb_build_object('ok', true, 'charged', total, 'cut', cut,
-    'net', net, 'remaining', remaining, 'caller', p_caller);
+  return public._charge_metered_core(p_caller, p_feature, p_ref, p_units, p_recipient);
 end; $function$
 
 -- snapshot-fn: chat_block_state
@@ -5768,6 +6730,156 @@ begin
   end if;
   return new;
 end;
+$function$
+
+-- snapshot-fn: check_user_total_coins
+CREATE OR REPLACE FUNCTION public.check_user_total_coins(p_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+    total_coins int;
+BEGIN
+    -- GUARD (audit 2026-10-31): hanya boleh membaca milik sendiri.
+    if auth.uid() is not null and p_user_id is distinct from auth.uid() then
+        return jsonb_build_object('error', 'FORBIDDEN');
+    end if;
+
+    -- Kumulatif kredit seumur hidup (selaras get_user_missions).
+    SELECT COALESCE(SUM(amount), 0) INTO total_coins
+    FROM public.coin_ledger
+    WHERE user_id = p_user_id AND amount > 0;
+
+    RETURN jsonb_build_object('total_coins', total_coins);
+END;
+$function$
+
+-- snapshot-fn: claim_mission_reward
+CREATE OR REPLACE FUNCTION public.claim_mission_reward(p_user_id uuid, p_mission_key text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_mission record;
+    v_user_mission record;
+    v_period date;
+    v_new_points int;
+    v_claimed_id bigint;
+    v_earned_bal bigint;
+    v_is_coins_mission boolean := false;
+    v_completed boolean;
+    v_gender text;
+    v_reward_bucket text;
+BEGIN
+    if auth.uid() is not null and p_user_id is distinct from auth.uid() then
+        return jsonb_build_object('error', 'FORBIDDEN');
+    end if;
+
+    IF (SELECT points_enabled FROM app_settings WHERE id = 'global') IS FALSE THEN
+        RETURN jsonb_build_object('error', 'POINTS_DISABLED');
+    END IF;
+
+    SELECT * INTO v_mission
+    FROM public.missions
+    WHERE mission_key = p_mission_key;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('error', 'MISSION_NOT_FOUND');
+    END IF;
+
+    -- 2026-11-02: tegakkan gender misi di SERVER juga. Sebelumnya misi
+    -- female-only (nyonya_1000) difilter hanya di get_user_missions, jadi
+    -- male bisa mengklaimnya lewat RPC langsung.
+    SELECT gender INTO v_gender FROM public.profiles WHERE id = p_user_id;
+    IF v_mission.gender IS NOT NULL
+       AND v_mission.gender <> 'all'
+       AND COALESCE(v_gender, 'all') <> v_mission.gender THEN
+        RETURN jsonb_build_object('error', 'MISSION_NOT_FOUND');
+    END IF;
+
+    v_period := CASE WHEN v_mission.is_daily THEN CURRENT_DATE ELSE NULL END;
+
+    -- Bucket reward: female → earned (withdrawable); selain female → bonus
+    -- (tidak bisa dicairkan, tidak bisa ditransfer). Lihat 20261101190000.
+    v_reward_bucket := CASE WHEN v_gender = 'female' THEN 'earned' ELSE 'bonus' END;
+
+    v_is_coins_mission := (v_mission.target_unit = 'coins');
+
+    IF v_is_coins_mission THEN
+        SELECT COALESCE(SUM(amount), 0) INTO v_earned_bal
+          FROM public.coin_ledger
+         WHERE user_id = p_user_id AND bucket = 'earned';
+
+        v_completed := (v_earned_bal >= v_mission.target_value);
+        IF NOT v_completed THEN
+            RETURN jsonb_build_object('error', 'MISSION_NOT_COMPLETED');
+        END IF;
+
+        INSERT INTO public.user_missions
+            (user_id, mission_id, progress, is_completed, completed_at, period_date)
+        VALUES (
+            p_user_id,
+            v_mission.id,
+            LEAST(v_earned_bal, v_mission.target_value)::int,
+            true,
+            now(),
+            v_period
+        )
+        ON CONFLICT (user_id, mission_id, COALESCE(period_date, '1970-01-01'::date))
+        DO UPDATE SET
+            progress = LEAST(v_earned_bal, v_mission.target_value)::int,
+            is_completed = true,
+            completed_at = COALESCE(user_missions.completed_at, now());
+    ELSE
+        SELECT * INTO v_user_mission
+        FROM public.user_missions
+        WHERE user_id = p_user_id
+          AND mission_id = v_mission.id
+          AND COALESCE(period_date, '1970-01-01'::date) = COALESCE(v_period, '1970-01-01'::date)
+          FOR UPDATE;
+
+        IF NOT FOUND THEN
+            RETURN jsonb_build_object('error', 'MISSION_NOT_STARTED');
+        END IF;
+
+        IF NOT v_user_mission.is_completed THEN
+            RETURN jsonb_build_object('error', 'MISSION_NOT_COMPLETED');
+        END IF;
+
+        IF v_user_mission.claimed THEN
+            RETURN jsonb_build_object('error', 'ALREADY_CLAIMED');
+        END IF;
+    END IF;
+
+    UPDATE public.user_missions
+    SET claimed = true, claimed_at = now()
+    WHERE user_id = p_user_id
+      AND mission_id = v_mission.id
+      AND COALESCE(period_date, '1970-01-01'::date) = COALESCE(v_period, '1970-01-01'::date)
+      AND claimed = false
+    RETURNING id INTO v_claimed_id;
+
+    IF v_claimed_id IS NULL THEN
+        RETURN jsonb_build_object('error', 'ALREADY_CLAIMED');
+    END IF;
+
+    INSERT INTO public.coin_ledger (user_id, bucket, type, amount, ref_id)
+    VALUES (p_user_id, v_reward_bucket, 'mission_reward', v_mission.reward_coins, p_mission_key);
+
+    SELECT points INTO v_new_points
+    FROM public.profiles
+    WHERE id = p_user_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'coins', v_mission.reward_coins,
+        'bucket', v_reward_bucket,
+        'total_points', v_new_points
+    );
+END;
 $function$
 
 -- snapshot-fn: claim_nickname
@@ -6454,23 +7566,40 @@ CREATE OR REPLACE FUNCTION public.credit_welcome_bonus(p_user uuid, p_install_id
 AS $function$
 declare
   coins int; max_ip int; ip_count int; tot int; existing int;
+  v_gender text;
+  v_is_client boolean := coalesce(auth.role(), '') = 'authenticated';
 begin
   if p_user is null then raise exception 'Missing user'; end if;
+  -- GUARD (defense in depth; akses utama dijaga GRANT di §4): pemanggil
+  -- CLIENT hanya boleh mengkredit dirinya sendiri. Edge function memakai
+  -- service_role → auth.role() bukan 'authenticated' → lolos.
+  if v_is_client and auth.uid() is not null and p_user <> auth.uid() then    raise exception 'Forbidden: tidak boleh mengkredit user lain'
+      using errcode = '42501';
+  end if;
   if p_kind not in ('anon','register') then
     raise exception 'Invalid kind: %', p_kind;
   end if;
   if p_install_id is null or length(trim(p_install_id)) < 6 then
     raise exception 'Invalid install_id';
   end if;
-
+  if (select points_enabled from app_settings where id = 'global') is false then
+    return jsonb_build_object('ok', true, 'granted', false,
+      'reason', 'points_disabled', 'coins', 0,
+      'total', public.yukcoin_total(p_user));
+  end if;
+  -- 2026-10-31: bonus koin HANYA untuk MALE.
+  select gender into v_gender from public.profiles where id = p_user;
+  if v_gender = 'female' then
+    return jsonb_build_object('ok', true, 'granted', false,
+      'reason', 'female_no_bonus', 'coins', 0,
+      'total', public.yukcoin_total(p_user));
+  end if;
   select case p_kind
            when 'anon' then coalesce(welcome_anon_coins,100)
            else coalesce(welcome_register_coins,100) end,
          coalesce(welcome_max_claims_per_ip_day, 3)
     into coins, max_ip
     from app_settings where id = 'global';
-
-  -- Lapis 1: install_id + kind sudah pernah klaim?
   select count(*) into existing from public.bonus_claims
     where install_id = p_install_id and kind = p_kind;
   if existing > 0 then
@@ -6478,8 +7607,6 @@ begin
       'reason', 'already_claimed', 'coins', 0,
       'total', public.yukcoin_total(p_user));
   end if;
-
-  -- Lapis 2: limit klaim per IP / 24 jam (bila IP tersedia).
   if p_ip is not null and length(trim(p_ip)) > 0 then
     select count(*) into ip_count from public.bonus_claims
       where ip = p_ip and kind = p_kind
@@ -6490,8 +7617,6 @@ begin
         'total', public.yukcoin_total(p_user));
     end if;
   end if;
-
-  -- Beri bonus (semua ke bucket 'bonus').
   insert into public.bonus_claims(install_id, kind, user_id, ip)
     values (p_install_id, p_kind, p_user, nullif(trim(coalesce(p_ip,'')), ''))
     on conflict (install_id, kind) do nothing;
@@ -6499,13 +7624,11 @@ begin
     return jsonb_build_object('ok', true, 'granted', false,
       'reason', 'race', 'coins', 0, 'total', public.yukcoin_total(p_user));
   end if;
-
   tot := public.ledger_credit(p_user, 'bonus', 'welcome_' || p_kind, coins,
            null, jsonb_build_object('install_id', p_install_id, 'ip', p_ip));
   insert into public.point_events(user_id, event, amount, metadata)
     values (p_user, 'welcome_' || p_kind, coins,
             jsonb_build_object('install_id', p_install_id));
-
   return jsonb_build_object('ok', true, 'granted', true, 'coins', coins,
     'total', tot);
 end; $function$
@@ -6741,11 +7864,179 @@ CREATE OR REPLACE FUNCTION public.daily_login_bonus()
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare cur_points int;
+declare
+  today date;
+  last_date date;
+  cur_streak int;
+  new_streak int;
+  bonus int;
+  v_gender text;
 begin
-  select points into cur_points from profiles where id = auth.uid();
-  return jsonb_build_object('points', coalesce(cur_points, 0), 'streak', 0, 'bonus', 0);
-end; $function$
+  today := (now() at time zone 'Asia/Jakarta')::date;
+
+  select last_login_date, login_streak, gender
+    into last_date, cur_streak, v_gender
+    from profiles where id = auth.uid();
+
+  if v_gender is null then
+    return jsonb_build_object('streak', 0, 'bonus', 0, 'total',
+      public.yukcoin_total(auth.uid()));
+  end if;
+
+  -- Kill-switch ekonomi: points_enabled=false → tanpa kredit.
+  if (select points_enabled from app_settings where id = 'global') is false then
+    return jsonb_build_object('streak', coalesce(cur_streak, 0), 'bonus', 0,
+      'total', public.yukcoin_total(auth.uid()));
+  end if;
+
+  -- Male only: female tidak pernah dapat tetesan koin gratis.
+  if v_gender <> 'male' then
+    return jsonb_build_object('streak', coalesce(cur_streak, 0), 'bonus', 0,
+      'total', public.yukcoin_total(auth.uid()));
+  end if;
+
+  -- Sudah klaim hari ini → idempotent, tidak menambah koin.
+  if last_date is not null and last_date >= today then
+    return jsonb_build_object('streak', coalesce(cur_streak, 0), 'bonus', 0,
+      'total', public.yukcoin_total(auth.uid()));
+  end if;
+
+  -- Streak: lanjut bila kemarin klaim; siklus ulang setelah hari ke-7.
+  if last_date is not null and last_date = today - 1 then
+    new_streak := coalesce(cur_streak, 0) + 1;
+    if new_streak > 7 then
+      new_streak := 1;
+    end if;
+  else
+    new_streak := 1;
+  end if;
+
+  bonus := public.streak_bonus_amount(new_streak);
+
+  update profiles set
+    login_streak = new_streak,
+    last_login_date = today,
+    login_at = now(),
+    room_reads_today = 0,
+    new_chats_today = 0,
+    one_time_actions = one_time_actions - array[
+      'online_5min','online_30min','online_60min','online_120min'
+    ]
+  where id = auth.uid();
+
+  -- Bucket 'bonus' = non-withdrawable; wallet ikut via wallet_sync_points.
+  perform public.ledger_credit(auth.uid(), 'bonus', 'daily_login', bonus,
+    'daily_login', jsonb_build_object('streak', new_streak));
+
+  return jsonb_build_object('streak', new_streak, 'bonus', bonus,
+    'total', public.yukcoin_total(auth.uid()));
+end;
+$function$
+
+-- snapshot-fn: decide_country_permit
+CREATE OR REPLACE FUNCTION public.decide_country_permit(p_uid uuid, p_country text, p_approve boolean, p_note text DEFAULT ''::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me  uuid := auth.uid();
+  ok  boolean;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  ok := public.is_chatyuk_admin(me)
+     or public.is_country_moderator(p_country, me);
+  if not ok then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  update public.country_send_permits
+     set status = case when p_approve then 'approved' else 'rejected' end,
+         decided_by = me,
+         decided_at = now(),
+         decision_note = coalesce(p_note, '')
+   where uid = p_uid and country = p_country;
+
+  if not found then
+    raise exception 'permit_not_found' using errcode = 'P0002';
+  end if;
+
+  insert into public.moderator_actions
+    (scope, scope_value, uid, target_uid, action, note)
+  values ('country', p_country, me, p_uid,
+          case when p_approve then 'grant_permit' else 'revoke_permit' end,
+          coalesce(p_note, ''));
+
+  return jsonb_build_object('ok', true, 'approved', p_approve);
+end;
+$function$
+
+-- snapshot-fn: decide_moderator_application
+CREATE OR REPLACE FUNCTION public.decide_moderator_application(p_application_id bigint, p_approve boolean, p_note text DEFAULT ''::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me   uuid := auth.uid();
+  a    public.moderator_applications%rowtype;
+  v_is_admin     boolean;
+  v_is_moderator boolean;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+
+  select * into a from public.moderator_applications where id = p_application_id;
+  if a.id is null then
+    raise exception 'application_not_found' using errcode = 'P0002';
+  end if;
+  if a.status <> 'pending' then
+    return jsonb_build_object('ok', false, 'error', 'already_decided');
+  end if;
+
+  v_is_admin := public.is_chatyuk_admin(me);
+  v_is_moderator := public.is_country_moderator(a.scope_value, me);
+  if not (v_is_admin or v_is_moderator) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  if p_approve then
+    perform pg_advisory_xact_lock(hashtext('modslot:' || a.scope_value));
+    if public.active_moderator_count(a.scope_value)
+       - (case when public.is_country_moderator(a.scope_value, a.uid)
+               then 1 else 0 end)
+       >= 2 then
+      return jsonb_build_object('ok', false, 'error', 'slots_full', 'max', 2);
+    end if;
+  end if;
+
+  update public.moderator_applications
+     set status = case when p_approve then 'approved' else 'rejected' end,
+         decided_by = me,
+         decided_at = now(),
+         decision_note = coalesce(p_note, '')
+   where id = p_application_id;
+
+  if p_approve then
+    insert into public.country_moderators (scope, scope_value, uid, granted_by, source)
+    values ('country', a.scope_value, a.uid, me, 'application')
+    on conflict (scope, scope_value, uid) do update
+      set revoked_at = null, granted_by = me, granted_at = now();
+  end if;
+
+  insert into public.moderator_actions (scope, scope_value, uid, target_uid, action, note)
+  values ('country', a.scope_value, me, a.uid,
+          case when p_approve then 'grant_permit' else 'dismiss_report' end,
+          case when p_approve then 'moderator_approved' else 'moderator_rejected' end);
+
+  return jsonb_build_object('ok', true, 'approved', p_approve);
+end;
+$function$
 
 -- snapshot-fn: deduct_chat_point
 CREATE OR REPLACE FUNCTION public.deduct_chat_point(msg_type text)
@@ -6762,18 +8053,17 @@ begin
     select points into remaining from profiles where id = auth.uid();
     return coalesce(remaining, 0);
   end if;
-
+  -- 2026-10-31: chat TEKS gratis untuk semua gender. Hanya foto & view-once
+  -- yang berbayar (pendorong top-up male + income female dari unlock foto).
   cost := case msg_type
     when 'image' then c_img
     when 'view_once' then c_vo
     when 'view_once_expired' then 0
-    else c_text end;
-
+    else 0 end;
   if cost = 0 then
     select points into remaining from profiles where id = auth.uid();
     return coalesce(remaining, 0);
   end if;
-
   remaining := public.ledger_spend(auth.uid(), 'spend_chat', cost, msg_type);
   insert into point_events (user_id, event, amount, metadata)
     values (auth.uid(), 'deduct', -cost, jsonb_build_object('msg_type', msg_type));
@@ -6965,6 +8255,95 @@ CREATE OR REPLACE FUNCTION public.earth_distance(earth, earth)
  LANGUAGE sql
  IMMUTABLE PARALLEL SAFE STRICT
 RETURN sec_to_gc(cube_distance(($1)::cube, ($2)::cube))
+
+-- snapshot-fn: economy_invariant_check
+CREATE OR REPLACE FUNCTION public.economy_invariant_check(p_limit integer DEFAULT 100)
+ RETURNS TABLE(check_name text, user_id uuid, expected bigint, actual bigint, detail text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if p_limit is null or p_limit < 1 then p_limit := 100; end if;
+
+  -- 1) profiles.points ≠ sum(ledger) — cache total keliru
+  return query
+    with sums as (
+      select l.user_id, sum(l.amount)::bigint as total
+      from public.coin_ledger l group by l.user_id
+    )
+    select 'points_mismatch'::text, p.id, s.total, p.points::bigint,
+           'profiles.points <> sum(coin_ledger.amount)'::text
+    from public.profiles p join sums s on s.user_id = p.id
+    where p.points <> s.total
+      and not exists (select 1 from public.economy_audit_exclusions e
+                       where e.check_name = 'points_mismatch' and e.user_id = p.id)
+    limit p_limit;
+
+  -- 2) saldo hantu: tak ada baris ledger tapi kolom saldo non-nol
+  return query
+    select 'phantom_balance'::text, p.id, 0::bigint,
+           (p.points + p.bonus_balance + p.earned_balance)::bigint,
+           'no ledger rows but balance columns non-zero'::text
+    from public.profiles p
+    where (p.points <> 0 or p.bonus_balance <> 0 or p.earned_balance <> 0)
+      and not exists (select 1 from public.coin_ledger l where l.user_id = p.id)
+      and not exists (select 1 from public.economy_audit_exclusions e
+                       where e.check_name = 'phantom_balance' and e.user_id = p.id)
+    limit p_limit;
+
+  -- 3) bonus_balance ≠ sum(bucket='bonus')
+  return query
+    with sums as (
+      select l.user_id, sum(l.amount)::bigint as b
+      from public.coin_ledger l where l.bucket = 'bonus' group by l.user_id
+    )
+    select 'bonus_mismatch'::text, p.id, s.b, p.bonus_balance::bigint,
+           'profiles.bonus_balance <> sum(bucket=bonus)'::text
+    from public.profiles p join sums s on s.user_id = p.id
+    where p.bonus_balance <> s.b
+      and not exists (select 1 from public.economy_audit_exclusions e
+                       where e.check_name = 'bonus_mismatch' and e.user_id = p.id)
+    limit p_limit;
+
+  -- 4) earned_balance ≠ sum(bucket='earned')
+  return query
+    with sums as (
+      select l.user_id, sum(l.amount)::bigint as e
+      from public.coin_ledger l where l.bucket = 'earned' group by l.user_id
+    )
+    select 'earned_mismatch'::text, p.id, s.e, p.earned_balance::bigint,
+           'profiles.earned_balance <> sum(bucket=earned)'::text
+    from public.profiles p join sums s on s.user_id = p.id
+    where p.earned_balance <> s.e
+      and not exists (select 1 from public.economy_audit_exclusions e
+                       where e.check_name = 'earned_mismatch' and e.user_id = p.id)
+    limit p_limit;
+
+  -- 5) bucket negatif — debit melebihi kredit di bucket tsb
+  return query
+    select 'negative_bucket'::text, l.user_id, 0::bigint, sum(l.amount)::bigint,
+           ('bucket=' || l.bucket)::text
+    from public.coin_ledger l
+    where not exists (select 1 from public.economy_audit_exclusions e
+                       where e.check_name = 'negative_bucket' and e.user_id = l.user_id)
+    group by l.user_id, l.bucket
+    having sum(l.amount) < 0
+    limit p_limit;
+
+  -- 6) baris ledger untuk user tanpa profil — residu akun terhapus yang
+  --    SUDAH dicatat dikecualikan; laporan baru tetap muncul.
+  return query
+    select 'orphan_ledger'::text, l.user_id, 0::bigint, count(*)::bigint,
+           'ledger rows without matching profile'::text
+    from public.coin_ledger l
+    where not exists (select 1 from public.profiles p where p.id = l.user_id)
+      and not exists (select 1 from public.economy_audit_exclusions e
+                       where e.check_name = 'orphan_ledger' and e.user_id = l.user_id)
+    group by l.user_id
+    limit p_limit;
+end;
+$function$
 
 -- snapshot-fn: edit_message_v2
 CREATE OR REPLACE FUNCTION public.edit_message_v2(p_message_id bigint, p_new_text text)
@@ -7188,6 +8567,26 @@ begin
 end;
 $function$
 
+-- snapshot-fn: enforce_ghost_mode_status
+CREATE OR REPLACE FUNCTION public.enforce_ghost_mode_status()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  -- Jangan sentuh saat status sengaja 'invisible' (ghost milik admin) —
+  -- mekanisme itu punya enforcement sendiri (trg_enforce_invisible).
+  if new.status in ('online', 'idle') and exists (
+    select 1 from public.ghost_mode_active g
+    where g.user_id = new.id and g.expires_at > now()
+  ) then
+    new.status := 'offline';
+  end if;
+  return new;
+end;
+$function$
+
 -- snapshot-fn: enforce_invisible
 CREATE OR REPLACE FUNCTION public.enforce_invisible()
  RETURNS trigger
@@ -7220,6 +8619,43 @@ begin
   if new.nickname ~ '^Anon[0-9A-F]{8}[0-9]*$' then
     new.needs_onboarding := true;
   end if;
+  return new;
+end;
+$function$
+
+-- snapshot-fn: enforce_room_media_gate
+CREATE OR REPLACE FUNCTION public.enforce_room_media_gate()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_private boolean;
+begin
+  if not public.is_room_media_type(new.type) then
+    return new;
+  end if;
+
+  select r.is_private into v_private from public.rooms r where r.id = new.room_id;
+  -- Room privat / grup privat: perilaku lama.
+  if coalesce(v_private, false) then
+    return new;
+  end if;
+
+  -- Admin request (service_role / email admin) tetap bebas (mis. migrasi data).
+  if public.is_admin_request() then
+    return new;
+  end if;
+
+  if not public.can_send_room_media(new.room_id, new.sender_id) then
+    raise exception 'media_trust_gate' using errcode = '42501';
+  end if;
+
+  if not public.room_media_rate_ok(new.room_id, new.sender_id) then
+    raise exception 'media_rate_limited' using errcode = '42901';
+  end if;
+
   return new;
 end;
 $function$
@@ -7301,6 +8737,29 @@ begin
   end if;
   return new;
 end; $function$
+
+-- snapshot-fn: flag_media_review
+CREATE OR REPLACE FUNCTION public.flag_media_review(p_message_id text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+
+  update public.messages
+     set needs_review = true
+   where id::text = p_message_id
+     and sender_id = me;
+
+  return jsonb_build_object('ok', found);
+end;
+$function$
 
 -- snapshot-fn: fn_archive_deleted_user
 CREATE OR REPLACE FUNCTION public.fn_archive_deleted_user(p_uid uuid, p_reason text, p_claimed_by uuid DEFAULT NULL::uuid, p_claimed_nick text DEFAULT NULL::text)
@@ -7435,7 +8894,7 @@ CREATE OR REPLACE FUNCTION public.follow_user(p_followee uuid)
  SET search_path TO 'public'
 AS $function$
 declare
-  me uuid := auth.uid(); nm text;
+  me uuid := auth.uid(); nm text; v_friend boolean;
 begin
   if me is null then raise exception 'Not authenticated'; end if;
   if p_followee is null or p_followee = me then raise exception 'Invalid target'; end if;
@@ -7453,11 +8912,22 @@ begin
   insert into follows (follower_id, followee_id) values (me, p_followee)
     on conflict do nothing;
 
+  -- Follow balik = teman: tutup permintaan pending di antara keduanya.
+  v_friend := exists (select 1 from follows
+                       where follower_id = p_followee and followee_id = me);
+  if v_friend then
+    update friend_requests
+       set status = 'accepted', responded_at = now()
+     where status = 'pending'
+       and ((from_id = me and to_id = p_followee)
+         or (from_id = p_followee and to_id = me));
+  end if;
+
   select nickname into nm from profiles where id = me;
   perform public.social_push(p_followee, coalesce(nm, 'Anon'), 'started following you',
     jsonb_build_object('type', 'follow', 'fromUid', me, 'fromName', coalesce(nm, 'Anon')));
 
-  return jsonb_build_object('ok', true, 'following', true);
+  return jsonb_build_object('ok', true, 'following', true, 'friend', v_friend);
 end;
 $function$
 
@@ -7608,6 +9078,12 @@ declare
 begin
   if me is null then raise exception 'Not authenticated'; end if;
 
+  -- 2026-10-31: hanya call/video/gift yang memakai poin. Semua fitur
+  -- akses-harian (filter gender, nearby, dll) GRATIS.
+  return jsonb_build_object('ok', true, 'already', true, 'charged', 0,
+    'remaining', public.yukcoin_total(me), 'free', true);
+
+  -- (kode lama dipertahankan di bawah, tidak dieksekusi — untuk referensi)
   cfg := (select metered_pricing -> coalesce(p_price_feature, p_feature)
             from app_settings where id = 'global');
   if cfg is null then raise exception 'Unknown feature: %', p_feature; end if;
@@ -7633,7 +9109,8 @@ begin
 
   return jsonb_build_object('ok', true, 'already', false, 'charged', unit_cost,
     'remaining', remaining);
-end; $function$
+end;
+$function$
 
 -- snapshot-fn: gc_to_sec
 CREATE OR REPLACE FUNCTION public.gc_to_sec(double precision)
@@ -7672,6 +9149,157 @@ CREATE OR REPLACE FUNCTION public.get_data_sizes()
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$ SELECT 'text', COALESCE(SUM(pg_column_size(text)), 0), COUNT(*) FROM (SELECT text FROM messages WHERE text != '' UNION ALL SELECT text FROM private_messages WHERE text != '') t UNION ALL SELECT 'image', COALESCE(SUM(pg_column_size(image_data)), 0), COUNT(*) FROM (SELECT image_data FROM messages WHERE image_data != '' UNION ALL SELECT image_data FROM private_messages WHERE image_data != '') i; $function$
+
+-- snapshot-fn: get_earnings_summary
+CREATE OR REPLACE FUNCTION public.get_earnings_summary(p_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    result jsonb;
+    v_total bigint;
+    v_weekly bigint;
+    v_today bigint;
+    v_gift bigint;
+    v_mission bigint;
+    v_private_call bigint;
+    v_match_call bigint;
+    v_other bigint;
+    v_withdrawable bigint;
+    v_total_balance bigint;
+    v_video_calls bigint;
+    v_video_seconds bigint;
+    v_match_calls bigint;
+    v_match_seconds bigint;
+    v_private_total bigint;
+    v_private_answered bigint;
+    v_day_start timestamptz;
+    v_week_start timestamptz;
+BEGIN
+    if coalesce(auth.role(), '') <> 'service_role'
+       and auth.uid() is not null
+       and p_user_id is distinct from auth.uid() then
+        raise exception 'Forbidden: tidak boleh membaca saldo user lain'
+            using errcode = '42501';
+    end if;
+
+    -- Awal hari/minggu dalam Asia/Jakarta, sebagai timestamptz. Bandingkan
+    -- timestamptz dengan timestamptz — `date_trunc('day', now() at time zone
+    -- …)` mengembalikan timestamp tanpa zona yang lalu dibandingkan dengan
+    -- kolom timestamptz → salah tafsir (terbukti: baris 23:29 UTC di hari
+    -- berikutnya WIB tidak terhitung).
+    v_day_start  := (((now() AT TIME ZONE 'Asia/Jakarta')::date)::timestamp
+                       AT TIME ZONE 'Asia/Jakarta');
+    v_week_start := ((date_trunc('week',
+                       (now() AT TIME ZONE 'Asia/Jakarta'))::timestamp)
+                       AT TIME ZONE 'Asia/Jakarta');
+
+    SELECT
+        COALESCE(SUM(l.amount), 0),
+        COALESCE(SUM(l.amount) FILTER (WHERE l.created_at >= v_week_start), 0),
+        COALESCE(SUM(l.amount) FILTER (WHERE l.created_at >= v_day_start), 0),
+        COALESCE(SUM(l.amount) FILTER (WHERE l.type IN ('gift_recv','coin_received')), 0),
+        COALESCE(SUM(l.amount) FILTER (WHERE l.type = 'mission_reward'), 0),
+        -- Privasi = income call_* yang ref_id-nya BUKAN call random.
+        COALESCE(SUM(l.amount) FILTER (
+            WHERE l.type IN ('call_audio_income','call_video_income',
+                             'private_call_income')
+              AND rc.id is null), 0),
+        -- Match = tipe match_call_income ATAU income call_* dari call random.
+        COALESCE(SUM(l.amount) FILTER (
+            WHERE l.type = 'match_call_income'
+               OR (l.type IN ('call_audio_income','call_video_income')
+                   AND rc.id is not null)), 0),
+        COALESCE(SUM(l.amount) FILTER (
+            WHERE l.type NOT IN ('gift_recv','coin_received','mission_reward',
+                                 'call_audio_income','call_video_income',
+                                 'private_call_income','match_call_income')), 0)
+    INTO v_total, v_weekly, v_today, v_gift, v_mission,
+         v_private_call, v_match_call, v_other
+    FROM public.coin_ledger l
+    LEFT JOIN public.calls rc
+      ON rc.id::text = l.ref_id AND rc.kind = 'random'
+    WHERE l.user_id = p_user_id
+      AND l.amount > 0
+      AND l.type IN (
+            'gift_recv','coin_received',
+            'mission_reward',
+            'call_audio_income','call_video_income',
+            'private_call_income','match_call_income',
+            'photo_income','photo_unlock_income',
+            'subscribe_income'
+      )
+      AND coalesce(l.ref_id, '') NOT IN ('t','test-income')
+      AND coalesce(l.ref_id, '') NOT LIKE 'cleanup\_%'
+      AND coalesce(l.ref_id, '') NOT LIKE 'female_bonus_reset\_%';
+
+    -- 2026-11-02: yang bisa DITARIK = bucket `earned` saja (sama dengan
+    -- validasi request_withdraw). `total_balance` = semua bucket, untuk
+    -- informasi — jangan tertukar.
+    SELECT COALESCE(SUM(amount) FILTER (WHERE bucket = 'earned'), 0)
+      INTO v_withdrawable
+      FROM public.coin_ledger
+     WHERE user_id = p_user_id;
+
+    SELECT COALESCE(SUM(amount), 0) INTO v_total_balance
+      FROM public.coin_ledger
+     WHERE user_id = p_user_id;
+
+    SELECT
+        COUNT(*) FILTER (WHERE call_type = 'video'),
+        COALESCE(SUM(EXTRACT(EPOCH FROM (ended_at - answered_at)))
+                 FILTER (WHERE call_type = 'video' AND answered_at IS NOT NULL
+                         AND ended_at IS NOT NULL), 0)::bigint,
+        COUNT(*) FILTER (WHERE kind = 'random'),
+        COALESCE(SUM(EXTRACT(EPOCH FROM (ended_at - answered_at)))
+                 FILTER (WHERE kind = 'random' AND answered_at IS NOT NULL
+                         AND ended_at IS NOT NULL), 0)::bigint
+    INTO v_video_calls, v_video_seconds, v_match_calls, v_match_seconds
+    FROM public.calls
+    WHERE (caller_id = p_user_id OR callee_id = p_user_id)
+      AND status = 'ended';
+    SELECT COUNT(*), COUNT(*) FILTER (WHERE answered_at IS NOT NULL)
+    INTO v_private_total, v_private_answered
+    FROM public.calls
+    WHERE callee_id = p_user_id
+      AND coalesce(kind, '') <> 'random'
+      AND status = 'ended';
+    result := jsonb_build_object(
+        'total_earnings', v_total,
+        'weekly_earnings', v_weekly,
+        'today_earnings', v_today,
+        'withdrawable', v_withdrawable,
+        'total_balance', v_total_balance,
+        'breakdown', jsonb_build_object(
+            'private_call', v_private_call,
+            'match_call', v_match_call,
+            'message', 0,
+            'gift', v_gift,
+            'mission', v_mission,
+            'bonus', 0,
+            'other', v_other
+        ),
+        'stats', jsonb_build_object(
+            'video_call_count', v_video_calls,
+            'video_call_seconds', v_video_seconds,
+            'match_call_count', v_match_calls,
+            'match_call_seconds', v_match_seconds,
+            'avg_match_seconds', CASE
+                WHEN v_match_calls > 0 THEN (v_match_seconds / v_match_calls)::bigint
+                ELSE 0 END,
+            'private_call_total', v_private_total,
+            'private_call_answered', v_private_answered,
+            'private_answer_rate', CASE
+                WHEN v_private_total > 0
+                THEN round((v_private_answered::numeric / v_private_total) * 100)
+                ELSE 0 END
+        )
+    );
+    RETURN result;
+END;
+$function$
 
 -- snapshot-fn: get_feature_flags
 CREATE OR REPLACE FUNCTION public.get_feature_flags()
@@ -7749,6 +9377,92 @@ begin
   return res;
 end; $function$
 
+-- snapshot-fn: get_my_level
+CREATE OR REPLACE FUNCTION public.get_my_level()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  cum int;
+  lvl int;
+  st public.user_level_state;
+  l record;
+  ladder jsonb;
+  just_rewarded jsonb := '[]'::jsonb;
+  points_on boolean;
+  v_gender text;
+begin
+  if me is null then raise exception 'Not authenticated'; end if;
+
+  -- Kumulatif topup = hanya kredit bucket 'topup' (amount > 0).
+  -- Spend (amount negatif) & bucket lain tidak mengurangi/menaikkan.
+  select coalesce(sum(amount), 0) into cum
+    from coin_ledger
+   where user_id = me and bucket = 'topup' and amount > 0;
+
+  select coalesce(max(level), 0) into lvl
+    from level_config where topup_coins <= cum;
+
+  select gender into v_gender from profiles where id = me;
+
+  select points_enabled into points_on from app_settings where id = 'global';
+
+  -- State + grant reward (idempoten): lock baris agar panggilan paralel
+  -- tidak dobel-credit (pola advisory-lock ala ledger_spend).
+  select * into st from user_level_state where user_id = me for update;
+  if not found then
+    insert into user_level_state (user_id, level, reward_granted_level)
+      values (me, lvl, 0)
+      on conflict (user_id) do nothing;
+    select * into st from user_level_state where user_id = me for update;
+  end if;
+
+  -- Reward hanya MALE (fitur My Level = male only) + kill-switch ekonomi.
+  if lvl > st.reward_granted_level
+     and v_gender = 'male'
+     and points_on is not false then
+    for l in select level, reward_coins from level_config
+             where level > st.reward_granted_level
+               and level <= lvl
+               and reward_coins > 0
+             order by level
+    loop
+      perform public.ledger_credit(me, 'bonus', 'level_reward',
+        l.reward_coins, 'level_' || l.level,
+        jsonb_build_object('level', l.level));
+      just_rewarded := just_rewarded || jsonb_build_array(
+        jsonb_build_object('level', l.level, 'coins', l.reward_coins));
+    end loop;
+    update user_level_state
+       set reward_granted_level = lvl, level = lvl, updated_at = now()
+     where user_id = me;
+  else
+    update user_level_state
+       set level = lvl, updated_at = now()
+     where user_id = me and level is distinct from lvl;
+  end if;
+
+  select jsonb_agg(jsonb_build_object(
+           'level', x.level, 'topup_coins', x.topup_coins,
+           'reward_coins', x.reward_coins) order by x.level)
+    into ladder
+    from level_config x;
+
+  return jsonb_build_object(
+    'level', lvl,
+    'cumulative', cum,
+    'next_level', (select min(level) from level_config where topup_coins > cum),
+    'next_at',    (select min(topup_coins) from level_config where topup_coins > cum),
+    'remaining',  coalesce((select min(topup_coins) from level_config where topup_coins > cum), 0) - cum,
+    'ladder', coalesce(ladder, '[]'::jsonb),
+    'just_rewarded', just_rewarded
+  );
+end;
+$function$
+
 -- snapshot-fn: get_my_topup_orders
 CREATE OR REPLACE FUNCTION public.get_my_topup_orders(row_limit integer DEFAULT 20)
  RETURNS jsonb
@@ -7800,7 +9514,6 @@ begin
   p_limit := least(greatest(coalesce(p_limit, 100), 1), 1000);
   if p_country is not null and btrim(p_country) = '' then p_country := null; end if;
 
-  -- Bypass admin dicek SEKALI (dulu dicek di dalam privacy_can_view 800x).
   v_bypass :=
     coalesce(
       (select privacy_bypass_enabled from public.app_settings where id = 'global'),
@@ -7812,7 +9525,6 @@ begin
     select
       p.id, p.nickname, p.gender, p.age, p.country, p.city, p.status, p.avatar,
       p.is_registered, p.last_seen, p.about,
-      p.friends_count, p.followers_count,
       coalesce(p.presence_visibility, 'nobody')      as presence_vis,
       coalesce(p.last_seen_visibility, 'nobody')     as seen_vis,
       coalesce(p.profile_photo_visibility, 'nobody') as photo_vis,
@@ -7822,6 +9534,12 @@ begin
       and p.status in ('online', 'idle')
       and p.last_seen >= now() - interval '30 minutes'
       and (p_country is null or p.country = p_country)
+      -- GHOST MODE: user yang membayar invisible TIDAK boleh muncul.
+      -- Admin bypass tetap melihat (untuk keperluan audit/monitoring).
+      and (v_bypass or not exists (
+        select 1 from public.ghost_mode_active g
+        where g.user_id = p.id and g.expires_at > now()
+      ))
       and not exists (
         select 1 from public.blocks b
         where (b.blocker_id = v_me and b.blocked_id = p.id)
@@ -7916,9 +9634,7 @@ begin
     'avatar', case when f.photo_ok then f.avatar else '' end,
     'is_registered', f.is_registered,
     'last_seen', case when f.seen_ok then f.last_seen else null end,
-    'about', case when f.about_ok then f.about else '' end,
-    'friends_count', f.friends_count,
-    'followers_count', f.followers_count
+    'about', case when f.about_ok then f.about else '' end
   ) order by f.last_seen desc), '[]'::jsonb)
   into rows
   from flags f
@@ -8148,6 +9864,112 @@ AS $function$
       ORDER BY pg_total_relation_size(schemaname || '.' || tablename) DESC;
       $function$
 
+-- snapshot-fn: get_user_level
+CREATE OR REPLACE FUNCTION public.get_user_level(p_user uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select jsonb_build_object('level', case
+    when (select gender from profiles where id = p_user) <> 'male' then 0
+    else coalesce((
+      select max(lc.level)
+        from level_config lc
+       where lc.topup_coins <= (
+         select coalesce(sum(amount), 0)
+           from coin_ledger
+          where user_id = p_user and bucket = 'topup' and amount > 0
+       )
+    ), 0)
+  end);
+$function$
+
+-- snapshot-fn: get_user_missions
+CREATE OR REPLACE FUNCTION public.get_user_missions(p_user_id uuid, p_period_date date DEFAULT NULL::date)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    result jsonb;
+    v_period date;
+    v_total bigint;
+    v_earned_bal bigint;
+    v_streak int;
+    v_last_login date;
+    v_gender text;
+BEGIN
+    if auth.uid() is not null and p_user_id is distinct from auth.uid() then
+        return jsonb_build_object('error', 'FORBIDDEN');
+    end if;
+
+    v_period := COALESCE(p_period_date, CURRENT_DATE);
+
+    SELECT COALESCE(SUM(amount), 0) INTO v_total
+      FROM public.coin_ledger
+     WHERE user_id = p_user_id AND amount > 0;
+
+    SELECT COALESCE(SUM(amount), 0) INTO v_earned_bal
+      FROM public.coin_ledger
+     WHERE user_id = p_user_id AND bucket = 'earned';
+
+    SELECT login_streak, last_login_date, gender
+      INTO v_streak, v_last_login, v_gender
+      FROM public.profiles
+     WHERE id = p_user_id;
+
+    WITH main_missions AS (
+        SELECT m.id, m.mission_key, m.title, m.description,
+               m.category, m.target_value, m.target_unit, m.reward_coins,
+               m.display_order,
+               CASE WHEN m.target_unit = 'coins'
+                    THEN GREATEST(0, LEAST(v_earned_bal, m.target_value))::int
+                    ELSE COALESCE(um.progress, 0) END AS progress,
+               CASE WHEN m.target_unit = 'coins'
+                    THEN (v_earned_bal >= m.target_value)
+                    ELSE COALESCE(um.is_completed, false) END AS is_completed,
+               COALESCE(um.claimed, false) AS claimed,
+               um.completed_at
+        FROM public.missions m
+        LEFT JOIN public.user_missions um
+               ON m.id = um.mission_id
+              AND um.user_id = p_user_id
+              AND um.period_date IS NULL
+        WHERE NOT m.is_daily
+          AND (m.gender = 'all' OR m.gender = COALESCE(v_gender, 'all'))
+    ),
+    daily_missions AS (
+        SELECT m.id, m.mission_key, m.title, m.description,
+               m.category, m.target_value, m.target_unit, m.reward_coins,
+               m.display_order, m.unlock_condition, m.schedule_start, m.schedule_end,
+               COALESCE(um.progress, 0) AS progress,
+               COALESCE(um.is_completed, false) AS is_completed,
+               COALESCE(um.claimed, false) AS claimed,
+               um.completed_at,
+               (v_total >= 1200) AS unlocked_by_total
+        FROM public.missions m
+        LEFT JOIN public.user_missions um
+               ON m.id = um.mission_id
+              AND um.user_id = p_user_id
+              AND um.period_date = v_period
+        WHERE m.is_daily
+          AND (m.gender = 'all' OR m.gender = COALESCE(v_gender, 'all'))
+    )
+    SELECT jsonb_build_object(
+        'main', (SELECT jsonb_agg(row_to_json(m) ORDER BY m.display_order) FROM main_missions m),
+        'daily', (SELECT jsonb_agg(row_to_json(dm) ORDER BY dm.display_order) FROM daily_missions dm),
+        'total_coins', v_total,
+        'login_streak', COALESCE(v_streak, 0),
+        'last_login_date', v_last_login,
+        'gender', v_gender
+    ) INTO result;
+
+    RETURN result;
+END;
+$function$
+
 -- snapshot-fn: get_user_photos_access
 CREATE OR REPLACE FUNCTION public.get_user_photos_access(p_user_id uuid)
  RETURNS jsonb
@@ -8212,6 +10034,92 @@ begin
   );
 end; $function$
 
+-- snapshot-fn: get_withdraw_account
+CREATE OR REPLACE FUNCTION public.get_withdraw_account()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_uid uuid := auth.uid();
+    v_rec record;
+BEGIN
+    IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
+
+    SELECT * INTO v_rec FROM public.withdraw_accounts WHERE user_id = v_uid;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('ok', true, 'has_account', false);
+    END IF;
+
+    RETURN jsonb_build_object('ok', true, 'has_account', true,
+        'dana_number', v_rec.dana_number, 'dana_name', v_rec.dana_name);
+END;
+$function$
+
+-- snapshot-fn: get_withdraw_config
+CREATE OR REPLACE FUNCTION public.get_withdraw_config()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    result jsonb;
+BEGIN
+    SELECT jsonb_build_object(
+        'rate', coalesce(withdraw_rate_idr, 7),
+        'min_coins', coalesce(withdraw_min_coins, 1500),
+        'fee_pct', coalesce(withdraw_fee_pct, 5),
+        'fee_min_idr', coalesce(withdraw_fee_min_idr, 1000),
+        'max_per_day', coalesce(withdraw_max_per_day, 3),
+        'min_interval_hours', coalesce(withdraw_min_interval_hours, 1),
+        'min_account_age_hours', coalesce(withdraw_min_account_age_hours, 72)
+    ) INTO result
+    FROM public.app_settings WHERE id = 'global';
+
+    RETURN coalesce(result, jsonb_build_object(
+        'rate', 7, 'min_coins', 1500, 'fee_pct', 5, 'fee_min_idr', 1000,
+        'max_per_day', 3, 'min_interval_hours', 1, 'min_account_age_hours', 72));
+END;
+$function$
+
+-- snapshot-fn: get_withdraw_history
+CREATE OR REPLACE FUNCTION public.get_withdraw_history(p_limit integer DEFAULT 30)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_uid uuid := auth.uid();
+    result jsonb;
+BEGIN
+    IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
+
+    SELECT jsonb_build_object(
+        'requests', coalesce((
+            SELECT jsonb_agg(row_to_json(w) ORDER BY w.created_at DESC)
+            FROM (
+                SELECT id, coin_amount, rate, gross_idr, fee_idr, payout_idr,
+                       status, pay_method, pay_account, pay_holder,
+                       admin_note, created_at, reviewed_at
+                  FROM public.withdrawal_requests
+                 WHERE user_id = v_uid
+                 ORDER BY created_at DESC
+                 LIMIT greatest(1, least(coalesce(p_limit, 30), 100))
+            ) w
+        ), '[]'::jsonb),
+        'earned_balance', (
+            SELECT coalesce(sum(amount) filter (where bucket = 'earned'), 0)
+              FROM public.coin_ledger WHERE user_id = v_uid
+        )
+    ) INTO result;
+
+    RETURN result;
+END;
+$function$
+
 -- snapshot-fn: get_yukcoin
 CREATE OR REPLACE FUNCTION public.get_yukcoin()
  RETURNS jsonb
@@ -8248,6 +10156,120 @@ BEGIN
   IF public.fn_room_role(p_uid, p_room_id) IS NULL THEN RAISE EXCEPTION 'Target not a member'; END IF;
   UPDATE public.room_members SET broadcast_granted = true WHERE room_id = p_room_id AND user_id = p_uid;
 END;
+$function$
+
+-- snapshot-fn: guard_country_lock
+CREATE OR REPLACE FUNCTION public.guard_country_lock()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_trusted boolean :=
+    coalesce(current_setting('chatyuk.country_ok', true), '') = '1';
+begin
+  -- Tidak ada perubahan → lolos.
+  if new.country is not distinct from old.country
+     and new.country_changed_at is not distinct from old.country_changed_at then
+    return new;
+  end if;
+
+  -- Jalur resmi (RPC), admin, belum pernah dikunci, atau lock sudah lewat.
+  if v_trusted
+     or public.is_chatyuk_admin(auth.uid())
+     or old.country_changed_at is null
+     or old.country_changed_at <= now() - interval '7 days' then
+    return new;
+  end if;
+
+  -- Terkunci: pertahankan nilai lama (tanpa error agar update kolom lain
+  -- pada baris yang sama tetap berhasil).
+  new.country := old.country;
+  new.country_changed_at := old.country_changed_at;
+  return new;
+end;
+$function$
+
+-- snapshot-fn: guard_economy_columns
+CREATE OR REPLACE FUNCTION public.guard_economy_columns()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  -- RPC resmi (ganti email, set is_registered saat registrasi/link) menandai
+  -- dirinya sendiri. Ledger trigger juga berjalan di konteks definer.
+  v_trusted boolean :=
+    coalesce(current_setting('chatyuk.economy_ok', true), '') = '1';
+begin
+  -- Hanya menegakkan aturan untuk permintaan CLIENT sungguhan. Konteks
+  -- internal (migrasi, job, service_role, test) tidak punya auth.uid() dan
+  -- memang berhak menyentuh kolom ini.
+  if auth.uid() is null
+     or coalesce(auth.role(), '') = 'service_role'
+     or v_trusted
+     or public.is_chatyuk_admin(auth.uid()) then
+    return new;
+  end if;
+
+  -- Nilai saldo & identitas hanya boleh berubah lewat trigger ledger / RPC.
+  if new.points is distinct from old.points then
+    new.points := old.points;
+  end if;
+  if new.bonus_balance is distinct from old.bonus_balance then
+    new.bonus_balance := old.bonus_balance;
+  end if;
+  if new.topup_balance is distinct from old.topup_balance then
+    new.topup_balance := old.topup_balance;
+  end if;
+  if new.earned_balance is distinct from old.earned_balance then
+    new.earned_balance := old.earned_balance;
+  end if;
+  if new.created_at is distinct from old.created_at then
+    new.created_at := old.created_at;
+  end if;
+
+  return new;
+end;
+$function$
+
+-- snapshot-fn: guard_gender_lock
+CREATE OR REPLACE FUNCTION public.guard_gender_lock()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  -- Tidak ada perubahan gender → lolos (update kolom lain bebas),
+  -- TAPI status lock WAJIB mengikuti nilai lama: client dilarang
+  -- membuka kunci sendiri (`gender_locked=false`).
+  if new.gender is not distinct from old.gender then
+    new.gender_locked := old.gender_locked;
+    return new;
+  end if;
+
+  -- Admin boleh mengoreksi (mis. salah daftar).
+  if public.is_chatyuk_admin(auth.uid()) then
+    new.gender_locked := true;
+    return new;
+  end if;
+
+  -- Terkunci → pertahankan nilai lama (tanpa error agar update kolom lain
+  -- pada baris yang sama tetap berhasil). Client juga tidak bisa memaksa
+  -- `gender_locked=false` karena nilainya dipulihkan di sini.
+  if old.gender_locked then
+    new.gender := old.gender;
+    new.gender_locked := true;
+    return new;
+  end if;
+
+  -- Perubahan pertama sah → langsung kunci.
+  new.gender_locked := true;
+  return new;
+end;
 $function$
 
 -- snapshot-fn: handle_new_private_message
@@ -8322,6 +10344,8 @@ AS $function$ select exists (select 1 from auth.users where id = coalesce(p_uid,
 CREATE OR REPLACE FUNCTION public.housekeeping_tick()
  RETURNS jsonb
  LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 declare
   v_idle   int := -1;
@@ -8330,7 +10354,8 @@ declare
   v_cron   int := 0;
 begin
   begin
-    v_idle := public.presence_idle_tick();
+    -- 10 mnt = 2.5x heartbeat klien (4 mnt). Lihat header migrasi ini.
+    v_idle := public.presence_idle_tick(interval '10 minutes');
   exception when others then null;
   end;
   begin
@@ -8568,6 +10593,22 @@ AS $function$
   );
 $function$
 
+-- snapshot-fn: is_country_moderator
+CREATE OR REPLACE FUNCTION public.is_country_moderator(p_country text, p_uid uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(p_uid is not null and exists (
+    select 1 from public.country_moderators cm
+     where cm.uid = p_uid
+       and cm.scope = 'country'
+       and cm.scope_value = p_country
+       and cm.revoked_at is null
+  ), false);
+$function$
+
 -- snapshot-fn: is_dummy_account
 CREATE OR REPLACE FUNCTION public.is_dummy_account(p_uid uuid)
  RETURNS boolean
@@ -8594,6 +10635,18 @@ AS $function$
     select 1 from public.ghost_mode_active
     where user_id = auth.uid() and expires_at > now()
   );
+$function$
+
+-- snapshot-fn: is_room_media_type
+CREATE OR REPLACE FUNCTION public.is_room_media_type(p_type text)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+AS $function$
+  select coalesce(p_type in (
+    'image', 'video', 'video_once', 'video_once_expired',
+    'sticker', 'file'
+  ), false);
 $function$
 
 -- snapshot-fn: join_private_room
@@ -8758,6 +10811,9 @@ declare
 begin
   if p_amount <= 0 then return public.wallet_sync_points(p_user); end if;
 
+  -- Serialisasi per user (re-entrant: aman bila pemanggil sudah memegang lock).
+  perform pg_advisory_xact_lock(hashtext('wallet:' || p_user::text));
+
   select coalesce(sum(amount) filter (where bucket='bonus'),0),
          coalesce(sum(amount) filter (where bucket='topup'),0),
          coalesce(sum(amount) filter (where bucket='earned'),0)
@@ -8767,14 +10823,12 @@ begin
     raise exception 'Not enough points';
   end if;
 
-  -- bonus dulu
   take := least(b, need);
   if take > 0 then
     insert into coin_ledger(user_id,bucket,type,amount,ref_id)
       values (p_user,'bonus',p_type,-take,p_ref);
     need := need - take;
   end if;
-  -- topup
   if need > 0 then
     take := least(t, need);
     if take > 0 then
@@ -8783,7 +10837,6 @@ begin
       need := need - take;
     end if;
   end if;
-  -- earned
   if need > 0 then
     take := least(e, need);
     if take > 0 then
@@ -8829,6 +10882,31 @@ begin
   end if;
 
   raise exception 'Not enough points';
+end; $function$
+
+-- snapshot-fn: ledger_spend_earned
+CREATE OR REPLACE FUNCTION public.ledger_spend_earned(p_user uuid, p_type text, p_amount integer, p_ref text DEFAULT NULL::text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare e int;
+begin
+  if p_amount <= 0 then return public.wallet_sync_points(p_user); end if;
+
+  perform pg_advisory_xact_lock(hashtext('wallet:' || p_user::text));
+
+  select coalesce(sum(amount) filter (where bucket='earned'), 0) into e
+    from coin_ledger where user_id = p_user;
+  if e < p_amount then
+    raise exception 'Not enough earned' using errcode = '22023';
+  end if;
+
+  insert into coin_ledger(user_id, bucket, type, amount, ref_id)
+    values (p_user, 'earned', p_type, -p_amount, p_ref);
+
+  return public.wallet_sync_points(p_user);
 end; $function$
 
 -- snapshot-fn: ledger_spend_paid
@@ -9502,6 +11580,365 @@ begin
   ) from app_settings where id = 'global');
 end; $function$
 
+-- snapshot-fn: moderator_candidates
+CREATE OR REPLACE FUNCTION public.moderator_candidates(p_country text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  if not (public.is_chatyuk_admin(me)
+          or public.is_country_moderator(p_country, me)) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'uid', t.uid, 'nickname', t.nickname, 'messages', t.n)
+           order by t.n desc)
+      from (
+        select m.sender_id as uid,
+               coalesce(max(pr.nickname), '?') as nickname,
+               count(*) as n
+          from public.messages m
+          join public.rooms r on r.id = m.room_id
+          left join public.profiles pr on pr.id = m.sender_id
+         where r.is_private = false
+           and r.country = p_country
+           and m.sender_id <> me
+           and not exists (
+             select 1 from public.country_moderators cm
+              where cm.uid = m.sender_id
+                and cm.scope = 'country'
+                and cm.scope_value = p_country
+                and cm.revoked_at is null
+           )
+         group by m.sender_id
+        having count(*) >= 20
+         order by count(*) desc
+         limit 30
+      ) t
+  ), '[]'::jsonb);
+end;
+$function$
+
+-- snapshot-fn: moderator_console
+CREATE OR REPLACE FUNCTION public.moderator_console(p_country text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  v_ok boolean;
+  v_apps jsonb;
+  v_permits jsonb;
+  v_reports jsonb;
+  v_reviews jsonb;
+  v_mods jsonb;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  v_ok := public.is_chatyuk_admin(me)
+       or public.is_country_moderator(p_country, me);
+  if not v_ok then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', a.id, 'uid', a.uid, 'reason', a.reason,
+           'created_at', a.created_at, 'nickname', pr.nickname)
+         order by a.created_at desc), '[]'::jsonb)
+    into v_apps
+    from public.moderator_applications a
+    left join public.profiles pr on pr.id = a.uid
+   where a.scope = 'country' and a.scope_value = p_country
+     and a.status = 'pending';
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'uid', s.uid, 'status', s.status, 'reason', s.reason,
+           'requested_at', s.requested_at, 'nickname', pr.nickname)
+         order by s.requested_at desc), '[]'::jsonb)
+    into v_permits
+    from public.country_send_permits s
+    left join public.profiles pr on pr.id = s.uid
+   where s.country = p_country and s.status = 'pending';
+
+  -- Laporan: sertakan tipe/path/teks + status sembunyi agar UI bisa
+  -- menampilkan thumbnail dan membatalkan penyembunyian.
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'message_id', r.message_id,
+           'reports', r.n,
+           'room_id', max(r.room_id),
+           'reason_code', max(r.reason_code),
+           'last_at', max(r.created_at),
+           'type', max(m.type),
+           'image_path', max(coalesce(m.image_path, '')),
+           'text', left(max(coalesce(m.text, '')), 120),
+           'hidden', bool_or(coalesce(m.is_deleted, false)))
+         order by max(r.created_at) desc), '[]'::jsonb)
+    into v_reports
+    from public.reports r
+    join public.messages m on m.id::text = r.message_id
+    join public.rooms ro on ro.id = m.room_id
+   where r.message_id is not null and r.status = 'open'
+     and ro.country = p_country
+   group by r.message_id;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'message_id', m.id::text,
+           'room_id', m.room_id,
+           'type', m.type,
+           'image_path', coalesce(m.image_path, ''),
+           'text', left(coalesce(m.text, ''), 120),
+           'created_at', m.created_at,
+           'sender_name', m.sender_name)
+         order by m.created_at desc), '[]'::jsonb)
+    into v_reviews
+    from public.messages m
+    join public.rooms ro on ro.id = m.room_id
+   where m.needs_review = true
+     and ro.country = p_country
+     and coalesce(m.is_deleted, false) = false
+   limit 100;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'uid', cm.uid, 'granted_at', cm.granted_at,
+           'nickname', pr.nickname, 'source', cm.source)
+         order by cm.granted_at desc), '[]'::jsonb)
+    into v_mods
+    from public.country_moderators cm
+    left join public.profiles pr on pr.id = cm.uid
+   where cm.scope = 'country' and cm.scope_value = p_country
+     and cm.revoked_at is null;
+
+  return jsonb_build_object(
+    'applications', v_apps,
+    'permits', v_permits,
+    'reports', v_reports,
+    'reviews', v_reviews,
+    'moderators', v_mods
+  );
+end;
+$function$
+
+-- snapshot-fn: moderator_hide_message
+CREATE OR REPLACE FUNCTION public.moderator_hide_message(p_message_id text, p_hide boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me        uuid := auth.uid();
+  v_room    text;
+  v_country text;
+  v_is_priv boolean;
+  v_ok      boolean;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+
+  select m.room_id into v_room
+    from public.messages m
+   where m.id::text = p_message_id;
+  if v_room is null then
+    raise exception 'message_not_found' using errcode = 'P0002';
+  end if;
+
+  select r.country, r.is_private into v_country, v_is_priv
+    from public.rooms r where r.id = v_room;
+
+  if v_is_priv then
+    -- Room privat: hanya admin (moderator negara tidak berwenang).
+    v_ok := public.is_chatyuk_admin(me);
+  else
+    v_ok := public.is_chatyuk_admin(me)
+         or public.is_country_moderator(v_country, me);
+  end if;
+  if not v_ok then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  update public.messages
+     set is_deleted = p_hide
+   where id::text = p_message_id;
+
+  insert into public.moderator_actions (scope, scope_value, uid, message_id, action)
+  values ('country', coalesce(v_country, ''), me, p_message_id,
+          case when p_hide then 'hide' else 'unhide' end);
+
+  return jsonb_build_object('ok', true, 'hidden', p_hide);
+end;
+$function$
+
+-- snapshot-fn: moderator_resign
+CREATE OR REPLACE FUNCTION public.moderator_resign()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me     uuid := auth.uid();
+  v_left text[];
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+
+  with left_rows as (
+    update public.country_moderators
+       set revoked_at = now()
+     where uid = me
+       and scope = 'country'
+       and revoked_at is null
+    returning scope_value
+  )
+  select coalesce(array_agg(scope_value), array[]::text[]) into v_left
+    from left_rows;
+
+  if v_left is null or array_length(v_left, 1) = 0 then
+    return jsonb_build_object('ok', true, 'was_moderator', false);
+  end if;
+
+  insert into public.moderator_actions
+    (scope, scope_value, uid, target_uid, action, note)
+  select 'country', c, me, me, 'revoke_permit', 'moderator_resign'
+    from unnest(v_left) as c;
+
+  return jsonb_build_object('ok', true, 'was_moderator', true,
+                            'countries', to_jsonb(v_left));
+end;
+$function$
+
+-- snapshot-fn: moderator_resolve_review
+CREATE OR REPLACE FUNCTION public.moderator_resolve_review(p_message_id text, p_hide boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me      uuid := auth.uid();
+  v_country text;
+  v_room  text;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+
+  select m.room_id, r.country into v_room, v_country
+    from public.messages m
+    join public.rooms r on r.id = m.room_id
+   where m.id::text = p_message_id;
+  if v_room is null then
+    raise exception 'message_not_found' using errcode = 'P0002';
+  end if;
+
+  if not (public.is_chatyuk_admin(me)
+          or public.is_country_moderator(v_country, me)) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  update public.messages
+     set needs_review = false,
+         is_deleted = case when p_hide then true else is_deleted end
+   where id::text = p_message_id;
+
+  insert into public.moderator_actions
+    (scope, scope_value, uid, message_id, action, note)
+  values ('country', v_country, me, p_message_id,
+          case when p_hide then 'hide' else 'approve_media' end,
+          'needs_review');
+
+  return jsonb_build_object('ok', true, 'hidden', p_hide);
+end;
+$function$
+
+-- snapshot-fn: moderator_set_colleague
+CREATE OR REPLACE FUNCTION public.moderator_set_colleague(p_country text, p_uid uuid, p_grant boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me      uuid := auth.uid();
+  v_admin boolean;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  v_admin := public.is_chatyuk_admin(me);
+  if not (v_admin or public.is_country_moderator(p_country, me)) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if p_uid = me then
+    raise exception 'cannot_target_self' using errcode = '22023';
+  end if;
+  if coalesce(p_country, '') = '' then
+    raise exception 'country_required' using errcode = '22023';
+  end if;
+
+  if p_grant then
+    perform pg_advisory_xact_lock(hashtext('modslot:' || p_country));
+    -- Target yang tadinya pernah moderator & diangkat ulang tidak menambah
+    -- slot baru → kecualikan dari hitungan.
+    if public.active_moderator_count(p_country)
+       - (case when public.is_country_moderator(p_country, p_uid) then 1 else 0 end)
+       >= 2 then
+      return jsonb_build_object('ok', false, 'error', 'slots_full', 'max', 2);
+    end if;
+
+    insert into public.country_moderators
+      (scope, scope_value, uid, granted_by, source)
+    values ('country', p_country, p_uid, me,
+            case when v_admin then 'admin' else 'moderator' end)
+    on conflict (scope, scope_value, uid) do update
+      set revoked_at = null, granted_by = me, granted_at = now(),
+          source = case when v_admin then 'admin' else 'moderator' end;
+  else
+    update public.country_moderators
+       set revoked_at = now()
+     where scope = 'country' and scope_value = p_country
+       and uid = p_uid and revoked_at is null;
+  end if;
+
+  insert into public.moderator_actions
+    (scope, scope_value, uid, target_uid, action, note)
+  values ('country', p_country, me, p_uid,
+          case when p_grant then 'grant_permit' else 'revoke_permit' end,
+          case when p_grant then 'moderator_appointed' else 'moderator_revoked' end);
+
+  return jsonb_build_object('ok', true, 'granted', p_grant);
+end;
+$function$
+
+-- snapshot-fn: moderator_uids
+CREATE OR REPLACE FUNCTION public.moderator_uids(p_uids uuid[])
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(jsonb_agg(jsonb_build_object('uid', cm.uid,
+                                               'country', cm.scope_value)), '[]'::jsonb)
+    from public.country_moderators cm
+   where cm.revoked_at is null
+     and cm.scope = 'country'
+     and cm.uid = any(coalesce(p_uids, array[]::uuid[]));
+$function$
+
 -- snapshot-fn: mute_private_chat
 CREATE OR REPLACE FUNCTION public.mute_private_chat(p_chat_id text, p_mute boolean DEFAULT true)
  RETURNS jsonb
@@ -9591,6 +12028,87 @@ CREATE OR REPLACE FUNCTION public.my_extra_photo_slots()
 AS $function$
   select coalesce((select extra from public.photo_slots_unlocked
                     where user_id = auth.uid()), 0);
+$function$
+
+-- snapshot-fn: my_moderation_state
+CREATE OR REPLACE FUNCTION public.my_moderation_state()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me        uuid := auth.uid();
+  v_countries text[];
+  v_pending   text[];
+  v_revoked   jsonb;
+  v_country   text;
+  v_created   timestamptz;
+  v_msgs      integer := 0;
+  v_eligible  boolean := false;
+  v_open      boolean := false;
+  v_count     integer := 0;
+begin
+  if me is null then
+    return jsonb_build_object(
+      'moderates', '[]'::json, 'pending', '[]'::json, 'revoked', '[]'::json,
+      'eligible', false, 'slot_open', false, 'slot_count', 0, 'slot_max', 2);
+  end if;
+
+  select coalesce(array_agg(scope_value), array[]::text[]) into v_countries
+    from public.country_moderators
+   where uid = me and scope = 'country' and revoked_at is null;
+
+  select coalesce(array_agg(scope_value), array[]::text[]) into v_pending
+    from public.moderator_applications
+   where uid = me and scope = 'country' and status = 'pending';
+
+  select country, created_at into v_country, v_created
+    from public.profiles where id = me;
+
+  if coalesce(v_country, '') <> '' and v_created is not null then
+    -- Syarat sama dengan apply_country_moderator: umur akun >= 7 hari &
+    -- >= 50 pesan publik di negaranya sendiri.
+    if v_created <= now() - interval '7 days' then
+      select count(*) into v_msgs
+        from public.messages m
+        join public.rooms r on r.id = m.room_id
+       where m.sender_id = me
+         and r.is_private = false
+         and r.country = v_country;
+      v_eligible := v_msgs >= 50;
+    end if;
+
+    v_count := public.active_moderator_count(v_country);
+    v_open := v_count < 2;
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'country', cm.scope_value, 'revoked_at', cm.revoked_at)
+         order by cm.revoked_at desc), '[]'::jsonb)
+    into v_revoked
+    from public.country_moderators cm
+   where cm.uid = me
+     and cm.revoked_at is not null
+     and exists (
+       select 1 from public.moderator_actions ma
+        where ma.uid = me and ma.target_uid = me
+          and ma.scope_value = cm.scope_value
+          and ma.note in ('auto_revoke_country_change', 'moderator_resign')
+     )
+   limit 5;
+
+  return jsonb_build_object(
+    'moderates', to_jsonb(v_countries),
+    'pending', to_jsonb(v_pending),
+    'revoked', v_revoked,
+    'country', v_country,
+    'eligible', v_eligible,
+    'slot_open', v_open,
+    'slot_count', v_count,
+    'slot_max', 2
+  );
+end;
 $function$
 
 -- snapshot-fn: my_photos
@@ -9783,6 +12301,11 @@ begin
     and p.status in ('online', 'idle')
     and p.last_seen >= now() - interval '30 minutes'
     and public.privacy_can_view(p.id, 'presence', me)
+    -- GHOST MODE: user yang membeli invisible tidak boleh muncul di Nearby.
+    and not exists (
+      select 1 from public.ghost_mode_active g
+      where g.user_id = p.id and g.expires_at > now()
+    )
     and not (p.id = any(v_excl))
     and not exists (
       select 1 from public.blocks b
@@ -10803,12 +13326,10 @@ CREATE OR REPLACE FUNCTION public.presence_for(p_uids uuid[])
 AS $function$
 declare
   me uuid := auth.uid();
-  invisible_uid uuid;
+  invisible_uid text;
   arr jsonb;
 begin
-  -- Invisible (mis. admin mode) → hilangkan dari hasil, konsisten dgn
-  -- get_online_users yang memfilter invisible lewat status.
-  select s.invisible_admin_uid into invisible_uid
+  select nullif(s.invisible_admin_uid, '') into invisible_uid
     from public.app_settings s where s.id = 'global';
 
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -10821,8 +13342,14 @@ begin
     'is_registered', p.is_registered,
     'avatar',    case when public.privacy_can_view(p.id, 'profile_photo', me)
                       then p.avatar else '' end,
-    'status',    case when public.privacy_can_view(p.id, 'presence', me)
-                      then p.status else 'offline' end,
+    -- Ghost mode = privasi PRESENCE: orang lain melihat 'offline'.
+    -- (Baris milik sendiri tidak pernah masuk sini — `p.id <> me` di WHERE.)
+    'status',    case
+                   when exists (select 1 from public.ghost_mode_active g
+                                 where g.user_id = p.id and g.expires_at > now())
+                     then 'offline'
+                   when public.privacy_can_view(p.id, 'presence', me)
+                     then p.status else 'offline' end,
     'last_seen', case when public.privacy_can_view(p.id, 'last_seen', me)
                       then p.last_seen else null end,
     'about',     case when public.privacy_can_view(p.id, 'about', me)
@@ -10831,8 +13358,7 @@ begin
   from public.profiles p
   where p.id = any(coalesce(p_uids, '{}'::uuid[]))
     and p.id <> coalesce(me, '00000000-0000-0000-0000-000000000000'::uuid)
-    and (invisible_uid is null or p.id <> invisible_uid)
-    -- Hormati blokir dua arah (sama seperti get_online_users).
+    and (invisible_uid is null or p.id::text <> invisible_uid)
     and not exists (
       select 1 from public.blocks b
       where (b.blocker_id = me and b.blocked_id = p.id)
@@ -10844,7 +13370,7 @@ end;
 $function$
 
 -- snapshot-fn: presence_idle_tick
-CREATE OR REPLACE FUNCTION public.presence_idle_tick(p_idle_after interval DEFAULT '00:04:00'::interval)
+CREATE OR REPLACE FUNCTION public.presence_idle_tick(p_idle_after interval DEFAULT '00:10:00'::interval)
  RETURNS integer
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -10853,11 +13379,11 @@ AS $function$
 declare
   v_n int := 0;
 begin
-  -- Hanya 'online' (bukan idle/offline/invisible). last_seen masih segar
-  -- (< p_idle_after) dikecualikan — mereka benar-benar aktif. Batas atas
-  -- 30 mnt = jendela tampil daftar online, supaya tidak menyentuh user yang
-  -- sudah "offline efektif" di client.
-  -- Dummy dikecualikan: presence-nya diatur ai_presence_tick / admin panel.
+  -- Hanya 'online' → 'idle'. JANGAN sentuh last_seen: nilai itu milik
+  -- heartbeat (mencerminkan aktivitas nyata), bukan milik tick.
+  -- Batas atas 30 mnt = jendela tampil get_online_users, supaya user yang
+  -- sudah "offline efektif" tidak ikut diubah.
+  -- Dummy dikecualikan (presence diatur ai_presence_tick / admin panel).
   update public.profiles p
      set status = 'idle'
    where p.status = 'online'
@@ -11069,18 +13595,21 @@ AS $function$
 declare
   r public.profiles%rowtype;
   me uuid := auth.uid();
-  v_is_me boolean := (p_user = me);
+  v_is_me boolean := (p_user = auth.uid());
 begin
   select * into r from public.profiles where id = p_user;
   if r.id is null then return '{}'::jsonb; end if;
+
   return jsonb_build_object(
     'id', r.id,
     'nickname', r.nickname,
     'gender', r.gender,
+    'gender_locked', coalesce(r.gender_locked, false),
     'age', r.age,
     'country', r.country,
     'city', r.city,
-    'status', case when public.privacy_can_view(r.id, 'presence', me) then r.status else 'offline' end,
+    'status', case when public.privacy_can_view(r.id, 'presence', me)
+                   then r.status else 'offline' end,
     'avatar', case when public.privacy_can_view(r.id, 'profile_photo', me) then r.avatar else '' end,
     'is_registered', r.is_registered,
     'needs_onboarding', coalesce(r.needs_onboarding, false),
@@ -11096,10 +13625,13 @@ begin
     'subscriber_count', r.subscriber_count,
     'subscription_price', r.subscription_price,
     'friends_count', r.friends_count,
-    -- Hanya untuk diri sendiri (data sensitif).
     'phone', case when v_is_me then coalesce(r.phone, '') else '' end,
     'birth_date', case when v_is_me then r.birth_date else null end,
-    'phone_verified_at', case when v_is_me then r.phone_verified_at else null end
+    'phone_verified_at',
+      case when v_is_me then r.phone_verified_at else null end,
+    -- Kapan negara boleh diubah lagi (khusus diri sendiri).
+    'country_changed_at',
+      case when v_is_me then r.country_changed_at else null end
   );
 end;
 $function$
@@ -11380,6 +13912,439 @@ begin
 end;
 $function$
 
+-- snapshot-fn: random_call_history
+CREATE OR REPLACE FUNCTION public.random_call_history(p_limit integer DEFAULT 30, p_offset integer DEFAULT 0)
+ RETURNS TABLE(call_id uuid, partner_id uuid, partner_name text, partner_avatar text, partner_gender text, partner_age integer, partner_city text, started_at timestamp with time zone, ended_at timestamp with time zone, duration_sec integer, online boolean, status text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  lim int := greatest(1, least(coalesce(p_limit, 30), 100));
+  off int := greatest(0, coalesce(p_offset, 0));
+begin
+  if me is null then raise exception 'Not authenticated'; end if;
+
+  return query
+  select c.id,
+         other.id,
+         coalesce(nullif(other.nickname, ''), 'User'),
+         case when public.privacy_can_view(other.id, 'profile_photo', me)
+              then coalesce(other.avatar, '') else '' end,
+         coalesce(other.gender, 'other'),
+         other.age,
+         other.city,
+         coalesce(c.answered_at, c.created_at),
+         c.ended_at,
+         greatest(0, extract(epoch from
+           (coalesce(c.ended_at, now()) - coalesce(c.answered_at, c.created_at)))::int),
+         (other.status in ('online', 'idle') and other.last_seen >= now() - interval '30 minutes'),
+         c.status
+    from public.calls c
+    join public.profiles other
+      on other.id = case when c.caller_id = me then c.callee_id else c.caller_id end
+   where c.kind = 'random'
+     and (c.caller_id = me or c.callee_id = me)
+     and c.status <> 'ringing'
+   order by coalesce(c.ended_at, c.created_at) desc
+   limit lim offset off;
+end;
+$function$
+
+-- snapshot-fn: random_match_join
+CREATE OR REPLACE FUNCTION public.random_match_join(p_want_gender text DEFAULT 'all'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  v_want text;
+  v_gender text;
+  my_lat double precision;
+  my_lon double precision;
+  v_registered boolean;
+  v_all boolean;
+  v_anon boolean;
+  q record;
+  cid uuid;
+  p_name text; p_gender text; p_age int; p_city text; p_avatar text;
+  p_dist double precision;
+  v_excl uuid[];
+  v_payer uuid;
+  v_tried uuid[] := '{}'::uuid[];
+  v_points_on boolean;
+  v_fee int := 2;
+  v_connect int := 10;
+begin
+  if me is null then raise exception 'Not authenticated'; end if;
+  if not public.feature_enabled_for('random_call') then
+    raise exception 'FEATURE_DISABLED';
+  end if;
+
+  select coalesce(call_all_enabled, true), coalesce(call_anon_enabled, false),
+         coalesce(points_enabled, true),
+         coalesce((metered_pricing->'match_call'->>'unit_cost')::int, 10)
+    into v_all, v_anon, v_points_on, v_connect
+    from public.app_settings where id = 'global';
+  if not v_all then raise exception 'CALL_DISABLED'; end if;
+
+  select gender, lat, lon, coalesce(is_registered, false)
+    into v_gender, my_lat, my_lon, v_registered
+    from public.profiles where id = me;
+  if not v_anon and not v_registered then
+    raise exception 'CALL_REGISTERED_ONLY';
+  end if;
+
+  -- 2026-10-31: LAWAN JENIS OTOMATIS. Male → cari female, female → cari male.
+  -- Tidak ada pilihan manual "Semua".
+  v_want := case v_gender
+              when 'male'   then 'female'
+              when 'female' then 'male'
+              else coalesce(nullif(p_want_gender,''), 'all')
+            end;
+
+  if exists (
+    select 1 from public.calls c
+     where (c.caller_id = me or c.callee_id = me)
+       and c.status in ('ringing', 'answered')
+       and coalesce(c.last_seen_at, c.answered_at, c.created_at) > now() - interval '5 minutes'
+  ) then
+    raise exception 'ALREADY_IN_CALL';
+  end if;
+
+  -- 2026-10-31 (charge-on-match): fee dipotong SAAT pair terbentuk, bukan
+  -- saat klik. Male yang jelas tak mampu bayar tidak masuk antrean.
+  -- 2026-11-04: precheck memakai saldo PAID >= pair + konek — bukan total.
+  -- Pair boleh didebit dari bucket bonus (_spend_yukcoin_core), tapi biaya
+  -- KONEK + menit lewat charge_metered menolak bonus → male bonus-only yang
+  -- lolos precheck lama dijamin call-nya mati di detik 30 (insufficient).
+  if v_gender = 'male' and v_points_on
+     and public.yukcoin_paid_total(me) < v_fee + v_connect then
+    return jsonb_build_object('status', 'no_funds');
+  end if;
+
+  select coalesce(array_agg(ae), '{}'::uuid[]) into v_excl
+    from public.admin_excluded_uids() ae;
+
+  insert into public.random_match_queue
+    (user_id, gender, want_gender, lat, lon, pinged_at, matched_call_id, matched_with)
+  values (me, v_gender, v_want, my_lat, my_lon, now(), null, null)
+  on conflict (user_id) do update
+    set gender = excluded.gender,
+        want_gender = excluded.want_gender,
+        lat = excluded.lat,
+        lon = excluded.lon,
+        pinged_at = now(),
+        matched_call_id = null,
+        matched_with = null;
+
+  -- Charge-on-match: loop kandidat → coba tagih pihak male → pair yang
+  -- terbayar pertama yang jadi. Kandidat male yang tak mampu bayar diskip
+  -- lewat precheck; spend tetap authoritative untuk race (saldo berubah
+  -- antara antre dan pair). Precheck kandidat juga dinaikkan ke paid >=
+  -- pair + konek dengan alasan yang sama.
+  q := null;
+  loop
+    select rq.* into q
+      from public.random_match_queue rq
+     where rq.user_id <> me
+       and rq.matched_call_id is null
+       and rq.pinged_at > now() - interval '30 seconds'
+       and (v_want = 'all' or rq.gender = v_want)
+       and (rq.want_gender = 'all' or rq.want_gender = v_gender)
+       and (rq.gender <> 'male' or not v_points_on
+            or public.yukcoin_paid_total(rq.user_id) >= v_fee + v_connect)
+       and not (rq.user_id = any (v_tried))
+       and not exists (
+         select 1 from public.blocks b
+          where (b.blocker_id = me and b.blocked_id = rq.user_id)
+             or (b.blocker_id = rq.user_id and b.blocked_id = me)
+       )
+       and not (rq.user_id = any (v_excl))
+       and not exists (
+         select 1 from public.ghost_mode_active g
+          where g.user_id = rq.user_id and g.expires_at > now()
+       )
+       and not exists (
+         select 1 from public.random_match_pairs rp
+          where rp.created_at > now() - interval '10 minutes'
+            and ((rp.a = me and rp.b = rq.user_id)
+              or (rp.a = rq.user_id and rp.b = me))
+       )
+     order by
+       case when my_lat is not null and rq.lat is not null
+            then earth_distance(ll_to_earth(my_lat, my_lon), ll_to_earth(rq.lat, rq.lon))
+            else 1e12 end asc,
+       rq.pinged_at asc
+     for update skip locked
+     limit 1;
+    if not found then
+      q := null;
+      exit;
+    end if;
+
+    -- Payer = pihak male (female gratis). Kalau joiner female → partner
+    -- male-nya yang membayar lewat fungsi internal (core, tanpa auth gate).
+    v_payer := case when v_gender = 'male' then me else q.user_id end;
+    begin
+      perform public._spend_yukcoin_core(v_payer, 'match_search', v_fee, 'match');
+      exit; -- terbayar (atau free-pass saat points_enabled OFF) → pair jadi
+    exception when others then
+      if v_payer = me then
+        delete from public.random_match_queue where user_id = me;
+        return jsonb_build_object('status', 'no_funds');
+      end if;
+      v_tried := v_tried || q.user_id;
+      q := null;
+    end;
+  end loop;
+
+  if q is null then
+    return jsonb_build_object('status', 'waiting');
+  end if;
+
+  insert into public.calls
+    (caller_id, callee_id, call_type, status, kind, answered_at, last_seen_at)
+  values (me, q.user_id, 'video', 'answered', 'random', now(), now())
+  returning id into cid;
+
+  update public.random_match_queue
+     set matched_call_id = cid, matched_with = me, pinged_at = now()
+   where user_id = q.user_id;
+
+  update public.random_match_queue
+     set matched_call_id = cid, matched_with = q.user_id, pinged_at = now()
+   where user_id = me;
+
+  insert into public.random_match_pairs (a, b)
+  values (least(me, q.user_id), greatest(me, q.user_id))
+  on conflict do nothing;
+
+  select p.nickname, p.gender, p.age, p.city,
+         case when public.privacy_can_view(p.id, 'profile_photo', me)
+              then p.avatar else '' end
+    into p_name, p_gender, p_age, p_city, p_avatar
+    from public.profiles p where p.id = q.user_id;
+
+  if my_lat is not null and q.lat is not null and q.lon is not null then
+    p_dist := earth_distance(ll_to_earth(my_lat, my_lon), ll_to_earth(q.lat, q.lon)) / 1000.0;
+  end if;
+
+  return jsonb_build_object(
+    'status', 'matched',
+    'call_id', cid,
+    'is_caller', true,
+    'partner', jsonb_build_object(
+      'uid', q.user_id,
+      'nickname', coalesce(p_name, 'User'),
+      'gender', coalesce(p_gender, 'other'),
+      'age', p_age,
+      'city', p_city,
+      'avatar', coalesce(p_avatar, ''),
+      'distance_km', p_dist
+    )
+  );
+end;
+$function$
+
+-- snapshot-fn: random_match_leave
+CREATE OR REPLACE FUNCTION public.random_match_leave()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare me uuid := auth.uid();
+begin
+  if me is null then raise exception 'Not authenticated'; end if;
+  delete from public.random_match_queue where user_id = me;
+  return jsonb_build_object('ok', true);
+end;
+$function$
+
+-- snapshot-fn: random_match_ping
+CREATE OR REPLACE FUNCTION public.random_match_ping()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  row_q record;
+  p_name text; p_gender text; p_age int; p_city text; p_avatar text;
+  v_call_status text;
+  v_seen timestamptz;
+begin
+  if me is null then raise exception 'Not authenticated'; end if;
+
+  select * into row_q from public.random_match_queue where user_id = me;
+  if not found then
+    return jsonb_build_object('status', 'idle');
+  end if;
+
+  -- Sudah dipasangkan orang lain (jalur realtime bisa telat/hilang).
+  if row_q.matched_call_id is not null then
+    select c.status,
+           coalesce(c.last_seen_at, c.answered_at, c.created_at)
+      into v_call_status, v_seen
+      from public.calls c where c.id = row_q.matched_call_id;
+    -- Call MATI/ZOMBIE: status bukan 'answered' (ended/canceled/dst.)
+    -- atau heartbeat basi ≥120 dtk. Jangan kembalikan callId mati —
+    -- bersihkan jejak pair, user tetap antre (bisa ter-pair ulang).
+    if v_call_status is distinct from 'answered'
+       or coalesce(v_seen, '-infinity'::timestamptz)
+          < now() - interval '120 seconds' then
+      update public.random_match_queue
+         set matched_call_id = null,
+             matched_with = null,
+             pinged_at = now()
+       where user_id = me;
+      return jsonb_build_object('status', 'waiting');
+    end if;
+    select p.nickname, p.gender, p.age, p.city,
+           case when public.privacy_can_view(p.id, 'profile_photo', me)
+                then p.avatar else '' end
+      into p_name, p_gender, p_age, p_city, p_avatar
+      from public.profiles p where p.id = row_q.matched_with;
+    return jsonb_build_object(
+      'status', 'matched',
+      'call_id', row_q.matched_call_id,
+      'is_caller', (select caller_id = me from public.calls where id = row_q.matched_call_id),
+      'partner', jsonb_build_object(
+        'uid', row_q.matched_with,
+        'nickname', coalesce(p_name, 'User'),
+        'gender', coalesce(p_gender, 'other'),
+        'age', p_age,
+        'city', p_city,
+        'avatar', coalesce(p_avatar, ''),
+        'distance_km', null
+      )
+    );
+  end if;
+
+  update public.random_match_queue set pinged_at = now() where user_id = me;
+  return jsonb_build_object('status', 'waiting');
+end;
+$function$
+
+-- snapshot-fn: random_match_stats
+CREATE OR REPLACE FUNCTION public.random_match_stats()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  my_lat double precision;
+  my_lon double precision;
+  my_gender text;
+  v_opposite text;
+  v_waiting int;
+  v_online int;
+  v_sample jsonb;
+  v_excl uuid[];
+begin
+  if me is null then raise exception 'Not authenticated'; end if;
+
+  select lat, lon, gender into my_lat, my_lon, my_gender
+    from public.profiles where id = me;
+
+  -- Lawan jenis: male↔female. Selain itu (other/null) = semua.
+  v_opposite := case my_gender
+                  when 'male' then 'female'
+                  when 'female' then 'male'
+                  else null
+                end;
+  select coalesce(array_agg(ae), '{}'::uuid[]) into v_excl
+    from public.admin_excluded_uids() ae;
+
+  select count(*) into v_waiting
+    from public.random_match_queue q
+    join public.profiles p on p.id = q.user_id
+   where q.matched_call_id is null
+     and q.pinged_at > now() - interval '30 seconds'
+     and (v_opposite is null or p.gender = v_opposite);
+
+  select count(*) into v_online
+    from public.profiles p
+   where p.id <> me
+     and p.status in ('online', 'idle')
+     and p.last_seen >= now() - interval '30 minutes'
+     and (v_opposite is null or p.gender = v_opposite)
+     and not (p.id = any (v_excl))
+     and not exists (select 1 from public.ghost_mode_active g
+                      where g.user_id = p.id and g.expires_at > now());
+
+  select coalesce(jsonb_agg(x order by x->>'distance_km' nulls last), '[]'::jsonb)
+    into v_sample
+    from (
+      select jsonb_build_object(
+               'uid', p.id,
+               'nickname', p.nickname,
+               'gender', p.gender,
+               'avatar', case when public.privacy_can_view(p.id, 'profile_photo', me)
+                              then p.avatar else '' end,
+               'city', p.city,
+               'distance_km', case when my_lat is not null and p.lat is not null and p.lon is not null
+                                   then round((earth_distance(ll_to_earth(my_lat, my_lon),
+                                                              ll_to_earth(p.lat, p.lon)) / 1000.0)::numeric, 1)
+                                   else null end
+             ) as x
+        from public.profiles p
+       where p.id <> me
+         and p.status in ('online', 'idle')
+         and p.last_seen >= now() - interval '30 minutes'
+         and (v_opposite is null or p.gender = v_opposite)
+         and public.privacy_can_view(p.id, 'presence', me)
+         and not (p.id = any (v_excl))
+         and not exists (select 1 from public.ghost_mode_active g
+                          where g.user_id = p.id and g.expires_at > now())
+         and not exists (select 1 from public.blocks b
+                          where (b.blocker_id = me and b.blocked_id = p.id)
+                             or (b.blocker_id = p.id and b.blocked_id = me))
+       order by p.last_seen desc
+       limit 8
+    ) s;
+
+  return jsonb_build_object('waiting', v_waiting, 'online', v_online,
+    'sample', v_sample, 'opposite_gender', v_opposite);
+end;
+$function$
+
+-- snapshot-fn: random_match_sweep
+CREATE OR REPLACE FUNCTION public.random_match_sweep()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_q int; v_c int; v_p int;
+begin
+  delete from public.random_match_queue
+   where matched_call_id is null
+     and pinged_at < now() - interval '60 seconds';
+  get diagnostics v_q = row_count;
+
+  -- Call random yang ditinggal (app mati / crash) ditutup supaya riwayat benar
+  -- dan tidak menahan user dianggap "sedang call".
+  update public.calls
+     set status = 'ended', ended_at = now()
+   where kind = 'random' and status = 'answered'
+     and coalesce(last_seen_at, answered_at, created_at) < now() - interval '3 minutes';
+  get diagnostics v_c = row_count;
+
+  delete from public.random_match_pairs where created_at < now() - interval '1 day';
+  get diagnostics v_p = row_count;
+
+  return jsonb_build_object('queue', v_q, 'calls', v_c, 'pairs', v_p);
+end;
+$function$
+
 -- snapshot-fn: recount_social_counts
 CREATE OR REPLACE FUNCTION public.recount_social_counts()
  RETURNS jsonb
@@ -11552,6 +14517,281 @@ begin
   return jsonb_build_object('ok', true, 'id', new_id);
 end; $function$
 
+-- snapshot-fn: report_room_message
+CREATE OR REPLACE FUNCTION public.report_room_message(p_message_id text, p_reason_code text, p_note text DEFAULT ''::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me        uuid := auth.uid();
+  v_room    text;
+  v_sender  uuid;
+  v_reporters integer;
+  v_code    text := coalesce(nullif(p_reason_code, ''), 'other');
+  v_hidden  boolean := false;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  if coalesce(p_message_id, '') = '' then
+    raise exception 'message_required' using errcode = '22023';
+  end if;
+
+  select m.room_id, m.sender_id into v_room, v_sender
+    from public.messages m where m.id::text = p_message_id;
+  if v_room is null then
+    raise exception 'message_not_found' using errcode = 'P0002';
+  end if;
+  if v_sender = me then
+    return jsonb_build_object('ok', false, 'error', 'own_message');
+  end if;
+
+  insert into public.reports
+    (reporter_id, reported_id, reason, message_id, room_id, reason_code)
+  values (me, v_sender, coalesce(p_note, ''), p_message_id, v_room, v_code)
+  on conflict (reporter_id, message_id) where message_id is not null do update
+    set reason_code = excluded.reason_code,
+        reason = excluded.reason,
+        status = 'open',
+        created_at = now();
+
+  select count(distinct r.reporter_id) into v_reporters
+    from public.reports r
+   where r.message_id = p_message_id
+     and r.status <> 'dismissed';
+
+  -- Hanya pornografi/kekerasan yang otomatis disembunyikan.
+  if v_reporters >= 3 and v_code in ('porn', 'violence') then
+    update public.messages set is_deleted = true
+     where id::text = p_message_id and coalesce(is_deleted, false) = false;
+    if found then
+      v_hidden := true;
+      insert into public.admin_alerts (kind, severity, message, detail)
+      values ('reported_media', 'high',
+              'Pesan disembunyikan otomatis (>=3 laporan pornografi/kekerasan)',
+              jsonb_build_object('message_id', p_message_id,
+                                 'room_id', v_room,
+                                 'reporters', v_reporters,
+                                 'reason_code', v_code));
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true, 'reporters', v_reporters,
+                            'auto_hidden', v_hidden);
+end;
+$function$
+
+-- snapshot-fn: request_country_permit
+CREATE OR REPLACE FUNCTION public.request_country_permit(p_country text, p_reason text DEFAULT ''::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me      uuid := auth.uid();
+  v_home  text;
+  v_row   public.country_send_permits%rowtype;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  if coalesce(p_country, '') = '' then
+    raise exception 'country_required' using errcode = '22023';
+  end if;
+
+  select country into v_home from public.profiles where id = me;
+  if v_home is not null and v_home = p_country then
+    return jsonb_build_object('ok', true, 'not_needed', true);
+  end if;
+
+  select * into v_row from public.country_send_permits
+   where uid = me and country = p_country;
+
+  if v_row.id is not null then
+    if v_row.status = 'approved' then
+      return jsonb_build_object('ok', true, 'already_approved', true);
+    end if;
+    if v_row.status = 'pending' then
+      return jsonb_build_object('ok', true, 'already_pending', true);
+    end if;
+    update public.country_send_permits
+       set status = 'pending', reason = coalesce(p_reason, ''),
+           requested_at = now(), decided_by = null, decided_at = null
+     where id = v_row.id;
+    return jsonb_build_object('ok', true, 'reopened', true);
+  end if;
+
+  insert into public.country_send_permits (uid, country, reason)
+  values (me, p_country, coalesce(p_reason, ''));
+
+  return jsonb_build_object('ok', true, 'requested', true);
+end;
+$function$
+
+-- snapshot-fn: request_withdraw
+CREATE OR REPLACE FUNCTION public.request_withdraw(p_coins integer, p_dana_number text DEFAULT NULL::text, p_dana_name text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_uid uuid := auth.uid();
+    v_gender text;
+    v_total int;
+    v_min_coins int;
+    v_rate int;
+    v_fee_pct int;
+    v_fee_min int;
+    v_max_day int;
+    v_min_interval int;
+    v_min_age int;
+    v_today_count int;
+    v_last_req timestamptz;
+    v_created_at timestamptz;
+    v_gross int;
+    v_fee int;
+    v_net int;
+    v_num text;
+    v_name text;
+    v_acc record;
+    v_req_id uuid;
+    -- Awal hari ini dalam zona waktu USER (Asia/Jakarta) sebagai timestamptz.
+    -- Bandingkan timestamptz dengan timestamptz (lihat catatan di
+    -- 20261102240000 — membandingkan dengan `date` salah tafsir).
+    v_day_start timestamptz :=
+      (((now() AT TIME ZONE 'Asia/Jakarta')::date)::timestamp
+         AT TIME ZONE 'Asia/Jakarta');
+BEGIN
+    IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
+
+    PERFORM pg_advisory_xact_lock(hashtext('withdraw:' || v_uid::text));
+
+    IF (SELECT points_enabled FROM app_settings WHERE id = 'global') IS FALSE THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'POINTS_DISABLED');
+    END IF;
+
+    SELECT gender INTO v_gender FROM public.profiles WHERE id = v_uid;
+    IF v_gender IS DISTINCT FROM 'female' THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'FEMALE_ONLY');
+    END IF;
+
+    SELECT coalesce(withdraw_min_coins, 1500),
+           coalesce(withdraw_rate_idr, 7),
+           coalesce(withdraw_fee_pct, 5),
+           coalesce(withdraw_fee_min_idr, 1000),
+           coalesce(withdraw_max_per_day, 3),
+           coalesce(withdraw_min_interval_hours, 1),
+           coalesce(withdraw_min_account_age_hours, 72)
+      INTO v_min_coins, v_rate, v_fee_pct, v_fee_min,
+           v_max_day, v_min_interval, v_min_age
+      FROM public.app_settings WHERE id = 'global';
+
+    IF p_coins IS NULL OR p_coins < v_min_coins THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'BELOW_MINIMUM',
+            'min_coins', v_min_coins);
+    END IF;
+
+    -- 2026-11-01 (190000): HANYA bucket `earned` yang bisa ditarik.
+    -- Koin `bonus` (gratis) tidak boleh dicairkan jadi uang.
+    SELECT coalesce(sum(amount) filter (where bucket = 'earned'), 0) INTO v_total
+      FROM public.coin_ledger WHERE user_id = v_uid;
+
+    IF v_total < p_coins THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'INSUFFICIENT_BALANCE',
+            'balance', v_total);
+    END IF;
+
+    SELECT created_at INTO v_created_at FROM public.profiles WHERE id = v_uid;
+    IF v_created_at IS NOT NULL
+       AND v_created_at > now() - make_interval(hours => v_min_age) THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'ACCOUNT_TOO_NEW',
+            'min_age_hours', v_min_age);
+    END IF;
+
+    -- (a) DIPULIHKAN: pengajuan yang DITOLAK tidak lagi menghitung kuota
+    -- harian maupun cooldown. Tanpa `status <> 'rejected'`, user yang kalah
+    -- satu kali harus menunggu 1 jam dan kehabisan kuota 3/hari padahal
+    -- tidak ada uang yang keluar.
+    SELECT count(*) INTO v_today_count
+      FROM public.withdrawal_requests
+     WHERE user_id = v_uid
+       AND created_at >= v_day_start
+       AND status <> 'rejected';
+    IF v_today_count >= v_max_day THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'DAILY_LIMIT',
+            'max_per_day', v_max_day);
+    END IF;
+
+    SELECT max(created_at) INTO v_last_req
+      FROM public.withdrawal_requests
+     WHERE user_id = v_uid
+       AND status <> 'rejected';
+    IF v_last_req IS NOT NULL
+       AND v_last_req > now() - make_interval(hours => v_min_interval) THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'TOO_SOON',
+            'min_interval_hours', v_min_interval);
+    END IF;
+
+    IF p_dana_number IS NOT NULL AND p_dana_name IS NOT NULL THEN
+        v_num := regexp_replace(p_dana_number, '[^0-9]', '', 'g');
+        IF v_num !~ '^(08|62)[0-9]{8,13}$' THEN
+            RETURN jsonb_build_object('ok', false, 'error', 'INVALID_NUMBER');
+        END IF;
+        IF v_num LIKE '62%' THEN v_num := '0' || substring(v_num from 3); END IF;
+        v_name := nullif(trim(p_dana_name), '');
+        IF v_name IS NULL OR length(v_name) < 3 THEN
+            RETURN jsonb_build_object('ok', false, 'error', 'INVALID_NAME');
+        END IF;
+        INSERT INTO public.withdraw_accounts (user_id, dana_number, dana_name, updated_at)
+        VALUES (v_uid, v_num, v_name, now())
+        ON CONFLICT (user_id) DO UPDATE SET
+            dana_number = excluded.dana_number,
+            dana_name = excluded.dana_name,
+            updated_at = now();
+    ELSE
+        SELECT * INTO v_acc FROM public.withdraw_accounts WHERE user_id = v_uid;
+        IF NOT FOUND THEN
+            RETURN jsonb_build_object('ok', false, 'error', 'NO_ACCOUNT');
+        END IF;
+        v_num := v_acc.dana_number;
+        v_name := v_acc.dana_name;
+    END IF;
+
+    v_gross := p_coins * v_rate;
+    -- (b) DIPULIHKAN: bulatkan ke atas agar SAMA dengan preview client
+    -- (WithdrawQuote.calc memakai round()). Dulu server memotong lewat
+    -- pembagian integer → dialog konfirmasi menjanjikan Rp 1 lebih besar.
+    v_fee := round((v_gross * v_fee_pct) / 100.0);
+    IF v_fee < v_fee_min THEN v_fee := v_fee_min; END IF;
+    IF v_fee > v_gross THEN v_fee := v_gross; END IF;
+    v_net := v_gross - v_fee;
+
+    INSERT INTO public.withdrawal_requests
+        (user_id, coin_amount, payout_idr, gross_idr, fee_idr, rate,
+         status, pay_method, pay_account, pay_holder)
+    VALUES
+        (v_uid, p_coins, v_net, v_gross, v_fee, v_rate,
+         'pending', 'ewallet', v_num, v_name)
+    RETURNING id INTO v_req_id;
+
+    -- SATU-SATUNYA titik debit. HANYA bucket `earned`.
+    PERFORM public.ledger_spend_earned(v_uid, 'withdraw', p_coins, v_req_id::text);
+
+    INSERT INTO public.point_events (user_id, event, amount, metadata)
+    VALUES (v_uid, 'withdraw', -p_coins, jsonb_build_object('request', v_req_id));
+
+    RETURN jsonb_build_object('ok', true, 'id', v_req_id,
+        'coins', p_coins, 'rate', v_rate,
+        'gross_idr', v_gross, 'fee_idr', v_fee, 'net_idr', v_net,
+        'dana_number', v_num, 'dana_name', v_name,
+        'status', 'pending');
+END;
+$function$
+
 -- snapshot-fn: request_withdrawal
 CREATE OR REPLACE FUNCTION public.request_withdrawal(p_coin_amount integer, p_pay_method text, p_pay_account text, p_pay_holder text)
  RETURNS jsonb
@@ -11677,6 +14917,46 @@ begin
 end;
 $function$
 
+-- snapshot-fn: resolve_message_reports
+CREATE OR REPLACE FUNCTION public.resolve_message_reports(p_message_id text, p_action text DEFAULT 'actioned'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me   uuid := auth.uid();
+  v_room text;
+  v_country text;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  select m.room_id into v_room from public.messages m where m.id::text = p_message_id;
+  if v_room is null then
+    raise exception 'message_not_found' using errcode = 'P0002';
+  end if;
+  select r.country into v_country from public.rooms r where r.id = v_room;
+
+  if not (public.is_chatyuk_admin(me)
+          or public.is_country_moderator(v_country, me)) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  update public.reports
+     set status = case when p_action = 'dismissed' then 'dismissed' else 'actioned' end,
+         actioned_by = me, actioned_at = now()
+   where message_id = p_message_id and status = 'open';
+
+  insert into public.moderator_actions
+    (scope, scope_value, uid, message_id, action, note)
+  values ('country', coalesce(v_country, ''), me, p_message_id,
+          'dismiss_report', p_action);
+
+  return jsonb_build_object('ok', true);
+end;
+$function$
+
 -- snapshot-fn: respond_friend_request
 CREATE OR REPLACE FUNCTION public.respond_friend_request(p_request_id bigint, p_accept boolean)
  RETURNS jsonb
@@ -11710,6 +14990,9 @@ begin
     if coalesce(friend_count, 0) <= 1 then
       perform public.one_time_bonus('first_friend', 0);
     end if;
+  elsif req.auto_follow then
+    -- Ditolak: buang follow yang dibuat oleh request ini saja.
+    delete from follows where follower_id = req.from_id and followee_id = req.to_id;
   end if;
 
   return jsonb_build_object('ok', true, 'accepted', p_accept);
@@ -11730,6 +15013,38 @@ BEGIN
   UPDATE public.room_members SET broadcast_granted = false WHERE room_id = p_room_id AND user_id = p_uid;
   UPDATE public.rooms SET live_uid = NULL, live_started_at = NULL WHERE id = p_room_id AND live_uid = p_uid;
 END;
+$function$
+
+-- snapshot-fn: revoke_country_permit
+CREATE OR REPLACE FUNCTION public.revoke_country_permit(p_uid uuid, p_country text, p_reason text DEFAULT ''::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  if not (public.is_chatyuk_admin(me)
+          or public.is_country_moderator(p_country, me)) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  update public.country_send_permits
+     set status = 'revoked', decided_by = me, decided_at = now(),
+         decision_note = coalesce(p_reason, '')
+   where uid = p_uid and country = p_country;
+
+  insert into public.moderator_actions
+    (scope, scope_value, uid, target_uid, action, note)
+  values ('country', p_country, me, p_uid, 'revoke_permit',
+          coalesce(p_reason, ''));
+
+  return jsonb_build_object('ok', true);
+end;
 $function$
 
 -- snapshot-fn: reward_photo_slot
@@ -11774,6 +15089,120 @@ BEGIN
      END IF;
   END LOOP;
 END;
+$function$
+
+-- snapshot-fn: room_media_gate_state
+CREATE OR REPLACE FUNCTION public.room_media_gate_state(p_room text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me        uuid := auth.uid();
+  v_private boolean;
+  v_country text;
+  v_home    text;
+  v_allowed boolean;
+  v_permit  text;
+  v_min_days integer;
+  v_min_msgs integer;
+  v_created timestamptz;
+  v_msgs    integer;
+  v_reason  text;
+begin
+  if me is null then
+    return jsonb_build_object('allowed', false, 'reason', 'not_authenticated');
+  end if;
+
+  select r.is_private, r.country into v_private, v_country
+    from public.rooms r where r.id = p_room;
+  if v_private is null then
+    return jsonb_build_object('allowed', false, 'reason', 'room_not_found');
+  end if;
+  if v_private then
+    return jsonb_build_object('allowed', true, 'reason', 'private_room',
+                              'room_country', v_country);
+  end if;
+
+  select country into v_home from public.profiles where id = me;
+
+  select status into v_permit from public.country_send_permits
+   where uid = me and country = v_country;
+
+  v_allowed := public.can_send_room_media(p_room, me);
+
+  if v_allowed then
+    return jsonb_build_object('allowed', true, 'reason', 'ok',
+      'room_country', v_country, 'home_country', v_home,
+      'permit_status', v_permit);
+  end if;
+
+  if coalesce(v_home, '') <> '' and v_home <> coalesce(v_country, '') then
+    if v_permit is distinct from 'approved' then
+      return jsonb_build_object('allowed', false,
+        'reason', case when v_permit = 'pending' then 'permit_pending'
+                       else 'needs_permit' end,
+        'room_country', v_country, 'home_country', v_home,
+        'permit_status', v_permit);
+    end if;
+  end if;
+
+  select coalesce(media_trust_min_days, 3), coalesce(media_trust_min_msgs, 20)
+    into v_min_days, v_min_msgs from public.app_settings where id = 'global';
+
+  select p.created_at into v_created from public.profiles p where p.id = me;
+  if v_created is null then
+    return jsonb_build_object('allowed', false, 'reason', 'profile_missing');
+  end if;
+  if v_created > now() - make_interval(days => v_min_days) then
+    v_reason := 'account_too_new';
+  else
+    select count(*) into v_msgs
+      from public.messages m
+      join public.rooms r2 on r2.id = m.room_id
+     where m.sender_id = me and r2.is_private = false;
+    v_reason := case when v_msgs < v_min_msgs then 'not_enough_messages'
+                     else 'blocked_other' end;
+  end if;
+
+  return jsonb_build_object('allowed', false, 'reason', v_reason,
+    'room_country', v_country, 'home_country', v_home,
+    'min_days', v_min_days, 'min_msgs', v_min_msgs,
+    'have_msgs', coalesce(v_msgs, 0),
+    'permit_status', v_permit);
+end;
+$function$
+
+-- snapshot-fn: room_media_rate_ok
+CREATE OR REPLACE FUNCTION public.room_media_rate_ok(p_room text, p_uid uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_per_min  integer;
+  v_per_hour integer;
+  v_min_cnt  integer;
+  v_hour_cnt integer;
+begin
+  select coalesce(media_rate_per_min, 3),
+         coalesce(media_rate_per_hour, 20)
+    into v_per_min, v_per_hour
+    from public.app_settings where id = 'global';
+
+  select count(*) filter (where m.created_at > now() - interval '1 minute'),
+         count(*)
+    into v_min_cnt, v_hour_cnt
+    from public.messages m
+   where m.room_id = p_room
+     and m.sender_id = p_uid
+     and public.is_room_media_type(m.type)
+     and m.created_at > now() - interval '1 hour';
+
+  return v_min_cnt < v_per_min and v_hour_cnt < v_per_hour;
+end;
 $function$
 
 -- snapshot-fn: room_online_counts
@@ -11960,6 +15389,47 @@ begin
 end;
 $function$
 
+-- snapshot-fn: save_withdraw_account
+CREATE OR REPLACE FUNCTION public.save_withdraw_account(p_dana_number text, p_dana_name text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_uid uuid := auth.uid();
+    v_num text;
+    v_name text;
+BEGIN
+    IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
+
+    -- Normalisasi nomor: buang spasi/strip, wajib 08xx atau 62xx, 10-14 digit.
+    v_num := regexp_replace(coalesce(p_dana_number, ''), '[^0-9]', '', 'g');
+    IF v_num !~ '^(08|62)[0-9]{8,13}$' THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'INVALID_NUMBER');
+    END IF;
+    -- 62xx → 0xx (format DANA domestik).
+    IF v_num LIKE '62%' THEN
+        v_num := '0' || substring(v_num from 3);
+    END IF;
+
+    v_name := nullif(trim(coalesce(p_dana_name, '')), '');
+    IF v_name IS NULL OR length(v_name) < 3 THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'INVALID_NAME');
+    END IF;
+
+    INSERT INTO public.withdraw_accounts (user_id, dana_number, dana_name, updated_at)
+    VALUES (v_uid, v_num, v_name, now())
+    ON CONFLICT (user_id) DO UPDATE SET
+        dana_number = excluded.dana_number,
+        dana_name = excluded.dana_name,
+        updated_at = now();
+
+    RETURN jsonb_build_object('ok', true,
+        'dana_number', v_num, 'dana_name', v_name);
+END;
+$function$
+
 -- snapshot-fn: scrub_reply_snapshot_private
 CREATE OR REPLACE FUNCTION public.scrub_reply_snapshot_private()
  RETURNS trigger
@@ -12096,7 +15566,7 @@ CREATE OR REPLACE FUNCTION public.send_friend_request(p_to uuid)
  SET search_path TO 'public'
 AS $function$
 declare
-  me uuid := auth.uid(); nm text;
+  me uuid := auth.uid(); nm text; v_was_following boolean;
 begin
   if me is null then raise exception 'Not authenticated'; end if;
   if p_to is null or p_to = me then raise exception 'Invalid target'; end if;
@@ -12111,13 +15581,28 @@ begin
      or exists (select 1 from profiles where id = p_to and is_registered = false) then
     raise exception 'SOCIAL_REGISTERED_ONLY';
   end if;
-  if exists (select 1 from follows where follower_id = me and followee_id = p_to
-             and exists (select 1 from follows where follower_id = p_to and followee_id = me)) then
+  if public._are_friends(me, p_to) then
     return jsonb_build_object('ok', true, 'already_friends', true);
   end if;
 
-  insert into friend_requests (from_id, to_id) values (me, p_to)
+  -- Tambah Teman = ikuti + ajak follow balik.
+  v_was_following := exists (select 1 from follows
+                              where follower_id = me and followee_id = p_to);
+  insert into follows (follower_id, followee_id) values (me, p_to)
     on conflict do nothing;
+
+  -- Target sudah mengikuti saya → kini saling follow = teman.
+  if exists (select 1 from follows where follower_id = p_to and followee_id = me) then
+    update friend_requests
+       set status = 'accepted', responded_at = now()
+     where status = 'pending'
+       and ((from_id = me and to_id = p_to) or (from_id = p_to and to_id = me));
+    return jsonb_build_object('ok', true, 'already_friends', true);
+  end if;
+
+  insert into friend_requests (from_id, to_id, auto_follow)
+  values (me, p_to, not v_was_following)
+  on conflict do nothing;
 
   select nickname into nm from profiles where id = me;
   perform public.social_push(p_to, coalesce(nm, 'Anon'), 'sent you a friend request',
@@ -12136,82 +15621,96 @@ CREATE OR REPLACE FUNCTION public.send_gift(p_chat_id text, p_receiver_id uuid, 
 AS $function$
 declare
   uid uuid := auth.uid();
-  g record; points_on boolean; cut_pct int; tx_max int; mult int;
+  g record; points_on boolean; cut_pct int; tx_max int;
   my_name text; my_gender text; am_registered boolean;
-  n int; bonus_price int; cut int; net int;
-  tier text; remaining int; recv_bucket text; recv_amount int;
+  n int; cut int; net int;
+  paid int; remaining int;
 begin
   if uid is null then raise exception 'Not authenticated'; end if;
   if p_receiver_id = uid then raise exception 'Cannot gift self'; end if;
-
-  select points_enabled, coalesce(gift_cut_pct,30), coalesce(bonus_price_multiplier,3)
-    into points_on, cut_pct, mult from app_settings where id = 'global';
+  select points_enabled, coalesce(gift_cut_pct,30)
+    into points_on, cut_pct from app_settings where id = 'global';
   if points_on is false and coalesce(auth.email(), '') <> 'zunixe@gmail.com' then
     raise exception 'Points system disabled';
   end if;
-
   select is_registered, nickname, gender into am_registered, my_name, my_gender
     from public.profiles where id = uid;
   if am_registered is not true then raise exception 'Sender must be registered'; end if;
-
   select coin_tx_max_per_hour into tx_max from app_settings where id = 'global';
   if (select count(*) from coin_ledger
       where user_id = uid and type in ('coin_sent','gift_sent')
       and created_at > now() - interval '1 hour') >= coalesce(tx_max, 30) then
     raise exception 'Too many transactions';
   end if;
-
   select * into g from gift_catalog where id = p_gift_id and active = true;
   if not found then raise exception 'Invalid gift'; end if;
   n := g.coins;
-
   if not exists (select 1 from public.private_chats pc
     where pc.chat_id = p_chat_id and uid = any (pc.participants)
       and p_receiver_id = any (pc.participants)) then
     raise exception 'Not a chat participant'; end if;
   if exists (select 1 from public.blocks b
-    where (b.blocker_id = uid and b.blocked_id = p_receiver_id)
-       or (b.blocker_id = p_receiver_id and b.blocked_id = uid)) then
+      where (b.blocker_id = uid and b.blocked_id = p_receiver_id)
+         or (b.blocker_id = p_receiver_id and b.blocked_id = uid)) then
     raise exception 'Blocked'; end if;
 
-  bonus_price := n * mult;
-  tier := (public.ledger_spend_dual(uid, 'gift_sent', n, bonus_price, p_chat_id))->>'tier';
-  remaining := public.wallet_sync_points(uid);
+  -- 2026-10-31: gift WAJIB pakai koin beli/penghasilan (topup + earned).
+  -- Koin gratis (`bonus`) TIDAK boleh dipakai — mencegah koin gratis male
+  -- berubah menjadi saldo withdrawable female (rugi platform).
+  select coalesce(sum(amount) filter (where bucket='topup'), 0)
+       + coalesce(sum(amount) filter (where bucket='earned'), 0)
+    into paid
+    from coin_ledger where user_id = uid;
 
-  if tier = 'paid' then
-    cut := (n * cut_pct) / 100;
-    net := n - cut;
-    recv_bucket := 'earned';
-    recv_amount := net;
-    if cut > 0 then
-      insert into platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
-        values ('gift_cut', cut, uid, p_receiver_id, p_chat_id,
-                jsonb_build_object('gift', p_gift_id, 'gross', n, 'net', net, 'pct', cut_pct));
-    end if;
-  else
-    net := n;
-    cut := 0;
-    recv_bucket := 'bonus';
-    recv_amount := bonus_price;
+  if paid < n then
+    raise exception 'Gift membutuhkan koin beli/penghasilan (top-up dulu)'
+      using errcode = '22023';
   end if;
 
-  if recv_amount > 0 then
-    perform public.ledger_credit(p_receiver_id, recv_bucket, 'gift_recv', recv_amount,
-      p_chat_id, jsonb_build_object('gift', p_gift_id, 'from', uid, 'tier', tier));
+  -- Potong dari topup dulu, lalu earned.
+  declare
+    take_topup int := least((select coalesce(sum(amount) filter (where bucket='topup'),0)
+                              from coin_ledger where user_id = uid), n);
+    take_earned int := n - take_topup;
+  begin
+    if take_topup > 0 then
+      insert into coin_ledger(user_id,bucket,type,amount,ref_id)
+        values (uid,'topup','gift_sent',-take_topup,p_chat_id);
+    end if;
+    if take_earned > 0 then
+      insert into coin_ledger(user_id,bucket,type,amount,ref_id)
+        values (uid,'earned','gift_sent',-take_earned,p_chat_id);
+    end if;
+  end;
+
+  remaining := public.wallet_sync_points(uid);
+
+  -- Platform ambil cut; penerima SELALU bucket `earned`.
+  cut := (n * cut_pct) / 100;
+  net := n - cut;
+
+  if net > 0 then
+    perform public.ledger_credit(p_receiver_id, 'earned', 'gift_recv', net,
+      p_chat_id, jsonb_build_object('gift', p_gift_id, 'from', uid, 'tier', 'paid'));
+  end if;
+
+  if cut > 0 then
+    insert into platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
+      values ('gift_cut', cut, uid, p_receiver_id, p_chat_id,
+              jsonb_build_object('gift', p_gift_id, 'gross', n, 'net', net, 'pct', cut_pct));
   end if;
 
   insert into public.point_events (user_id, event, amount, metadata)
-    values (uid, 'gift_sent', -case when tier = 'paid' then n else bonus_price end,
-            jsonb_build_object('gift', p_gift_id, 'tier', tier)),
-           (p_receiver_id, 'gift_recv', recv_amount,
-            jsonb_build_object('gift', p_gift_id, 'tier', tier));
+    values (uid, 'gift_sent', -n, jsonb_build_object('gift', p_gift_id, 'tier', 'paid')),
+           (p_receiver_id, 'gift_recv', net,
+            jsonb_build_object('gift', p_gift_id, 'tier', 'paid'));
 
   insert into public.private_messages (chat_id, sender_id, sender_name, sender_gender, text, type, image_data)
     values (p_chat_id, uid, coalesce(my_name,'Anon'), coalesce(my_gender,'other'),
             p_gift_id, 'gift', '');
 
   return jsonb_build_object('ok', true, 'points', coalesce(remaining,0),
-    'gift', p_gift_id, 'gross', n, 'net', net, 'cut', cut, 'tier', tier);
+    'gift', p_gift_id, 'gross', n, 'net', net, 'cut', cut, 'tier', 'paid');
 end; $function$
 
 -- snapshot-fn: send_reengage_notifications
@@ -12291,121 +15790,11 @@ CREATE OR REPLACE FUNCTION public.send_room_gift(p_room_id text, p_gift_id text,
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare
-  uid uuid := auth.uid();
-  g record; r record; points_on boolean; cut_pct int;
-  my_name text; my_gender text;
-  b int; t int; e int; need int;
-  pay_bonus int := 0; pay_topup int := 0; pay_earned int := 0;
-  n int; cut int; net int;
-  earn_src int; recv_earned int; recv_bonus int; remaining int;
-  host_id uuid;
-begin
-  if uid is null then raise exception 'Not authenticated'; end if;
-  if p_qty is null or p_qty < 1 or p_qty > 20 then
-    raise exception 'Invalid qty';
-  end if;
-
-  select points_enabled, coalesce(gift_cut_pct,30) into points_on, cut_pct
-    from app_settings where id = 'global';
-  if points_on is false then raise exception 'Points system disabled'; end if;
-
-  select * into g from gift_catalog where id = p_gift_id and active = true;
-  if not found then raise exception 'Invalid gift'; end if;
-  n := g.coins * p_qty;
-
-  -- Room harus private (live room), aktif, dan punya owner (host)
-  select * into r from rooms where id = p_room_id;
-  if not found then raise exception 'Room not found'; end if;
-  if r.is_private is not true then raise exception 'Not a live room'; end if;
-  if r.expires_at is not null and r.expires_at <= now() then
-    raise exception 'Room expired';
-  end if;
-  host_id := r.owner_id;
-  if host_id is null then raise exception 'Room has no host'; end if;
-  if host_id = uid then raise exception 'Cannot gift self'; end if;
-
-  -- Pengirim harus member room atau host-nya sendiri (tidak relevan, tapi aman)
-  if not exists (select 1 from room_members rm
-      where rm.room_id = p_room_id and rm.user_id = uid)
-    and not exists (select 1 from rooms r2
-      where r2.id = p_room_id and r2.owner_id = uid) then
-    raise exception 'Not a room member';
-  end if;
-
-  -- saldo & porsi bucket pengirim
-  select coalesce(sum(amount) filter (where bucket='bonus'),0),
-         coalesce(sum(amount) filter (where bucket='topup'),0),
-         coalesce(sum(amount) filter (where bucket='earned'),0)
-    into b, t, e from coin_ledger where user_id = uid;
-  if (b + t + e) < n then raise exception 'Not enough points'; end if;
-
-  need := n;
-  pay_bonus  := least(b, need); need := need - pay_bonus;
-  pay_topup  := least(t, need); need := need - pay_topup;
-  pay_earned := least(e, need); need := need - pay_earned;
-
-  if pay_bonus > 0 then
-    insert into coin_ledger(user_id,bucket,type,amount,ref_id,metadata)
-      values (uid,'bonus','gift_sent',-pay_bonus,p_room_id,
-              jsonb_build_object('gift',p_gift_id,'qty',p_qty,'room',true));
-  end if;
-  if pay_topup > 0 then
-    insert into coin_ledger(user_id,bucket,type,amount,ref_id,metadata)
-      values (uid,'topup','gift_sent',-pay_topup,p_room_id,
-              jsonb_build_object('gift',p_gift_id,'qty',p_qty,'room',true));
-  end if;
-  if pay_earned > 0 then
-    insert into coin_ledger(user_id,bucket,type,amount,ref_id,metadata)
-      values (uid,'earned','gift_sent',-pay_earned,p_room_id,
-              jsonb_build_object('gift',p_gift_id,'qty',p_qty,'room',true));
-  end if;
-  remaining := public.wallet_sync_points(uid);
-
-  -- platform cut + net ke host (lineage proporsional, pola phase3)
-  cut := (n * cut_pct) / 100;
-  net := n - cut;
-
-  earn_src := pay_topup + pay_earned;
-  if net <= 0 then
-    recv_earned := 0; recv_bonus := 0;
-  elsif earn_src = 0 then
-    recv_earned := 0; recv_bonus := net;
-  elsif pay_bonus = 0 then
-    recv_earned := net; recv_bonus := 0;
-  else
-    recv_earned := (net * earn_src) / n;
-    recv_bonus  := net - recv_earned;
-  end if;
-
-  if recv_earned > 0 then
-    perform public.ledger_credit(host_id,'earned','gift_recv',recv_earned,p_room_id,
-      jsonb_build_object('gift',p_gift_id,'qty',p_qty,'from',uid));
-  end if;
-  if recv_bonus > 0 then
-    perform public.ledger_credit(host_id,'bonus','gift_recv',recv_bonus,p_room_id,
-      jsonb_build_object('gift',p_gift_id,'qty',p_qty,'from',uid));
-  end if;
-
-  if cut > 0 then
-    insert into platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
-      values ('gift_cut', cut, uid, host_id, p_room_id,
-              jsonb_build_object('gift',p_gift_id,'qty',p_qty,'gross',n,'net',net,'pct',cut_pct));
-  end if;
-
-  insert into public.point_events (user_id, event, amount, metadata)
-    values (uid, 'gift_sent', -n, jsonb_build_object('gift',p_gift_id,'qty',p_qty)),
-           (host_id, 'gift_recv', net, jsonb_build_object('gift',p_gift_id,'qty',p_qty));
-
-  -- pesan bukti gift di room feed (realtime ke semua penonton)
-  select nickname, gender into my_name, my_gender from public.profiles where id = uid;
-  insert into public.messages (room_id, sender_id, sender_name, sender_gender, text, type, image_data)
-    values (p_room_id, uid, coalesce(my_name,'Anon'), coalesce(my_gender,'other'),
-            p_gift_id, 'gift', '');
-
-  return jsonb_build_object('ok', true, 'points', coalesce(remaining,0),
-    'gift', p_gift_id, 'qty', p_qty, 'gross', n, 'net', net, 'cut', cut);
-end; $function$
+BEGIN
+  RAISE EXCEPTION 'Gift hanya untuk chat pribadi (bukan room/grup)'
+    USING ERRCODE = '42501';
+END;
+$function$
 
 -- snapshot-fn: set_dummy_hold
 CREATE OR REPLACE FUNCTION public.set_dummy_hold(p_uid uuid, p_held boolean)
@@ -12459,6 +15848,87 @@ begin
   update public.room_members set role = p_role
    where room_id = p_room_id and user_id = p_uid;
   return jsonb_build_object('ok', true, 'role', p_role);
+end;
+$function$
+
+-- snapshot-fn: set_my_country
+CREATE OR REPLACE FUNCTION public.set_my_country(p_country text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me        uuid := auth.uid();
+  v_country text := nullif(btrim(coalesce(p_country, '')), '');
+  v_old     text;
+  v_changed timestamptz;
+  v_revoked text[];
+  v_next    timestamptz;
+begin
+  if me is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  if v_country is null then
+    raise exception 'country_required' using errcode = '22023';
+  end if;
+
+  select country, country_changed_at into v_old, v_changed
+    from public.profiles where id = me;
+
+  if v_old is not null and v_old = v_country then
+    return jsonb_build_object('ok', true, 'unchanged', true,
+                              'country', v_country);
+  end if;
+
+  -- Lock 7 hari SEJAK PERUBAHAN TERAKHIR. Baris baru (NULL) bebas.
+  if v_changed is not null and v_changed > now() - interval '7 days' then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'cooldown',
+      'next_change_at', (v_changed + interval '7 days'),
+      'country', v_old
+    );
+  end if;
+
+  perform set_config('chatyuk.country_ok', '1', true);
+  update public.profiles
+     set country = v_country,
+         country_changed_at = now()
+   where id = me;
+  perform set_config('chatyuk.country_ok', '', true);
+
+  -- MODERATOR pindah negara → jabatan dicabut (bukan dipindah).
+  with revoked as (
+    update public.country_moderators
+       set revoked_at = now()
+     where uid = me
+       and revoked_at is null
+       and scope = 'country'
+       and scope_value <> v_country
+    returning scope_value
+  )
+  select coalesce(array_agg(scope_value), array[]::text[])
+    into v_revoked
+    from revoked;
+
+  if v_revoked is not null and array_length(v_revoked, 1) > 0 then
+    insert into public.moderator_actions
+      (scope, scope_value, uid, target_uid, action, note)
+    select 'country', c, me, me, 'revoke_permit',
+           'auto_revoke_country_change'
+      from unnest(v_revoked) as c;
+  end if;
+
+  v_next := now() + interval '7 days';
+
+  return jsonb_build_object(
+    'ok', true,
+    'country', v_country,
+    'previous_country', v_old,
+    'next_change_at', v_next,
+    'revoked_moderator_for', to_jsonb(v_revoked)
+  );
 end;
 $function$
 
@@ -12734,66 +16204,14 @@ CREATE OR REPLACE FUNCTION public.spend_yukcoin(p_user uuid, p_feature text, p_a
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare
-  e int; b int; need int; take int; tier text;
 begin
-  -- GUARD KEAMANAN (2026-10-22): user hanya boleh mendebit saldo SENDIRI.
-  -- service_role (auth.uid() null) tetap bebas untuk job server.
   if auth.uid() is not null and p_user is distinct from auth.uid() then
     raise exception 'Forbidden: tidak boleh mendebit saldo user lain'
       using errcode = '42501';
   end if;
-  if p_amount is null or p_amount <= 0 then
-    return jsonb_build_object(
-      'tier', 'noop',
-      'remaining', public.yukcoin_total(p_user)
-    );
-  end if;
-
-  select coalesce(sum(amount) filter (where bucket = 'earned'), 0),
-         coalesce(sum(amount) filter (where bucket = 'bonus'), 0)
-    into e, b
-    from public.coin_ledger
-   where user_id = p_user;
-
-  if (e + b) < p_amount then
-    raise exception 'YukCoin tidak cukup';
-  end if;
-
-  need := p_amount;
-
-  -- earned dulu
-  take := least(e, need);
-  if take > 0 then
-    insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
-      values (p_user, 'earned', p_feature, -take, p_ref, coalesce(p_meta, '{}'::jsonb));
-    need := need - take;
-  end if;
-
-  -- sisanya dari bonus
-  if need > 0 then
-    take := least(b, need);
-    if take > 0 then
-      insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
-        values (p_user, 'bonus', p_feature, -take, p_ref, coalesce(p_meta, '{}'::jsonb));
-      need := need - take;
-    end if;
-  end if;
-
-  tier := case when e >= p_amount then 'earned' else 'mixed' end;
-
-  -- Log pemakaian + event analytics.
-  insert into public.yukcoin_consumptions(user_id, feature, cost, ref_id, metadata)
-    values (p_user, p_feature, p_amount, p_ref, coalesce(p_meta, '{}'::jsonb));
-  insert into public.point_events(user_id, event, amount, metadata)
-    values (p_user, p_feature, -p_amount,
-            jsonb_build_object('feature', p_feature, 'ref', p_ref, 'tier', tier));
-
-  return jsonb_build_object(
-    'tier', tier,
-    'remaining', public.yukcoin_total(p_user)
-  );
-end; $function$
+  return public._spend_yukcoin_core(p_user, p_feature, p_amount, p_ref, p_meta);
+end;
+$function$
 
 -- snapshot-fn: start_broadcast
 CREATE OR REPLACE FUNCTION public.start_broadcast(p_room_id text)
@@ -13119,7 +16537,17 @@ CREATE OR REPLACE FUNCTION public.streak_bonus_amount(streak integer)
  RETURNS integer
  LANGUAGE sql
  IMMUTABLE
-AS $function$ select 0; $function$
+AS $function$
+  select case streak
+    when 1 then 25
+    when 2 then 30
+    when 3 then 35
+    when 4 then 40
+    when 5 then 45
+    when 6 then 50
+    else 100
+  end;
+$function$
 
 -- snapshot-fn: submit_kyc
 CREATE OR REPLACE FUNCTION public.submit_kyc(p_full_name text, p_id_type text, p_id_number text, p_id_photo text, p_selfie_photo text, p_birth_date date DEFAULT NULL::date)
@@ -13459,7 +16887,7 @@ END;
 $function$
 
 -- snapshot-fn: touch_call
-CREATE OR REPLACE FUNCTION public.touch_call(p_call_id uuid)
+CREATE OR REPLACE FUNCTION public.touch_call(p_call_id uuid, p_connected boolean DEFAULT false)
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -13467,7 +16895,11 @@ CREATE OR REPLACE FUNCTION public.touch_call(p_call_id uuid)
 AS $function$
 begin
   update public.calls
-     set last_seen_at = now()
+     set last_seen_at = now(),
+         media_connected_at = case
+           when p_connected then coalesce(media_connected_at, now())
+           else media_connected_at
+         end
    where id = p_call_id
      and ended_at is null
      and auth.uid() in (caller_id, callee_id);
@@ -13494,17 +16926,21 @@ $function$
 CREATE OR REPLACE FUNCTION public.trg_coin_ledger_balance()
  RETURNS trigger
  LANGUAGE plpgsql
- SET search_path TO 'public', 'pg_temp'
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 begin
+  perform set_config('chatyuk.economy_ok', '1', true);
   update public.profiles set
     bonus_balance = bonus_balance + case when new.bucket='bonus' then new.amount else 0 end,
     topup_balance = topup_balance + case when new.bucket='topup' then new.amount else 0 end,
     earned_balance = earned_balance + case when new.bucket='earned' then new.amount else 0 end,
     points = points + new.amount
-  where id=new.user_id;
+  where id = new.user_id;
+  perform set_config('chatyuk.economy_ok', '', true);
   return new;
-end; $function$
+end;
+$function$
 
 -- snapshot-fn: undo_message_v2
 CREATE OR REPLACE FUNCTION public.undo_message_v2(p_message_id bigint)
@@ -13572,7 +17008,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: unlock_photo
+-- snapshot-fn: unlock_photo (overload 1)
 CREATE OR REPLACE FUNCTION public.unlock_photo(p_photo_id uuid, p_mode text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -13639,6 +17075,113 @@ begin
   return jsonb_build_object('ok', true, 'points', remaining, 'mode', p_mode, 'tier', tier);
 end; $function$
 
+-- snapshot-fn: unlock_photo (overload 2)
+CREATE OR REPLACE FUNCTION public.unlock_photo(p_photo_id text, p_mode text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  points_on boolean; once_cost int; perm_cost int; owner_pct int;
+  cost int; owner_id uuid; owner_share int; remaining int;
+  paid int; topup_avail int;
+  take_topup int; take_earned int;
+  v_photo uuid;
+begin
+  if me is null then raise exception 'Not authenticated'; end if;
+  if p_mode not in ('once','perm') then raise exception 'Invalid mode'; end if;
+
+  -- Parameter datang sebagai text dari PostgREST → cast eksplisit.
+  begin
+    v_photo := trim(p_photo_id)::uuid;
+  exception when others then
+    raise exception 'Invalid photo id';
+  end;
+
+  select points_enabled, photo_unlock_once, photo_unlock_perm, photo_unlock_owner_pct
+    into points_on, once_cost, perm_cost, owner_pct
+    from app_settings where id = 'global';
+
+  if points_on is false then
+    return jsonb_build_object('ok', true, 'tier', 'free', 'points',
+      (select points from public.profiles where id = me));
+  end if;
+
+  select user_id into owner_id from public.user_photos where id = v_photo;
+  if owner_id is null then
+    raise exception 'Photo not found';
+  end if;
+  if owner_id = me then
+    return jsonb_build_object('ok', true, 'tier', 'free', 'points',
+      (select points from public.profiles where id = me));
+  end if;
+
+  -- Idempoten: sudah pernah dibuka permanen → jangan menagih lagi.
+  if exists (select 1 from public.photo_unlocks
+              where viewer_id = me and photo_id = v_photo) then
+    return jsonb_build_object('ok', true, 'tier', 'owned', 'points',
+      (select points from public.profiles where id = me));
+  end if;
+
+  cost := case when p_mode = 'perm' then coalesce(perm_cost,20)
+               else coalesce(once_cost,5) end;
+
+  -- WAJIB koin beli/penghasilan. `bonus` gratis tidak boleh.
+  select coalesce(sum(amount) filter (where bucket='topup'), 0),
+         coalesce(sum(amount) filter (where bucket='topup'), 0)
+       + coalesce(sum(amount) filter (where bucket='earned'), 0)
+    into topup_avail, paid
+    from public.coin_ledger where user_id = me;
+
+  if paid < cost then
+    raise exception 'Not enough points';
+  end if;
+
+  -- Serialisasi per user (cegah dua unlock paralel menagih dua kali).
+  perform pg_advisory_xact_lock(hashtext('wallet:' || me::text));
+
+  take_topup := least(topup_avail, cost);
+  take_earned := cost - take_topup;
+
+  if take_topup > 0 then
+    insert into public.coin_ledger(user_id,bucket,type,amount,ref_id)
+      values (me,'topup','photo_unlock',-take_topup,v_photo::text);
+  end if;
+  if take_earned > 0 then
+    insert into public.coin_ledger(user_id,bucket,type,amount,ref_id)
+      values (me,'earned','photo_unlock',-take_earned,v_photo::text);
+  end if;
+
+  remaining := public.wallet_sync_points(me);
+
+  owner_share := (cost * owner_pct) / 100;
+  if owner_share > 0 then
+    perform public.ledger_credit(owner_id, 'earned', 'photo_income',
+      owner_share, v_photo::text,
+      jsonb_build_object('from', me, 'mode', p_mode, 'gross', cost));
+  end if;
+
+  insert into public.platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
+    values ('photo_unlock', cost - owner_share, me, owner_id, v_photo::text,
+            jsonb_build_object('mode', p_mode, 'gross', cost,
+                               'owner_share', owner_share));
+
+  insert into public.point_events (user_id, event, amount, metadata)
+    values (me, 'photo_unlock', -cost,
+            jsonb_build_object('photo_id', v_photo, 'mode', p_mode));
+
+  if p_mode = 'perm' then
+    insert into public.photo_unlocks (viewer_id, photo_id) values (me, v_photo)
+      on conflict do nothing;
+  end if;
+
+  return jsonb_build_object('ok', true, 'tier', 'paid', 'points', remaining,
+    'owner_share', owner_share);
+end;
+$function$
+
 -- snapshot-fn: unmute_story_author
 CREATE OR REPLACE FUNCTION public.unmute_story_author(p_author uuid)
  RETURNS void
@@ -13693,6 +17236,69 @@ begin
   -- sync juga ke profiles untuk kompatibilitas client lama yang masih baca profiles.fcm_token
   update public.profiles set fcm_token = coalesce(p_token,'') where id = uid;
 end;
+$function$
+
+-- snapshot-fn: update_mission_progress
+CREATE OR REPLACE FUNCTION public.update_mission_progress(p_user_id uuid, p_mission_key text, p_increment integer DEFAULT 1)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_mission record;
+    v_period date;
+    v_progress int;
+    v_completed boolean;
+    v_inc int;
+BEGIN
+    if auth.uid() is not null and p_user_id is distinct from auth.uid() then
+        return jsonb_build_object('error', 'FORBIDDEN');
+    end if;
+
+    -- Clamp 1..120: nilai di luar itu dianggap tidak sah.
+    v_inc := coalesce(p_increment, 1);
+    if v_inc < 1 then v_inc := 1; end if;
+    if v_inc > 120 then v_inc := 120; end if;
+
+    SELECT * INTO v_mission
+    FROM public.missions
+    WHERE mission_key = p_mission_key;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('error', 'MISSION_NOT_FOUND');
+    END IF;
+
+    v_period := CASE WHEN v_mission.is_daily THEN CURRENT_DATE ELSE NULL END;
+
+    INSERT INTO public.user_missions
+        (user_id, mission_id, progress, is_completed, completed_at, period_date)
+    VALUES (
+        p_user_id,
+        v_mission.id,
+        LEAST(v_inc, v_mission.target_value),
+        v_inc >= v_mission.target_value,
+        CASE WHEN v_inc >= v_mission.target_value THEN now() END,
+        v_period
+    )
+    ON CONFLICT (user_id, mission_id, COALESCE(period_date, '1970-01-01'::date)) DO UPDATE SET
+        progress = LEAST(user_missions.progress + v_inc, v_mission.target_value),
+        is_completed = (user_missions.progress + v_inc >= v_mission.target_value),
+        completed_at = CASE
+            WHEN user_missions.progress + v_inc >= v_mission.target_value
+                 AND NOT user_missions.is_completed
+            THEN now()
+            ELSE user_missions.completed_at
+        END
+    RETURNING progress, is_completed INTO v_progress, v_completed;
+
+    RETURN jsonb_build_object(
+        'progress', v_progress,
+        'target', v_mission.target_value,
+        'completed', v_completed,
+        'reward_coins', v_mission.reward_coins
+    );
+END;
 $function$
 
 -- snapshot-fn: update_my_location
@@ -14284,6 +17890,17 @@ begin
     into res from app_settings where id = 'global';
   return res;
 end; $function$
+
+-- snapshot-fn: yukcoin_paid_total
+CREATE OR REPLACE FUNCTION public.yukcoin_paid_total(p_user uuid)
+ RETURNS integer
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(sum(amount) filter (where bucket in ('topup','earned')), 0)::int
+    from public.coin_ledger where user_id = p_user;
+$function$
 
 -- snapshot-fn: yukcoin_total
 CREATE OR REPLACE FUNCTION public.yukcoin_total(p_user uuid)

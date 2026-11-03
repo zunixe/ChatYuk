@@ -19,7 +19,13 @@ mixin _CallSessionMediaMx on _CallBase {
       // di Xiaomi pernah mic jauh yang kepilih (suara pelan).
       final peerConfigFuture =
           CallConfig.getPeerConfig(relayOnly: _relayOnly);
-      final localStreamFuture = navigator.mediaDevices.getUserMedia({
+      // Rebuild pc saat fallback all-candidates MEMPERTAHANKAN stream lokal
+      // (kamera/mic tetap hidup → PiP tidak blink + setup jauh lebih cepat
+      // daripada getUserMedia ulang di HP lambat). Stream baru hanya dibuka
+      // bila belum ada.
+      final localStreamFuture = _localStream != null
+          ? Future<MediaStream>.value(_localStream!)
+          : navigator.mediaDevices.getUserMedia({
         'audio': {
           'echoCancellation': true,
           'noiseSuppression': true,
@@ -104,6 +110,7 @@ mixin _CallSessionMediaMx on _CallBase {
         dlog('[ICE] connectionState: $state');
         if (_closed) return;
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          _reconnecting = false;
           if (!_closed && _phase != CallPhase.inCall) {
             _phase = CallPhase.inCall;
             _connectedAt = DateTime.now();
@@ -184,6 +191,7 @@ mixin _CallSessionMediaMx on _CallBase {
         if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected ||
             ice == RTCIceConnectionState.RTCIceConnectionStateConnected ||
             ice == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+          _reconnecting = false;
           if (_phase != CallPhase.inCall) {
             dlog(
               '[ICE] 15s check: pc/ice Connected -> SET inCall (anti putus)',
@@ -223,6 +231,10 @@ mixin _CallSessionMediaMx on _CallBase {
         if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
             state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
           var changed = false;
+          if (_reconnecting) {
+            _reconnecting = false;
+            changed = true;
+          }
           if (_iceReconnectFailed) {
             _iceReconnectFailed = false;
             changed = true;
@@ -251,6 +263,12 @@ mixin _CallSessionMediaMx on _CallBase {
             // Lawan menutup call ikut memutus media — konfirmasi status dulu
             // supaya layar ikut tertutup, bukan retry ICE ke sesi mati.
             if (await _remoteEnded()) return;
+            // Sinyal "menyambungkan" ke UI — fase TETAP inCall sehingga frame
+            // video terakhir tidak dibuang (dulu layar ikut blank total).
+            if (_phase == CallPhase.inCall && !_reconnecting) {
+              _reconnecting = true;
+              notifyListeners();
+            }
             if (!_iceRestarted) {
               await _attemptIceRestart();
             } else {
@@ -445,6 +463,10 @@ mixin _CallSessionMediaMx on _CallBase {
     final pc = _pc;
     if (pc == null || _closed) return;
     _iceRestarted = true;
+    if (_phase == CallPhase.inCall && !_reconnecting) {
+      _reconnecting = true;
+      notifyListeners();
+    }
     dlog('[ICE] restart attempt (isCaller=$isCaller)');
     if (!isCaller) {
       // Callee TIDAK boleh restartIce unilateral: ufrag baru tidak pernah

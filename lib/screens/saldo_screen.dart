@@ -16,8 +16,14 @@ class SaldoScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(localeProvider).s;
     final state = ref.watch(earningsProvider);
-    final canWithdraw =
-        ref.watch(withdrawProvider.select((w) => w.canWithdraw));
+    final wd = ref.watch(withdrawProvider.select(
+      (w) => (
+        can: w.canWithdraw,
+        min: w.config.minCoins,
+        earned: w.earnedBalance,
+        loading: w.loading,
+      ),
+    ));
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -47,7 +53,7 @@ class SaldoScreen extends ConsumerWidget {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: canWithdraw
+                      onPressed: wd.can
                           ? () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -64,6 +70,20 @@ class SaldoScreen extends ConsumerWidget {
                       label: Text(s.wdTitle, style: AppText.button),
                     ),
                   ),
+                  // Kapan tombol hidup — user tak menebak kenapa withdraw
+                  // abu-abu (batas sama dengan request_withdraw server).
+                  if (!wd.can && !wd.loading)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, left: 4),
+                      child: Text(
+                        s.saldoWdLocked(
+                          wd.min,
+                          (wd.min - wd.earned).clamp(0, wd.min),
+                        ),
+                        style: AppText.caption
+                            .copyWith(color: AppTheme.textSecondary),
+                      ),
+                    ),
                   const SizedBox(height: 14),
                   _SectionTitle(s.saldoEarnings),
                   Padding(

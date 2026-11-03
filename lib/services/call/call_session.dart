@@ -64,6 +64,21 @@ abstract class _CallBase extends ChangeNotifier {
   final String myGender;
   final List<Map<String, dynamic>> pendingSignals;
 
+  /// Siapa yang men-tick billing di sisi client. Default = isCaller
+  /// (private: caller selalu payer). Random match: server menagih pihak
+  /// MALE siapa pun caller-nya — caller di sini murni peran signaling.
+  /// null → fallback isCaller; provider random-match mengisinya dari
+  /// gender lokal supaya yang tick adalah device sang payer.
+  final bool? billingPayer;
+
+  bool get isBillingPayer => billingPayer ?? isCaller;
+
+  /// Durasi gratis di awal call (detik) sebelum billing berjalan —
+  /// Random Match = 30 (dijangkar ke `media_connected_at` di server);
+  /// private = 0 (menit pertama langsung tertagih / kuota female).
+  /// Diisi provider; UI memakai untuk countdown "gratis Ns".
+  final int billingFreeGraceSec;
+
   final CallService _service = CallService.instance;
 
   _CallBase({
@@ -75,6 +90,8 @@ abstract class _CallBase extends ChangeNotifier {
     this.myName = '',
     this.myGender = 'other',
     this.pendingSignals = const [],
+    this.billingPayer,
+    this.billingFreeGraceSec = 0,
   });
 
   final RTCVideoRenderer localRenderer = RTCVideoRenderer();
@@ -142,6 +159,7 @@ abstract class _CallBase extends ChangeNotifier {
   Timer? _billingTimer;
   int _billingPerMin = 0;
   int _billingCharged = 0;
+  int _billingIncome = 0;
   bool _billingEndedNoCoin = false;
   /// Saldo habis di tengah panggilan → panggilan DIJEDA (bukan diputus) dan
   /// UI menampilkan dialog "lanjutkan + isi koin". Di-set oleh _billingTick.
@@ -154,7 +172,28 @@ abstract class _CallBase extends ChangeNotifier {
   int _billingFreeLimitMin = 0;
   int get billingPerMinute => _billingPerMin;
   int get billingChargedTotal => _billingCharged;
+  // Pendapatan live sisi penerima (female): diisi dari income_total pada
+  // cabang info-only call_billing_tick — tanpa menagih siapa pun.
+  int get billingIncome => _billingIncome;
   bool get endedDueToNoCoin => _billingEndedNoCoin;
+
+  /// ICE lagi disambung-ulang (restart/fallback) padahal call sudah inCall —
+  /// UI menampilkan indikator "Menyambungkan ulang" TANPA mengosongkan video
+  /// (fase tetap inCall sehingga frame terakhir tak dibuang → tidak blank).
+  bool _reconnecting = false;
+  bool get isReconnecting => _reconnecting;
+
+  /// Sisa detik gratis — dihitung lokal dari `connectedAt` (momen yang sama
+  /// dengan yang di-stamp server sebagai `media_connected_at`). >0 hanya
+  /// selama masa grace call match; private call selalu 0.
+  int get billingFreeSecondsLeft {
+    if (billingFreeGraceSec <= 0) return 0;
+    final start = _connectedAt;
+    if (start == null) return billingFreeGraceSec;
+    final left =
+        billingFreeGraceSec - DateTime.now().difference(start).inSeconds;
+    return left > 0 ? left : 0;
+  }
 
   /// Callback saldo: `call_billing_tick` mengembalikan `remaining` (saldo
   /// sisa) di SETIAP respons — dipakai untuk menyegarkan counter/kartu
@@ -313,6 +352,8 @@ class CallSession extends _CallBase
     super.myName,
     super.myGender,
     super.pendingSignals,
+    super.billingPayer,
+    super.billingFreeGraceSec,
   });
 
   /// Siapkan renderer + media lokal + peer connection + listener sinyal.
@@ -454,6 +495,7 @@ class CallSession extends _CallBase
       final cur = _pc?.connectionState;
       if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         dlog('[ICE] phaseWatch -> SET inCall');
+        _reconnecting = false;
         _phase = CallPhase.inCall;
         _connectedAt = _connectedAt ?? DateTime.now();
         _recordConnected('phaseWatch');
@@ -509,7 +551,14 @@ class CallSession extends _CallBase
       // pc lama dipertahankan: Failed ≠ Closed — offer baru menghidupkan
       // kembali lewat ICE restart, tanpa melepas kamera/mic.
       dlog('[ICE] callee minta fallback via ice_retry (bukan rebuild)');
-      _phase = CallPhase.connecting;
+      // Sudah inCall → tandai "menyambungkan" saja; menurunkan fase ke
+      // connecting membuat UI membuang video → blank + "menghubungkan"
+      // walau media cuma blip. Layar pra-sambung tetap pakai connecting.
+      if (_phase == CallPhase.inCall) {
+        _reconnecting = true;
+      } else {
+        _phase = CallPhase.connecting;
+      }
       notifyListeners();
       unawaited(
         _service.sendSignal(callId, 'ice_retry').catchError((_) {}),
@@ -537,12 +586,9 @@ class CallSession extends _CallBase
     try {
       await old?.close();
     } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
-    // Lepas stream lokal lama agar kamera/mik tidak bocor (setup ulang
-    // di bawah membuka track baru; izin sudah ada jadi cepat).
-    try {
-      await _localStream?.dispose();
-    } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
-    _localStream = null;
+    // Stream lokal DIPERTAHANKAN: track kamera/mic hidup independen dari pc
+    // dan bisa langsung di-addTrack ke pc baru — kamera tak re-init (yang
+    // di Xiaomi lambat + bikin PiP blink) dan preview tak pernah kosong.
     await _signalSub?.cancel();
     _signalSub = null;
     _service.disposeSignal(callId);
@@ -551,7 +597,11 @@ class CallSession extends _CallBase
     _processedSignalIds.clear();
     _offered = false;
     _relayOnly = false;
-    _phase = CallPhase.connecting;
+    if (_phase == CallPhase.inCall) {
+      _reconnecting = true;
+    } else {
+      _phase = CallPhase.connecting;
+    }
     notifyListeners();
     // Bangun ulang peer connection + media.
     await _setupMediaAndPeer();
@@ -631,15 +681,17 @@ class CallSession extends _CallBase
     // tidak dipanggil di sebagian device sehingga UI nyangkut "Menghubungkan"
     // padahal media sudah mengalir. Cek state PC langsung tiap sync.
     final curState = _pc?.connectionState;
-    if (curState == RTCPeerConnectionState.RTCPeerConnectionStateConnected &&
-        _phase != CallPhase.inCall) {
-      dlog('[ICE] sync safety-net -> SET inCall');
-      _phase = CallPhase.inCall;
-      _connectedAt = _connectedAt ?? DateTime.now();
-      _recordConnected('syncSafetyNet');
-      _startBilling();
-      _setProximity(true);
-      notifyListeners();
+    if (curState == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+      _reconnecting = false;
+      if (_phase != CallPhase.inCall) {
+        dlog('[ICE] sync safety-net -> SET inCall');
+        _phase = CallPhase.inCall;
+        _connectedAt = _connectedAt ?? DateTime.now();
+        _recordConnected('syncSafetyNet');
+        _startBilling();
+        _setProximity(true);
+        notifyListeners();
+      }
     }
     try {
       final rows = await _service.syncCallSignals(callId);
@@ -717,14 +769,19 @@ class CallSession extends _CallBase
   }
 
   // ── Billing call ──
-  // Hanya PEMANGGIL (isCaller) yang ditagih. Tick tiap menit; server
-  // memutuskan biaya dari answered_at. Bila server bilang can_continue=false
-  // → akhiri call ini (saldo habis).
+  // Hanya sisi PAYER yang men-tick (isBillingPayer — private = caller,
+  // random = pihak male, ditentukan provider). Tick tiap menit + tick
+  // sekali di detik ~30 supaya grace 30 detik match ter-charge tepat
+  // waktu; server memutuskan biaya dari answered_at. Bila server bilang
+  // can_continue=false → jeda call ini (saldo habis).
   @override
   void _startBilling() {
-    if (!isCaller) return;
+    // Payer men-tick untuk menagih; sisi PENERIMA tetap men-tick — server
+    // menjawab cabang info-only (income_total) tanpa menagih siapa pun,
+    // supaya UI female bisa menampilkan pendapatan live.
     _billingTimer?.cancel();
     unawaited(_billingTick());
+    Timer(const Duration(seconds: 30), () => unawaited(_billingTick()));
     _billingTimer = Timer.periodic(
       const Duration(seconds: 60),
       (_) => unawaited(_billingTick()),
@@ -737,6 +794,7 @@ class CallSession extends _CallBase
       final res = await _service.callBillingTick(callId);
       if (_closed) return;
       _billingCharged = (res['charged_total'] as num?)?.toInt() ?? 0;
+      _billingIncome = (res['income_total'] as num?)?.toInt() ?? 0;
       // Saldo sisa dari tick → segarkan UI saldo (counter header call &
       // kartu profil) tanpa RPC tambahan.
       final remaining = (res['remaining'] as num?)?.toInt();

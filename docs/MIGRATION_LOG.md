@@ -231,6 +231,62 @@ UI yang memanggilnya, dan `user_info` justru membuang foto terkunci ->
   marker migrasi basi + tier bonus `send_gift` yang sudah dihapus
   20261031110005).
 
+## 2026-11-02 — call_billing_tick: remaining konsisten + match tertagih 120 dtk
+
+### `20261102120000_billing_remaining_consistency.sql` (APPLIED via Management API)
+
+- **Masalah 1 (counter loncat 986↔1021):** `remaining` yang dikirim ke
+  client memakai dua definisi — `yukcoin_paid_total` (topup+earned)
+  pra-charge, `yukcoin_total` (semua bucket) pasca-charge & early-return.
+  Client menaruhnya langsung ke saldo UI → poll profiles.points
+  mengoreksi bolak-balik. **Fix:** `remaining` SELALU `yukcoin_total`;
+  `v_paid` dipisah khusus afford-check (`charge_metered` menolak bonus).
+- **Masalah 2 (match tidak tertagih):** migrasi 240000 (timezone)
+  menulis `(elapsed_sec - 120)/60` → tagihan pertama baru di elapsed
+  180 dtk ≈ 3 menit. Dikembalikan ke `elapsed_sec/60 - 1` → menit ke-1
+  gratis, charge mulai **120 dtk** sesuai desain 110011/190000.
+- **Catatan flag:** `call_billing` feature_flags `published:false` —
+  per-menit billing OFF untuk user biasa; admin (`zunixe@gmail.com`)
+  bypass via `feature_enabled_for` → tetap tertagih.
+
+### `20261102123000_publish_call_billing.sql` (APPLIED via Management API)
+
+- `feature_flags.call_billing` → `published:true` — billing per-menit
+  berlaku untuk SEMUA user (keputusan produk).
+- **Verifikasi:** `random_match_test.sql` 26/26 (+3 asersi: charge
+  1 menit @130 dtk, remaining=total, tick ulang tidak dobel);
+  call_billing_toggle 3/3, call_test 20/20, economy 27+28+14 hijau.
+
+## 2026-11-03 — Ping match: jangan kembalikan call mati
+
+### `20261103000000_random_match_ping_dead_call.sql` (APPLIED via Management API)
+
+- **Gejala user:** "pas klik match pas mau ngebuka aga ngelag — layarnya
+  jadi kaya double". Dua akar:
+  1. `matched_call_id` menempel di `random_match_queue` sampai
+     leave()/re-join; `random_match_ping` selalu menjawab 'matched'
+     tanpa cek call masih hidup → client membuka `CallSession` untuk
+     call yang SUDAH ended di atas sesi baru → media ganda (lag) +
+     tampilan duplikat.
+  2. `RandomMatchState.callId` tidak pernah dibersihkan di client →
+     dedup `_openSession` bisa lolos untuk callId basi; `_openCallRoute`
+     juga tidak cek `routeTracker` (ensureCallScreenRoute bisa push
+     duluan saat resume/tap notif → layar ditumpuk).
+- **Fix server:** ping memvalidasi `calls.status='answered'` +
+  `coalesce(last_seen_at, answered_at, created_at)` segar <120 dtk
+  (heartbeat client 25 dtk, zombie sweep admin 75 dtk → 120 aman).
+  Call ended/zombie → `matched_call_id` & `matched_with` dibersihkan,
+  jawab 'waiting' (user tetap antre → bisa ter-pair ulang).
+- **Fix client:** `copyWith.clearCallId` (dipakai start/next/cancel/
+  hangup/onRemoteEnded/_fail); `hangup`/`onRemoteEnded` ikut
+  `unawaited(_svc.leave())`; dedup `_openSession` menolak 'matched' basi
+  saat fase connecting/inCall dengan callId lain, dan promote→inCall
+  bila `callProvider.activeSession.callId` sama; `_openCallRoute`
+  mengecek `routeTracker.contains(kCallScreenRoute)`.
+- **Verifikasi:** `random_match_test.sql` **30/30** (+5 asersi:
+  ended→waiting + jejak dibersihkan, zombie heartbeat basi→waiting,
+  hidup→matched + call_id benar); `check_migrations --all` OK bersih.
+
 ## 2026-11-01 — Progres nyonya = saldo earned net + min withdraw 2000
 
 ### `20261101160000_nyonya_progress_earned_balance.sql` (APPLIED via Management API)
@@ -4410,3 +4466,95 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - **Verifikasi:** live — male admin → nyonya_1000 absen;
   `daily_login_test.sql` 15/15 (male tanpa nyonya, female dengan judul
   bersih); `check_migrations --all` OK bersih.
+
+## 20261103100000_match_billing_male_payer
+- **File:** `20261103100000_match_billing_male_payer.sql` (apply via Management API).
+- **Isi:** billing Random Match hybrid — payer SELALU pihak male siapa pun
+  caller signaling-nya (asimetri lama: caller = joiner kedua → female-caller
+  membuat call gratis total & female income 0). Model: gratis 30 detik →
+  biaya konek 10 sekali (feature `match_call`, split 70/30 → female +3) →
+  `call_video` 20/menit (female +6). <30 dtk siapa pun tutup → male hanya
+  rugi pair fee 2. Tick boleh dari kedua peserta (random) — billing
+  diarahkan ke payer via `_charge_metered_core` baru (badan faithful
+  charge_metered live: points_enabled, guard recipient random-aware,
+  yukcoin_paid_total + ledger_spend_paid, income hanya female). Guard
+  recipient diperluas: kind='random' → penerima wajib peserta call
+  (female bisa caller); private tetap wajib callee. `charge_metered` →
+  wrapper auth-guard + delegasi; postur grant live dipertahankan
+  (dicabut dari authenticated, service_role saja).
+  `metered_pricing += match_call {unit_cost:10, cut_pct:70}`.
+- **Client:** `CallSession.billingPayer` (default isCaller) — provider
+  random-match mengisi `gender=='male'` supaya tick jalan di device payer
+  (UX top-up/pause yang benar); tick sekali di detik ~30 agar biaya konek
+  ter-charge tepat waktu.
+- **Verifikasi:** `match_billing_test.sql` baru 15/15 (grace, konek,
+  idempotent, female-caller→male tetap tertagih, insufficient, non-
+  participant); `economy_paid_only_test.sql` 27/27; `random_match_test.sql`
+  30/30 (assert model lama di-update); `call_billing_toggle_test.sql` 3/3;
+  snapshot_functions di-refresh; `check_migrations --all` OK bersih.
+
+## 20261103130000_match_income_ledger_type
+- **File:** `20261103130000_match_income_ledger_type.sql` (apply via Management API).
+- **Isi:** income per-menit match ditulis `call_video_income` → rincian
+  Saldo female salah masuk "Panggilan Privasi" (fee konek sudah benar
+  `match_call_income`). `coin_ledger` append-only → fix 3 lapis:
+  `_charge_metered_core` + param `p_ledger_type` (pricing tetap p_feature,
+  tipe ledger/income/revenue ditulis p_ledger_type; versi 5-arg lama
+  di-drop supaya tidak ada overload ambigu); `call_billing_tick` per-menit
+  kind='random' → p_ledger_type='match_call'; `get_earnings_summary`
+  bucket match_call via JOIN calls(kind='random') → income lama
+  `call_video_income` dari call random ikut terhitung match tanpa update
+  ledger. Spend male match juga tertulis `match_call`.
+- **Client:** tile riwayat `match_call` (spend) → label "Panggilan Match";
+  hint saldoWdLocked di bawah tombol withdraw.
+- **Verifikasi:** live ChatAja breakdown match_call=12 private_call=0;
+  `random_match_test.sql` 35/35 (+6: income type, spend type, earnings
+  bucket, regresi baris lama via join); `match_billing_test.sql` 16/16;
+  `economy_money_test.sql` 28/28 (claim caller dipulihkan di section 8);
+  full suite SQL hijau; `check_migrations --all` OK bersih.
+
+## 20261104000000_call_media_connected_at.sql
+- Jangkar billing match ke media CONNECT (bukan pair): kolom
+  `calls.media_connected_at`; `touch_call(p_call_id,p_connected)` — overload
+  1-arg lama di-drop (default-arg supaya rpc lama tetap resolve, ACL sama);
+  `call_billing_tick` elapsed = coalesce(media_connected_at, answered_at)
+  untuk kind='random' (client lama → fallback answered_at, bukan regresi);
+  `random_match_join` precheck male → `yukcoin_paid_total >= pair+konek`
+  (12) supaya match tak dijamin mati di detik 30 untuk male bonus-only.
+- Client: `_recordConnected` stamp sekali; `billingFreeGraceSec=30` ke sesi
+  → countdown "Gratis Ns" di header random call; `trackMission(match_calls)`
+  dipindah ke phase→inCall (gagal connect tak dihitung).
+- Applied via Management API; snapshot functions_all di-refresh.
+
+## 20261104010000_match_search_spend_topup.sql
+- BUG produksi: `_spend_yukcoin_core` hanya debit earned+bonus — `topup`
+  (koin beli uang asli) tidak dihitung → male topup-only tak pernah bisa
+  bayar fee pair (joiner di-skip / no_funds). `match_search` kini debit
+  bonus → topup → earned (fee ke platform, tanpa penerima → bonus aman);
+  fitur 'gift'/'gift_sent' legacy tetap earned+bonus.
+- Applied via Management API; economy_money_test §11 di-update ke urutan
+  baru (28/28).
+
+## Verifikasi gabungan 2026-11-04
+- `random_match_test.sql` 38/38 (precheck paid, kandidat bonus-only diskip,
+  funding test dipindah ke bucket topup); `match_billing_test.sql` 21/21
+  (jangkar media: pair 45s+media 5s → gratis; media 40s → 30; fallback
+  answered_at; touch_call stamp sekali earliest menang);
+  `economy_money_test.sql` 28/28; `call_billing_toggle_test.sql` 3/3;
+  full suite SQL hijau; `check_migrations --all` OK bersih.
+
+## 20261105000000_callee_billing_info.sql
+- `call_billing_tick`: callee kini boleh tick (private sebelumnya ditolak
+  "Only caller can be billed"). Billing tetap diarahkan ke payer
+  (idempotent — tick dua sisi tidak dobel), respons memuat `income_total`
+  (sum ledger `%_income` milik pemanggil) untuk tampilan pendapatan live.
+- FIX laten: `v_caller_gender` kini dari `c.caller_id` (bukan `me`) —
+  callee-tick random dulu salah resolve payer, callee-tick private bisa
+  kena cabang free-female. `v_free_used` dihitung untuk `c.caller_id`.
+- Client: `_startBilling` tick juga untuk penerima; `billingIncome` getter;
+  banner call = saldo (−N caller / +N penerima); match: (+N) untuk female.
+- Stabilitas: `_reconnecting` flag — ICE blip mid-call TIDAK lagi menurunkan
+  fase ke connecting (penyebab layar blank+"menghubungkan"); stream lokal
+  dipertahankan saat rebuild all-candidates (kamera tak re-init → PiP tak
+  blink); chip "Menyambungkan ulang" di UI.
+- Applied via Management API; match_billing_test 26/26; full SQL hijau.

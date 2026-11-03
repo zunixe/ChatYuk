@@ -75,6 +75,7 @@ class RandomMatchState {
     RandomPartner? partner,
     bool clearPartner = false,
     String? callId,
+    bool clearCallId = false,
     bool? isCaller,
     String? errorCode,
     bool clearError = false,
@@ -86,7 +87,10 @@ class RandomMatchState {
     online: online ?? this.online,
     sample: sample ?? this.sample,
     partner: clearPartner ? null : (partner ?? this.partner),
-    callId: callId ?? this.callId,
+    // callId WAJIB dibersihkan eksplisit saat sesi berakhir — callId basi
+    // membuat dedup `_openSession` lolos untuk 'matched' telat dari call
+    // yang sudah mati → sesi kedua dibuka ("layar kaya double" + lag).
+    callId: clearCallId ? null : (callId ?? this.callId),
     isCaller: isCaller ?? this.isCaller,
     errorCode: clearError ? null : (errorCode ?? this.errorCode),
     partnerEnded: partnerEnded ?? this.partnerEnded,
@@ -167,6 +171,7 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
       clearPartner: true,
       clearError: true,
       partnerEnded: false,
+      clearCallId: true,
     );
     _listenQueue();
     try {
@@ -210,7 +215,10 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
   /// Batal mencari (tetap di layar, kembali ke idle).
   Future<void> cancel() async {
     _stopSearching();
-    state = state.copyWith(phase: RandomMatchPhase.idle);
+    state = state.copyWith(
+      phase: RandomMatchPhase.idle,
+      clearCallId: true,
+    );
     try {
       await _svc.leave();
     } catch (e) {
@@ -239,6 +247,7 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
       clearPartner: true,
       clearError: true,
       partnerEnded: false,
+      clearCallId: true,
     );
     _listenQueue();
     _busy = false;
@@ -247,13 +256,17 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
   }
 
   /// Akhiri call lalu kembali ke layar radar (tidak mencari lagi).
+  /// `leave()` ikut menghapus baris antrean supaya `matched_call_id` mati
+  /// tidak dikembalikan ping berikutnya (call mati jangan dibuka ulang).
   Future<void> hangup() async {
     _stopSearching();
     await _endCall();
+    unawaited(_svc.leave());
     state = state.copyWith(
       phase: RandomMatchPhase.idle,
       clearPartner: true,
       partnerEnded: false,
+      clearCallId: true,
     );
   }
 
@@ -265,9 +278,11 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
     if (!state.inCall) return;
     await _endCall();
     _stopSearching();
+    unawaited(_svc.leave());
     state = state.copyWith(
       phase: RandomMatchPhase.idle,
       partnerEnded: true,
+      clearCallId: true,
     );
   }
 
@@ -313,9 +328,29 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
     // 'matched' bisa tiba dua kali: respons join() + ping/watchQueue
     // realtime. Tanpa dedup ini, DUA CallSession dibuat untuk callId sama
     // (pc, getUserMedia, timer ICE ganda → offer/answer dobel & zombie).
-    if (state.callId == callId &&
-        (state.phase == RandomMatchPhase.connecting ||
-            state.phase == RandomMatchPhase.inCall)) {
+    if (state.phase == RandomMatchPhase.connecting ||
+        state.phase == RandomMatchPhase.inCall) {
+      // Sudah di sesi → 'matched' sama = duplikat (dedup); 'matched' lain
+      // = BASI dari antrean call yang sudah mati (queue event telat/ping
+      // lama). JANGAN buka sesi kedua di atas sesi hidup: kamera/mic/pc
+      // ganda = lag + video tampak "double".
+      if (state.callId != callId) {
+        dlog('[RandomMatch] matched basi diabaikan (aktif=${state.callId}, datang=$callId)');
+      }
+      return;
+    }
+    // Sesi untuk callId ini sudah hidup di callProvider tapi fase provider
+    // belum inCall (mis. 'matched' datang dua kali berdekatan): pulihkan
+    // state — JANGAN startSession kedua untuk call yang sama.
+    final live = ref.read(callProvider.notifier).activeSession;
+    if (live != null && live.callId == callId) {
+      _stopSearching();
+      state = state.copyWith(
+        phase: RandomMatchPhase.inCall,
+        partner: partner,
+        callId: callId,
+        isCaller: res['is_caller'] == true,
+      );
       return;
     }
     _stopSearching();
@@ -341,15 +376,35 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
             mode: CallMode.fullscreen,
             myName: profile?.nickname ?? '',
             myGender: profile?.gender ?? 'other',
+            // Random match: server menagih pihak MALE siapa pun caller
+            // signaling-nya. Tick billing hanya di device payer; gender
+            // tak dikenal → fallback isCaller (perilaku lama).
+            billingPayer: profile?.gender == 'male'
+                ? true
+                : (profile?.gender == 'female' ? false : null),
+            // Grace 30 detik dari media connect — UI countdown + jangkar
+            // billing server (media_connected_at) menunjuk momen yang sama.
+            billingFreeGraceSec: 30,
             notifBody: s.callNotifActiveVideo,
             notifChannel: s.callNotifActiveAudio,
             notifDesc: s.callNotifActiveAudio,
             chatId: '$kRandomChatIdPrefix$callId',
           );
       state = state.copyWith(phase: RandomMatchPhase.inCall);
-      // Misi panggilan match (utama + harian)
-      ref.read(pointsProvider.notifier).trackMission('match_calls');
-      ref.read(pointsProvider.notifier).trackMission('daily_match_calls');
+      // Misi dihitung saat media benar-benar tersambung (phase→inCall),
+      // bukan saat sesi dibuat — call yang gagal connect tak dihitung.
+      final sess = ref.read(callProvider.notifier).activeSession;
+      if (sess != null) {
+        void onConnect() {
+          if (sess.phase != CallPhase.inCall) return;
+          sess.removeListener(onConnect);
+          ref.read(pointsProvider.notifier).trackMission('match_calls');
+          ref.read(pointsProvider.notifier).trackMission('daily_match_calls');
+        }
+
+        sess.addListener(onConnect);
+        onConnect();
+      }
       // Fee match (−2) dipotong server saat pair terbentuk → segarkan
       // saldo (kartu YukCoin/counter header call ikut akurat).
       unawaited(ref.read(pointsProvider.notifier).refreshWallet());
@@ -369,7 +424,11 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
 
   void _fail(String code) {
     _stopSearching();
-    state = state.copyWith(phase: RandomMatchPhase.idle, errorCode: code);
+    state = state.copyWith(
+      phase: RandomMatchPhase.idle,
+      errorCode: code,
+      clearCallId: true,
+    );
   }
 
   String _errorCodeOf(Object e) {

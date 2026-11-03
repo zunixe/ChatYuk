@@ -8,6 +8,8 @@ select supabase_tests.mk_dummy('d0c1e000-0000-4000-8000-0000000000a1'::uuid, '[T
 select supabase_tests.mk_dummy('d0c1e000-0000-4000-8000-0000000000a2'::uuid, '[TEST] RndB', 'online');
 select supabase_tests.mk_dummy('d0c1e000-0000-4000-8000-0000000000a3'::uuid, '[TEST] RndC', 'online');
 select supabase_tests.mk_dummy('d0c1e000-0000-4000-8000-0000000000a4'::uuid, '[TEST] RndD', 'online');
+select supabase_tests.mk_dummy('d0c1e000-0000-4000-8000-0000000000a5'::uuid, '[TEST] RndE', 'online');
+select supabase_tests.mk_dummy('d0c1e000-0000-4000-8000-0000000000a6'::uuid, '[TEST] RndF', 'online');
 
 update public.profiles set gender = 'female', lat = -6.20, lon = 106.80
  where id = 'd0c1e000-0000-4000-8000-0000000000a2';
@@ -49,11 +51,36 @@ select supabase_tests.check('male saldo 0 → tidak ada baris antrean',
               where user_id = 'd0c1e000-0000-4000-8000-0000000000a1'));
 
 -- Danai dummy male via ledger (trigger menyinkron profiles.points).
+-- Bucket 'topup' = PAID — precheck join (20261104) menolak bonus-only.
 insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
 values
- ('d0c1e000-0000-4000-8000-0000000000a1','bonus','topup',100,'test-fund'),
- ('d0c1e000-0000-4000-8000-0000000000a3','bonus','topup',100,'test-fund'),
- ('d0c1e000-0000-4000-8000-0000000000a4','bonus','topup',100,'test-fund');
+ ('d0c1e000-0000-4000-8000-0000000000a1','topup','topup',100,'test-fund'),
+ ('d0c1e000-0000-4000-8000-0000000000a3','topup','topup',100,'test-fund'),
+ ('d0c1e000-0000-4000-8000-0000000000a4','topup','topup',100,'test-fund');
+
+-- ── 0c. Precheck paid (20261104): male BONUS-only ≥ pair fee tapi paid
+--    < pair+konek → no_funds; kandidat male bonus-only juga diskip. ──
+insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
+values
+ ('d0c1e000-0000-4000-8000-0000000000a5','bonus','topup',100,'test-fund-bonus'),
+ ('d0c1e000-0000-4000-8000-0000000000a6','bonus','topup',100,'test-fund-bonus');
+select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a5', true);
+insert into _rm values ('e_bonus', public.random_match_join('all')::text);
+select supabase_tests.check('male bonus-only (paid 0) → no_funds',
+  (select v::jsonb->>'status' from _rm where k = 'e_bonus') = 'no_funds');
+select supabase_tests.check('male bonus-only → tidak masuk antrean',
+  not exists(select 1 from public.random_match_queue
+              where user_id = 'd0c1e000-0000-4000-8000-0000000000a5'));
+-- Kandidat male bonus-only di antrean → diskip oleh joiner female.
+insert into public.random_match_queue
+  (user_id, gender, want_gender, pinged_at)
+values ('d0c1e000-0000-4000-8000-0000000000a6', 'male', 'female', now());
+select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a2', true);
+insert into _rm values ('b_skip', public.random_match_join('all')::text);
+select supabase_tests.check('kandidat male paid < pair+konek → diskip (waiting)',
+  (select v::jsonb->>'status' from _rm where k = 'b_skip') = 'waiting');
+delete from public.random_match_queue;
+select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a1', true);
 
 -- ── 1. A menunggu, B masuk → langsung matched (tanpa ringing) ──
 insert into _rm values ('a_join', public.random_match_join('all')::text);
@@ -121,13 +148,13 @@ select supabase_tests.check('random_call_history memuat call tadi (durasi 20 dtk
           where h.call_id = (select (v::jsonb->>'call_id')::uuid from _rm where k = 'b_join')
             and h.duration_sec >= 20));
 
--- ── 3. Billing random = gratis ──
+-- ── 3. Billing random <30 dtk = gratis (model 20261103: konek 10 @30s) ──
 select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a2', true);
 insert into _rm values ('bill', public.call_billing_tick(
   (select (v::jsonb->>'call_id')::uuid from _rm where k = 'b_join'))::text);
-select supabase_tests.check('billing random: per_minute 0 & tidak ditagih',
-  (select (v::jsonb->>'per_minute')::int = 0
-      and (v::jsonb->>'charged_total')::int = 0
+select supabase_tests.check('billing random <30s: tidak ditagih & masih gratis',
+  (select (v::jsonb->>'charged_total')::int = 0
+      and (v::jsonb->>'billed_minutes')::int = 0
       and (v::jsonb->>'can_continue')::boolean
      from _rm where k = 'bill'));
 
@@ -182,6 +209,155 @@ select public.random_match_leave();
 select supabase_tests.check('leave menghapus baris antrean sendiri',
   not exists(select 1 from public.random_match_queue
               where user_id = 'd0c1e000-0000-4000-8000-0000000000a4'));
+
+-- ── 10. Billing match: male caller ditagih mulai 120 dtk + remaining=total ──
+-- Dana a3 di bucket `topup` (PAID — charge_metered menolak bonus).
+insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
+values ('d0c1e000-0000-4000-8000-0000000000a3','topup','topup',100,'test-fund-paid');
+-- Flag call_billing harus published supaya jalur male berjalan
+-- (bypass zunixe@gmail.com tidak berlaku untuk dummy).
+update public.app_settings
+   set feature_flags = feature_flags || '{"call_billing":{"published":true}}'::jsonb
+ where id = 'global';
+with nc as (
+  insert into public.calls (caller_id, callee_id, kind, call_type, status, answered_at)
+  values ('d0c1e000-0000-4000-8000-0000000000a3',
+          'd0c1e000-0000-4000-8000-0000000000a2',
+          'random','video','answered', now() - interval '130 seconds')
+  returning id)
+insert into _rm select 'paid_call', id::text from nc;
+select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a3', true);
+insert into _rm values ('tick_paid', public.call_billing_tick(
+  (select v::uuid from _rm where k = 'paid_call'))::text);
+select supabase_tests.check('match 130 dtk → konek 10 + 2 menit (50)',
+  (select (v::jsonb->>'billed_minutes')::int = 2
+     and (v::jsonb->>'charged_total')::int = 50
+     and (v::jsonb->>'can_continue')::boolean
+     and (v::jsonb->>'reason') is null
+   from _rm where k = 'tick_paid'));
+select supabase_tests.check('remaining = yukcoin_total (bukan paid-only)',
+  (select (v::jsonb->>'remaining')::int from _rm where k = 'tick_paid')
+  = (select coalesce(sum(amount),0)::int from public.coin_ledger
+      where user_id = 'd0c1e000-0000-4000-8000-0000000000a3'));
+-- Tick kedua di menit yang sama → tidak dobel charge (konek maupun menit).
+insert into _rm values ('tick_paid2', public.call_billing_tick(
+  (select v::uuid from _rm where k = 'paid_call'))::text);
+select supabase_tests.check('tick ulang → tidak dobel (konek + menit)',
+  (select (v::jsonb->>'billed_minutes')::int = 2
+     and (v::jsonb->>'charged_total')::int = 50
+   from _rm where k = 'tick_paid2'));
+
+-- Kategorisasi income match (20261103130000): female HARUS menerima
+-- 'match_call_income' (konek 3 + menit 12 = 15), BUKAN 'call_video_income'
+-- — bug lama membuat income match muncul di rincian "Panggilan Privasi".
+select supabase_tests.check('income female match → match_call_income (15)',
+  (select coalesce(sum(amount),0) from public.coin_ledger
+    where user_id = 'd0c1e000-0000-4000-8000-0000000000a2'
+      and type = 'match_call_income'
+      and ref_id = (select v from _rm where k = 'paid_call')) = 15);
+select supabase_tests.check('income female match BUKAN call_video_income',
+  not exists(select 1 from public.coin_ledger
+    where user_id = 'd0c1e000-0000-4000-8000-0000000000a2'
+      and type = 'call_video_income'
+      and ref_id = (select v from _rm where k = 'paid_call')));
+select supabase_tests.check('spend male match → match_call (bukan call_video)',
+  exists(select 1 from public.coin_ledger
+    where user_id = 'd0c1e000-0000-4000-8000-0000000000a3'
+      and type = 'match_call' and amount < 0
+      and ref_id = (select v from _rm where k = 'paid_call'))
+  and not exists(select 1 from public.coin_ledger
+    where user_id = 'd0c1e000-0000-4000-8000-0000000000a3'
+      and type = 'call_video' and amount < 0
+      and ref_id = (select v from _rm where k = 'paid_call')));
+
+-- Earnings summary: bucket match_call menangkap income match — termasuk
+-- baris LAMA 'call_video_income' dari call random (ledger append-only,
+-- tak bisa di-retype → kategori via JOIN calls.kind).
+select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a2', true);
+insert into _rm values ('earn_b', public.get_earnings_summary(
+  'd0c1e000-0000-4000-8000-0000000000a2')::text);
+select supabase_tests.check('earnings breakdown.match_call = 15, private = 0',
+  (select (v::jsonb->'breakdown'->>'match_call')::int = 15
+     and (v::jsonb->'breakdown'->>'private_call')::int = 0
+   from _rm where k = 'earn_b'));
+-- Regresi untuk baris lama: income 'call_video_income' yang ref_id-nya
+-- call random juga harus masuk bucket match_call (bukan private_call).
+insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
+values ('d0c1e000-0000-4000-8000-0000000000a2','earned','call_video_income',
+        7,(select v from _rm where k = 'paid_call'));
+insert into _rm values ('earn_b2', public.get_earnings_summary(
+  'd0c1e000-0000-4000-8000-0000000000a2')::text);
+select supabase_tests.check('call_video_income call random → match_call (22)',
+  (select (v::jsonb->'breakdown'->>'match_call')::int = 22
+     and (v::jsonb->'breakdown'->>'private_call')::int = 0
+   from _rm where k = 'earn_b2'));
+select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a3', true);
+
+-- ── 11. Ping dengan matched_call_id call MATI → 'waiting' + jejak bersih ──
+-- matched_call_id bisa menempel di antrean setelah call ended; ping lama
+-- mengembalikannya lagi → client membuka CallSession untuk call mati.
+delete from public.random_match_queue;
+with dead as (
+  insert into public.calls (caller_id, callee_id, kind, call_type, status,
+                            answered_at, ended_at, last_seen_at)
+  values ('d0c1e000-0000-4000-8000-0000000000a3',
+          'd0c1e000-0000-4000-8000-0000000000a2',
+          'random','video','ended',
+          now() - interval '300 seconds',
+          now() - interval '200 seconds',
+          now() - interval '200 seconds')
+  returning id)
+insert into _rm select 'dead_call', id::text from dead;
+insert into public.random_match_queue
+  (user_id, gender, want_gender, pinged_at, matched_call_id, matched_with)
+values ('d0c1e000-0000-4000-8000-0000000000a3','male','all', now(),
+        (select v::uuid from _rm where k = 'dead_call'),
+        'd0c1e000-0000-4000-8000-0000000000a2');
+insert into _rm values ('ping_dead', public.random_match_ping()::text);
+select supabase_tests.check('ping call ENDED → waiting (bukan matched)',
+  (select v::jsonb->>'status' from _rm where k = 'ping_dead') = 'waiting');
+select supabase_tests.check('jejak pair dibersihkan (matched_call_id & matched_with NULL)',
+  not exists(select 1 from public.random_match_queue
+              where user_id = 'd0c1e000-0000-4000-8000-0000000000a3'
+                and (matched_call_id is not null or matched_with is not null)));
+
+-- Zombie: status 'answered' tapi heartbeat basi → juga dibersihkan.
+with zom as (
+  insert into public.calls (caller_id, callee_id, kind, call_type, status,
+                            answered_at, last_seen_at)
+  values ('d0c1e000-0000-4000-8000-0000000000a3',
+          'd0c1e000-0000-4000-8000-0000000000a2',
+          'random','video','answered',
+          now() - interval '600 seconds',
+          now() - interval '300 seconds')
+  returning id)
+insert into _rm select 'zom_call', id::text from zom;
+update public.random_match_queue
+   set matched_call_id = (select v::uuid from _rm where k = 'zom_call'),
+       matched_with = 'd0c1e000-0000-4000-8000-0000000000a2'
+ where user_id = 'd0c1e000-0000-4000-8000-0000000000a3';
+insert into _rm values ('ping_zom', public.random_match_ping()::text);
+select supabase_tests.check('ping call ZOMBIE (heartbeat basi) → waiting',
+  (select v::jsonb->>'status' from _rm where k = 'ping_zom') = 'waiting');
+
+-- Call HIDUP (answered + heartbeat segar) → tetap matched.
+with live as (
+  insert into public.calls (caller_id, callee_id, kind, call_type, status,
+                            answered_at, last_seen_at)
+  values ('d0c1e000-0000-4000-8000-0000000000a3',
+          'd0c1e000-0000-4000-8000-0000000000a2',
+          'random','video','answered', now() - interval '10 seconds', now())
+  returning id)
+insert into _rm select 'live_call', id::text from live;
+update public.random_match_queue
+   set matched_call_id = (select v::uuid from _rm where k = 'live_call'),
+       matched_with = 'd0c1e000-0000-4000-8000-0000000000a2'
+ where user_id = 'd0c1e000-0000-4000-8000-0000000000a3';
+insert into _rm values ('ping_live', public.random_match_ping()::text);
+select supabase_tests.check('ping call HIDUP → matched + call_id benar',
+  (select v::jsonb->>'status' from _rm where k = 'ping_live') = 'matched'
+  and (select (v::jsonb->>'call_id')::uuid from _rm where k = 'ping_live')
+      = (select v::uuid from _rm where k = 'live_call'));
 
 select set_config('request.jwt.claim.sub', '', true);
 select supabase_tests.report() as result;

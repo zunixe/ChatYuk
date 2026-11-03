@@ -132,6 +132,14 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
   /// (dipanggil dari build/postFrame & tombol Match) dan direset saat
   /// route selesai — user back / digantikan layar chat.
   void _openCallRoute() {
+    // Route call mungkin SUDAH dibuka pihak lain (ensureCallScreenRoute
+    // saat app resume / tap notif "panggilan aktif") — tanpa cek ini layar
+    // call ditumpuk dua kali ("layar kaya double").
+    if (routeTracker.contains(kCallScreenRoute)) {
+      _callRouteOpen = false;
+      return;
+    }
+    _callRouteOpen = true;
     Navigator.push(
       context,
       // PERF: fullscreenDialog → lewati slide 250 ms; nama route agar

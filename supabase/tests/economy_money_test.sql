@@ -184,6 +184,8 @@ select supabase_tests.check('withdraw reject → saldo kembali 2032',
 
 -- ════ 8. CHARGE_METERED: harga kolom + income female (male tidak) ════
 -- call_video 20/min, cut 70% → caller −20, female +6, revenue 14.
+-- charge_metered menolak menagih user lain → claim harus caller (a1).
+select set_config('request.jwt.claim.sub', 'ec03e000-0000-4000-8000-0000000000a1', true);
 insert into _mn values ('metered',
   public.charge_metered('ec03e000-0000-4000-8000-0000000000a1',
                         'call_video', 'mn-call', 1,
@@ -261,21 +263,25 @@ select supabase_tests.check('topup ulang → already:true, ledger hanya 1 baris'
         where user_id='ec03e000-0000-4000-8000-0000000000a1'
           and type='topup' and ref_id='test-ord-1') = 1);
 
--- ════ 11. BUCKET ORDER: spend_yukcoin = earned dulu lalu bonus ════
--- m1: earned sisa 98 setelah race §9 (−2), bonus 60 setelah metered §8
--- (−40 via ledger_spend bonus-first). Spend 150 → earned −98, bonus −52.
--- (sum() di assert = −100 earned, −52 bonus termasuk race −2.)
+-- ════ 11. BUCKET ORDER: match_search = bonus dulu → topup → earned ════
+-- (20261104b: `topup` ikut dipakai untuk fee pair + urut diubah — sebelumnya
+-- earned→bonus, yang membuat user topup-only tak pernah bisa match.)
+-- m1: bonus 100 + topup + earned. Spend 150 → bonus −100 (semua), topup −50
+-- (+ −2 jejak race §9 = −52 total), earned tak tersentuh.
 select set_config('request.jwt.claim.sub', 'ec03e000-0000-4000-8000-0000000000a1', true);
 insert into _mn values ('spend_ord',
   public.spend_yukcoin('ec03e000-0000-4000-8000-0000000000a1',
                        'match_search', 150, 'mn')::text);
-select supabase_tests.check('spend_yukcoin: earned −100 dulu, bonus −50',
+select supabase_tests.check('match_search: bonus −100 dulu, lalu topup −52, earned tak tersentuh',
   (select coalesce(sum(amount),0) from public.coin_ledger
     where user_id='ec03e000-0000-4000-8000-0000000000a1'
-      and bucket='earned' and type='match_search') = -100
+      and bucket='bonus' and type='match_search') = -100
   and (select coalesce(sum(amount),0) from public.coin_ledger
     where user_id='ec03e000-0000-4000-8000-0000000000a1'
-      and bucket='bonus' and type='match_search') = -52,
+      and bucket='topup' and type='match_search') = -52
+  and (select coalesce(sum(amount),0) from public.coin_ledger
+    where user_id='ec03e000-0000-4000-8000-0000000000a1'
+      and bucket='earned' and type='match_search') = 0,
   (select v from _mn where k='spend_ord'));
 
 -- ════ 12. Sehat menyeluruh: invariant check untuk semua dummy ════

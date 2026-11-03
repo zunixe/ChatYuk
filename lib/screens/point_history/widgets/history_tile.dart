@@ -118,6 +118,9 @@ class HistoryTile extends StatelessWidget {
       case 'private_call_income':
       case 'match_call_income':
         return s.pointHistoryCallIncome;
+      // Spend sisi male untuk call match (fee konek + per-menit).
+      case 'match_call':
+        return s.saldoMatchCall;
       case 'gift_sent':
         return s.pointHistoryGiftSent;
       case 'gift_recv':
