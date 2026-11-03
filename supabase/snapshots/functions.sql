@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-11-03T12:46:33Z
+-- Timestamp: 2026-11-03T23:31:37Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -1061,7 +1061,7 @@ begin
     'sent', p_amount, 'received', v_net, 'cut_pct', v_cut_pct);
 end; $function$
 
--- snapshot-fn: send_gift @ 20261031110005_female_withdraw_all.sql
+-- snapshot-fn: send_gift @ 20261110000000_econ_lockdown_phase1.sql
 CREATE OR REPLACE FUNCTION public.send_gift(p_chat_id text, p_receiver_id uuid, p_gift_id text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1076,6 +1076,9 @@ declare
   paid int; remaining int;
 begin
   if uid is null then raise exception 'Not authenticated'; end if;
+  -- 2026-11-10: serialkan debit per user (sama dgn ledger_spend_paid dst);
+  -- juga menutup balapan cek batas transaksi/jam.
+  perform pg_advisory_xact_lock(hashtext('wallet:' || uid::text));
   if p_receiver_id = uid then raise exception 'Cannot gift self'; end if;
   select points_enabled, coalesce(gift_cut_pct,30)
     into points_on, cut_pct from app_settings where id = 'global';

@@ -124,6 +124,15 @@ Deno.serve(async (req) => {
       return json({ error: 'Not purchased', state: purchaseState }, 409);
     }
 
+    // purchaseType: 0 = test (license tester), 1 = promo (kode promo).
+    // Bukan uang asli → jangan dikredit sebagai topup (bisa dicairkan lewat
+    // gift → earned). QA bisa mengizinkan lewat secret
+    // PLAY_ALLOW_TEST_PURCHASES=1 (JANGAN aktif di produksi normal).
+    const allowTest = Deno.env.get('PLAY_ALLOW_TEST_PURCHASES') === '1';
+    if ((vjson.purchaseType === 0 || vjson.purchaseType === 1) && !allowTest) {
+      return json({ error: 'Test/promo purchase not credited', type: vjson.purchaseType }, 409);
+    }
+
     // Ikat ke akun: pembelian baru membawa obfuscatedExternalAccountId =
     // sha256(uid pembeli). Token milik akun lain → tolak (cegah token
     // dipakai/dicuri akun lain). Pembelian lama (tanpa field) tetap diterima.

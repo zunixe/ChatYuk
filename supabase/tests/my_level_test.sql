@@ -43,6 +43,9 @@ select supabase_tests.check('next_level = 1, next_at = 700',
 -- ── 2. Topup 700 → Lv.1 + reward +50 sekali ──
 insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
 values ('d0c5e000-0000-4000-8000-0000000000a1', 'topup', 'topup', 700, 'test-lv-1');
+-- Level dihitung dari order paid (20261110020000).
+insert into public.topup_orders (id, user_id, package_id, coins, price_idr, status, provider, platform, paid_at)
+values ('test-lv-1', 'd0c5e000-0000-4000-8000-0000000000a1', (select id from public.topup_packages order by price_idr limit 1), 700, 0, 'paid', 'test', 'play', now());
 insert into _ml values ('lv1', public.get_my_level()::text);
 select supabase_tests.check('kumulatif 700 → level 1',
   (select v::jsonb->>'level' from _ml where k = 'lv1') = '1');
@@ -76,6 +79,9 @@ select supabase_tests.check('earned/bonus/spend tidak mengubah kumulatif (700 �
 -- ── 5. Naik ke Lv.2 (kumulatif 2000) → reward +100 ──
 insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
 values ('d0c5e000-0000-4000-8000-0000000000a1', 'topup', 'topup', 1300, 'test-lv-2');
+-- Level dihitung dari order paid (20261110020000).
+insert into public.topup_orders (id, user_id, package_id, coins, price_idr, status, provider, platform, paid_at)
+values ('test-lv-2', 'd0c5e000-0000-4000-8000-0000000000a1', (select id from public.topup_packages order by price_idr limit 1), 1300, 0, 'paid', 'test', 'play', now());
 insert into _ml values ('lv2', public.get_my_level()::text);
 select supabase_tests.check('kumulatif 2000 → level 2',
   (select v::jsonb->>'level' from _ml where k = 'lv2') = '2');
@@ -88,6 +94,9 @@ select supabase_tests.check('get_user_level(male) → 2',
   (select v::jsonb->>'level' from _ml where k = 'ulvl') = '2');
 insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
 values ('d0c5e000-0000-4000-8000-0000000000a2', 'topup', 'topup', 999999, 'test-lv-f');
+-- Level dihitung dari order paid (20261110020000).
+insert into public.topup_orders (id, user_id, package_id, coins, price_idr, status, provider, platform, paid_at)
+values ('test-lv-f', 'd0c5e000-0000-4000-8000-0000000000a2', (select id from public.topup_packages order by price_idr limit 1), 999999, 0, 'paid', 'test', 'play', now());
 insert into _ml values ('ulvf', public.get_user_level('d0c5e000-0000-4000-8000-0000000000a2')::text);
 select supabase_tests.check('get_user_level(female) → 0 (male only)',
   (select v::jsonb->>'level' from _ml where k = 'ulvf') = '0');
@@ -96,6 +105,9 @@ select supabase_tests.check('get_user_level(female) → 0 (male only)',
 update public.app_settings set points_enabled = false where id = 'global';
 insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)
 values ('d0c5e000-0000-4000-8000-0000000000a1', 'topup', 'topup', 3000, 'test-lv-3');
+-- Level dihitung dari order paid (20261110020000).
+insert into public.topup_orders (id, user_id, package_id, coins, price_idr, status, provider, platform, paid_at)
+values ('test-lv-3', 'd0c5e000-0000-4000-8000-0000000000a1', (select id from public.topup_packages order by price_idr limit 1), 3000, 0, 'paid', 'test', 'play', now());
 insert into _ml values ('lv3off', public.get_my_level()::text);
 select supabase_tests.check('kill-switch: level tetap dihitung (5000 → Lv.3)',
   (select v::jsonb->>'level' from _ml where k = 'lv3off') = '3');

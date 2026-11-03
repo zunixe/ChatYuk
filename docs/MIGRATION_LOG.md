@@ -1,3 +1,39 @@
+## 2026-11-10 — Review ulang ekonomi + level (APPLIED 2026-11-04 via API)
+
+### `20261110000000_econ_lockdown_phase1.sql`
+- `withdraw_accounts` & `subscriptions`: klien SELECT-only (revoke tulis +
+  drop policy tulis). Dulu PATCH langsung melewati cooldown nomor DANA dan
+  membuat langganan gratis.
+- `guard_economy_columns` (+INSERT): `subscription_price` hanya via
+  `set_subscription_price` (kini set `chatyuk.economy_ok`); `is_registered`
+  hanya naik bila auth user terverifikasi (`profile_is_verified`); insert profil
+  klien → saldo 0, `created_at` now, gender terkunci. Deteksi klien memakai GUC
+  `role` (fungsi definer → `current_user` selalu owner).
+- Nomor DANA unik antar akun (`DANA_IN_USE`); `request_withdraw` menahan
+  (`shared_device` → UNDER_REVIEW) penghasilan dari akun yang berbagi device.
+- `admin_withdraw_process`: approve ditolak bila ada `fraud_holds` terbuka;
+  `reviewed_by = auth.uid()`.
+- `subscribe_creator(…, p_expected_price)` → `PRICE_CHANGED`.
+- `send_gift` (FROZEN): wallet lock. `user_fcm_tokens`: internal saja.
+
+### `20261110010000_server_call_billing.sql`
+- Isi `call_billing_tick` → `_call_bill_as(call, payer)`; tick = wrapper.
+- `settle_call` menagih atas nama payer: trigger saat `ended_at` terisi +
+  cron `call-billing-settle` tiap menit (call aktif). Saldo kurang > 4 menit →
+  server mengakhiri call (`calls.billing_short_since`).
+
+### `20261110020000_refund_chain_level_missions.sql`
+- `reverse_play_topup`: tahan penerima berantai (kedalaman 3) + cabut level &
+  hadiah level (`level_recompute_after_refund`).
+- Level = koin `topup_orders` status paid (`level_paid_coins`) — tutup panen
+  level via `refund_chat_point`.
+- `refund_chat_point` maks 10/jam; `update_mission_progress` dari klien
+  dibatasi waktu nyata (`user_missions.last_increment_at`).
+
+Test: `econ_review_1110_test.sql` 14/14; `my_level_test` & `call_billing_toggle_test`
+disesuaikan; smoke_anon_register OK; seluruh suite SQL lolos.
+Edge function `play-topup-verify` v8 (tolak purchaseType test/promo kecuali secret `PLAY_ALLOW_TEST_PURCHASES=1`).
+
 ## 2026-11-09 (b) — Withdraw: masa tahan, refund Play, billing call
 
 ### `20261109020000_withdraw_hold_play_refund.sql` (APPLIED 2026-11-04 via API)
