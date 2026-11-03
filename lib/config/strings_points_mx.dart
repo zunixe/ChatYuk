@@ -834,6 +834,12 @@ mixin SPointsMx {
   String get kycErrDuplicate => isId
       ? 'Verifikasi sudah pernah dikirim'
       : 'Verification was already submitted';
+  String get kycErrNoFace => isId
+      ? 'Wajah tidak terdeteksi. Posisikan wajah di dalam oval lalu foto ulang.'
+      : 'No face detected. Place your face inside the oval and retake.';
+  String get kycFaceGuide => isId
+      ? 'Posisikan wajah di dalam oval'
+      : 'Place your face inside the oval';
   String get kycPendingTitle => isId ? 'Sedang Ditinjau' : 'Under Review';
   String get kycPendingBody => isId
       ? 'Verifikasi kamu sedang ditinjau admin. Withdraw terbuka otomatis setelah disetujui.'

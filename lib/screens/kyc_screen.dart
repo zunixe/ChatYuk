@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config/strings.dart';
@@ -27,6 +28,30 @@ class KycScreen extends ConsumerStatefulWidget {
 }
 
 class _KycScreenState extends ConsumerState<KycScreen> {
+  /// Deteksi wajah pada file foto — injectable untuk test (ML Kit native
+  /// tak tersedia di unit test). Return jumlah wajah, -1 = detektor gagal
+  /// di device (jangan blokir — admin tetap review manual).
+  @visibleForTesting
+  static Future<int> Function(String path) faceChecker = _faceCount;
+
+  static Future<int> _faceCount(String path) async {
+    final detector = FaceDetector(
+      options: FaceDetectorOptions(
+        performanceMode: FaceDetectorMode.fast,
+      ),
+    );
+    try {
+      final faces =
+          await detector.processImage(InputImage.fromFilePath(path));
+      return faces.length;
+    } catch (e) {
+      dlog('[KYC] face detect error: $e');
+      return -1;
+    } finally {
+      detector.close();
+    }
+  }
+
   final _nameCtrl = TextEditingController();
   final _numberCtrl = TextEditingController();
   final _picker = ImagePicker();
@@ -84,6 +109,24 @@ class _KycScreenState extends ConsumerState<KycScreen> {
       return;
     }
     if (picked == null || !mounted) return;
+
+    // Validasi selfie: harus ada wajah (anti foto asal/tembok/dokumen).
+    // Dilakukan SEBELUM proses — hemat waktu user daripada ditolak admin.
+    if (selfie) {
+      final faces = await faceChecker(picked.path);
+      if (!mounted) return;
+      if (faces == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(s.kycErrNoFace),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+        return;
+      }
+      // faces == -1 → detektor gagal di device ini → lanjut; admin
+      // tetap mereview manual. faces ≥ 1 → lolos.
+    }
 
     setState(() => _processingPhoto = true);
     try {
@@ -277,7 +320,8 @@ class _KycScreenState extends ConsumerState<KycScreen> {
         ),
         const SizedBox(height: 12),
 
-        // 4. Foto selfie — untuk face-match manual admin.
+        // 4. Foto selfie — panduan oval posisi wajah + validasi ada wajah
+        // (ML Kit) saat foto dipilih; admin cocokkan dengan foto dokumen.
         _PhotoCard(
           title: s.kycPhotoSelfie,
           hint: s.kycPhotoSelfieHint,
@@ -285,6 +329,8 @@ class _KycScreenState extends ConsumerState<KycScreen> {
           busy: _processingPhoto,
           tapLabel: s.kycTapToAdd,
           retakeLabel: s.kycRetake,
+          faceGuide: true,
+          guideText: s.kycFaceGuide,
           onTap: () => _pickPhoto(s, selfie: true),
         ),
         const SizedBox(height: 16),
@@ -368,6 +414,7 @@ class _Card extends StatelessWidget {
 }
 
 /// Kartu ambil/lihat foto KYC — tap membuka picker kamera/galeri.
+/// [faceGuide] menggambar oval panduan posisi wajah (selfie).
 class _PhotoCard extends StatelessWidget {
   final String title;
   final String hint;
@@ -375,6 +422,8 @@ class _PhotoCard extends StatelessWidget {
   final bool busy;
   final String tapLabel;
   final String retakeLabel;
+  final bool faceGuide;
+  final String? guideText;
   final VoidCallback onTap;
 
   const _PhotoCard({
@@ -385,6 +434,8 @@ class _PhotoCard extends StatelessWidget {
     required this.tapLabel,
     required this.retakeLabel,
     required this.onTap,
+    this.faceGuide = false,
+    this.guideText,
   });
 
   @override
@@ -417,45 +468,60 @@ class _PhotoCard extends StatelessWidget {
               clipBehavior: Clip.antiAlias,
               child: busy
                   ? const Center(child: CircularProgressIndicator())
-                  : has
-                      ? Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Image.memory(
-                              base64Decode(
-                                dataUrl!.substring(dataUrl!.indexOf(',') + 1),
-                              ),
-                              fit: BoxFit.contain,
-                              // MEMORY: thumbnail saja — bytes asli tetap
-                              // di field (yang dikirim ke server).
-                              cacheWidth: 600,
+                  : Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // Oval panduan posisi wajah — tetap terlihat di
+                        // atas preview supaya user bisa cek posisi muka.
+                        if (faceGuide)
+                          IgnorePointer(
+                            child: CustomPaint(
+                              painter: _FaceGuidePainter(),
                             ),
-                            Positioned(
-                              right: 8,
-                              bottom: 8,
-                              child: _chipLabel(retakeLabel),
-                            ),
-                          ],
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.add_a_photo_outlined,
-                                size: 32,
-                                color: AppTheme.textSecondary,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                tapLabel,
-                                style: AppText.caption.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
                           ),
-                        ),
+                        if (has)
+                          Image.memory(
+                            base64Decode(
+                              dataUrl!.substring(dataUrl!.indexOf(',') + 1),
+                            ),
+                            fit: BoxFit.contain,
+                            // MEMORY: thumbnail saja — bytes asli tetap
+                            // di field (yang dikirim ke server).
+                            cacheWidth: 600,
+                          )
+                        else
+                          Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!faceGuide) ...[
+                                  Icon(
+                                    Icons.add_a_photo_outlined,
+                                    size: 32,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                  const SizedBox(height: 6),
+                                ],
+                                Text(
+                                  faceGuide && guideText != null
+                                      ? guideText!
+                                      : tapLabel,
+                                  textAlign: TextAlign.center,
+                                  style: AppText.caption.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (has)
+                          Positioned(
+                            right: 8,
+                            bottom: 8,
+                            child: _chipLabel(retakeLabel),
+                          ),
+                      ],
+                    ),
             ),
           ),
         ],
@@ -471,6 +537,62 @@ class _PhotoCard extends StatelessWidget {
         ),
         child: Text(text, style: AppText.caption.copyWith(color: Colors.white)),
       );
+}
+
+/// Oval panduan posisi wajah di kartu selfie — outline putus-putus +
+/// ikon wajah di tengah supaya jelas area targetnya.
+class _FaceGuidePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Oval sedikit lebih tinggi dari lebar — bentuk umum wajah.
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: size.width * 0.42,
+      height: size.height * 0.72,
+    );
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.85)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    // Outline putus-putus: potong perimeter oval jadi segmen.
+    final path = Path()..addOval(rect);
+    const dashLen = 10.0;
+    const gapLen = 7.0;
+    for (final metric in path.computeMetrics()) {
+      var dist = 0.0;
+      while (dist < metric.length) {
+        canvas.drawPath(
+          metric.extractPath(dist, dist + dashLen),
+          paint,
+        );
+        dist += dashLen + gapLen;
+      }
+    }
+
+    // Ikon wajah sederhana di tengah oval (mata + senyum).
+    final c = rect.center;
+    final eyePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+    final eyeY = c.dy - rect.height * 0.08;
+    canvas.drawCircle(Offset(c.dx - rect.width * 0.14, eyeY), 3, eyePaint);
+    canvas.drawCircle(Offset(c.dx + rect.width * 0.14, eyeY), 3, eyePaint);
+    canvas.drawArc(
+      Rect.fromCenter(
+        center: Offset(c.dx, c.dy + rect.height * 0.06),
+        width: rect.width * 0.3,
+        height: rect.height * 0.22,
+      ),
+      0.4,
+      2.34,
+      false,
+      paint..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FaceGuidePainter old) => false;
 }
 
 /// Tampilan status (pending/approved) — ikon + judul + penjelasan.
