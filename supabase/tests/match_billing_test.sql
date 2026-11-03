@@ -31,11 +31,13 @@ update public.app_settings
  where id = 'global';
 
 -- ════ 1. Grace <30 detik → gratis total, tak ada consumption ════
-insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at)
+insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at,
+                          media_connected_at)
 values ('ec06e000-0000-4000-8000-0000000000c1'::uuid,
         'ec06e000-0000-4000-8000-0000000000a1',
         'ec06e000-0000-4000-8000-0000000000f1',
-        'random', 'video', 'answered', now() - interval '20 seconds');
+        'random', 'video', 'answered', now() - interval '20 seconds',
+        now() - interval '20 seconds');
 select set_config('request.jwt.claim.sub',
                   'ec06e000-0000-4000-8000-0000000000a1', true);
 insert into _mb values ('g1',
@@ -51,7 +53,7 @@ select supabase_tests.check('MB: <30s → nol consumption & nol ledger debit',
               where user_id='ec06e000-0000-4000-8000-0000000000a1'));
 
 -- ════ 2. 45 detik (male caller) → konek 10 + menit 1 = 30; female +9 ════
-update public.calls set answered_at = now() - interval '45 seconds'
+update public.calls set answered_at = now() - interval '45 seconds', media_connected_at = now() - interval '45 seconds'
  where id='ec06e000-0000-4000-8000-0000000000c1';
 insert into _mb values ('g2',
   public.call_billing_tick('ec06e000-0000-4000-8000-0000000000c1')::text);
@@ -83,7 +85,7 @@ select supabase_tests.check('MB: tick ulang → masih charged 30 (idempotent)',
   (select v from _mb where k='g3'));
 
 -- ════ 4. 95 detik → menit ke-2 ikut → total 50, female total +15 ════
-update public.calls set answered_at = now() - interval '95 seconds'
+update public.calls set answered_at = now() - interval '95 seconds', media_connected_at = now() - interval '95 seconds'
  where id='ec06e000-0000-4000-8000-0000000000c1';
 insert into _mb values ('g4',
   public.call_billing_tick('ec06e000-0000-4000-8000-0000000000c1')::text);
@@ -97,11 +99,13 @@ select supabase_tests.check('MB: female total income 15 (3 konek + 2×6 menit)',
       and type = 'match_call_income') = 15);
 
 -- ════ 5. FEMALE caller (random) → billing tetap di MALE (asimetri fix) ════
-insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at)
+insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at,
+                          media_connected_at)
 values ('ec06e000-0000-4000-8000-0000000000c2'::uuid,
         'ec06e000-0000-4000-8000-0000000000f1',
         'ec06e000-0000-4000-8000-0000000000a1',
-        'random', 'video', 'answered', now() - interval '45 seconds');
+        'random', 'video', 'answered', now() - interval '45 seconds',
+        now() - interval '45 seconds');
 -- Tick datang dari device FEMALE (caller) — sejak lockdown A2c recipient
 -- READ-ONLY: tidak lagi memicu tagihan ke male (menutup celah "female terus
 -- tick call lama → koin male terkuras").
@@ -137,11 +141,13 @@ select supabase_tests.check('MB: female TIDAK kena cabang free-limit (income +9)
       and ref_id='ec06e000-0000-4000-8000-0000000000c2') = 9);
 
 -- ════ 6. Male paid 25 → konek 10 lunas, menit gagal → pause + female +3 ════
-insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at)
+insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at,
+                          media_connected_at)
 values ('ec06e000-0000-4000-8000-0000000000c3'::uuid,
         'ec06e000-0000-4000-8000-0000000000a2',
         'ec06e000-0000-4000-8000-0000000000f1',
-        'random', 'video', 'answered', now() - interval '45 seconds');
+        'random', 'video', 'answered', now() - interval '45 seconds',
+        now() - interval '45 seconds');
 select set_config('request.jwt.claim.sub',
                   'ec06e000-0000-4000-8000-0000000000a2', true);
 insert into _mb values ('p1',
@@ -158,11 +164,13 @@ select supabase_tests.check('MB: walau pause, female tetap +3 konek',
             and ref_id='ec06e000-0000-4000-8000-0000000000c3'));
 
 -- ════ 7. Male paid 5 → konek pun tak sanggup → pause, nol charge ════
-insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at)
+insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at,
+                          media_connected_at)
 values ('ec06e000-0000-4000-8000-0000000000c4'::uuid,
         'ec06e000-0000-4000-8000-0000000000a3',
         'ec06e000-0000-4000-8000-0000000000f1',
-        'random', 'video', 'answered', now() - interval '45 seconds');
+        'random', 'video', 'answered', now() - interval '45 seconds',
+        now() - interval '45 seconds');
 select set_config('request.jwt.claim.sub',
                   'ec06e000-0000-4000-8000-0000000000a3', true);
 insert into _mb values ('p2',
@@ -219,8 +227,8 @@ select supabase_tests.check('MB: media 40s → konek+menit charged 30',
   and (select (v::jsonb->>'charged_total')::int from _mb where k='m2') = 30,
   (select v from _mb where k='m2'));
 
--- Fallback client lama (media_connected_at NULL) → dari answered_at
--- (sudah tercakup seksi 1-7; assert eksplisit di sini).
+-- 2026-11-09: TANPA media_connected_at (video tak pernah tersambung) →
+-- TIDAK ditagih (dulu fallback ke answered_at → biaya konek tanpa video).
 insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at)
 values ('ec06e000-0000-4000-8000-0000000000c6'::uuid,
         'ec06e000-0000-4000-8000-0000000000a1',
@@ -228,8 +236,8 @@ values ('ec06e000-0000-4000-8000-0000000000c6'::uuid,
         'random', 'video', 'answered', now() - interval '45 seconds');
 insert into _mb values ('m3',
   public.call_billing_tick('ec06e000-0000-4000-8000-0000000000c6')::text);
-select supabase_tests.check('MB: tanpa stamp (client lama) → fallback answered_at, charged 30',
-  (select (v::jsonb->>'charged_total')::int from _mb where k='m3') = 30,
+select supabase_tests.check('MB: tanpa stamp media → tidak ditagih (charged 0)',
+  coalesce((select (v::jsonb->>'charged_total')::int from _mb where k='m3'), 0) = 0,
   (select v from _mb where k='m3'));
 
 -- ════ 10. touch_call(p_connected) → stamp sekali, earliest menang ════

@@ -1,3 +1,37 @@
+## 2026-11-09 (b) — Withdraw: masa tahan, refund Play, billing call
+
+### `20261109020000_withdraw_hold_play_refund.sql` (APPLIED 2026-11-04 via API)
+Keputusan user: reward misi → bonus; `send_coins` tetap earned + masa tahan;
+masa tahan 7 hari.
+- `app_settings.withdraw_hold_days` (7) & `withdraw_max_coins_per_day` (50.000).
+- `earned_held(uid, days)`: kredit `earned` (kecuali `withdraw_refund`)
+  dalam masa tahan → belum bisa ditarik.
+- `request_withdraw` v3: `HELD_BALANCE` {available, held}, `DAILY_AMOUNT_LIMIT`
+  {remaining}, `UNDER_REVIEW` (fraud_holds terbuka), KYC dicek SEBELUM nomor
+  DANA disimpan (N8).
+- `get_earnings_summary`: `withdrawable` setelah masa tahan + `held`,
+  `hold_days`. `get_withdraw_config`: + `hold_days`, `max_coins_per_day`.
+- `claim_mission_reward`: reward selalu `bonus`.
+- Refund Play: `topup_orders.status` + 'refunded' (+`refunded_at`,
+  `refund_shortfall`), tabel `fraud_holds`, `reverse_play_topup(token)`
+  (tarik topup → earned sebatas saldo; tahan pembeli + semua `to_user`
+  di platform_revenue sejak pembelian; idempoten), `admin_fraud_holds`,
+  `admin_resolve_fraud_hold`. Cron `play-voided-sync` 02:40 → edge function.
+
+### `20261109030000_billing_private_media_pricing.sql` (APPLIED 2026-11-04 via API)
+- `call_billing_tick`: `FEATURE_DISABLED` hanya untuk call random (private
+  call tak lagi gratis saat flag random_call mati); random ditagih hanya
+  setelah `media_connected_at` (tanpa fallback `answered_at`).
+- `metered_pricing_public` + `match_search_cost`, `match_connect_cost`,
+  `match_free_seconds` (UI tak lagi hardcode).
+
+Edge function (deploy `--use-api`): `play-topup-verify` v7 (tolak token
+yang `obfuscatedExternalAccountId` ≠ sha256(uid)), `play-voided-sync` v1
+(verify_jwt=false, x-app-secret). Klien mengirim `applicationUserName`.
+Test: `withdraw_hold_refund_test.sql` 16/16; suite lama disesuaikan
+(hold 0 di test non-hold, misi → bonus, random call distempel media);
+seluruh suite SQL lolos.
+
 ## 2026-11-09 — Review ulang ekonomi + KYC profesional
 
 ### `20261109000000_econ_calls_guard_v2.sql` (APPLIED 2026-11-04 via API)

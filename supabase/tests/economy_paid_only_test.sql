@@ -6,6 +6,9 @@
 -- Transaksional — hanya akun dummy test; semua angka dari app_settings live.
 begin;
 select supabase_tests.begin_tests();
+-- Masa tahan (20261109020000) diuji di withdraw_hold_refund_test; di sini 0
+-- supaya saldo earned seed (dibuat "sekarang") bisa langsung ditarik.
+update public.app_settings set withdraw_hold_days = 0 where id = 'global';
 
 select supabase_tests.mk_dummy('ec05e000-0000-4000-8000-0000000000a1'::uuid, '[TEST] PoM1', 'online');
 select supabase_tests.mk_dummy('ec05e000-0000-4000-8000-0000000000a2'::uuid, '[TEST] PoM2', 'online');
@@ -218,10 +221,10 @@ select set_config('request.jwt.claim.sub',
 insert into _po values ('c2',
   public.claim_mission_reward('ec05e000-0000-4000-8000-0000000000a3',
                               'like_posts')::text);
-select supabase_tests.check('L3: female klaim misi → bucket earned',
+select supabase_tests.check('L3: female klaim misi → bucket bonus (tak bisa dicairkan)',
   exists (select 1 from public.coin_ledger
           where user_id='ec05e000-0000-4000-8000-0000000000a3'
-            and bucket='earned' and type='mission_reward' and amount=5),
+            and bucket='bonus' and type='mission_reward' and amount=5),
   (select v from _po where k='c2'));
 
 -- ════ 10. Regresi: klaim dobel tetap ditolak ════

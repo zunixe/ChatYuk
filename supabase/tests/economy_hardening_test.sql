@@ -12,6 +12,9 @@
 -- Transaksional (BEGIN/ROLLBACK) — tidak menyentuh data produksi.
 begin;
 select supabase_tests.begin_tests();
+-- Masa tahan (20261109020000) diuji di withdraw_hold_refund_test; di sini 0
+-- supaya saldo earned seed (dibuat "sekarang") bisa langsung ditarik.
+update public.app_settings set withdraw_hold_days = 0 where id = 'global';
 
 create temp table _gw (key text primary key, val text) on commit drop;
 grant all on _gw to service_role;

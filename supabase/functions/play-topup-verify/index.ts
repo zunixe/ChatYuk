@@ -124,6 +124,21 @@ Deno.serve(async (req) => {
       return json({ error: 'Not purchased', state: purchaseState }, 409);
     }
 
+    // Ikat ke akun: pembelian baru membawa obfuscatedExternalAccountId =
+    // sha256(uid pembeli). Token milik akun lain → tolak (cegah token
+    // dipakai/dicuri akun lain). Pembelian lama (tanpa field) tetap diterima.
+    const boundTo = vjson.obfuscatedExternalAccountId as string | undefined;
+    if (boundTo) {
+      const digest = await crypto.subtle.digest(
+        'SHA-256', new TextEncoder().encode(user.id),
+      );
+      const mine = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0')).join('');
+      if (boundTo !== mine) {
+        return json({ error: 'Purchase belongs to another account' }, 403);
+      }
+    }
+
     // Kredit coin (idempoten by token).
     const { data: credit, error: rpcErr } = await admin.rpc('credit_play_topup', {
       p_user: user.id,

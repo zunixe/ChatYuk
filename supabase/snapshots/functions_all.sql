@@ -1,6 +1,6 @@
 -- SNAPSHOT SEMUA fungsi public (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh --all
--- Timestamp: 2026-11-03T17:11:38Z
+-- Timestamp: 2026-11-03T22:30:01Z
 
 -- snapshot-fn: _anon_gate_insert
 CREATE OR REPLACE FUNCTION public._anon_gate_insert()
@@ -1771,6 +1771,29 @@ begin
 end;
 $function$
 
+-- snapshot-fn: admin_fraud_holds
+CREATE OR REPLACE FUNCTION public.admin_fraud_holds(p_open_only boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare res jsonb;
+begin
+  if coalesce(auth.email(), '') != 'zunixe@gmail.com' then
+    raise exception 'Unauthorized'; end if;
+  select coalesce(jsonb_agg(x order by x.created_at desc), '[]'::jsonb) into res
+  from (
+    select h.id, h.user_id, h.reason, h.ref_id, h.created_at, h.resolved_at,
+           h.resolve_note, p.nickname, p.email
+      from public.fraud_holds h
+      left join public.profiles p on p.id = h.user_id
+     where (not p_open_only or h.resolved_at is null)
+     limit 200
+  ) x;
+  return res;
+end; $function$
+
 -- snapshot-fn: admin_get_ai_reply_log
 CREATE OR REPLACE FUNCTION public.admin_get_ai_reply_log(p_chat_id text DEFAULT NULL::text, p_limit integer DEFAULT 100)
  RETURNS jsonb[]
@@ -3264,6 +3287,22 @@ begin
   insert into point_events (user_id, event, amount, metadata)
     values (auth.uid(), 'admin_reset_all', 0, jsonb_build_object('affected_users', affected));
   return affected;
+end; $function$
+
+-- snapshot-fn: admin_resolve_fraud_hold
+CREATE OR REPLACE FUNCTION public.admin_resolve_fraud_hold(p_id bigint, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if coalesce(auth.email(), '') != 'zunixe@gmail.com' then
+    raise exception 'Unauthorized'; end if;
+  update public.fraud_holds
+     set resolved_at = now(), resolved_by = auth.uid(), resolve_note = p_note
+   where id = p_id and resolved_at is null;
+  return jsonb_build_object('ok', found);
 end; $function$
 
 -- snapshot-fn: admin_revenue_overview
@@ -6008,9 +6047,6 @@ declare
        AT TIME ZONE 'Asia/Jakarta');
 begin
   if me is null then raise exception 'Not authenticated'; end if;
-  if not public.feature_enabled_for('random_call') then
-    raise exception 'FEATURE_DISABLED';
-  end if;
   select coalesce(call_all_enabled, true), coalesce(call_anon_enabled, false),
          coalesce(points_enabled, true)
     into v_all, v_anon, points_on
@@ -6036,6 +6072,12 @@ begin
   -- terserial → tidak ada double-charge.
   select * into c from public.calls where id = p_call_id for update;
   if not found then raise exception 'Call not found'; end if;
+  -- 2026-11-09: flag random_call hanya untuk call RANDOM. Dulu dicek untuk
+  -- semua call → saat flag mati, tick private call melempar FEATURE_DISABLED
+  -- dan klien menelannya = private call GRATIS tanpa ketahuan.
+  if c.kind = 'random' and not public.feature_enabled_for('random_call') then
+    raise exception 'FEATURE_DISABLED';
+  end if;
 
   select gender into v_caller_gender from public.profiles where id = c.caller_id;
   if c.kind is distinct from 'random' and c.caller_id <> me
@@ -6097,10 +6139,15 @@ begin
   end if;
 
   if c.answered_at is not null then
+    -- 2026-11-09: random ditagih HANYA setelah video benar-benar tersambung
+    -- (media_connected_at, distempel salah satu sisi via touch_call). Dulu
+    -- fallback ke answered_at → male kena biaya konek walau video tak
+    -- pernah tampil.
     v_anchor := case when c.kind = 'random'
-                     then coalesce(c.media_connected_at, c.answered_at)
+                     then c.media_connected_at
                      else c.answered_at end;
-    elapsed_sec := greatest(0, floor(extract(epoch from (v_end - v_anchor)))::int);
+    elapsed_sec := case when v_anchor is null then 0 else
+      greatest(0, floor(extract(epoch from (v_end - v_anchor)))::int) end;
   else
     elapsed_sec := 0;
   end if;
@@ -6936,7 +6983,10 @@ BEGIN
 
     -- Bucket reward: female → earned (withdrawable); selain female → bonus
     -- (tidak bisa dicairkan, tidak bisa ditransfer). Lihat 20261101190000.
-    v_reward_bucket := CASE WHEN v_gender = 'female' THEN 'earned' ELSE 'bonus' END;
+    -- 2026-11-09: reward misi SELALU bonus (tidak bisa dicairkan) untuk
+    -- semua gender — dulu female → earned = koin gratis bisa jadi uang
+    -- lewat multi-akun.
+    v_reward_bucket := 'bonus';
 
     v_is_coins_mission := (v_mission.target_unit = 'coins');
 
@@ -8389,6 +8439,22 @@ AS $function$
   select uid from public.dummy_accounts where uid is not null;
 $function$
 
+-- snapshot-fn: earned_held
+CREATE OR REPLACE FUNCTION public.earned_held(p_uid uuid, p_days integer)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(sum(amount), 0)::int
+    from public.coin_ledger
+   where user_id = p_uid
+     and bucket = 'earned'
+     and amount > 0
+     and type <> 'withdraw_refund'
+     and created_at > now() - make_interval(days => greatest(p_days, 0));
+$function$
+
 -- snapshot-fn: earth
 CREATE OR REPLACE FUNCTION public.earth()
  RETURNS double precision
@@ -9343,6 +9409,8 @@ DECLARE
     v_match_call bigint;
     v_other bigint;
     v_withdrawable bigint;
+    v_held bigint := 0;
+    v_hold_days int;
     v_total_balance bigint;
     v_video_calls bigint;
     v_video_seconds bigint;
@@ -9418,6 +9486,13 @@ BEGIN
       FROM public.coin_ledger
      WHERE user_id = p_user_id;
 
+    -- 2026-11-09: kurangi penghasilan yang masih dalam masa tahan.
+    SELECT coalesce(withdraw_hold_days, 7) INTO v_hold_days
+      FROM public.app_settings WHERE id = 'global';
+    v_held := least(greatest(v_withdrawable, 0),
+                    public.earned_held(p_user_id, coalesce(v_hold_days, 7)));
+    v_withdrawable := greatest(0, v_withdrawable - v_held);
+
     SELECT COALESCE(SUM(amount), 0) INTO v_total_balance
       FROM public.coin_ledger
      WHERE user_id = p_user_id;
@@ -9446,6 +9521,8 @@ BEGIN
         'weekly_earnings', v_weekly,
         'today_earnings', v_today,
         'withdrawable', v_withdrawable,
+        'held', v_held,
+        'hold_days', coalesce(v_hold_days, 7),
         'total_balance', v_total_balance,
         'breakdown', jsonb_build_object(
             'private_call', v_private_call,
@@ -10253,7 +10330,9 @@ BEGIN
         'require_kyc', coalesce(withdraw_require_kyc, true),
         'dana_change_cooldown_hours',
             coalesce(withdraw_dana_change_cooldown_hours, 168),
-        'coin_send_cut_pct', coalesce(coin_send_cut_pct, 30)
+        'coin_send_cut_pct', coalesce(coin_send_cut_pct, 30),
+        'hold_days', coalesce(withdraw_hold_days, 7),
+        'max_coins_per_day', coalesce(withdraw_max_coins_per_day, 50000)
     ) INTO result
     FROM public.app_settings WHERE id = 'global';
 
@@ -10261,7 +10340,8 @@ BEGIN
         'rate', 7, 'min_coins', 1500, 'fee_pct', 5, 'fee_min_idr', 1000,
         'max_per_day', 3, 'min_interval_hours', 1, 'min_account_age_hours', 72,
         'require_kyc', true, 'dana_change_cooldown_hours', 168,
-        'coin_send_cut_pct', 30));
+        'coin_send_cut_pct', 30, 'hold_days', 7,
+        'max_coins_per_day', 50000));
 END;
 $function$
 
@@ -11798,7 +11878,12 @@ begin
     'call_video_cost_per_min', call_video_cost_per_min,
     'call_free_minutes_daily', call_free_minutes_daily,
     'filter_gender_cost', filter_gender_cost,
-    'nearby_cost', nearby_cost
+    'nearby_cost', nearby_cost,
+    -- == v_fee di random_match_join (fee pencarian saat pasangan terbentuk).
+    'match_search_cost', 2,
+    'match_connect_cost',
+      coalesce((metered_pricing->'match_call'->>'unit_cost')::int, 10),
+    'match_free_seconds', 30
   ) from app_settings where id = 'global');
 end; $function$
 
@@ -14884,6 +14969,11 @@ declare
     v_require_kyc boolean;
     v_dana_cd_hours int;
     v_dana_free timestamptz;
+    v_hold_days int;
+    v_max_coins_day int;
+    v_held int;
+    v_available int;
+    v_today_coins int;
     v_day_start timestamptz :=
       (((now() AT TIME ZONE 'Asia/Jakarta')::date)::timestamp
          AT TIME ZONE 'Asia/Jakarta');
@@ -14909,10 +14999,13 @@ begin
            coalesce(withdraw_min_interval_hours, 1),
            coalesce(withdraw_min_account_age_hours, 72),
            coalesce(withdraw_require_kyc, true),
-           coalesce(withdraw_dana_change_cooldown_hours, 168)
+           coalesce(withdraw_dana_change_cooldown_hours, 168),
+           coalesce(withdraw_hold_days, 7),
+           coalesce(withdraw_max_coins_per_day, 50000)
       INTO v_min_coins, v_rate, v_fee_pct, v_fee_min,
            v_max_day, v_min_interval, v_min_age,
-           v_require_kyc, v_dana_cd_hours
+           v_require_kyc, v_dana_cd_hours,
+           v_hold_days, v_max_coins_day
       FROM public.app_settings WHERE id = 'global';
 
     IF p_coins IS NULL OR p_coins < v_min_coins THEN
@@ -14928,6 +15021,22 @@ begin
     IF v_total < p_coins THEN
         RETURN jsonb_build_object('ok', false, 'error', 'INSUFFICIENT_BALANCE',
             'balance', v_total);
+    END IF;
+
+    -- 2026-11-09: masa tahan — penghasilan v_hold_days hari terakhir belum
+    -- bisa dicairkan (jendela refund Google Play / sengketa).
+    v_held := public.earned_held(v_uid, v_hold_days);
+    v_available := greatest(0, v_total - v_held);
+    IF v_available < p_coins THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'HELD_BALANCE',
+            'available', v_available, 'held', least(v_held, v_total),
+            'hold_days', v_hold_days);
+    END IF;
+
+    -- 2026-11-09: akun ditahan (mis. terkait pembelian Play yang di-refund).
+    IF EXISTS (SELECT 1 FROM public.fraud_holds
+                WHERE user_id = v_uid AND resolved_at IS NULL) THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'UNDER_REVIEW');
     END IF;
 
     SELECT created_at INTO v_created_at FROM public.profiles WHERE id = v_uid;
@@ -14949,6 +15058,26 @@ begin
     IF v_today_count >= v_max_day THEN
         RETURN jsonb_build_object('ok', false, 'error', 'DAILY_LIMIT',
             'max_per_day', v_max_day);
+    END IF;
+
+    -- 2026-11-09: batas NOMINAL per hari (selain jumlah request).
+    SELECT coalesce(sum(coin_amount), 0) INTO v_today_coins
+      FROM public.withdrawal_requests
+     WHERE user_id = v_uid
+       AND created_at >= v_day_start
+       AND status <> 'rejected';
+    IF v_today_coins + p_coins > v_max_coins_day THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'DAILY_AMOUNT_LIMIT',
+            'max_coins_per_day', v_max_coins_day,
+            'remaining', greatest(0, v_max_coins_day - v_today_coins));
+    END IF;
+
+    -- N8 (2026-11-09): gerbang KYC SEBELUM menyimpan nomor DANA — dulu
+    -- request yang ditolak KYC tetap menyimpan nomor & memulai cooldown.
+    IF v_require_kyc AND NOT EXISTS (
+        SELECT 1 FROM public.kyc_requests
+         WHERE user_id = v_uid AND status = 'approved') THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'KYC_REQUIRED');
     END IF;
 
     SELECT max(created_at) INTO v_last_req
@@ -15004,15 +15133,6 @@ begin
         END IF;
         v_num := v_acc.dana_number;
         v_name := v_acc.dana_name;
-    END IF;
-
-    -- B2: Gerbang KYC — dipasang SETELAH semua validasi murah supaya
-    -- error ordering tetap intuitif (BELOW_MINIMUM dkk menang dulu).
-    -- Withdraw hanya untuk identitas terverifikasi saat flag aktif.
-    IF v_require_kyc AND NOT EXISTS (
-        SELECT 1 FROM public.kyc_requests
-         WHERE user_id = v_uid AND status = 'approved') THEN
-        RETURN jsonb_build_object('ok', false, 'error', 'KYC_REQUIRED');
     END IF;
 
     v_gross := p_coins * v_rate;
@@ -15250,6 +15370,68 @@ begin
   end if;
 
   return jsonb_build_object('ok', true, 'accepted', p_accept);
+end;
+$function$
+
+-- snapshot-fn: reverse_play_topup
+CREATE OR REPLACE FUNCTION public.reverse_play_topup(p_purchase_token text, p_reason text DEFAULT 'voided'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  o record; t int; e int; take int; need int; n_flag int := 0;
+begin
+  select * into o from public.topup_orders
+   where purchase_token = p_purchase_token for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'error', 'NOT_FOUND');
+  end if;
+  if o.status = 'refunded' then
+    return jsonb_build_object('ok', true, 'already', true);
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('wallet:' || o.user_id::text));
+  select coalesce(sum(amount) filter (where bucket = 'topup'), 0),
+         coalesce(sum(amount) filter (where bucket = 'earned'), 0)
+    into t, e
+    from public.coin_ledger where user_id = o.user_id;
+
+  need := o.coins;
+  take := least(greatest(t, 0), need);
+  if take > 0 then
+    insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
+    values (o.user_id, 'topup', 'play_refund', -take, o.id,
+            jsonb_build_object('reason', p_reason));
+    need := need - take;
+  end if;
+  take := least(greatest(e, 0), need);
+  if take > 0 then
+    insert into public.coin_ledger(user_id, bucket, type, amount, ref_id, metadata)
+    values (o.user_id, 'earned', 'play_refund', -take, o.id,
+            jsonb_build_object('reason', p_reason));
+    need := need - take;
+  end if;
+
+  update public.topup_orders
+     set status = 'refunded', refunded_at = now(), refund_shortfall = need
+   where id = o.id;
+
+  -- Tahan pembeli + semua penerima koinnya sejak pembelian.
+  insert into public.fraud_holds (user_id, reason, ref_id)
+  select distinct u, 'play_refund', o.id
+    from (select o.user_id as u
+          union
+          select pr.to_user from public.platform_revenue pr
+           where pr.from_user = o.user_id
+             and pr.to_user is not null
+             and pr.created_at >= coalesce(o.paid_at, o.created_at)) x
+  on conflict do nothing;
+  get diagnostics n_flag = row_count;
+
+  return jsonb_build_object('ok', true, 'order_id', o.id, 'coins', o.coins,
+    'shortfall', need, 'flagged', n_flag);
 end;
 $function$
 

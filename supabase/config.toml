@@ -398,6 +398,10 @@ verify_jwt = true
 [functions.play-topup-verify]
 verify_jwt = true
 
+# play-voided-sync dipanggil pg_cron (x-app-secret), bukan user — tanpa JWT.
+[functions.play-voided-sync]
+verify_jwt = false
+
 # welcome-bonus dipanggil client authenticated (klaim bonus sekali per device
 # + limit IP) — butuh JWT user.
 [functions.welcome-bonus]

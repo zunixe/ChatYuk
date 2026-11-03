@@ -8,6 +8,9 @@
 -- Transaksional — hanya akun dummy test.
 begin;
 select supabase_tests.begin_tests();
+-- Masa tahan (20261109020000) diuji di withdraw_hold_refund_test; di sini 0
+-- supaya saldo earned seed (dibuat "sekarang") bisa langsung ditarik.
+update public.app_settings set withdraw_hold_days = 0 where id = 'global';
 
 select supabase_tests.mk_dummy('ed070000-0000-4000-8000-0000000000a1'::uuid, '[TEST] B-M1', 'online');
 select supabase_tests.mk_dummy('ed070000-0000-4000-8000-0000000000f1'::uuid, '[TEST] B-F1', 'online');

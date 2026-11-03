@@ -298,7 +298,8 @@ select supabase_tests.check('ON: welcome male → granted, ledger welcome_regist
               where user_id = 'ec02e000-0000-4000-8000-0000000000a2'
                 and bucket = 'bonus' and type = 'welcome_register'));
 
--- B9. misi complete + klaim → kredit earned 'mission_reward'; re-claim ditolak
+-- B9. misi complete + klaim → kredit BONUS 'mission_reward' (2026-11-09:
+-- reward misi tak bisa dicairkan); re-claim ditolak
 insert into _mx values ('prog_f',
   public.update_mission_progress('ec02e000-0000-4000-8000-0000000000a3',
                                  'call_minutes', 30)::text);
@@ -307,11 +308,11 @@ select supabase_tests.check('ON: misi 30/30 → completed',
 insert into _mx values ('claim_f',
   public.claim_mission_reward('ec02e000-0000-4000-8000-0000000000a3',
                               'call_minutes')::text);
-select supabase_tests.check('ON: claim misi → success, earned +reward',
+select supabase_tests.check('ON: claim misi → success, bonus +reward',
   (select v::jsonb->>'success' from _mx where k = 'claim_f') = 'true'
   and exists (select 1 from public.coin_ledger
               where user_id = 'ec02e000-0000-4000-8000-0000000000a3'
-                and bucket = 'earned' and type = 'mission_reward'
+                and bucket = 'bonus' and type = 'mission_reward'
                 and ref_id = 'call_minutes'));
 insert into _mx values ('claim2',
   public.claim_mission_reward('ec02e000-0000-4000-8000-0000000000a3',

@@ -223,10 +223,12 @@ update public.app_settings
    set feature_flags = feature_flags || '{"call_billing":{"published":true}}'::jsonb
  where id = 'global';
 with nc as (
-  insert into public.calls (caller_id, callee_id, kind, call_type, status, answered_at)
+  insert into public.calls (caller_id, callee_id, kind, call_type, status, answered_at,
+                            media_connected_at)
   values ('d0c1e000-0000-4000-8000-0000000000a3',
           'd0c1e000-0000-4000-8000-0000000000a2',
-          'random','video','answered', now() - interval '130 seconds')
+          'random','video','answered', now() - interval '130 seconds',
+          now() - interval '130 seconds')
   returning id)
 insert into _rm select 'paid_call', id::text from nc;
 select set_config('request.jwt.claim.sub', 'd0c1e000-0000-4000-8000-0000000000a3', true);
