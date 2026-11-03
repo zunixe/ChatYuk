@@ -11,6 +11,7 @@ import '../core/media/native_image.dart';
 import '../providers/riverpod/kyc_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../utils.dart';
+import 'kyc_selfie_camera_screen.dart';
 
 /// Halaman verifikasi identitas (KYC) — syarat withdraw perempuan.
 ///
@@ -96,17 +97,33 @@ class _KycScreenState extends ConsumerState<KycScreen> {
   Future<void> _pickPhoto(S s, {required bool selfie}) async {
     final source = await _pickSource(s);
     if (source == null || !mounted) return;
-    final XFile? picked;
-    try {
-      picked = await _picker.pickImage(
-        source: source,
-        // Selfie idealnya kamera depan (best practice face-match).
-        preferredCameraDevice:
-            selfie ? CameraDevice.front : CameraDevice.rear,
+    XFile? picked;
+    if (selfie && source == ImageSource.camera) {
+      // Kamera selfie KUSTOM: oval panduan DI DALAM viewfinder + deteksi
+      // wajah live — shutter baru aktif saat wajah pas. Gagal init (mis.
+      // MIUI) → lastInitFailed → fallback ke kamera sistem di bawah.
+      KycSelfieCameraScreen.lastInitFailed = false;
+      picked = await Navigator.push<XFile?>(
+        context,
+        MaterialPageRoute(builder: (_) => const KycSelfieCameraScreen()),
       );
-    } catch (e) {
-      dlog('[KYC] pick error: $e');
-      return;
+      if (!mounted) return;
+      // null & BUKAN init-gagal = user sengaja membatalkan → jangan
+      // buka kamera lain, langsung keluar.
+      if (picked == null && !KycSelfieCameraScreen.lastInitFailed) return;
+    }
+    if (picked == null) {
+      try {
+        picked = await _picker.pickImage(
+          source: source,
+          // Selfie idealnya kamera depan (best practice face-match).
+          preferredCameraDevice:
+              selfie ? CameraDevice.front : CameraDevice.rear,
+        );
+      } catch (e) {
+        dlog('[KYC] pick error: $e');
+        return;
+      }
     }
     if (picked == null || !mounted) return;
 

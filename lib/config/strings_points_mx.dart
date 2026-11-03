@@ -840,6 +840,15 @@ mixin SPointsMx {
   String get kycFaceGuide => isId
       ? 'Posisikan wajah di dalam oval'
       : 'Place your face inside the oval';
+  String get kycCamReady => isId
+      ? 'Wajah terdeteksi — ketuk tombol untuk memotret'
+      : 'Face detected — tap the button to capture';
+  String get kycCamMulti => isId
+      ? 'Terdeteksi lebih dari satu wajah'
+      : 'More than one face detected';
+  String get kycCamLookStraight => isId
+      ? 'Hadapkan wajah lurus & dekatkan ke kamera'
+      : 'Face the camera straight & move closer';
   String get kycPendingTitle => isId ? 'Sedang Ditinjau' : 'Under Review';
   String get kycPendingBody => isId
       ? 'Verifikasi kamu sedang ditinjau admin. Withdraw terbuka otomatis setelah disetujui.'
