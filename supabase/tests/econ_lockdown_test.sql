@@ -122,24 +122,25 @@ select supabase_tests.check('LK: client insert call random+answered → ditolak'
   (select ok from _g where k='a3a') = true,
   (select msg from _g where k='a3a'));
 
--- A3b. Update answered_at ke masa lalu (backdate) → ditolak.
+-- A3b. Backdate answered_at yang SUDAH terisi → diabaikan (nilai lama tetap).
+-- (2026-11-09: guard menormalkan, bukan melempar — retry klien tetap aman.)
 do $$
-declare v_ok boolean; v_msg text;
+declare v_before timestamptz; v_after timestamptz;
 begin
+  select answered_at into v_before from public.calls
+   where id = 'ed060000-0000-4000-8000-0000000000c2';
   set local role authenticated;
   perform set_config('request.jwt.claim.sub',
                      'ed060000-0000-4000-8000-0000000000a1', true);
-  begin
-    update public.calls set answered_at = now() - interval '1 hour'
-     where id = 'ed060000-0000-4000-8000-0000000000c2';
-    v_ok := false; v_msg := 'no exception';
-  exception when others then
-    v_ok := true; v_msg := sqlerrm;
-  end;
+  update public.calls set answered_at = now() - interval '1 hour'
+   where id = 'ed060000-0000-4000-8000-0000000000c2';
   reset role;
-  insert into _g values ('a3b', v_ok, v_msg);
+  select answered_at into v_after from public.calls
+   where id = 'ed060000-0000-4000-8000-0000000000c2';
+  insert into _g values ('a3b', v_after = v_before,
+                         v_before::text || ' -> ' || v_after::text);
 end $$;
-select supabase_tests.check('LK: client backdate answered_at → ditolak',
+select supabase_tests.check('LK: client backdate answered_at → diabaikan',
   (select ok from _g where k='a3b') = true,
   (select msg from _g where k='a3b'));
 
@@ -205,6 +206,73 @@ select supabase_tests.check('LK: client update status+ended_at (hangup) → diiz
   (select ok from _g where k='a3e') = true,
   (select msg from _g where k='a3e'));
 
+-- ════ N1/N2 (20261109000000). Kolom basis billing dari klien ════
+insert into public.calls (id, caller_id, callee_id, kind, call_type, status, answered_at)
+values ('ed060000-0000-4000-8000-0000000000c3'::uuid,
+        'ed060000-0000-4000-8000-0000000000a1',
+        'ed060000-0000-4000-8000-0000000000f1',
+        'direct', 'video', 'answered', now() - interval '45 seconds');
+do $$
+declare v_row record;
+begin
+  set local role authenticated;
+  -- callee (female) mencoba: ended_at besok, created_at mundur, ganti tipe.
+  perform set_config('request.jwt.claim.sub',
+                     'ed060000-0000-4000-8000-0000000000f1', true);
+  update public.calls
+     set ended_at = now() + interval '1 day',
+         created_at = now() - interval '5 years',
+         call_type = 'audio',
+         caller_id = 'ed060000-0000-4000-8000-0000000000f1',
+         status = 'ended'
+   where id = 'ed060000-0000-4000-8000-0000000000c3';
+  reset role;
+  select * into v_row from public.calls
+   where id = 'ed060000-0000-4000-8000-0000000000c3';
+  insert into _g values ('n1_end', v_row.ended_at <= now(), v_row.ended_at::text);
+  insert into _g values ('n2_created', v_row.created_at > now() - interval '1 day',
+                         v_row.created_at::text);
+  insert into _g values ('n2_type', v_row.call_type = 'video', v_row.call_type);
+  insert into _g values ('n2_caller',
+    v_row.caller_id = 'ed060000-0000-4000-8000-0000000000a1', v_row.caller_id::text);
+  insert into _g values ('n2_status', v_row.status = 'ended', v_row.status);
+end $$;
+select supabase_tests.check('LK: client ended_at masa depan → dipaksa now()',
+  (select ok from _g where k='n1_end'), (select msg from _g where k='n1_end'));
+select supabase_tests.check('LK: client ubah created_at → diabaikan',
+  (select ok from _g where k='n2_created'), (select msg from _g where k='n2_created'));
+select supabase_tests.check('LK: client ubah call_type → diabaikan',
+  (select ok from _g where k='n2_type'), (select msg from _g where k='n2_type'));
+select supabase_tests.check('LK: client ubah caller_id → diabaikan',
+  (select ok from _g where k='n2_caller'), (select msg from _g where k='n2_caller'));
+select supabase_tests.check('LK: hangup sah (status ended) tetap tersimpan',
+  (select ok from _g where k='n2_status'), (select msg from _g where k='n2_status'));
+
+-- N1b. Baris lama dgn ended_at masa depan (sebelum guard) → tick dibatasi now().
+insert into public.calls (id, caller_id, callee_id, kind, call_type, status,
+                          answered_at, ended_at)
+values ('ed060000-0000-4000-8000-0000000000c4'::uuid,
+        'ed060000-0000-4000-8000-0000000000a1',
+        'ed060000-0000-4000-8000-0000000000f1',
+        'direct', 'video', 'ended',
+        now() - interval '90 seconds', now() + interval '1 day');
+select set_config('request.jwt.claim.sub',
+                  'ed060000-0000-4000-8000-0000000000a1', true);
+insert into _lk values ('f1',
+  public.call_billing_tick('ed060000-0000-4000-8000-0000000000c4')::text);
+select supabase_tests.check('LK: ended_at masa depan → billed ≤ 2 menit (cap now)',
+  coalesce((select (v::jsonb->>'billed_minutes')::int from _lk where k='f1'), 0) <= 2,
+  (select v from _lk where k='f1'));
+
+-- N4. Cron invarian tidak bisa dipicu client.
+select supabase_tests.check('LK: economy_invariant_cron tidak executable anon',
+  has_function_privilege('anon', 'public.economy_invariant_cron()', 'execute') = false);
+select supabase_tests.check('LK: economy_invariant_cron tidak executable authenticated',
+  has_function_privilege('authenticated', 'public.economy_invariant_cron()', 'execute') = false);
+select supabase_tests.check('LK: _spend_yukcoin_core tidak executable authenticated',
+  has_function_privilege('authenticated',
+    'public._spend_yukcoin_core(uuid,text,integer,text,jsonb)', 'execute') = false);
+
 -- ════ A4a. Unique index menit — insert menit sama dua kali gagal ════
 delete from _g;
 do $$
@@ -260,7 +328,7 @@ select supabase_tests.check('LK: economy_invariant_cron jalan (return int ≥ 0)
 -- admin_* bisa dieksekusi authenticated (guard email di dalam fungsi).
 select supabase_tests.check('LK: submit_kyc executable authenticated',
   has_function_privilege('authenticated',
-    'public.submit_kyc(text,text,text,text,text,date)', 'execute') = true);
+    'public.submit_kyc(text,text,text,text,text,date,jsonb)', 'execute') = true);
 select supabase_tests.check('LK: get_my_kyc executable authenticated',
   has_function_privilege('authenticated',
     'public.get_my_kyc()', 'execute') = true);
@@ -272,7 +340,7 @@ select supabase_tests.check('LK: admin_kyc_review executable authenticated',
     'public.admin_kyc_review(uuid,boolean,text)', 'execute') = true);
 select supabase_tests.check('LK: submit_kyc TIDAK executable anon',
   has_function_privilege('anon',
-    'public.submit_kyc(text,text,text,text,text,date)', 'execute') = false);
+    'public.submit_kyc(text,text,text,text,text,date,jsonb)', 'execute') = false);
 
 select set_config('request.jwt.claim.sub', '', true);
 select supabase_tests.report() as result;
