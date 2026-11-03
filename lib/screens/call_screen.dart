@@ -14,6 +14,7 @@ import '../utils.dart';
 import '../widgets/call_no_coin_dialog.dart';
 import '../widgets/call_control_button.dart';
 import '../widgets/profile_avatar.dart';
+import '../providers/riverpod/topup_provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 /// Layar panggilan 1:1 — dipakai caller (menelpon) dan callee (menerima).
@@ -209,6 +210,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       await showCallNoCoinDialog(
         context,
         perMinute: perMin,
+        topupEvents: ref.read(topupProvider).events,
+        onTopupStart: _session.holdForTopup,
         onEnd: () {
           _noCoinDialogShown = false;
           _session.endCallNoCoin();

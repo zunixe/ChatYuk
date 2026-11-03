@@ -98,9 +98,6 @@ mixin SRandomMx {
   String randomNeedCoinBody(int fee) => isId
       ? 'Match memotong $fee YukCoin saat kamu dapat pasangan. Isi YukCoin dulu, ya.'
       : 'A match costs $fee YukCoin — charged only when you get a match. Top up first.';
-  String get randomMatchFee => isId
-      ? '−$kMatchFeeCoins YukCoin / match'
-      : '−$kMatchFeeCoins YukCoin / match';
 
   // ── Koin habis di tengah panggilan ──
   String get callNoCoinTitle => isId ? 'YukCoin habis' : 'Out of YukCoin';
@@ -110,6 +107,12 @@ mixin SRandomMx {
   String get callNoCoinContinue => isId ? 'Lanjutkan' : 'Continue';
   String get callNoCoinEnd => isId ? 'Akhiri' : 'End call';
   String get callNoCoinTopup => isId ? 'Isi YukCoin' : 'Top up';
+  String get callTopupWaiting => isId
+      ? 'Menunggu pembayaran Google Play selesai…'
+      : 'Waiting for the Google Play payment to finish…';
+  String get callTopupFailed => isId
+      ? 'Pembayaran gagal atau dibatalkan.'
+      : 'Payment failed or was cancelled.';
   String get callNoCoinStillEmpty => isId
       ? 'YukCoin masih belum cukup'
       : 'Still not enough YukCoin';

@@ -1,8 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:in_app_purchase/in_app_purchase.dart';
 
 import '../config/app_flavor.dart';
+import '../models/topup_event.dart';
 import 'points_service.dart';
 import 'tiktok_service.dart';
 import '../utils.dart';
@@ -40,6 +45,11 @@ class TopupService {
 
   /// Callback setelah coin berhasil di-credit server.
   void Function(int coins)? onCredited;
+
+  final _events = StreamController<TopupEvent>.broadcast();
+
+  /// Hasil tiap pembelian (pending / masuk / gagal / dibatalkan).
+  Stream<TopupEvent> get events => _events.stream;
 
   Future<void> init() async {
     if (_ready) return;
@@ -79,22 +89,42 @@ class TopupService {
     final match = _products.where((p) => p.id == productId).toList();
     if (match.isEmpty) {
       dlog('[TOPUP] produk tidak ditemukan: $productId');
+      _events.add(const TopupEvent(TopupEventKind.failed));
       return;
     }
+    _events.add(const TopupEvent(TopupEventKind.started));
     try {
       await _iap.buyConsumable(
-        purchaseParam: PurchaseParam(productDetails: match.first),
+        purchaseParam: PurchaseParam(
+          productDetails: match.first,
+          // Ikat pembelian ke akun (hash uid — bukan ID mentah, sesuai
+          // pedoman Play). play-topup-verify menolak token yang
+          // obfuscatedExternalAccountId-nya milik akun lain.
+          applicationUserName: playAccountHash(
+            Supabase.instance.client.auth.currentUser?.id,
+          ),
+        ),
       );
     } catch (e) {
       dlog('[TOPUP] buy error: $e');
+      _events.add(const TopupEvent(TopupEventKind.failed));
     }
   }
 
   Future<void> _onPurchase(List<PurchaseDetails> purchases) async {
     for (final p in purchases) {
-      if (p.status == PurchaseStatus.pending) continue;
+      if (p.status == PurchaseStatus.pending) {
+        _events.add(const TopupEvent(TopupEventKind.pending));
+        continue;
+      }
+      if (p.status == PurchaseStatus.canceled) {
+        _events.add(const TopupEvent(TopupEventKind.canceled));
+        if (p.pendingCompletePurchase) await _iap.completePurchase(p);
+        continue;
+      }
       if (p.status == PurchaseStatus.error) {
         dlog('[TOPUP] purchase error: ${p.error}');
+        _events.add(const TopupEvent(TopupEventKind.failed));
         if (p.pendingCompletePurchase) {
           await _iap.completePurchase(p);
         }
@@ -108,6 +138,10 @@ class TopupService {
             productId: p.productID,
             purchaseToken: token,
           );
+          _events.add(TopupEvent(
+            coins > 0 ? TopupEventKind.credited : TopupEventKind.failed,
+            coins,
+          ));
           if (coins > 0) {
             onCredited?.call(coins);
             // TikTok App Events: PURCHASE (pendapatan) — untuk optimasi iklan
@@ -128,6 +162,7 @@ class TopupService {
           }
         } catch (e) {
           dlog('[TOPUP] verify error: $e');
+          _events.add(const TopupEvent(TopupEventKind.failed));
         }
         if (p.pendingCompletePurchase) {
           await _iap.completePurchase(p);
@@ -141,3 +176,8 @@ class TopupService {
     _sub = null;
   }
 }
+
+/// SHA-256 hex dari uid — nilai `obfuscatedAccountId` Google Play. Sama
+/// persis dengan perhitungan di edge function play-topup-verify.
+String? playAccountHash(String? uid) =>
+    uid == null ? null : sha256.convert(utf8.encode(uid)).toString();

@@ -18,6 +18,7 @@ import '../../services/mission_progress_service.dart';
 import '../../services/points_service.dart';
 import 'missions_provider.dart';
 import '../../utils.dart';
+import 'match_pricing_provider.dart';
 import '../../widgets/points_toast.dart';
 
 /// State poin/koin (immutable — yang di-watch widget).
@@ -578,7 +579,10 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
                   ] else ...[
                     _onboardItem('🪙', s.pointsOnboardMaleSub, highlight: true),
                     _onboardItem('', s.pointsOnboardMaleCall(callAudio, callVideo)),
-                    _onboardItem('', s.pointsOnboardMaleMatch(kMatchFeeCoins)),
+                    _onboardItem('', s.pointsOnboardMaleMatch(
+                        (ref.read(matchPricingProvider).value ??
+                                const MatchPricing())
+                            .searchCoins)),
                     _onboardItem(
                         '',
                         s.pointsOnboardMaleGift(

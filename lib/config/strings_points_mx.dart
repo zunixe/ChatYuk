@@ -787,6 +787,21 @@ mixin SPointsMx {
       ? 'Tarik $coins YukCoin dan terima Rp $net ke DANA?'
       : 'Withdraw $coins coins and receive Rp $net to DANA?';
   String get wdConfirmYes => isId ? 'Ya, Ajukan' : 'Yes, Request';
+  String wdHeld(int available, int days) => isId
+      ? 'Sebagian penghasilan masih dalam masa tahan $days hari. Yang bisa ditarik sekarang: $available YukCoin'
+      : 'Part of your earnings is still in the $days-day hold period. Withdrawable now: $available YukCoin';
+  String wdHeldInfo(int held, int days) => isId
+      ? '$held YukCoin masih ditahan (penghasilan $days hari terakhir)'
+      : '$held YukCoin on hold (earnings from the last $days days)';
+  String wdDailyAmount(int remaining) => isId
+      ? 'Melewati batas nominal harian. Sisa hari ini: $remaining YukCoin'
+      : 'Over the daily amount limit. Remaining today: $remaining YukCoin';
+  String get wdUnderReview => isId
+      ? 'Akun sedang ditinjau admin. Withdraw dibuka kembali setelah selesai.'
+      : 'Your account is under admin review. Withdrawals reopen once it is done.';
+  String get wdErrGeneric => isId
+      ? 'Gagal memproses. Coba lagi.'
+      : 'Something went wrong. Please try again.';
   String get wdLoadFail =>
       isId ? 'Gagal memuat data withdraw' : 'Failed to load withdrawal data';
 

@@ -852,6 +852,13 @@ class CallSession extends _CallBase
     }
   }
 
+  /// User membuka pembelian koin: tahan auto-hangup selama Google Play
+  /// memproses (dulu timer 60 dtk tetap jalan → call putus di tengah bayar).
+  /// [resumeBillingAfterTopup] menyalakan lagi timer bila saldo masih kurang.
+  void holdForTopup() {
+    if (_awaitingContinue) _pauseTimer?.cancel();
+  }
+
   /// Dipanggil UI setelah user mengisi koin: coba tagih lagi.
   /// Return true bila panggilan bisa lanjut.
   Future<bool> resumeBillingAfterTopup() async {

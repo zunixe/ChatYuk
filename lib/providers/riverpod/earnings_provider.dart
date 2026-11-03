@@ -29,6 +29,9 @@ class EarningsState {
   /// Total SEMUA bucket (bonus+topup+earned) — untuk informasi; yang bisa
   /// ditarik hanya `withdrawable` (bucket earned).
   final int totalBalance;
+  /// Penghasilan dalam masa tahan (belum bisa ditarik) + lamanya.
+  final int held;
+  final int holdDays;
   final bool loading;
   final String? error;
 
@@ -53,6 +56,8 @@ class EarningsState {
     this.privateAnswerRate = 0,
     this.withdrawable = 0,
     this.totalBalance = 0,
+    this.held = 0,
+    this.holdDays = 7,
     this.loading = true,
     this.error,
   });
@@ -88,6 +93,8 @@ class EarningsState {
       privateAnswerRate: i(s['private_answer_rate']),
       withdrawable: i(json['withdrawable']),
       totalBalance: i(json['total_balance']),
+      held: i(json['held']),
+      holdDays: json['hold_days'] == null ? 7 : i(json['hold_days']),
       loading: false,
     );
   }
@@ -113,6 +120,8 @@ class EarningsState {
     privateAnswerRate: privateAnswerRate,
     withdrawable: withdrawable,
     totalBalance: totalBalance,
+    held: held,
+    holdDays: holdDays,
     loading: loading ?? this.loading,
     error: error,
   );

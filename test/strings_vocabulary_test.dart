@@ -95,7 +95,6 @@ void main() {
       (s) => s.randomNeedCoinBody(2),
       (s) => s.randomNeedCoinBody(2)
     ),
-    'randomMatchFee': ((s) => s.randomMatchFee, (s) => s.randomMatchFee),
     'callNoCoinTitle': ((s) => s.callNoCoinTitle, (s) => s.callNoCoinTitle),
     'callNoCoinBody(6)': (
       (s) => s.callNoCoinBody(6),

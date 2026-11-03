@@ -19,6 +19,8 @@ class WithdrawConfig {
   final int minAccountAgeHours;
   final bool requireKyc;
   final int danaChangeCooldownHours;
+  final int holdDays;
+  final int maxCoinsPerDay;
 
   const WithdrawConfig({
     this.rate = 7,
@@ -32,6 +34,8 @@ class WithdrawConfig {
     this.minAccountAgeHours = 72,
     this.requireKyc = true,
     this.danaChangeCooldownHours = 168,
+    this.holdDays = 7,
+    this.maxCoinsPerDay = 50000,
   });
 
   WithdrawQuote quote(int coins) =>
@@ -135,6 +139,8 @@ class WithdrawNotifier extends Notifier<WithdrawState> {
         requireKyc: cfg['require_kyc'] != false,
         danaChangeCooldownHours:
             _i(cfg['dana_change_cooldown_hours']),
+        holdDays: (cfg['hold_days'] as num?)?.toInt() ?? 7,
+        maxCoinsPerDay: (cfg['max_coins_per_day'] as num?)?.toInt() ?? 50000,
       );
 
       final accRes = await _sb.rpc('get_withdraw_account');
@@ -161,7 +167,9 @@ class WithdrawNotifier extends Notifier<WithdrawState> {
   }
 
   /// Simpan / ubah akun DANA.
-  Future<bool> saveAccount(String number, String name) async {
+  /// Simpan akun DANA. null = sukses; selain itu kode error server
+  /// (mis. DANA_CHANGE_COOLDOWN) — layar memetakan ke teks bilingual.
+  Future<String?> saveAccount(String number, String name) async {
     try {
       final res = await _sb.rpc('save_withdraw_account', params: {
         'p_dana_number': number,
@@ -174,14 +182,15 @@ class WithdrawNotifier extends Notifier<WithdrawState> {
             danaName: res['dana_name'] ?? '',
           ),
         );
-        return true;
+        return null;
       }
-      state = state.copyWith(error: res['error']?.toString());
-      return false;
+      final err = res['error']?.toString() ?? 'UNKNOWN';
+      state = state.copyWith(error: err);
+      return err;
     } catch (e) {
       dlog('[WITHDRAW] saveAccount error: $e');
-      state = state.copyWith(error: e.toString());
-      return false;
+      state = state.copyWith(error: 'UNKNOWN');
+      return 'UNKNOWN';
     }
   }
 
@@ -195,6 +204,10 @@ class WithdrawNotifier extends Notifier<WithdrawState> {
       unawaited(ref.read(earningsProvider.notifier).refresh());
     } catch (_) {}
   }
+
+  /// Respons gagal terakhir `request_withdraw` (mis. `available`,
+  /// `remaining`) — dipakai layar untuk pesan yang menyebut angka.
+  Map<String, dynamic>? lastErrorDetail;
 
   /// Ajukan withdraw. Mengembalikan pesan error (null = sukses).
   Future<String?> request(int coins) async {
@@ -217,12 +230,13 @@ class WithdrawNotifier extends Notifier<WithdrawState> {
         return null;
       }
       final err = res['error']?.toString() ?? 'UNKNOWN';
+      lastErrorDetail = (res as Map).cast<String, dynamic>();
       state = state.copyWith(submitting: false, error: err);
       return err;
     } catch (e) {
       dlog('[WITHDRAW] request error: $e');
-      state = state.copyWith(submitting: false, error: e.toString());
-      return e.toString();
+      state = state.copyWith(submitting: false, error: 'UNKNOWN');
+      return 'UNKNOWN';
     }
   }
 

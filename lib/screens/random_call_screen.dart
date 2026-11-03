@@ -19,6 +19,7 @@ import '../core/call/call_permissions.dart';
 import '../utils.dart';
 import '../widgets/chat_route.dart';
 import '../widgets/call_no_coin_dialog.dart';
+import '../providers/riverpod/topup_provider.dart';
 import '../widgets/gender_avatar.dart';
 
 /// Layar video call RANDOM (hasil Match). Video lawan penuh layar, kamera
@@ -154,6 +155,8 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
       await showCallNoCoinDialog(
         context,
         perMinute: perMin,
+        topupEvents: ref.read(topupProvider).events,
+        onTopupStart: session.holdForTopup,
         onEnd: () {
           _noCoinDialogShown = false;
           session.endCallNoCoin();

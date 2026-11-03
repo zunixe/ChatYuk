@@ -9,7 +9,8 @@ class DanaForm extends StatefulWidget {
   final String initialNumber;
   final String initialName;
   final bool saving;
-  final Future<bool> Function(String number, String name) onSave;
+  /// null = tersimpan; selain itu pesan error (sudah bilingual) untuk user.
+  final Future<String?> Function(String number, String name) onSave;
 
   const DanaForm({
     super.key,
@@ -64,12 +65,16 @@ class _DanaFormState extends State<DanaForm> {
 
     if (clean == null || name.length < 3) return;
 
-    final ok = await widget.onSave(clean, name);
-    if (ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.wdDanaSaved)),
-      );
-    }
+    final err = await widget.onSave(clean, name);
+    if (!mounted) return;
+    // Dulu gagal simpan (termasuk cooldown ganti nomor) DIAM — user mengira
+    // nomor sudah tersimpan.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(err ?? s.wdDanaSaved),
+        backgroundColor: err == null ? null : AppTheme.danger,
+      ),
+    );
   }
 
   @override

@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/nav_gate.dart';
 import '../core/call/call_permissions.dart';
 import '../config/strings.dart';
-import '../config/gifts.dart';
 import '../config/theme.dart';
 import '../models/random_match.dart';
 import '../providers/riverpod/locale_provider.dart';
@@ -16,6 +15,7 @@ import '../providers/riverpod/random_match_provider.dart';
 import '../widgets/gender_avatar.dart';
 import '../widgets/call_permission_dialog.dart';
 import 'random_call_history_screen.dart';
+import '../providers/riverpod/match_pricing_provider.dart';
 import 'random_call_screen.dart';
 
 /// Layar utama Random Video Call: radar orang sekitar + tombol Match.
@@ -90,7 +90,10 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
           style: AppText.title.copyWith(color: AppTheme.textPrimary),
         ),
         content: Text(
-          s.randomNeedCoinBody(kMatchFeeCoins),
+          s.randomNeedCoinBody(
+            (ref.read(matchPricingProvider).value ?? const MatchPricing())
+                .searchCoins,
+          ),
           style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
         ),
         actions: [

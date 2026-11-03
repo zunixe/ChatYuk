@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/topup_event.dart';
 import '../../services/topup_service.dart';
 import 'points_provider.dart';
 
@@ -15,6 +16,7 @@ class TopupNotifier {
   List<Map<String, dynamic>> get packages => service.packages;
   bool get available => service.available;
   Future<void> buy(String productId) => service.buy(productId);
+  Stream<TopupEvent> get events => service.events;
 }
 
 final topupProvider = Provider<TopupNotifier>((ref) {

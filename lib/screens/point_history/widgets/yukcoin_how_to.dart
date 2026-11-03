@@ -4,6 +4,7 @@ import '../../../config/theme.dart';
 import '../../../config/gifts.dart';
 import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/points_provider.dart';
+import '../../../providers/riverpod/match_pricing_provider.dart';
 import '../../../config/strings.dart';
 
 /// Section "Cara dapat" & "Cara pakai YukCoin". Harga diambil dari provider
@@ -25,6 +26,7 @@ class YukcoinHowTo extends ConsumerWidget {
     // PERF: `select` record field harga (value-type) — dulu `watch` penuh →
     // widget rebuild tiap PointsProvider notify (saldo/pricing sering).
     // Hanya harga call/video yang ditampilkan (fitur lain gratis).
+    final mp = ref.matchPricing;
     final pp = ref.watch(
       pointsProvider.select(
         (p) => (
@@ -100,9 +102,9 @@ class YukcoinHowTo extends ConsumerWidget {
               _row(
                 Icons.people_outline,
                 s.yukcoinFeatureMatch,
-                '$kMatchFeeCoins',
+                '${mp.searchCoins}',
                 trailing: s.yukcoinPerMatch,
-                note: '${s.yukcoinMatchNote} ${s.yukcoinMatchPerMinNote(pp.callVideo, kMatchFreeSeconds, kMatchConnectFeeCoins)}',
+                note: '${s.yukcoinMatchNote} ${s.yukcoinMatchPerMinNote(pp.callVideo, mp.freeSeconds, mp.connectCoins)}',
               ),
               _row(
                 Icons.card_giftcard,

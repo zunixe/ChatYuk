@@ -51,6 +51,8 @@ class SaldoScreen extends ConsumerWidget {
                     withdrawable: state.withdrawable,
                     totalBalance: state.totalBalance,
                     rate: wd.rate,
+                    held: state.held,
+                    holdDays: state.holdDays,
                   ),
                   const SizedBox(height: 10),
                   // KYC bisa dimulai SEKARANG walau saldo belum cukup —
@@ -253,12 +255,16 @@ class _BalanceCard extends StatelessWidget {
   final int withdrawable;
   final int totalBalance;
   final int rate;
+  final int held;
+  final int holdDays;
 
   const _BalanceCard({
     required this.s,
     required this.withdrawable,
     this.totalBalance = 0,
     this.rate = 7,
+    this.held = 0,
+    this.holdDays = 7,
   });
 
   /// 2026-11-01: yang bisa ditarik HANYA bucket `earned` (request_withdraw
@@ -315,6 +321,24 @@ class _BalanceCard extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
+          if (held > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.lock_clock_outlined,
+                    size: 14, color: Colors.white.withValues(alpha: 0.9)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    s.wdHeldInfo(held, holdDays),
+                    style: AppText.caption.copyWith(
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           // Total semua bucket ditampilkan terpisah supaya tidak tertukar
           // dengan angka yang benar-benar bisa ditarik.
           if (totalBalance != withdrawable) ...[

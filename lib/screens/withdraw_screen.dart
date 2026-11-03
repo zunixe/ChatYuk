@@ -114,6 +114,11 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     );
   }
 
+  int _detailInt(String key, int fallback) =>
+      (ref.read(withdrawProvider.notifier).lastErrorDetail?[key] as num?)
+          ?.toInt() ??
+      fallback;
+
   String _errorText(String code) {
     final s = ref.read(localeProvider).s;
     final cfg = ref.read(withdrawProvider).config;
@@ -133,7 +138,11 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
       'FEMALE_ONLY' => s.wdFemaleOnly,
       'KYC_REQUIRED' => s.wdKycRequired,
       'DANA_CHANGE_COOLDOWN' => s.wdDanaCooldown(cfg.danaChangeCooldownHours),
-      _ => code,
+      'HELD_BALANCE' => s.wdHeld(_detailInt('available', 0), cfg.holdDays),
+      'DAILY_AMOUNT_LIMIT' =>
+        s.wdDailyAmount(_detailInt('remaining', cfg.maxCoinsPerDay)),
+      'UNDER_REVIEW' => s.wdUnderReview,
+      _ => s.wdErrGeneric,
     };
   }
 
@@ -216,8 +225,10 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                   DanaForm(
                     initialNumber: state.account?.danaNumber ?? '',
                     initialName: state.account?.danaName ?? '',
-                    onSave: (n, name) =>
-                        notifier.saveAccount(n, name),
+                    onSave: (n, name) async {
+                      final err = await notifier.saveAccount(n, name);
+                      return err == null ? null : _errorText(err);
+                    },
                   ),
                   const SizedBox(height: 20),
                   _SectionTitle(s.wdHistory),
