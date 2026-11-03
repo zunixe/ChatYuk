@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/strings.dart';
-import '../config/strings_admin.dart';
+import '../config/strings_admin_kyc.dart';
 import '../config/theme.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../utils.dart';
@@ -20,8 +20,8 @@ class _KycReq {
   final String fullName;
   final String idType;
   final String idNumber;
-  final String idPhoto;
-  final String selfiePhoto;
+  final Map<String, dynamic> checks;
+  final Map<String, dynamic> serverChecks;
   final String? birthDate;
   final String? rejectReason;
   final String nickname;
@@ -35,8 +35,8 @@ class _KycReq {
     required this.fullName,
     required this.idType,
     required this.idNumber,
-    required this.idPhoto,
-    required this.selfiePhoto,
+    required this.checks,
+    required this.serverChecks,
     required this.birthDate,
     required this.rejectReason,
     required this.nickname,
@@ -51,8 +51,9 @@ class _KycReq {
         fullName: j['full_name']?.toString() ?? '-',
         idType: j['id_type']?.toString() ?? 'ktp',
         idNumber: j['id_number']?.toString() ?? '-',
-        idPhoto: j['id_photo']?.toString() ?? '',
-        selfiePhoto: j['selfie_photo']?.toString() ?? '',
+        checks: (j['checks'] as Map?)?.cast<String, dynamic>() ?? const {},
+        serverChecks:
+            (j['server_checks'] as Map?)?.cast<String, dynamic>() ?? const {},
         birthDate: j['birth_date']?.toString(),
         rejectReason: j['reject_reason']?.toString(),
         nickname: j['nickname']?.toString() ?? '-',
@@ -63,10 +64,18 @@ class _KycReq {
       );
 }
 
+/// Foto KTP + selfie satu pengajuan (sudah didecode SEKALI).
+class _KycPhotos {
+  final Uint8List? id;
+  final Uint8List? selfie;
+  const _KycPhotos(this.id, this.selfie);
+}
+
 /// Tab admin KYC — review pengajuan verifikasi identitas (syarat withdraw).
-/// Foto tersimpan sebagai data URL base64 di `kyc_requests` (bukan bucket
-/// public — dokumen identitas tidak boleh terekspos URL publik) dan hanya
-/// dikembalikan `admin_kyc_list` untuk akun admin.
+/// Daftar (`admin_kyc_list`) TANPA foto; foto diambil per pengajuan lewat
+/// `admin_kyc_photos` dan di-cache (dulu semua foto + riwayat sekaligus dan
+/// didecode ulang tiap rebuild). Chip "cek otomatis" = hasil OCR/liveness
+/// klien + validasi NIK server, membantu admin memutuskan.
 class AdminKycTab extends ConsumerStatefulWidget {
   const AdminKycTab({super.key});
 
@@ -79,6 +88,7 @@ class _AdminKycTabState extends ConsumerState<AdminKycTab> {
   bool _loading = true;
   String? _error;
   List<_KycReq> _items = const [];
+  final Map<String, Future<_KycPhotos>> _photos = {};
 
   @override
   void initState() {
@@ -104,6 +114,7 @@ class _AdminKycTabState extends ConsumerState<AdminKycTab> {
       setState(() {
         _items = list;
         _loading = false;
+        _photos.clear();
       });
     } catch (e) {
       dlog('[ADMIN-KYC] load error: $e');
@@ -128,7 +139,7 @@ class _AdminKycTabState extends ConsumerState<AdminKycTab> {
       }
     }
     try {
-      await Supabase.instance.client.rpc(
+      final res = await Supabase.instance.client.rpc(
         'admin_kyc_review',
         params: {
           'p_request_id': r.id,
@@ -137,7 +148,11 @@ class _AdminKycTabState extends ConsumerState<AdminKycTab> {
         },
       );
       if (!mounted) return;
-      _snack(approve ? s.adminKycApprovedSnack : s.adminKycRejectedSnack);
+      if (res is Map && res['ok'] == false) {
+        _snack(s.adminKycAlreadyProcessed, error: true);
+      } else {
+        _snack(approve ? s.adminKycApprovedSnack : s.adminKycRejectedSnack);
+      }
       _load();
     } catch (e) {
       dlog('[ADMIN-KYC] review error: $e');
@@ -182,19 +197,35 @@ class _AdminKycTabState extends ConsumerState<AdminKycTab> {
   }
 
   /// Data URL `data:image/jpeg;base64,…` → bytes untuk Image.memory.
-  Uint8List? _photoBytes(String dataUrl) {
+  static Uint8List? _photoBytes(String? dataUrl) {
+    if (dataUrl == null || dataUrl.isEmpty) return null;
     try {
       final comma = dataUrl.indexOf(',');
-      if (comma < 0) return base64Decode(dataUrl);
-      return base64Decode(dataUrl.substring(comma + 1));
+      return base64Decode(comma < 0 ? dataUrl : dataUrl.substring(comma + 1));
     } catch (_) {
       return null;
     }
   }
 
-  void _viewPhoto(String title, String dataUrl) {
-    final bytes = _photoBytes(dataUrl);
-    if (bytes == null) return;
+  Future<_KycPhotos> _photosFor(String id) => _photos.putIfAbsent(id, () async {
+        try {
+          final res = await Supabase.instance.client.rpc(
+            'admin_kyc_photos',
+            params: {'p_request_id': id},
+          );
+          final j = (res as Map).cast<String, dynamic>();
+          return _KycPhotos(
+            _photoBytes(j['id_photo'] as String?),
+            _photoBytes(j['selfie_photo'] as String?),
+          );
+        } catch (e) {
+          dlog('[ADMIN-KYC] photos error: $e');
+          _photos.remove(id);
+          return const _KycPhotos(null, null);
+        }
+      });
+
+  void _viewPhoto(String title, Uint8List bytes) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -336,17 +367,29 @@ class _AdminKycTabState extends ConsumerState<AdminKycTab> {
               ),
             ),
             const SizedBox(height: 10),
+            _checksView(s, r),
+            const SizedBox(height: 10),
             // Dua foto berdampingan — tap untuk viewer full-screen.
-            Row(
-              children: [
-                Expanded(
-                  child: _photoThumb(s, r.idPhoto, s.adminKycDocPhoto),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _photoThumb(s, r.selfiePhoto, s.adminKycSelfiePhoto),
-                ),
-              ],
+            FutureBuilder<_KycPhotos>(
+              future: _photosFor(r.id),
+              builder: (_, snap) {
+                final p = snap.data;
+                return Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: _photoThumb(
+                          s, p?.id, s.adminKycDocPhoto, snap.hasData),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: _photoThumb(
+                          s, p?.selfie, s.adminKycSelfiePhoto, snap.hasData),
+                    ),
+                  ],
+                );
+              },
             ),
             if (!pending && (r.rejectReason ?? '').isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -402,8 +445,81 @@ class _AdminKycTabState extends ConsumerState<AdminKycTab> {
     );
   }
 
-  Widget _photoThumb(S s, String dataUrl, String title) {
-    final bytes = _photoBytes(dataUrl);
+  /// Chip ✓/✗ hasil cek otomatis + nilai yang terbaca dari KTP.
+  Widget _checksView(S s, _KycReq r) {
+    final c = r.checks;
+    final sc = r.serverChecks;
+    final ocr = (c['ocr'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final q = (c['doc_quality'] as Map?)?.cast<String, dynamic>();
+    final nameScore = (c['name_score'] as num?)?.toDouble();
+    final items = <(String, bool?)>[
+      (s.adminKycChkNik, sc['nik_valid'] as bool? ?? c['nik_valid'] as bool?),
+      (s.adminKycChkBirth,
+          sc['birth_match_nik'] as bool? ?? c['birth_match_nik'] as bool?),
+      (s.adminKycChkOcr, c['ocr_ktp'] as bool?),
+      (s.adminKycChkNikOcr, c['nik_match_ocr'] as bool?),
+      (s.adminKycChkName, nameScore == null ? null : nameScore >= 0.8),
+      (s.adminKycChkGender, sc['gender_match_profile'] as bool?),
+      (s.adminKycChkLive, c['live'] as bool?),
+      (s.adminKycChkQuality,
+          q == null ? null : ((q['sharpness'] as num?) ?? 0) >= 60),
+    ];
+    final read = [
+      if (ocr['nik'] != null) 'NIK ${ocr['nik']}',
+      if (ocr['name'] != null) '${ocr['name']}',
+      if (ocr['birth_date'] != null) '${ocr['birth_date']}',
+    ].join(' · ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [for (final (label, ok) in items) _checkChip(label, ok)],
+        ),
+        if (read.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            s.adminKycOcrRead(read),
+            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _checkChip(String label, bool? ok) {
+    final color = ok == null
+        ? AppTheme.textSecondary
+        : ok
+            ? const Color(0xFF2ECC71)
+            : AppTheme.danger;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            ok == null
+                ? Icons.remove
+                : ok
+                    ? Icons.check
+                    : Icons.close,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(label, style: AppText.label.copyWith(color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _photoThumb(S s, Uint8List? bytes, String title, bool loaded) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -413,7 +529,7 @@ class _AdminKycTabState extends ConsumerState<AdminKycTab> {
         ),
         const SizedBox(height: 4),
         InkWell(
-          onTap: bytes == null ? null : () => _viewPhoto(title, dataUrl),
+          onTap: bytes == null ? null : () => _viewPhoto(title, bytes),
           borderRadius: BorderRadius.circular(8),
           child: Container(
             height: 120,
@@ -423,12 +539,20 @@ class _AdminKycTabState extends ConsumerState<AdminKycTab> {
               borderRadius: BorderRadius.circular(8),
             ),
             clipBehavior: Clip.antiAlias,
-            child: bytes == null
-                ? Center(
-                    child: Icon(Icons.broken_image_outlined,
-                        color: AppTheme.textSecondary),
+            child: !loaded
+                ? const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   )
-                : Image.memory(bytes, fit: BoxFit.cover, cacheWidth: 400),
+                : bytes == null
+                    ? Center(
+                        child: Icon(Icons.broken_image_outlined,
+                            color: AppTheme.textSecondary),
+                      )
+                    : Image.memory(bytes, fit: BoxFit.cover, cacheWidth: 400),
           ),
         ),
       ],

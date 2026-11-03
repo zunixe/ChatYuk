@@ -103,19 +103,20 @@ class KycNotifier extends Notifier<KycState> {
     }
   }
 
-  /// Kirim pengajuan KYC. [idPhoto]/[selfiePhoto] = data URL base64
-  /// (`data:image/jpeg;base64,…`) — kontrak `submit_kyc` (min length 100).
-  /// Return null = sukses (status → pending); String = pesan error klien.
-  /// Error server (duplicate/invalid) dipetakan ke kode yang dikenali layar.
-  Future<String?> submit({
+  /// Kirim pengajuan KYC. [idPhoto]/[selfiePhoto] = data URL base64.
+  /// [checks] = hasil cek klien (OCR, liveness, kualitas) untuk admin —
+  /// server memvalidasi ulang NIK/tgl lahir/NIK unik sendiri.
+  /// Return null = sukses (status → pending), selain itu kode error.
+  Future<KycSubmitError?> submit({
     required String fullName,
     required String idType,
     required String idNumber,
     required String idPhoto,
     required String selfiePhoto,
     DateTime? birthDate,
+    Map<String, dynamic> checks = const {},
   }) async {
-    if (state.submitting) return 'busy';
+    if (state.submitting) return KycSubmitError.busy;
     state = state.copyWith(submitting: true);
     try {
       await _sb.rpc(
@@ -128,6 +129,7 @@ class KycNotifier extends Notifier<KycState> {
           'p_selfie_photo': selfiePhoto,
           if (birthDate != null)
             'p_birth_date': birthDate.toIso8601String().substring(0, 10),
+          'p_checks': checks,
         },
       );
       state = state.copyWith(submitting: false, status: 'pending');
@@ -135,17 +137,45 @@ class KycNotifier extends Notifier<KycState> {
     } on PostgrestException catch (e) {
       dlog('[KYC] submit_kyc error: ${e.message}');
       state = state.copyWith(submitting: false, error: e.message);
-      // Pesan dari `raise exception` RPC tiba mentah — layar memetakan
-      // yang dikenal ('KYC already submitted' → kycErrDuplicate).
-      return e.message.contains('already submitted')
-          ? 'duplicate'
-          : 'server:${e.message}';
+      return kycErrorFromServer(e.message);
     } catch (e) {
       dlog('[KYC] submit_kyc error: $e');
       state = state.copyWith(submitting: false, error: e.toString());
-      return 'generic';
+      return KycSubmitError.generic;
     }
   }
+}
+
+enum KycSubmitError {
+  busy,
+  generic,
+  duplicate,
+  nikUsed,
+  nikInvalid,
+  birthMismatch,
+  underage,
+  name,
+  tooMany,
+  photos,
+}
+
+/// Kode `raise exception` dari `submit_kyc` → enum (layar memetakan ke
+/// string bilingual; pesan server mentah tidak pernah ditampilkan).
+KycSubmitError kycErrorFromServer(String msg) {
+  const map = {
+    'KYC_ALREADY_SUBMITTED': KycSubmitError.duplicate,
+    'KYC_NIK_USED': KycSubmitError.nikUsed,
+    'KYC_NIK_INVALID': KycSubmitError.nikInvalid,
+    'KYC_BIRTH_MISMATCH': KycSubmitError.birthMismatch,
+    'KYC_UNDERAGE': KycSubmitError.underage,
+    'KYC_NAME_INVALID': KycSubmitError.name,
+    'KYC_TOO_MANY': KycSubmitError.tooMany,
+    'KYC_PHOTOS_REQUIRED': KycSubmitError.photos,
+  };
+  for (final e in map.entries) {
+    if (msg.contains(e.key)) return e.value;
+  }
+  return KycSubmitError.generic;
 }
 
 final kycProvider =

@@ -1,3 +1,37 @@
+## 2026-11-09 — Review ulang ekonomi + KYC profesional
+
+### `20261109000000_econ_calls_guard_v2.sql` (APPLIED 2026-11-04 via API)
+Menutup celah yang muncul dari Fase A (`20261106000000`):
+1. **N1** `call_billing_tick`: `v_end := least(coalesce(ended_at, now()), now())`
+   — dulu `ended_at` masa depan (bisa ditulis peserta) menagih semua menit
+   sampai saldo payer habis.
+2. **N2/N3** `calls_client_guard`: `created_at`, `caller_id`, `callee_id`,
+   `call_type` dibekukan untuk klien; `answered_at`/`ended_at` hanya sekali &
+   diisi jam SERVER (nilai jam HP diabaikan → tak lagi ditolak saat jam HP
+   telat). Perubahan ilegal DINORMALKAN (bukan error) supaya retry
+   `updateStatus` klien tetap aman.
+3. **N4** revoke `economy_invariant_cron()` dari public/anon/authenticated.
+4. **S4** `_spend_yukcoin_core`: `pg_advisory_xact_lock('wallet:'||uid)`
+   (komentar Fase A bilang sudah, ternyata belum).
+Test: `econ_lockdown_test.sql` 34/34 (A3b disesuaikan: backdate diabaikan;
++N1/N2/N4).
+
+### `20261109010000_kyc_validation.sql` (APPLIED 2026-11-04 via API)
+KYC divalidasi ulang di server (klien bisa dimodifikasi):
+- hanya KTP; `kyc_nik_info(nik)` = struktur NIK (provinsi, kab/kec ≠ 00,
+  tgl lahir +40 perempuan, urut ≠ 0000);
+- `submit_kyc` v2 (+`p_checks jsonb`, signature lama DI-DROP): tgl lahir ==
+  NIK, usia ≥ 17, maks 3/24 jam, **1 NIK = 1 akun** (unique index
+  pending/approved), error berupa kode `KYC_*` (klien → string bilingual);
+- kolom `checks` (OCR/liveness/kualitas dari klien) & `server_checks`;
+- `admin_kyc_list` tanpa foto (+checks), foto via `admin_kyc_photos(id)`;
+- `admin_kyc_review`: `FOR UPDATE` + wajib `pending` + alasan tolak wajib.
+Test: `kyc_validation_test.sql` 21/21.
+
+Catatan: `economy_bonus_saldo_test.sql` gagal 2 cek "kuota gratis female"
+bila dijalankan 00:00–00:40 WIB (fixture `answered_at = now()-40m` jatuh ke
+hari sebelumnya) — rapuh waktu, bukan regresi.
+
 ## 2026-11-02 — Audit lanjutan: pulihkan regresi + zona waktu (Fase 23)
 
 **Temuan utama:** migrasi `20261101190000_paid_only_economy.sql` (yang

@@ -1,6 +1,6 @@
 -- SNAPSHOT SEMUA fungsi public (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh --all
--- Timestamp: 2026-11-02T23:56:42Z
+-- Timestamp: 2026-11-03T17:11:38Z
 
 -- snapshot-fn: _anon_gate_insert
 CREATE OR REPLACE FUNCTION public._anon_gate_insert()
@@ -248,6 +248,10 @@ begin
       'remaining', public.yukcoin_total(p_user)
     );
   end if;
+
+  -- Serialkan debit per user (namespace sama dgn ledger_spend_paid dst) —
+  -- tanpa ini fee match bisa balapan dgn tick billing → saldo minus.
+  perform pg_advisory_xact_lock(hashtext('wallet:' || p_user::text));
 
   -- Kill-switch ekonomi: points_enabled=false → free (pola 110013).
   if (select points_enabled from app_settings where id = 'global') is false then
@@ -2220,13 +2224,30 @@ begin
   select coalesce(jsonb_agg(x order by x.created_at desc), '[]'::jsonb) into res
   from (
     select k.id, k.user_id, k.status, k.full_name, k.id_type, k.id_number,
-           k.id_photo, k.selfie_photo, k.birth_date, k.reject_reason, k.created_at,
-           p.nickname, p.email
+           k.birth_date, k.reject_reason, k.created_at, k.reviewed_at,
+           k.checks, k.server_checks, p.nickname, p.email, p.gender
     from kyc_requests k
     join profiles p on p.id = k.user_id
     where (p_status = 'all' or k.status = p_status)
+    limit 200
   ) x;
   return coalesce(res, '[]'::jsonb);
+end; $function$
+
+-- snapshot-fn: admin_kyc_photos
+CREATE OR REPLACE FUNCTION public.admin_kyc_photos(p_request_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare r record;
+begin
+  if coalesce(auth.email(), '') != 'zunixe@gmail.com' then
+    raise exception 'Unauthorized'; end if;
+  select id_photo, selfie_photo into r from kyc_requests where id = p_request_id;
+  if not found then raise exception 'Request not found'; end if;
+  return jsonb_build_object('id_photo', r.id_photo, 'selfie_photo', r.selfie_photo);
 end; $function$
 
 -- snapshot-fn: admin_kyc_review
@@ -2236,20 +2257,30 @@ CREATE OR REPLACE FUNCTION public.admin_kyc_review(p_request_id uuid, p_approve 
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare uid uuid := auth.uid();
+declare uid uuid := auth.uid(); v_status text;
 begin
   if coalesce(auth.email(), '') != 'zunixe@gmail.com' then
     raise exception 'Unauthorized'; end if;
 
+  select status into v_status from kyc_requests
+   where id = p_request_id for update;
+  if not found then raise exception 'Request not found'; end if;
+  if v_status <> 'pending' then
+    return jsonb_build_object('ok', false, 'error', 'ALREADY_PROCESSED',
+                              'status', v_status);
+  end if;
+  if not p_approve and length(trim(coalesce(p_reason, ''))) = 0 then
+    raise exception 'Reason required';
+  end if;
+
   update kyc_requests set
     status = case when p_approve then 'approved' else 'rejected' end,
-    reject_reason = case when p_approve then null else p_reason end,
+    reject_reason = case when p_approve then null else trim(p_reason) end,
     reviewed_by = uid,
     reviewed_at = now(),
     updated_at = now()
   where id = p_request_id;
 
-  if not found then raise exception 'Request not found'; end if;
   return jsonb_build_object('ok', true, 'approved', p_approve);
 end; $function$
 
@@ -4818,7 +4849,7 @@ END;
 $function$
 
 -- snapshot-fn: admin_withdraw_process
-CREATE OR REPLACE FUNCTION public.admin_withdraw_process(p_request_id uuid, p_approve boolean, p_note text DEFAULT NULL::text)
+CREATE OR REPLACE FUNCTION public.admin_withdraw_process(p_request_id uuid, p_approve boolean, p_note text DEFAULT NULL::text, p_tx_id text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -4879,9 +4910,15 @@ BEGIN
     END IF;
 
     -- Approve: TIDAK ada debit. Koin sudah keluar di request_withdraw.
+    -- B4: wajib ada bukti transfer (tx_id) agar bisa diaudit ulang.
+    IF nullif(trim(coalesce(p_tx_id, '')), '') IS NULL THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'TX_ID_REQUIRED');
+    END IF;
+
     UPDATE public.withdrawal_requests
     SET status = 'paid',
         admin_note = nullif(trim(coalesce(p_note, '')), ''),
+        tx_id = trim(p_tx_id),
         reviewed_by = (SELECT id FROM public.profiles WHERE email = v_admin_email LIMIT 1),
         reviewed_at = now(),
         updated_at = now()
@@ -4895,6 +4932,7 @@ BEGIN
 
     RETURN jsonb_build_object('ok', true, 'status', 'paid',
         'coins', v_req.coin_amount, 'net_idr', v_req.payout_idr,
+        'tx_id', trim(p_tx_id),
         'remaining_points', v_new_points, 'debited', 0);
 END;
 $function$
@@ -5963,6 +6001,8 @@ declare
   v_connect_billed boolean := false;
   v_free_seconds_left int := 0;
   v_anchor timestamptz;
+  v_end timestamptz;
+  v_ended boolean;
   v_day_start timestamptz :=
     (((now() AT TIME ZONE 'Asia/Jakarta')::date)::timestamp
        AT TIME ZONE 'Asia/Jakarta');
@@ -5991,14 +6031,13 @@ begin
       'billed_minutes', 0, 'charged_total', 0, 'per_minute', 0,
       'remaining', public.yukcoin_total(me));
   end if;
-  select * into c from public.calls where id = p_call_id;
+
+  -- A2a: KUNCI baris call — dua tick bersamaan (payer+callee / dua device)
+  -- terserial → tidak ada double-charge.
+  select * into c from public.calls where id = p_call_id for update;
   if not found then raise exception 'Call not found'; end if;
-  -- Gender CALLER yang sebenarnya (bukan pemanggil tick): tick kini boleh
-  -- dari kedua peserta — pakai `me` di sini dulu membuat callee-tick random
-  -- salah resolve payer dan private callee-tick kena cabang free-female.
+
   select gender into v_caller_gender from public.profiles where id = c.caller_id;
-  -- Private: kedua peserta boleh tick — caller menagih, callee baca info.
-  -- Pihak ketiga tetap ditolak.
   if c.kind is distinct from 'random' and c.caller_id <> me
      and c.callee_id <> me then
     raise exception 'Only caller can be billed';
@@ -6008,9 +6047,6 @@ begin
   end if;
 
   -- ── Payer & recipient ──
-  -- Random: pihak MALE membayar, pihak FEMALE menerima split (kebalikan
-  -- dari asumsi caller=payer lama — caller match = siapa yang join kedua,
-  -- murni kebetulan sisi signaling, bukan ekonomi). Private: caller bayar.
   if c.kind = 'random' then
     select gender into v_callee_gender from public.profiles where id = c.callee_id;
     if v_caller_gender = 'male' then
@@ -6030,15 +6066,84 @@ begin
   if me <> v_payer and me <> v_recipient then
     raise exception 'Only participants';
   end if;
-  -- Pendapatan live pemanggil tick (0 untuk payer — dia tidak menerima
-  -- income). Sumber kebenaran = ledger yang ditulis _charge_metered_core.
+
   select coalesce(sum(amount),0) into v_income
     from public.coin_ledger
    where user_id = me and ref_id = p_call_id::text
      and type like '%\_income' escape '\';
 
+  -- A2b: call sudah berakhir → elapsed di-cap ke ended_at. Tick setelah
+  -- ended hanya menagih menit yang BENAR-BENAR terpakai, lalu melaporkan
+  -- can_continue=false agar client berhenti (tidak ada tagihan baru).
+  v_ended := c.ended_at is not null
+             or c.status in ('ended','canceled','declined','missed','busy');
+  -- N1 (2026-11-09): ended_at TIDAK boleh di masa depan (dulu peserta bisa
+  -- set ended_at=besok → tick menagih semua menit sampai saldo habis).
+  v_end   := least(coalesce(c.ended_at, now()), now());
+
+  feat := case when c.kind = 'random' then 'call_video'
+               when c.call_type = 'audio' then 'call_audio'
+               else 'call_video' end;
+  select case when c.kind = 'random' then call_video_cost_per_min
+              when c.call_type = 'audio' then call_audio_cost_per_min
+              else call_video_cost_per_min end
+    into unit_cost
+    from app_settings where id = 'global';
+  unit_cost := coalesce(unit_cost, 0);
+
+  if c.kind = 'random' then
+    select coalesce((metered_pricing->'match_call'->>'unit_cost')::int, 10)
+      into v_connect_cost from app_settings where id = 'global';
+  end if;
+
+  if c.answered_at is not null then
+    v_anchor := case when c.kind = 'random'
+                     then coalesce(c.media_connected_at, c.answered_at)
+                     else c.answered_at end;
+    elapsed_sec := greatest(0, floor(extract(epoch from (v_end - v_anchor)))::int);
+  else
+    elapsed_sec := 0;
+  end if;
+
+  if c.kind = 'random' then
+    billable_minutes := case when elapsed_sec >= 30
+                        then 1 + (elapsed_sec - 30) / 60 else 0 end;
+    v_free_seconds_left := case when v_ended then 0
+                            else greatest(0, 30 - elapsed_sec) end;
+  else
+    billable_minutes := (elapsed_sec + 59) / 60;
+  end if;
+
+  select count(*) into already_billed
+    from public.yukcoin_consumptions
+    where user_id = v_payer and feature = feat and ref_id = p_call_id::text;
+  v_connect_billed := exists (
+    select 1 from public.yukcoin_consumptions
+     where user_id = v_payer and feature = 'match_call'
+       and ref_id = p_call_id::text
+  );
+
+  -- ── A2c: RECIPIENT READ-ONLY ──
+  -- Tick penerima tidak lagi menagih: ia hanya membaca kondisi billing
+  -- (income_total, billed_minutes, charged_total) untuk ditampilkan.
+  -- Ini menutup jalur "female terus tick call lama → koin male terkuras".
+  -- Charge tetap mungkin hanya dari sisi payer; kunci baris + unique index
+  -- menjamin idempoten walau kedua sisi tick bersamaan.
+  if me = v_recipient and me <> v_payer then
+    return jsonb_build_object('ok', true,
+      'can_continue', not v_ended,
+      'billed_minutes', already_billed,
+      'charged_total', already_billed * unit_cost
+        + (case when v_connect_billed then v_connect_cost else 0 end),
+      'per_minute', unit_cost,
+      'remaining', public.yukcoin_total(me),
+      'income_total', v_income,
+      'free_seconds_left', v_free_seconds_left,
+      'ended', v_ended,
+      'role', 'recipient');
+  end if;
+
   -- ── Caller FEMALE = GRATIS (batas menit/hari) — private saja ──
-  -- Random TIDAK gratis walau caller female: payer-nya tetap male.
   if c.kind is distinct from 'random' and v_caller_gender = 'female' then
     select coalesce(female_free_call_min_per_day, 30) into v_free_limit
       from app_settings where id = 'global';
@@ -6060,73 +6165,45 @@ begin
         'income_total', v_income,
         'free_used_min', v_free_used, 'free_limit_min', v_free_limit);
     end if;
-    return jsonb_build_object('ok', true, 'can_continue', true,
+    return jsonb_build_object('ok', true,
+      'can_continue', not v_ended,
       'billed_minutes', 0, 'charged_total', 0, 'per_minute', 0,
       'remaining', public.yukcoin_total(me),
       'income_total', v_income,
-        'free_used_min', v_free_used, 'free_limit_min', v_free_limit);
+      'ended', v_ended,
+      'free_used_min', v_free_used, 'free_limit_min', v_free_limit);
   end if;
 
-  feat := case when c.kind = 'random' then 'call_video'
-               when c.call_type = 'audio' then 'call_audio'
-               else 'call_video' end;
-  select case when c.kind = 'random' then call_video_cost_per_min
-              when c.call_type = 'audio' then call_audio_cost_per_min
-              else call_video_cost_per_min end
-    into unit_cost
-    from app_settings where id = 'global';
-  unit_cost := coalesce(unit_cost, 0);
   if c.answered_at is null then
-    return jsonb_build_object('ok', true, 'can_continue', true,
+    return jsonb_build_object('ok', true, 'can_continue', not v_ended,
       'billed_minutes', 0, 'charged_total', 0, 'per_minute', unit_cost,
-      'remaining', public.yukcoin_total(me));
-  end if;
-  v_anchor := case when c.kind = 'random'
-                   then coalesce(c.media_connected_at, c.answered_at)
-                   else c.answered_at end;
-  elapsed_sec := greatest(0, floor(extract(epoch from (now() - v_anchor)))::int);
-
-  if c.kind = 'random' then
-    billable_minutes := case when elapsed_sec >= 30
-                        then 1 + (elapsed_sec - 30) / 60 else 0 end;
-    v_free_seconds_left := greatest(0, 30 - elapsed_sec);
-  else
-    billable_minutes := (elapsed_sec + 59) / 60;
+      'remaining', public.yukcoin_total(me), 'ended', v_ended);
   end if;
 
-  select count(*) into already_billed
-    from public.yukcoin_consumptions
-    where user_id = v_payer and feature = feat and ref_id = p_call_id::text;
   to_bill := greatest(0, billable_minutes - already_billed);
   v_paid := public.yukcoin_paid_total(v_payer);
   remaining := public.yukcoin_total(me);
 
-  if c.kind = 'random' and elapsed_sec >= 30 then
-    select coalesce((metered_pricing->'match_call'->>'unit_cost')::int, 10)
-      into v_connect_cost from app_settings where id = 'global';
-    select exists (
-      select 1 from public.yukcoin_consumptions
-       where user_id = v_payer and feature = 'match_call'
-         and ref_id = p_call_id::text
-    ) into v_connect_billed;
-    if not v_connect_billed then
-      if v_paid < v_connect_cost then
-        return jsonb_build_object('ok', true, 'can_continue', false,
-          'billed_minutes', already_billed,
-          'charged_total', already_billed * unit_cost,
-          'per_minute', unit_cost,
-          'remaining', remaining, 'reason', 'insufficient',
-          'free_seconds_left', 0);
-      end if;
-      perform public._charge_metered_core(v_payer, 'match_call',
-        p_call_id::text, 1, v_recipient);
-      insert into public.yukcoin_consumptions(user_id, feature, cost, ref_id, metadata)
-        values (v_payer, 'match_call', v_connect_cost, p_call_id::text,
-                jsonb_build_object('kind', 'random', 'connect', true));
-      v_connect_billed := true;
-      v_paid := public.yukcoin_paid_total(v_payer);
-      remaining := public.yukcoin_total(me);
+  -- Connect fee (random, lolos 30 dtk)
+  if c.kind = 'random' and elapsed_sec >= 30 and not v_connect_billed then
+    if v_paid < v_connect_cost then
+      return jsonb_build_object('ok', true, 'can_continue', false,
+        'billed_minutes', already_billed,
+        'charged_total', already_billed * unit_cost,
+        'per_minute', unit_cost,
+        'remaining', remaining, 'reason', 'insufficient',
+        'free_seconds_left', 0, 'ended', v_ended);
     end if;
+    perform public._charge_metered_core(v_payer, 'match_call',
+      p_call_id::text, 1, v_recipient);
+    insert into public.yukcoin_consumptions(user_id, feature, cost, ref_id, metadata)
+      values (v_payer, 'match_call', v_connect_cost, p_call_id::text,
+              jsonb_build_object('kind', 'random', 'connect', true,
+                                 'minute', 0))
+      on conflict do nothing;
+    v_connect_billed := true;
+    v_paid := public.yukcoin_paid_total(v_payer);
+    remaining := public.yukcoin_total(me);
   end if;
 
   if to_bill > 0 then
@@ -6137,7 +6214,7 @@ begin
           + (case when v_connect_billed then v_connect_cost else 0 end),
         'per_minute', unit_cost,
         'remaining', remaining, 'reason', 'insufficient',
-        'free_seconds_left', 0);
+        'free_seconds_left', 0, 'ended', v_ended);
     end if;
     afford := v_paid / greatest(unit_cost, 1);
     charge_n := least(to_bill, afford);
@@ -6150,7 +6227,8 @@ begin
                jsonb_build_object('minute', already_billed + g,
                                   'call_type', c.call_type,
                                   'kind', coalesce(c.kind, 'private'))
-        from generate_series(1, charge_n) g;
+        from generate_series(1, charge_n) g
+        on conflict do nothing;
       already_billed := already_billed + charge_n;
       v_paid := public.yukcoin_paid_total(v_payer);
       remaining := public.yukcoin_total(me);
@@ -6162,18 +6240,20 @@ begin
           + (case when v_connect_billed then v_connect_cost else 0 end),
         'per_minute', unit_cost,
         'remaining', remaining, 'reason', 'insufficient',
-        'free_seconds_left', 0);
+        'free_seconds_left', 0, 'ended', v_ended);
     end if;
   end if;
 
-  return jsonb_build_object('ok', true, 'can_continue', true,
+  return jsonb_build_object('ok', true,
+    'can_continue', not v_ended,
     'billed_minutes', already_billed,
     'charged_total', already_billed * unit_cost
       + (case when v_connect_billed then v_connect_cost else 0 end),
     'per_minute', unit_cost,
     'remaining', remaining,
     'income_total', v_income,
-    'free_seconds_left', v_free_seconds_left);
+    'free_seconds_left', v_free_seconds_left,
+    'ended', v_ended);
 end;
 $function$
 
@@ -6330,6 +6410,58 @@ begin
     ));
   end loop;
 end; $function$
+
+-- snapshot-fn: calls_client_guard
+CREATE OR REPLACE FUNCTION public.calls_client_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  -- Role PostgREST: 'authenticated'/'anon' = tulis langsung dari client.
+  -- Fungsi DEFINER (random_match_join, touch_call, admin_sweep_calls)
+  -- berjalan sebagai owner 'postgres' → tidak terjaga trigger ini.
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    if new.kind is distinct from 'direct'
+       or new.status is distinct from 'ringing'
+       or new.answered_at is not null
+       or new.media_connected_at is not null
+       or new.ended_at is not null then
+      raise exception 'client may only insert ringing direct calls'
+        using errcode = '42501';
+    end if;
+    new.created_at := now();
+    return new;
+  end if;
+  -- UPDATE
+  if new.kind is distinct from old.kind then
+    raise exception 'calls.kind is immutable' using errcode = '42501';
+  end if;
+  if new.media_connected_at is distinct from old.media_connected_at then
+    raise exception 'calls.media_connected_at is server-managed'
+      using errcode = '42501';
+  end if;
+  -- Identitas & tipe call beku (basis billing).
+  new.created_at := old.created_at;
+  new.caller_id  := old.caller_id;
+  new.callee_id  := old.callee_id;
+  new.call_type  := old.call_type;
+  -- answered_at / ended_at: sekali saja, nilai = jam server.
+  if old.answered_at is not null or new.answered_at is null then
+    new.answered_at := old.answered_at;
+  else
+    new.answered_at := now();
+  end if;
+  if old.ended_at is not null or new.ended_at is null then
+    new.ended_at := old.ended_at;
+  else
+    new.ended_at := now();
+  end if;
+  return new;
+end;
+$function$
 
 -- snapshot-fn: can_send_room_media
 CREATE OR REPLACE FUNCTION public.can_send_room_media(p_room text, p_uid uuid)
@@ -7128,6 +7260,28 @@ AS $function$
 begin
   raise exception 'coin_ledger is append-only';
 end; $function$
+
+-- snapshot-fn: coin_ledger_nonneg_guard
+CREATE OR REPLACE FUNCTION public.coin_ledger_nonneg_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_sum bigint;
+begin
+  if new.amount < 0 then
+    select coalesce(sum(amount),0) into v_sum
+      from public.coin_ledger
+     where user_id = new.user_id and bucket = new.bucket;
+    if v_sum < 0 then
+      raise exception 'Saldo % tidak cukup (akan negatif)', new.bucket
+        using errcode = '22023';
+    end if;
+  end if;
+  return new;
+end;
+$function$
 
 -- snapshot-fn: comment_like_count_sync
 CREATE OR REPLACE FUNCTION public.comment_like_count_sync()
@@ -8342,6 +8496,27 @@ begin
                        where e.check_name = 'orphan_ledger' and e.user_id = l.user_id)
     group by l.user_id
     limit p_limit;
+end;
+$function$
+
+-- snapshot-fn: economy_invariant_cron
+CREATE OR REPLACE FUNCTION public.economy_invariant_cron()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_n int;
+begin
+  insert into public.economy_invariant_log
+        (check_name, user_id, expected, actual, detail)
+    select check_name, user_id, expected, actual, detail
+      from public.economy_invariant_check(500);
+  get diagnostics v_n = row_count;
+  if v_n > 0 then
+    raise warning 'economy_invariant_check: % pelanggaran', v_n;
+  end if;
+  return v_n;
 end;
 $function$
 
@@ -10074,13 +10249,19 @@ BEGIN
         'fee_min_idr', coalesce(withdraw_fee_min_idr, 1000),
         'max_per_day', coalesce(withdraw_max_per_day, 3),
         'min_interval_hours', coalesce(withdraw_min_interval_hours, 1),
-        'min_account_age_hours', coalesce(withdraw_min_account_age_hours, 72)
+        'min_account_age_hours', coalesce(withdraw_min_account_age_hours, 72),
+        'require_kyc', coalesce(withdraw_require_kyc, true),
+        'dana_change_cooldown_hours',
+            coalesce(withdraw_dana_change_cooldown_hours, 168),
+        'coin_send_cut_pct', coalesce(coin_send_cut_pct, 30)
     ) INTO result
     FROM public.app_settings WHERE id = 'global';
 
     RETURN coalesce(result, jsonb_build_object(
         'rate', 7, 'min_coins', 1500, 'fee_pct', 5, 'fee_min_idr', 1000,
-        'max_per_day', 3, 'min_interval_hours', 1, 'min_account_age_hours', 72));
+        'max_per_day', 3, 'min_interval_hours', 1, 'min_account_age_hours', 72,
+        'require_kyc', true, 'dana_change_cooldown_hours', 168,
+        'coin_send_cut_pct', 30));
 END;
 $function$
 
@@ -10736,6 +10917,44 @@ begin
 end;
 $function$
 
+-- snapshot-fn: kyc_nik_info
+CREATE OR REPLACE FUNCTION public.kyc_nik_info(p_nik text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ IMMUTABLE
+ SET search_path TO 'public'
+AS $function$
+declare
+  prov int; d int; m int; yy int; y int; birth date; fem boolean;
+begin
+  if p_nik is null or p_nik !~ '^[0-9]{16}$' then return null; end if;
+  prov := substr(p_nik, 1, 2)::int;
+  if prov not in (11,12,13,14,15,16,17,18,19,21,31,32,33,34,35,36,
+                  51,52,53,61,62,63,64,65,71,72,73,74,75,76,81,82,
+                  91,92,93,94,95,96) then
+    return null;
+  end if;
+  if substr(p_nik, 3, 2) = '00' or substr(p_nik, 5, 2) = '00'
+     or substr(p_nik, 13, 4) = '0000' then
+    return null;
+  end if;
+  d := substr(p_nik, 7, 2)::int;
+  fem := d > 40;
+  if fem then d := d - 40; end if;
+  m := substr(p_nik, 9, 2)::int;
+  yy := substr(p_nik, 11, 2)::int;
+  y := case when yy > extract(year from now())::int % 100
+            then 1900 + yy else 2000 + yy end;
+  begin
+    birth := make_date(y, m, d);
+  exception when others then
+    return null;
+  end;
+  if birth > current_date then return null; end if;
+  return jsonb_build_object('birth_date', birth, 'female', fem);
+end;
+$function$
+
 -- snapshot-fn: latitude
 CREATE OR REPLACE FUNCTION public.latitude(earth)
  RETURNS double precision
@@ -10919,6 +11138,9 @@ AS $function$
 declare t int; e int; need int; take int;
 begin
   if p_amount <= 0 then return public.wallet_sync_points(p_user); end if;
+
+  perform pg_advisory_xact_lock(hashtext('wallet:' || p_user::text));
+
   select coalesce(sum(amount) filter (where bucket='topup'),0),
          coalesce(sum(amount) filter (where bucket='earned'),0)
     into t, e from coin_ledger where user_id = p_user;
@@ -14638,7 +14860,7 @@ CREATE OR REPLACE FUNCTION public.request_withdraw(p_coins integer, p_dana_numbe
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-DECLARE
+declare
     v_uid uuid := auth.uid();
     v_gender text;
     v_total int;
@@ -14659,13 +14881,13 @@ DECLARE
     v_name text;
     v_acc record;
     v_req_id uuid;
-    -- Awal hari ini dalam zona waktu USER (Asia/Jakarta) sebagai timestamptz.
-    -- Bandingkan timestamptz dengan timestamptz (lihat catatan di
-    -- 20261102240000 — membandingkan dengan `date` salah tafsir).
+    v_require_kyc boolean;
+    v_dana_cd_hours int;
+    v_dana_free timestamptz;
     v_day_start timestamptz :=
       (((now() AT TIME ZONE 'Asia/Jakarta')::date)::timestamp
          AT TIME ZONE 'Asia/Jakarta');
-BEGIN
+begin
     IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
 
     PERFORM pg_advisory_xact_lock(hashtext('withdraw:' || v_uid::text));
@@ -14685,9 +14907,12 @@ BEGIN
            coalesce(withdraw_fee_min_idr, 1000),
            coalesce(withdraw_max_per_day, 3),
            coalesce(withdraw_min_interval_hours, 1),
-           coalesce(withdraw_min_account_age_hours, 72)
+           coalesce(withdraw_min_account_age_hours, 72),
+           coalesce(withdraw_require_kyc, true),
+           coalesce(withdraw_dana_change_cooldown_hours, 168)
       INTO v_min_coins, v_rate, v_fee_pct, v_fee_min,
-           v_max_day, v_min_interval, v_min_age
+           v_max_day, v_min_interval, v_min_age,
+           v_require_kyc, v_dana_cd_hours
       FROM public.app_settings WHERE id = 'global';
 
     IF p_coins IS NULL OR p_coins < v_min_coins THEN
@@ -14746,12 +14971,32 @@ BEGIN
         IF v_name IS NULL OR length(v_name) < 3 THEN
             RETURN jsonb_build_object('ok', false, 'error', 'INVALID_NAME');
         END IF;
+
+        -- B3: Cooldown ganti nomor — nomor yang BERBEDA dari tersimpan
+        -- tak boleh diganti sebelum `withdraw_dana_change_cooldown_hours`
+        -- sejak updated_at. Nomor sama / hanya ganti nama → bebas.
+        SELECT * INTO v_acc FROM public.withdraw_accounts WHERE user_id = v_uid;
+        IF FOUND AND v_acc.dana_number IS DISTINCT FROM v_num
+           AND v_acc.updated_at > now() - make_interval(hours => v_dana_cd_hours) THEN
+            v_dana_free := v_acc.updated_at + make_interval(hours => v_dana_cd_hours);
+            RETURN jsonb_build_object('ok', false,
+                'error', 'DANA_CHANGE_COOLDOWN',
+                'cooldown_until', v_dana_free,
+                'cooldown_hours', v_dana_cd_hours);
+        END IF;
+
         INSERT INTO public.withdraw_accounts (user_id, dana_number, dana_name, updated_at)
         VALUES (v_uid, v_num, v_name, now())
         ON CONFLICT (user_id) DO UPDATE SET
             dana_number = excluded.dana_number,
             dana_name = excluded.dana_name,
-            updated_at = now();
+            updated_at = case
+              -- updated_at maju HANYA saat nomor berubah → cooldown diukur
+              -- dari ganti nomor terakhir, bukan edit nama.
+              when withdraw_accounts.dana_number is distinct from excluded.dana_number
+                then now()
+              else withdraw_accounts.updated_at
+            end;
     ELSE
         SELECT * INTO v_acc FROM public.withdraw_accounts WHERE user_id = v_uid;
         IF NOT FOUND THEN
@@ -14759,6 +15004,15 @@ BEGIN
         END IF;
         v_num := v_acc.dana_number;
         v_name := v_acc.dana_name;
+    END IF;
+
+    -- B2: Gerbang KYC — dipasang SETELAH semua validasi murah supaya
+    -- error ordering tetap intuitif (BELOW_MINIMUM dkk menang dulu).
+    -- Withdraw hanya untuk identitas terverifikasi saat flag aktif.
+    IF v_require_kyc AND NOT EXISTS (
+        SELECT 1 FROM public.kyc_requests
+         WHERE user_id = v_uid AND status = 'approved') THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'KYC_REQUIRED');
     END IF;
 
     v_gross := p_coins * v_rate;
@@ -15400,6 +15654,9 @@ DECLARE
     v_uid uuid := auth.uid();
     v_num text;
     v_name text;
+    v_acc record;
+    v_cd_hours int;
+    v_free timestamptz;
 BEGIN
     IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
 
@@ -15418,12 +15675,31 @@ BEGIN
         RETURN jsonb_build_object('ok', false, 'error', 'INVALID_NAME');
     END IF;
 
+    -- Cooldown ganti nomor (Fase B): nomor BERBEDA dari tersimpan tak
+    -- boleh diganti sebelum cooldown berlalu. Nomor sama/nama saja → bebas.
+    SELECT coalesce(withdraw_dana_change_cooldown_hours, 168)
+      INTO v_cd_hours
+      FROM public.app_settings WHERE id = 'global';
+    SELECT * INTO v_acc FROM public.withdraw_accounts WHERE user_id = v_uid;
+    IF FOUND AND v_acc.dana_number IS DISTINCT FROM v_num
+       AND v_acc.updated_at > now() - make_interval(hours => v_cd_hours) THEN
+        v_free := v_acc.updated_at + make_interval(hours => v_cd_hours);
+        RETURN jsonb_build_object('ok', false,
+            'error', 'DANA_CHANGE_COOLDOWN',
+            'cooldown_until', v_free,
+            'cooldown_hours', v_cd_hours);
+    END IF;
+
     INSERT INTO public.withdraw_accounts (user_id, dana_number, dana_name, updated_at)
     VALUES (v_uid, v_num, v_name, now())
     ON CONFLICT (user_id) DO UPDATE SET
         dana_number = excluded.dana_number,
         dana_name = excluded.dana_name,
-        updated_at = now();
+        updated_at = case
+          when withdraw_accounts.dana_number is distinct from excluded.dana_number
+            then now()
+          else withdraw_accounts.updated_at
+        end;
 
     RETURN jsonb_build_object('ok', true,
         'dana_number', v_num, 'dana_name', v_name);
@@ -15509,6 +15785,7 @@ AS $function$
 declare
   uid uuid := auth.uid(); am_registered boolean; remaining int;
   my_name text; my_gender text; points_on boolean; tx_max int;
+  v_cut_pct int; v_cut int; v_net int;
 begin
   if uid is null then raise exception 'Not authenticated'; end if;
 
@@ -15544,18 +15821,33 @@ begin
   -- Hanya koin belian (topup+earned) — koin bonus TIDAK bisa ditransfer.
   remaining := public.ledger_spend_paid(uid, 'coin_sent', p_amount, p_chat_id);
 
-  -- Penerima selalu dapat 'earned' (bisa dicairkan setelah KYC).
-  perform public.ledger_credit(p_receiver_id, 'earned', 'coin_received', p_amount,
-    p_chat_id, jsonb_build_object('from', uid));
+  -- B1: potongan platform (default 30%). Penerima menerima NET ke
+  -- `earned` — masih bisa di-withdraw, tapi hasil "pencucian" send_coins
+  -- kini dipotong seperti gift sehingga refund-fraud tidak lagi gratis.
+  select coalesce(coin_send_cut_pct, 30) into v_cut_pct
+    from app_settings where id = 'global';
+  v_cut := (p_amount * v_cut_pct) / 100;
+  v_net := p_amount - v_cut;
+
+  perform public.ledger_credit(p_receiver_id, 'earned', 'coin_received', v_net,
+    p_chat_id, jsonb_build_object('from', uid,
+      'gross', p_amount, 'cut', v_cut, 'pct', v_cut_pct));
+
+  if v_cut > 0 then
+    insert into platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
+    values ('coin_send_cut', v_cut, uid, p_receiver_id, p_chat_id,
+            jsonb_build_object('gross', p_amount, 'pct', v_cut_pct));
+  end if;
 
   insert into public.point_events (user_id, event, amount)
-    values (uid, 'coin_sent', -p_amount), (p_receiver_id, 'coin_received', p_amount);
+    values (uid, 'coin_sent', -p_amount), (p_receiver_id, 'coin_received', v_net);
 
   insert into public.private_messages (chat_id, sender_id, sender_name, sender_gender, text, type, image_data)
     values (p_chat_id, uid, coalesce(my_name, 'Anon'), coalesce(my_gender, 'other'),
             p_amount::text, 'coin', '');
 
-  return jsonb_build_object('ok', true, 'points', coalesce(remaining, 0));
+  return jsonb_build_object('ok', true, 'points', coalesce(remaining, 0),
+    'sent', p_amount, 'received', v_net, 'cut_pct', v_cut_pct);
 end; $function$
 
 -- snapshot-fn: send_friend_request
@@ -16550,32 +16842,81 @@ AS $function$
 $function$
 
 -- snapshot-fn: submit_kyc
-CREATE OR REPLACE FUNCTION public.submit_kyc(p_full_name text, p_id_type text, p_id_number text, p_id_photo text, p_selfie_photo text, p_birth_date date DEFAULT NULL::date)
+CREATE OR REPLACE FUNCTION public.submit_kyc(p_full_name text, p_id_type text, p_id_number text, p_id_photo text, p_selfie_photo text, p_birth_date date DEFAULT NULL::date, p_checks jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare uid uuid := auth.uid();
+declare
+  uid uuid := auth.uid();
+  v_nik text := trim(coalesce(p_id_number, ''));
+  v_info jsonb;
+  v_gender text;
 begin
   if uid is null then raise exception 'Not authenticated'; end if;
-  if length(trim(p_full_name)) < 3 then raise exception 'Invalid name'; end if;
-  if length(trim(p_id_number)) < 8 then raise exception 'Invalid ID number'; end if;
-  if length(p_id_photo) < 100 or length(p_selfie_photo) < 100 then
-    raise exception 'Photos required'; end if;
+  if coalesce(p_id_type, 'ktp') <> 'ktp' then
+    raise exception 'KYC_DOC_TYPE';
+  end if;
+  if length(trim(coalesce(p_full_name, ''))) < 3 then
+    raise exception 'KYC_NAME_INVALID';
+  end if;
+  if length(coalesce(p_id_photo, '')) < 100
+     or length(coalesce(p_selfie_photo, '')) < 100 then
+    raise exception 'KYC_PHOTOS_REQUIRED';
+  end if;
+
+  v_info := public.kyc_nik_info(v_nik);
+  if v_info is null then raise exception 'KYC_NIK_INVALID'; end if;
+  if p_birth_date is null
+     or p_birth_date <> (v_info->>'birth_date')::date then
+    raise exception 'KYC_BIRTH_MISMATCH';
+  end if;
+  if p_birth_date > (current_date - interval '17 years')::date then
+    raise exception 'KYC_UNDERAGE';
+  end if;
+
+  -- Kunci per user → dua submit bersamaan tidak lolos cek di bawah.
+  perform pg_advisory_xact_lock(hashtext('kyc:' || uid::text));
 
   if exists (select 1 from kyc_requests
              where user_id = uid and status in ('pending', 'approved')) then
-    raise exception 'KYC already submitted';
+    raise exception 'KYC_ALREADY_SUBMITTED';
+  end if;
+  if (select count(*) from kyc_requests
+      where user_id = uid and created_at > now() - interval '24 hours') >= 3 then
+    raise exception 'KYC_TOO_MANY';
+  end if;
+  if exists (select 1 from kyc_requests
+             where id_number = v_nik and user_id <> uid
+               and status in ('pending', 'approved')) then
+    raise exception 'KYC_NIK_USED';
   end if;
 
-  insert into kyc_requests (user_id, status, full_name, id_type, id_number,
-                            id_photo, selfie_photo, birth_date)
-  values (uid, 'pending', p_full_name, coalesce(p_id_type, 'ktp'), p_id_number,
-          p_id_photo, p_selfie_photo, p_birth_date);
+  select gender into v_gender from profiles where id = uid;
+
+  begin
+    insert into kyc_requests (user_id, status, full_name, id_type, id_number,
+                              id_photo, selfie_photo, birth_date, checks,
+                              server_checks)
+    values (uid, 'pending', upper(trim(p_full_name)), 'ktp', v_nik,
+            p_id_photo, p_selfie_photo, p_birth_date,
+            coalesce(p_checks, '{}'::jsonb),
+            jsonb_build_object(
+              'nik_valid', true,
+              'birth_match_nik', true,
+              'nik_female', (v_info->>'female')::boolean,
+              'gender_match_profile',
+                case when v_gender in ('female', 'male')
+                     then (v_info->>'female')::boolean = (v_gender = 'female')
+                     end));
+  exception when unique_violation then
+    raise exception 'KYC_NIK_USED';
+  end;
 
   return jsonb_build_object('ok', true, 'status', 'pending');
-end; $function$
+end;
+$function$
 
 -- snapshot-fn: subscribe_creator
 CREATE OR REPLACE FUNCTION public.subscribe_creator(p_creator uuid, p_periods integer DEFAULT 1)

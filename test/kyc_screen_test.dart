@@ -49,9 +49,16 @@ void main() {
     await pump(t, _FakeKyc('none'));
 
     expect(find.text(s.kycTitle), findsOneWidget);
-    expect(find.text(s.kycDocType), findsOneWidget);
     expect(find.text(s.kycPhotoId), findsOneWidget);
-    expect(find.text(s.kycPhotoSelfie), findsOneWidget);
+    // Langkah 2 & 3 di bawah viewport — scroll ke masing-masing.
+    for (final title in [s.kycPhotoSelfie, s.kycDataTitle]) {
+      await t.scrollUntilVisible(
+        find.text(title),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text(title), findsOneWidget);
+    }
     // Tombol submit jauh di bawah — ListView hanya me-render viewport;
     // scroll dulu sampai terlihat (scrollable eksplisit: ada TextField
     // yang juga scrollable → ambigu tanpa `scrollable:`).

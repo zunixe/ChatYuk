@@ -9,6 +9,7 @@ part 'strings_auth_mx.dart';
 part 'strings_points_mx.dart';
 part 'strings_social_mx.dart';
 part 'strings_random_mx.dart';
+part 'strings_kyc_mx.dart';
 
 
 part 'strings_legal_privacy.dart';
@@ -22,7 +23,8 @@ class S
         SAuthMx,
         SPointsMx,
         SSocialMx,
-        SRandomMx {
+        SRandomMx,
+        SKycMx {
   @override
   final bool isId;
   // ignore: prefer_const_constructors_in_immutables

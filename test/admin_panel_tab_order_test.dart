@@ -31,6 +31,7 @@ void main() {
     'timeline',
     'docs',
     'moderation',
+    'kyc',
     'marketing',
   ];
 

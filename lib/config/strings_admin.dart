@@ -997,31 +997,6 @@ extension SAdminExcludeX on S {
 
   // ── Tab KYC (review verifikasi identitas withdraw) ──
   String get adminKycTab => isId ? 'KYC' : 'KYC';
-  String get adminKycTitle => isId ? 'Verifikasi Identitas' : 'Identity Verifications';
-  String get adminKycEmpty => isId
-      ? 'Tidak ada pengajuan verifikasi'
-      : 'No verification requests';
-  String get adminKycPending => isId ? 'Menunggu' : 'Pending';
-  String get adminKycApproved => isId ? 'Disetujui' : 'Approved';
-  String get adminKycRejected => isId ? 'Ditolak' : 'Rejected';
-  String get adminKycAll => isId ? 'Semua' : 'All';
-  String get adminKycApprove => isId ? 'Setujui' : 'Approve';
-  String get adminKycReject => isId ? 'Tolak' : 'Reject';
-  String get adminKycRejectTitle => isId ? 'Tolak Verifikasi' : 'Reject Verification';
-  String get adminKycRejectHint => isId
-      ? 'Alasan penolakan (ditampilkan ke user)'
-      : 'Rejection reason (shown to the user)';
-  String get adminKycDocPhoto => isId ? 'Foto Dokumen' : 'Document Photo';
-  String get adminKycSelfiePhoto => isId ? 'Foto Selfie' : 'Selfie Photo';
-  String get adminKycApprovedSnack =>
-      isId ? 'Verifikasi disetujui' : 'Verification approved';
-  String get adminKycRejectedSnack =>
-      isId ? 'Verifikasi ditolak' : 'Verification rejected';
-  String get adminKycRejectNeedReason =>
-      isId ? 'Isi alasan penolakan dulu' : 'Enter a rejection reason first';
-  String adminKycReviewedAt(String date) => isId
-      ? 'Ditinjau $date'
-      : 'Reviewed $date';
   String get adminMktNewCampaign => isId ? 'Buat Campaign' : 'New Campaign';
   String get adminMktEmpty =>
       isId ? 'Belum ada campaign email' : 'No email campaigns yet';

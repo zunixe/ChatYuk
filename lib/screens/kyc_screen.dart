@@ -1,232 +1,279 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config/strings.dart';
 import '../config/theme.dart';
+import '../core/kyc/kyc_capture.dart';
+import '../core/kyc/kyc_form_check.dart';
+import '../core/kyc/ktp_ocr.dart';
+import '../core/kyc/nik.dart';
 import '../core/media/native_image.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/kyc_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../utils.dart';
-import 'kyc_selfie_camera_screen.dart';
+import 'kyc/kyc_document_camera_screen.dart';
+import 'kyc/kyc_selfie_camera_screen.dart';
+import 'kyc/widgets/kyc_camera_widgets.dart';
+import 'kyc/widgets/kyc_form_widgets.dart';
 
 /// Halaman verifikasi identitas (KYC) — syarat withdraw perempuan.
 ///
-/// Flow (best practice KTP/paspor): consent → jenis dokumen → foto dokumen
-/// → foto selfie → data (nama, nomor, tgl lahir) → kirim → status.
-/// Status pending/approved/rejected menggantikan form (rejected → resubmit).
-/// Foto diproses `NativeImage.processJpeg` (max 1200px q82) → data URL
-/// base64 ke `submit_kyc` (kolom TEXT — bucket public tidak dipakai agar
-/// dokumen tidak terekspos URL publik).
+/// 3 langkah, semuanya kamera LANGSUNG (tanpa galeri):
+///  1. KTP — kamera membaca KTP (OCR) + cek tajam/silau, auto-jepret.
+///  2. Wajah — liveness (kedip + toleh) dengan wajah yang sama.
+///  3. Data — terisi otomatis dari KTP; NIK divalidasi strukturnya dan
+///     dicocokkan dengan tgl lahir; beda dengan hasil baca KTP ditandai.
+/// Hasil cek dikirim sebagai `checks` untuk admin; server memvalidasi
+/// ulang NIK/tgl lahir/NIK unik (klien bisa dimodifikasi).
 class KycScreen extends ConsumerStatefulWidget {
   const KycScreen({super.key});
+
+  /// Hitung wajah pada file — injectable untuk test (ML Kit native tidak
+  /// ada di unit test). -1 = detektor gagal (jangan blokir).
+  @visibleForTesting
+  static Future<int> Function(String path) faceChecker = _faceCount;
+
+  /// Baca teks KTP dari file (fallback kamera sistem) — injectable test.
+  @visibleForTesting
+  static Future<List<String>> Function(String path) ocrReader = _ocrLines;
+
+  static Future<int> _faceCount(String path) async {
+    final d = FaceDetector(options: FaceDetectorOptions());
+    try {
+      return (await d.processImage(InputImage.fromFilePath(path))).length;
+    } catch (e) {
+      dlog('[KYC] face detect error: $e');
+      return -1;
+    } finally {
+      d.close();
+    }
+  }
+
+  static Future<List<String>> _ocrLines(String path) async {
+    final r = TextRecognizer(script: TextRecognitionScript.latin);
+    try {
+      final t = await r.processImage(InputImage.fromFilePath(path));
+      return [for (final b in t.blocks) for (final l in b.lines) l.text];
+    } catch (e) {
+      dlog('[KYC] ocr error: $e');
+      return const [];
+    } finally {
+      r.close();
+    }
+  }
 
   @override
   ConsumerState<KycScreen> createState() => _KycScreenState();
 }
 
 class _KycScreenState extends ConsumerState<KycScreen> {
-  /// Deteksi wajah pada file foto — injectable untuk test (ML Kit native
-  /// tak tersedia di unit test). Return jumlah wajah, -1 = detektor gagal
-  /// di device (jangan blokir — admin tetap review manual).
-  @visibleForTesting
-  static Future<int> Function(String path) faceChecker = _faceCount;
-
-  static Future<int> _faceCount(String path) async {
-    final detector = FaceDetector(
-      options: FaceDetectorOptions(
-        performanceMode: FaceDetectorMode.fast,
-      ),
-    );
-    try {
-      final faces =
-          await detector.processImage(InputImage.fromFilePath(path));
-      return faces.length;
-    } catch (e) {
-      dlog('[KYC] face detect error: $e');
-      return -1;
-    } finally {
-      detector.close();
-    }
-  }
-
   final _nameCtrl = TextEditingController();
-  final _numberCtrl = TextEditingController();
+  final _nikCtrl = TextEditingController();
   final _picker = ImagePicker();
 
-  String _docType = 'ktp';
   DateTime? _birthDate;
-  String? _idPhoto; // data:image/jpeg;base64,…
-  String? _selfiePhoto;
-  bool _processingPhoto = false;
+  KycDocCapture? _doc;
+  KycSelfieCapture? _selfie;
+  Uint8List? _docBytes; // JPEG terproses (dikirim) — didecode SEKALI
+  Uint8List? _selfieBytes;
+  String? _docB64;
+  String? _selfieB64;
+  bool _busyDoc = false;
+  bool _busySelfie = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nikCtrl.addListener(_onNikChanged);
+    _nameCtrl.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _numberCtrl.dispose();
+    _nikCtrl.dispose();
     super.dispose();
   }
 
-  Future<ImageSource?> _pickSource(S s) {
-    return showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: AppTheme.bgCard,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: Text(s.kycCamera),
-              onTap: () => Navigator.pop(ctx, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: Text(s.kycGallery),
-              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _onNikChanged() {
+    final info = Nik.parse(_nikCtrl.text);
+    // NIK valid & tgl lahir belum diisi → isi dari NIK.
+    if (info != null && _birthDate == null) _birthDate = info.birthDate;
+    setState(() {});
   }
 
-  Future<void> _pickPhoto(S s, {required bool selfie}) async {
-    final source = await _pickSource(s);
-    if (source == null || !mounted) return;
-    XFile? picked;
-    if (selfie && source == ImageSource.camera) {
-      // Kamera selfie KUSTOM: oval panduan DI DALAM viewfinder + deteksi
-      // wajah live — shutter baru aktif saat wajah pas. Gagal init (mis.
-      // MIUI) → lastInitFailed → fallback ke kamera sistem di bawah.
-      KycSelfieCameraScreen.lastInitFailed = false;
-      picked = await Navigator.push<XFile?>(
-        context,
-        MaterialPageRoute(builder: (_) => const KycSelfieCameraScreen()),
+  void _snack(String msg, {bool error = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: error ? AppTheme.danger : null,
+    ));
+  }
+
+  /// JPEG 1200px q82 → (bytes untuk pratinjau, base64 untuk server).
+  Future<(Uint8List, String)?> _process(String path) async {
+    final raw = await XFile(path).readAsBytes();
+    final b64 = await NativeImage.processJpeg(raw, maxPx: 1200, quality: 82);
+    if (b64 == null) return null;
+    return (base64Decode(b64), b64);
+  }
+
+  Future<void> _captureDoc(S s) async {
+    KycDocumentCameraScreen.lastInitFailed = false;
+    var cap = await Navigator.push<KycDocCapture?>(
+      context,
+      MaterialPageRoute(builder: (_) => const KycDocumentCameraScreen()),
+    );
+    if (!mounted) return;
+    if (cap == null && KycDocumentCameraScreen.lastInitFailed) {
+      // Kamera kustom gagal (mis. MIUI) → kamera sistem, tetap tanpa galeri.
+      final x = await _pickCamera(CameraDevice.rear);
+      if (x == null || !mounted) return;
+      setState(() => _busyDoc = true);
+      cap = KycDocCapture(
+        path: x.path,
+        ocr: KtpOcr.parse(await KycScreen.ocrReader(x.path)),
       );
-      if (!mounted) return;
-      // null & BUKAN init-gagal = user sengaja membatalkan → jangan
-      // buka kamera lain, langsung keluar.
-      if (picked == null && !KycSelfieCameraScreen.lastInitFailed) return;
     }
-    if (picked == null) {
-      try {
-        picked = await _picker.pickImage(
-          source: source,
-          // Selfie idealnya kamera depan (best practice face-match).
-          preferredCameraDevice:
-              selfie ? CameraDevice.front : CameraDevice.rear,
-        );
-      } catch (e) {
-        dlog('[KYC] pick error: $e');
-        return;
-      }
-    }
-    if (picked == null || !mounted) return;
-
-    // Validasi selfie: harus ada wajah (anti foto asal/tembok/dokumen).
-    // Dilakukan SEBELUM proses — hemat waktu user daripada ditolak admin.
-    if (selfie) {
-      final faces = await faceChecker(picked.path);
-      if (!mounted) return;
-      if (faces == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(s.kycErrNoFace),
-            backgroundColor: AppTheme.danger,
-          ),
-        );
-        return;
-      }
-      // faces == -1 → detektor gagal di device ini → lanjut; admin
-      // tetap mereview manual. faces ≥ 1 → lolos.
-    }
-
-    setState(() => _processingPhoto = true);
+    if (cap == null) return;
+    setState(() => _busyDoc = true);
     try {
-      final bytes = await picked.readAsBytes();
-      // 1200px q82: cukup tajam untuk membaca dokumen, ~150-300KB base64.
-      final b64 = await NativeImage.processJpeg(
-        bytes,
-        maxPx: 1200,
-        quality: 82,
-      );
+      final p = await _process(cap.path);
       if (!mounted) return;
-      if (b64 == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.kycErrGeneric)),
-        );
-        return;
-      }
+      if (p == null) return _snack(s.kycErrGeneric);
+      final ocr = cap.ocr;
       setState(() {
-        final url = 'data:image/jpeg;base64,$b64';
-        if (selfie) {
-          _selfiePhoto = url;
-        } else {
-          _idPhoto = url;
-        }
+        _doc = cap;
+        _docBytes = p.$1;
+        _docB64 = p.$2;
+        // Isi otomatis dari KTP (user tetap bisa mengoreksi).
+        if (ocr.nik != null) _nikCtrl.text = ocr.nik!;
+        if (ocr.name != null) _nameCtrl.text = ocr.name!;
+        final info = Nik.parse(_nikCtrl.text);
+        _birthDate = ocr.birthDate ?? info?.birthDate ?? _birthDate;
       });
     } finally {
-      if (mounted) setState(() => _processingPhoto = false);
+      if (mounted) setState(() => _busyDoc = false);
     }
   }
 
-  Future<void> _pickBirthDate(S s) async {
+  Future<void> _captureSelfie(S s) async {
+    KycSelfieCameraScreen.lastInitFailed = false;
+    var cap = await Navigator.push<KycSelfieCapture?>(
+      context,
+      MaterialPageRoute(builder: (_) => const KycSelfieCameraScreen()),
+    );
+    if (!mounted) return;
+    if (cap == null && KycSelfieCameraScreen.lastInitFailed) {
+      final x = await _pickCamera(CameraDevice.front);
+      if (x == null || !mounted) return;
+      cap = KycSelfieCapture(path: x.path, live: false);
+    }
+    if (cap == null) return;
+    setState(() => _busySelfie = true);
+    try {
+      final faces = await KycScreen.faceChecker(cap.path);
+      if (!mounted) return;
+      if (faces == 0) return _snack(s.kycErrNoFace);
+      if (faces > 1) return _snack(s.kycCamMulti);
+      final p = await _process(cap.path);
+      if (!mounted) return;
+      if (p == null) return _snack(s.kycErrGeneric);
+      setState(() {
+        _selfie = cap;
+        _selfieBytes = p.$1;
+        _selfieB64 = p.$2;
+      });
+    } finally {
+      if (mounted) setState(() => _busySelfie = false);
+    }
+  }
+
+  Future<XFile?> _pickCamera(CameraDevice device) async {
+    try {
+      return await _picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: device,
+      );
+    } catch (e) {
+      dlog('[KYC] system camera error: $e');
+      return null;
+    }
+  }
+
+  Future<void> _pickBirthDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(now.year - 25),
+      initialDate: _birthDate ?? DateTime(now.year - 25),
       firstDate: DateTime(now.year - 100),
-      lastDate: DateTime(now.year - 17),
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: Theme.of(ctx).colorScheme.copyWith(
-                primary: AppTheme.primary,
-                surface: AppTheme.bgCard,
-              ),
-        ),
-        child: child!,
-      ),
+      lastDate: now,
     );
     if (picked != null && mounted) setState(() => _birthDate = picked);
   }
 
-  String? _validate(S s) {
-    if (_idPhoto == null || _selfiePhoto == null) return s.kycErrPhotos;
-    if (_nameCtrl.text.trim().length < 3) return s.kycErrName;
-    if (_numberCtrl.text.trim().length < 8) return s.kycErrNumber;
-    if (_birthDate == null) return s.kycErrBirth;
-    return null;
+  /// Gender profil — dibaca sekali (null bila auth belum siap, mis. test).
+  String? _gender;
+  bool _genderRead = false;
+  String? get _profileGender {
+    if (!_genderRead) {
+      _genderRead = true;
+      try {
+        _gender = ref.read(authProvider).profile?.gender;
+      } catch (_) {}
+    }
+    return _gender;
   }
 
+  KycFormCheck _check() => KycFormCheck.evaluate(
+        nik: _nikCtrl.text.trim(),
+        name: _nameCtrl.text,
+        birth: _birthDate,
+        doc: _doc,
+        selfie: _selfie,
+        profileGender: _profileGender,
+      );
+
+  String _errorText(S s, KycFormError e) => switch (e) {
+        KycFormError.photos => s.kycErrPhotos,
+        KycFormError.name => s.kycErrName,
+        KycFormError.nik => s.kycErrNumber,
+        KycFormError.birth => s.kycErrBirth,
+        KycFormError.birthMismatch => s.kycErrBirthMismatch,
+        KycFormError.underage => s.kycErrUnderage,
+      };
+
   Future<void> _submit(S s) async {
-    final err = _validate(s);
-    if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
-      return;
-    }
+    final c = _check();
+    if (c.error != null) return _snack(_errorText(s, c.error!));
     final res = await ref.read(kycProvider.notifier).submit(
           fullName: _nameCtrl.text.trim(),
-          idType: _docType,
-          idNumber: _numberCtrl.text.trim(),
-          idPhoto: _idPhoto!,
-          selfiePhoto: _selfiePhoto!,
+          idType: 'ktp',
+          idNumber: _nikCtrl.text.trim(),
+          idPhoto: 'data:image/jpeg;base64,$_docB64',
+          selfiePhoto: 'data:image/jpeg;base64,$_selfieB64',
           birthDate: _birthDate,
+          checks: c.checks,
         );
-    if (!mounted) return;
-    if (res != null) {
-      final msg = res == 'duplicate'
-          ? s.kycErrDuplicate
-          : res.startsWith('server:')
-              ? res.substring(7)
-              : s.kycErrGeneric;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: AppTheme.danger),
-      );
-    }
+    if (!mounted || res == null) return;
+    _snack(switch (res) {
+      KycSubmitError.duplicate => s.kycErrDuplicate,
+      KycSubmitError.nikUsed => s.kycErrNikUsed,
+      KycSubmitError.nikInvalid => s.kycErrNumber,
+      KycSubmitError.birthMismatch => s.kycErrBirthMismatch,
+      KycSubmitError.underage => s.kycErrUnderage,
+      KycSubmitError.name => s.kycErrName,
+      KycSubmitError.tooMany => s.kycErrTooMany,
+      KycSubmitError.photos => s.kycErrPhotos,
+      KycSubmitError.busy || KycSubmitError.generic => s.kycErrGeneric,
+    });
   }
 
   @override
@@ -238,15 +285,15 @@ class _KycScreenState extends ConsumerState<KycScreen> {
       body: kyc.loading
           ? const Center(child: CircularProgressIndicator())
           : switch (kyc.status) {
-              'pending' => _StatusView(
+              'pending' => KycStatusView(
                   icon: Icons.hourglass_top_outlined,
-                  color: Colors.orange,
+                  color: kKycWarn,
                   title: s.kycPendingTitle,
                   body: s.kycPendingBody,
                 ),
-              'approved' => _StatusView(
+              'approved' => KycStatusView(
                   icon: Icons.verified_outlined,
-                  color: const Color(0xFF2ECC71),
+                  color: kKycOk,
                   title: s.kycApprovedTitle,
                   body: s.kycApprovedBody,
                 ),
@@ -256,25 +303,26 @@ class _KycScreenState extends ConsumerState<KycScreen> {
   }
 
   Widget _buildForm(S s, KycState kyc) {
+    final check = _check();
+    final ocr = _doc?.ocr;
+    final nik = _nikCtrl.text.trim();
+    final nikError = nik.length == 16 && Nik.parse(nik) == null;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        // Status rejected → tampilkan alasan di atas form resubmit.
         if (kyc.isRejected) ...[
-          _Card(
+          KycCard(
             color: AppTheme.danger.withValues(alpha: 0.12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  const Icon(Icons.error_outline, color: AppTheme.danger),
+                  Icon(Icons.error_outline, size: 20, color: AppTheme.danger),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       s.kycRejectedTitle,
-                      style: AppText.bodyStrong.copyWith(
-                        color: AppTheme.danger,
-                      ),
+                      style: AppText.bodyStrong.copyWith(color: AppTheme.danger),
                     ),
                   ),
                 ]),
@@ -282,9 +330,8 @@ class _KycScreenState extends ConsumerState<KycScreen> {
                   const SizedBox(height: 6),
                   Text(
                     s.kycRejectedReason(kyc.rejectReason!),
-                    style: AppText.bodySmall.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
+                    style: AppText.bodySmall
+                        .copyWith(color: AppTheme.textSecondary),
                   ),
                 ],
               ],
@@ -292,9 +339,7 @@ class _KycScreenState extends ConsumerState<KycScreen> {
           ),
           const SizedBox(height: 12),
         ],
-
-        // 1. Intro + consent (wajib legal: foto dokumen & wajah).
-        _Card(
+        KycCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -302,349 +347,151 @@ class _KycScreenState extends ConsumerState<KycScreen> {
               const SizedBox(height: 6),
               Text(
                 s.kycIntroBody,
-                style: AppText.bodySmall.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
+                style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 16),
-
-        // 2. Jenis dokumen — KTP / Paspor / SIM (panduan capture
-        // menyesuaikan tipe yang dipilih).
-        _sectionLabel(s.kycDocType),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          children: [
-            _docChip(s.kycDocKtp, 'ktp'),
-            _docChip(s.kycDocPassport, 'passport'),
-            _docChip(s.kycDocSim, 'sim'),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // 3. Foto dokumen — panduan kualitas (4 sudut, jelas, tanpa glare).
-        _PhotoCard(
+        const SizedBox(height: 12),
+        KycStepCard(
+          number: 1,
           title: s.kycPhotoId,
           hint: s.kycPhotoIdHint,
-          dataUrl: _idPhoto,
-          busy: _processingPhoto,
-          tapLabel: s.kycTapToAdd,
-          retakeLabel: s.kycRetake,
-          onTap: () => _pickPhoto(s, selfie: false),
-        ),
-        const SizedBox(height: 12),
-
-        // 4. Foto selfie — panduan oval posisi wajah + validasi ada wajah
-        // (ML Kit) saat foto dipilih; admin cocokkan dengan foto dokumen.
-        _PhotoCard(
-          title: s.kycPhotoSelfie,
-          hint: s.kycPhotoSelfieHint,
-          dataUrl: _selfiePhoto,
-          busy: _processingPhoto,
-          tapLabel: s.kycTapToAdd,
-          retakeLabel: s.kycRetake,
-          faceGuide: true,
-          guideText: s.kycFaceGuide,
-          onTap: () => _pickPhoto(s, selfie: true),
-        ),
-        const SizedBox(height: 16),
-
-        // 5. Data diri sesuai dokumen.
-        TextField(
-          controller: _nameCtrl,
-          decoration: InputDecoration(labelText: s.kycFullName),
-          textCapitalization: TextCapitalization.words,
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _numberCtrl,
-          decoration: InputDecoration(labelText: s.kycIdNumber),
-          keyboardType: TextInputType.visiblePassword,
-        ),
-        const SizedBox(height: 12),
-        InkWell(
-          onTap: () => _pickBirthDate(s),
-          borderRadius: BorderRadius.circular(8),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: s.kycBirthDate,
-              suffixIcon: const Icon(Icons.calendar_month_outlined),
-            ),
-            child: Text(
-              _birthDate == null
-                  ? s.kycPickDate
-                  : '${_birthDate!.day}/${_birthDate!.month}/${_birthDate!.year}',
-              style: AppText.body.copyWith(
-                color: _birthDate == null
-                    ? AppTheme.textSecondary
-                    : AppTheme.textPrimary,
+          done: _doc != null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              KycPhotoTile(
+                bytes: _docBytes,
+                emptyIcon: Icons.badge_outlined,
+                tapLabel: s.kycTapToAdd,
+                retakeLabel: s.kycRetake,
+                busy: _busyDoc,
+                onTap: () => _captureDoc(s),
               ),
-            ),
+              if (ocr != null)
+                ocr.looksLikeKtp
+                    ? KycNote(
+                        icon: Icons.check_circle_outline,
+                        color: kKycOk,
+                        text: s.kycKtpRead,
+                      )
+                    : KycNote(
+                        icon: Icons.info_outline,
+                        color: kKycWarn,
+                        text: s.kycKtpNotRead,
+                      ),
+            ],
           ),
         ),
-        const SizedBox(height: 24),
-
+        const SizedBox(height: 12),
+        KycStepCard(
+          number: 2,
+          title: s.kycPhotoSelfie,
+          hint: s.kycPhotoSelfieHint,
+          done: _selfie != null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: SizedBox(
+                  width: 180,
+                  child: KycPhotoTile(
+                    bytes: _selfieBytes,
+                    emptyIcon: Icons.face_retouching_natural,
+                    tapLabel: s.kycTapToAdd,
+                    retakeLabel: s.kycRetake,
+                    busy: _busySelfie,
+                    aspect: 0.78,
+                    onTap: () => _captureSelfie(s),
+                  ),
+                ),
+              ),
+              if (_selfie?.live == true)
+                KycNote(
+                  icon: Icons.verified_user_outlined,
+                  color: kKycOk,
+                  text: s.kycLiveVerified,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        KycStepCard(
+          number: 3,
+          title: s.kycDataTitle,
+          hint: s.kycDataHint,
+          done: check.error == null,
+          child: Column(
+            children: [
+              TextField(
+                controller: _nikCtrl,
+                decoration: InputDecoration(
+                  labelText: s.kycIdNumber,
+                  errorText: nikError ? s.kycErrNumber : null,
+                  counterText: '',
+                ),
+                keyboardType: TextInputType.number,
+                maxLength: 16,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _nameCtrl,
+                decoration: InputDecoration(labelText: s.kycFullName),
+                textCapitalization: TextCapitalization.characters,
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: _pickBirthDate,
+                borderRadius: BorderRadius.circular(8),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: s.kycBirthDate,
+                    suffixIcon: const Icon(Icons.calendar_month_outlined),
+                    errorText: check.error == KycFormError.birthMismatch
+                        ? s.kycErrBirthMismatch
+                        : null,
+                  ),
+                  child: Text(
+                    _birthDate == null
+                        ? s.kycPickDate
+                        : '${_birthDate!.day}/${_birthDate!.month}/${_birthDate!.year}',
+                    style: AppText.body.copyWith(
+                      color: _birthDate == null
+                          ? AppTheme.textSecondary
+                          : AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+              for (final w in check.warnings)
+                KycNote(
+                  icon: Icons.warning_amber_rounded,
+                  color: kKycWarn,
+                  text: switch (w) {
+                    KycFormWarning.nikMismatch => s.kycWarnNikMismatch,
+                    KycFormWarning.nameMismatch => s.kycWarnNameMismatch,
+                    KycFormWarning.genderMismatch => s.kycWarnGenderMismatch,
+                  },
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         FilledButton(
-          onPressed:
-              kyc.submitting || _processingPhoto ? null : () => _submit(s),
+          onPressed: kyc.submitting || _busyDoc || _busySelfie
+              ? null
+              : () => _submit(s),
           child: Text(kyc.submitting ? s.kycSubmitting : s.kycSubmit),
+        ),
+        const SizedBox(height: 10),
+        KycNote(
+          icon: Icons.lock_outline,
+          color: AppTheme.textSecondary,
+          text: s.kycSecureNote,
         ),
       ],
     );
   }
-
-  Widget _sectionLabel(String label) => Text(
-        label,
-        style: AppText.label.copyWith(color: AppTheme.textSecondary),
-      );
-
-  Widget _docChip(String label, String value) {
-    final sel = _docType == value;
-    return ChoiceChip(
-      label: Text(label),
-      selected: sel,
-      onSelected: (_) => setState(() => _docType = value),
-      selectedColor: AppTheme.primary.withValues(alpha: 0.25),
-    );
-  }
-}
-
-/// Kartu dasar section (latar card + padding konsisten).
-class _Card extends StatelessWidget {
-  final Widget child;
-  final Color? color;
-  const _Card({required this.child, this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color ?? AppTheme.bgCard,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: child,
-      );
-}
-
-/// Kartu ambil/lihat foto KYC — tap membuka picker kamera/galeri.
-/// [faceGuide] menggambar oval panduan posisi wajah (selfie).
-class _PhotoCard extends StatelessWidget {
-  final String title;
-  final String hint;
-  final String? dataUrl;
-  final bool busy;
-  final String tapLabel;
-  final String retakeLabel;
-  final bool faceGuide;
-  final String? guideText;
-  final VoidCallback onTap;
-
-  const _PhotoCard({
-    required this.title,
-    required this.hint,
-    required this.dataUrl,
-    required this.busy,
-    required this.tapLabel,
-    required this.retakeLabel,
-    required this.onTap,
-    this.faceGuide = false,
-    this.guideText,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final has = dataUrl != null;
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: AppText.bodyStrong),
-          const SizedBox(height: 4),
-          Text(
-            hint,
-            style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-          ),
-          const SizedBox(height: 10),
-          InkWell(
-            onTap: busy ? null : onTap,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              height: 170,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: has ? AppTheme.primary : AppTheme.divider,
-                ),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: busy
-                  ? const Center(child: CircularProgressIndicator())
-                  : Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        // Oval panduan posisi wajah — tetap terlihat di
-                        // atas preview supaya user bisa cek posisi muka.
-                        if (faceGuide)
-                          IgnorePointer(
-                            child: CustomPaint(
-                              painter: _FaceGuidePainter(),
-                            ),
-                          ),
-                        if (has)
-                          Image.memory(
-                            base64Decode(
-                              dataUrl!.substring(dataUrl!.indexOf(',') + 1),
-                            ),
-                            fit: BoxFit.contain,
-                            // MEMORY: thumbnail saja — bytes asli tetap
-                            // di field (yang dikirim ke server).
-                            cacheWidth: 600,
-                          )
-                        else
-                          Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (!faceGuide) ...[
-                                  Icon(
-                                    Icons.add_a_photo_outlined,
-                                    size: 32,
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                  const SizedBox(height: 6),
-                                ],
-                                Text(
-                                  faceGuide && guideText != null
-                                      ? guideText!
-                                      : tapLabel,
-                                  textAlign: TextAlign.center,
-                                  style: AppText.caption.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        if (has)
-                          Positioned(
-                            right: 8,
-                            bottom: 8,
-                            child: _chipLabel(retakeLabel),
-                          ),
-                      ],
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chipLabel(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(text, style: AppText.caption.copyWith(color: Colors.white)),
-      );
-}
-
-/// Oval panduan posisi wajah di kartu selfie — outline putus-putus +
-/// ikon wajah di tengah supaya jelas area targetnya.
-class _FaceGuidePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Oval sedikit lebih tinggi dari lebar — bentuk umum wajah.
-    final rect = Rect.fromCenter(
-      center: Offset(size.width / 2, size.height / 2),
-      width: size.width * 0.42,
-      height: size.height * 0.72,
-    );
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.85)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    // Outline putus-putus: potong perimeter oval jadi segmen.
-    final path = Path()..addOval(rect);
-    const dashLen = 10.0;
-    const gapLen = 7.0;
-    for (final metric in path.computeMetrics()) {
-      var dist = 0.0;
-      while (dist < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(dist, dist + dashLen),
-          paint,
-        );
-        dist += dashLen + gapLen;
-      }
-    }
-
-    // Ikon wajah sederhana di tengah oval (mata + senyum).
-    final c = rect.center;
-    final eyePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.85)
-      ..style = PaintingStyle.fill;
-    final eyeY = c.dy - rect.height * 0.08;
-    canvas.drawCircle(Offset(c.dx - rect.width * 0.14, eyeY), 3, eyePaint);
-    canvas.drawCircle(Offset(c.dx + rect.width * 0.14, eyeY), 3, eyePaint);
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(c.dx, c.dy + rect.height * 0.06),
-        width: rect.width * 0.3,
-        height: rect.height * 0.22,
-      ),
-      0.4,
-      2.34,
-      false,
-      paint..strokeWidth = 2,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_FaceGuidePainter old) => false;
-}
-
-/// Tampilan status (pending/approved) — ikon + judul + penjelasan.
-class _StatusView extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String body;
-  const _StatusView({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.body,
-  });
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 56, color: color),
-              const SizedBox(height: 14),
-              Text(title, style: AppText.titleEmphasis),
-              const SizedBox(height: 8),
-              Text(
-                body,
-                textAlign: TextAlign.center,
-                style: AppText.bodySmall.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
 }
