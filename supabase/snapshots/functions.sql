@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-11-03T23:31:37Z
+-- Timestamp: 2026-11-04T12:54:46Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -986,7 +986,7 @@ begin
   return coalesce(tot, 0);
 end; $function$
 
--- snapshot-fn: send_coins @ 20261107000000_econ_antifraud_phaseb.sql
+-- snapshot-fn: send_coins @ 20261110050000_promo_bonus_spend.sql
 CREATE OR REPLACE FUNCTION public.send_coins(p_chat_id text, p_receiver_id uuid, p_amount integer)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1029,14 +1029,16 @@ begin
        or (b.blocker_id = p_receiver_id and b.blocked_id = uid)) then
     raise exception 'Blocked'; end if;
 
-  -- Hanya koin belian (topup+earned) — koin bonus TIDAK bisa ditransfer.
-  remaining := public.ledger_spend_paid(uid, 'coin_sent', p_amount, p_chat_id);
-
   -- B1: potongan platform (default 30%). Penerima menerima NET ke
   -- `earned` — masih bisa di-withdraw, tapi hasil "pencucian" send_coins
   -- kini dipotong seperti gift sehingga refund-fraud tidak lagi gratis.
   select coalesce(coin_send_cut_pct, 30) into v_cut_pct
     from app_settings where id = 'global';
+
+  -- Koin beli/penghasilan dulu; male boleh menambal dengan bonus
+  -- (×multiplier, plafon promo) — ledger_spend_promo (2026-11-10).
+  remaining := public.ledger_spend_promo(uid, 'coin_sent', p_amount, p_chat_id,
+    p_receiver_id, 100 - v_cut_pct);
   v_cut := (p_amount * v_cut_pct) / 100;
   v_net := p_amount - v_cut;
 
@@ -1061,7 +1063,7 @@ begin
     'sent', p_amount, 'received', v_net, 'cut_pct', v_cut_pct);
 end; $function$
 
--- snapshot-fn: send_gift @ 20261110000000_econ_lockdown_phase1.sql
+-- snapshot-fn: send_gift @ 20261110050000_promo_bonus_spend.sql
 CREATE OR REPLACE FUNCTION public.send_gift(p_chat_id text, p_receiver_id uuid, p_gift_id text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1109,33 +1111,17 @@ begin
   -- 2026-10-31: gift WAJIB pakai koin beli/penghasilan (topup + earned).
   -- Koin gratis (`bonus`) TIDAK boleh dipakai — mencegah koin gratis male
   -- berubah menjadi saldo withdrawable female (rugi platform).
-  select coalesce(sum(amount) filter (where bucket='topup'), 0)
-       + coalesce(sum(amount) filter (where bucket='earned'), 0)
-    into paid
-    from coin_ledger where user_id = uid;
+  -- 2026-11-10: male boleh menambal dengan bonus (harga ×multiplier,
+  -- plafon promo) — ledger_spend_promo.
+  paid := public.yukcoin_spendable(uid, p_receiver_id, 100 - cut_pct);
 
   if paid < n then
     raise exception 'Gift membutuhkan koin beli/penghasilan (top-up dulu)'
       using errcode = '22023';
   end if;
 
-  -- Potong dari topup dulu, lalu earned.
-  declare
-    take_topup int := least((select coalesce(sum(amount) filter (where bucket='topup'),0)
-                              from coin_ledger where user_id = uid), n);
-    take_earned int := n - take_topup;
-  begin
-    if take_topup > 0 then
-      insert into coin_ledger(user_id,bucket,type,amount,ref_id)
-        values (uid,'topup','gift_sent',-take_topup,p_chat_id);
-    end if;
-    if take_earned > 0 then
-      insert into coin_ledger(user_id,bucket,type,amount,ref_id)
-        values (uid,'earned','gift_sent',-take_earned,p_chat_id);
-    end if;
-  end;
-
-  remaining := public.wallet_sync_points(uid);
+  remaining := public.ledger_spend_promo(uid, 'gift_sent', n, p_chat_id,
+    p_receiver_id, 100 - cut_pct);
 
   -- Platform ambil cut; penerima SELALU bucket `earned`.
   cut := (n * cut_pct) / 100;

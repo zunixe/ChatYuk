@@ -1,5 +1,33 @@
 ## 2026-11-10 (b) — Koin bonus untuk fee match (APPLIED 2026-11-04 via API)
 
+### `20261110050000_promo_bonus_spend.sql` (APPLIED 2026-11-04)
+Keputusan user: bonus male bisa untuk call/gift/kirim koin/langganan;
+penghasilan female dari situ bisa ditarik (biaya promosi), plafon Rp300rb/bln.
+- `ledger_spend_promo`: koin beli/earned dulu; sisa ditambal bonus ×
+  `bonus_price_multiplier` (3). Biaya Rupiah dicatat `metadata.promo_idr`.
+- `_promo_payer_ok`: male terdaftar, device bukan 'unknown', install_id tidak
+  dipakai akun lain, plafon tersisa > 0.
+- Plafon `app_settings.promo_budget_idr_monthly` (default 300000, bulan WIB) —
+  dipakai bersama hadiah misi female earned (`_mission_payout_eligible` →
+  `promo_budget` bila habis). Belum ada UI admin.
+- Menyentuh: `send_gift`, `send_coins` (FROZEN), `subscribe_creator`,
+  `_charge_metered_core`, `_call_bill_as`, `get_wallet` (+`promo_ok`,
+  `bonus_multiplier`). Diff snapshot: hanya blok debit yang berubah.
+- Test: `promo_bonus_spend_test.sql` 12/12 + 8 suite ekonomi hijau di live.
+
+### `20261110040000_female_mission_withdrawable.sql` (APPLIED 2026-11-04)
+- `claim_mission_reward`: hadiah misi FEMALE → `earned` (bisa ditarik, ikut
+  masa tahan) bila `_mission_payout_eligible` lolos; selain itu tetap `bonus`
+  + `reason` (`no_device`/`shared_device`/`shared_ip`). Male tetap bonus.
+- Device: tabel baru `mission_payout_devices` — install_id dimiliki akun
+  pertama yang menerima hadiah earned; akun lain di device itu → bonus.
+- IP: `_request_ip()` membaca header request (cf-connecting-ip /
+  x-forwarded-for) — IP dari HP (`user_devices.ip_address`) tidak valid
+  (152 device, 1 IP). IP sama < 24 jam dgn akun lain → bonus.
+- Ledger `metadata` mencatat `ip` & `reason`. Klien: snackbar sesuai bucket.
+- Test: `female_mission_payout_test.sql` 9/9; ekonomi lain tetap hijau.
+  Verifikasi REST: `_request_ip()` = IP publik pemanggil.
+
 ### `20261110030000_match_bonus_fee.sql`
 Keputusan user: koin BONUS boleh membayar fee match; call gratis 30 detik;
 lewat itu konek + menit wajib koin isi ulang (billing menjeda + top-up).

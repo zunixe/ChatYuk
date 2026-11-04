@@ -89,21 +89,26 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen> {
 
   Future<void> _claimMission(String key, int coins) async {
     final s = ref.read(localeProvider).s;
-    final ok = await ref.read(missionsProvider.notifier).claimReward(key);
+    final notifier = ref.read(missionsProvider.notifier);
+    final ok = await notifier.claimReward(key);
     if (!mounted || !ok) return;
-    // 2026-11-01: bucket reward by-gender (server) — female → `earned`
-    // (withdrawable), selain female → `bonus`. Saldo total tetap naik.
+    // Bucket ditentukan server: female → `earned` bila device & IP tidak
+    // dipakai akun lain, selain itu `bonus`. Saldo total tetap naik.
     unawaited(ref.read(pointsProvider.notifier).refreshWallet());
     final isFemale =
         ref.read(authProvider.notifier).profile?.gender == 'female';
+    final String text;
+    if (notifier.lastClaimBucket == 'earned') {
+      text = s.bonusRewardCoinsWithdrawable(coins);
+    } else if (isFemale &&
+        (notifier.lastClaimReason == 'shared_device' ||
+            notifier.lastClaimReason == 'shared_ip')) {
+      text = s.bonusRewardCoinsSharedDevice(coins);
+    } else {
+      text = s.bonusRewardCoinsNonWithdrawable(coins);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          isFemale
-              ? s.bonusRewardCoins(coins)
-              : s.bonusRewardCoinsNonWithdrawable(coins),
-        ),
-      ),
+      SnackBar(content: Text(text)),
     );
   }
 

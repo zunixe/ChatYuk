@@ -221,7 +221,7 @@ select set_config('request.jwt.claim.sub',
 insert into _po values ('c2',
   public.claim_mission_reward('ec05e000-0000-4000-8000-0000000000a3',
                               'like_posts')::text);
-select supabase_tests.check('L3: female klaim misi → bucket bonus (tak bisa dicairkan)',
+select supabase_tests.check('L3: female tanpa device klaim misi → bucket bonus (no_device)',
   exists (select 1 from public.coin_ledger
           where user_id='ec05e000-0000-4000-8000-0000000000a3'
             and bucket='bonus' and type='mission_reward' and amount=5),

@@ -199,6 +199,11 @@ class MissionsNotifier extends Notifier<MissionsState> {
     }
   }
 
+  /// Hasil klaim terakhir dari server: bucket (`earned`/`bonus`) & alasan
+  /// bila hadiah jadi bonus (`shared_device`/`shared_ip`/`no_device`).
+  String? lastClaimBucket;
+  String? lastClaimReason;
+
   /// Klaim reward misi
   Future<bool> claimReward(String missionKey) async {
     final userId = _sb.auth.currentUser?.id;
@@ -214,10 +219,11 @@ class MissionsNotifier extends Notifier<MissionsState> {
       );
 
       if (res['success'] == true) {
+        lastClaimBucket = res['bucket'] as String?;
+        lastClaimReason = res['reason'] as String?;
         await _loadMissions(userId: userId);
-        // 2026-11-01: bucket reward by-gender (server) — female → `earned`
-        // (withdrawable), selain female → `bonus` (tidak bisa dicairkan).
-        // Invalidasi earnings hanya relevan untuk female.
+        // 2026-11-10: female → `earned` bila device & IP tidak dipakai akun
+        // lain; selain itu `bonus` (tidak bisa dicairkan).
         ref.invalidate(earningsProvider);
         return true;
       }

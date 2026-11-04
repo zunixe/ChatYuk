@@ -496,8 +496,8 @@ Future<GiftItem?> showGiftPickerSheet(
                 itemCount: kGiftCatalog.length,
                 itemBuilder: (ctx, i) {
                   final g = kGiftCatalog[i];
-                  // Server (send_gift) hanya menerima topup+earned —
-                  // bucket `bonus` gratis ditolak, jadi jangan dihitung.
+                  // paidBalance = saldo yang bisa dipakai (koin beli +
+                  // bonus/×multiplier bila promo diizinkan server).
                   final afford = g.coins <= paidBalance;
                   return InkWell(
                     onTap: afford ? () => Navigator.pop(ctx, g) : null,

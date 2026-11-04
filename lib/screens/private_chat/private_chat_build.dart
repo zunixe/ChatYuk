@@ -495,7 +495,7 @@ mixin _PcBuildMx on _PrivateChatBase {
       context,
       otherName: widget.otherName,
       pointsEnabled: points.enabled,
-      paidBalance: points.paidBalance,
+      paidBalance: points.spendableBalance,
     );
     if (amount == null || !mounted) return;
     await _sendCoins(amount);
@@ -528,7 +528,7 @@ mixin _PcBuildMx on _PrivateChatBase {
     final gift = await showGiftPickerSheet(
       context,
       pointsEnabled: points.enabled,
-      paidBalance: points.paidBalance,
+      paidBalance: points.spendableBalance,
     );
     if (gift != null && mounted) {
       setState(() => _showAttachRow = false);

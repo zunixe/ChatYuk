@@ -363,10 +363,10 @@ mixin _UiInitMx on _UserInfoBase {
       context,
       listen: false,
     ).read(pointsProvider.notifier);
-    // Server (subscribe_creator) wajib koin beli/penghasilan — cek saldo
-    // paid SEBELUM dialog konfirmasi, bukan setelah user setuju.
+    // Server (subscribe_creator): koin beli dulu, lalu bonus ×multiplier bila
+    // promo diizinkan — cek SEBELUM dialog konfirmasi.
     final paidBalance =
-        ProviderScope.containerOf(context, listen: false).read(pointsProvider).paidBalance;
+        ProviderScope.containerOf(context, listen: false).read(pointsProvider).spendableBalance;
     if (paidBalance < price) {
       points.showOutOfPointsDialog(context, s.isId);
       return;

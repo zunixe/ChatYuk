@@ -265,8 +265,8 @@ mixin SPointsMx {
   String get walletPaid => isId ? 'Isi ulang' : 'Topped up';
   String get walletEarned => isId ? 'Penghasilan' : 'Earnings';
   String get walletBucketsHint => isId
-      ? 'Bonus: fee match & 30 detik pertama call. Video call lanjutan, gift, kirim koin & langganan pakai koin isi ulang/penghasilan.'
-      : 'Bonus: match fee & the first 30 seconds of a call. Longer video calls, gifts, coin transfers & subscriptions use topped-up/earned coins.';
+      ? 'Koin isi ulang/penghasilan dipakai lebih dulu. Bonus bisa menambal call, gift, kirim koin & langganan dengan harga ×3 (promo terbatas).'
+      : 'Topped-up/earned coins are used first. Bonus coins can cover calls, gifts, coin transfers & subscriptions at 3× the price (limited promo).';
 
   // ── YukCoin v2 (halaman & fitur berbayar) ──
   String get yukcoinTitle => isId ? 'YukCoin' : 'YukCoin';
@@ -663,6 +663,13 @@ mixin SPointsMx {
   String bonusRewardCoinsNonWithdrawable(int n) => isId
       ? '+$n koin bonus (tidak bisa dicairkan)'
       : '+$n bonus coins (cannot be withdrawn)';
+  // 2026-11-10: hadiah misi female → penghasilan (ikut masa tahan withdraw).
+  String bonusRewardCoinsWithdrawable(int n) => isId
+      ? '+$n koin penghasilan (bisa ditarik setelah masa tahan)'
+      : '+$n earned coins (withdrawable after the holding period)';
+  String bonusRewardCoinsSharedDevice(int n) => isId
+      ? '+$n koin bonus — perangkat/jaringan ini sudah dipakai akun lain untuk hadiah yang bisa ditarik'
+      : '+$n bonus coins — this device/network was already used by another account for withdrawable rewards';
   String get bonusClaim => isId ? 'Klaim' : 'Claim';
   String get bonusClaimed => isId ? 'Diklaim' : 'Claimed';
   String get bonusGo => isId ? 'Mulai' : 'Go';

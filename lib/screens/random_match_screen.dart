@@ -16,7 +16,6 @@ import '../widgets/gender_avatar.dart';
 import '../widgets/call_permission_dialog.dart';
 import 'random_call_history_screen.dart';
 import '../providers/riverpod/match_pricing_provider.dart';
-import '../providers/riverpod/points_provider.dart';
 import 'random_call_screen.dart';
 
 /// Layar utama Random Video Call: radar orang sekitar + tombol Match.

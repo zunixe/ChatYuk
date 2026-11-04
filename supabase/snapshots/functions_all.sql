@@ -1,6 +1,6 @@
 -- SNAPSHOT SEMUA fungsi public (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh --all
--- Timestamp: 2026-11-03T23:56:59Z
+-- Timestamp: 2026-11-04T12:55:16Z
 
 -- snapshot-fn: _anon_gate_insert
 CREATE OR REPLACE FUNCTION public._anon_gate_insert()
@@ -74,6 +74,7 @@ declare
   remaining int; v_paid int; afford int; charge_n int;
   v_payer uuid; v_recipient uuid;
   v_income int;
+  v_host_pct int;
   v_connect_cost int := 0;
   v_connect_billed boolean := false;
   v_free_seconds_left int := 0;
@@ -170,6 +171,8 @@ begin
     into unit_cost
     from app_settings where id = 'global';
   unit_cost := coalesce(unit_cost, 0);
+  select 100 - coalesce(call_cut_pct, 70) into v_host_pct
+    from app_settings where id = 'global';
 
   if c.kind = 'random' then
     select coalesce((metered_pricing->'match_call'->>'unit_cost')::int, 10)
@@ -266,7 +269,7 @@ begin
   end if;
 
   to_bill := greatest(0, billable_minutes - already_billed);
-  v_paid := public.yukcoin_paid_total(v_payer);
+  v_paid := public.yukcoin_spendable(v_payer, v_recipient, v_host_pct);
   remaining := public.yukcoin_total(me);
 
   -- Connect fee (random, lolos 30 dtk)
@@ -287,7 +290,7 @@ begin
                                  'minute', 0))
       on conflict do nothing;
     v_connect_billed := true;
-    v_paid := public.yukcoin_paid_total(v_payer);
+    v_paid := public.yukcoin_spendable(v_payer, v_recipient, v_host_pct);
     remaining := public.yukcoin_total(me);
   end if;
 
@@ -315,7 +318,7 @@ begin
         from generate_series(1, charge_n) g
         on conflict do nothing;
       already_billed := already_billed + charge_n;
-      v_paid := public.yukcoin_paid_total(v_payer);
+      v_paid := public.yukcoin_spendable(v_payer, v_recipient, v_host_pct);
       remaining := public.yukcoin_total(me);
     end if;
     if charge_n < to_bill or v_paid < unit_cost then
@@ -421,13 +424,16 @@ begin
   -- Call WAJIB pakai koin beli/penghasilan. Koin gratis (`bonus`) tidak
   -- boleh membayar menit call — 30% net-nya menjadi `earned` female
   -- (withdrawable) = koin gratis berubah jadi uang.
-  balance := public.yukcoin_paid_total(p_caller);
+  -- 2026-11-10: + bonus male (harga ×multiplier, plafon promo) via
+  -- ledger_spend_promo — lihat migrasi promo_bonus_spend.
+  balance := public.yukcoin_spendable(p_caller, p_recipient, 100 - cut_pct);
   if balance < total then
     raise exception 'Koin beli/penghasilan tidak cukup (top-up dulu)'
       using errcode = '22023';
   end if;
 
-  remaining := public.ledger_spend_paid(p_caller, v_ltype, total, p_ref);
+  remaining := public.ledger_spend_promo(p_caller, v_ltype, total, p_ref,
+    p_recipient, 100 - cut_pct);
 
   cut := (total * cut_pct) / 100;
   net := total - cut;
@@ -467,6 +473,39 @@ AS $function$
   select coalesce(auth.email(), '') = 'zunixe@gmail.com'
 $function$
 
+-- snapshot-fn: _mission_payout_eligible
+CREATE OR REPLACE FUNCTION public._mission_payout_eligible(p_uid uuid, p_ip text)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if not exists (select 1 from public.user_devices
+                  where user_id = p_uid and install_id <> 'unknown') then
+    return 'no_device';
+  end if;
+  if exists (select 1 from public.user_devices d
+               join public.mission_payout_devices o on o.install_id = d.install_id
+              where d.user_id = p_uid and o.user_id <> p_uid) then
+    return 'shared_device';
+  end if;
+  if p_ip is not null and exists (
+       select 1 from public.coin_ledger l
+        where l.type = 'mission_reward' and l.bucket = 'earned'
+          and l.metadata->>'ip' = p_ip
+          and l.created_at > now() - interval '24 hours'
+          and l.user_id <> p_uid) then
+    return 'shared_ip';
+  end if;
+  -- 2026-11-10: plafon promo bulanan habis → bonus.
+  if public.promo_budget_left_idr() <= 0 then
+    return 'promo_budget';
+  end if;
+  return null;
+end;
+$function$
+
 -- snapshot-fn: _privacy_are_friends
 CREATE OR REPLACE FUNCTION public._privacy_are_friends(a uuid, b uuid)
  RETURNS boolean
@@ -483,6 +522,80 @@ AS $function$
     where f1.follower_id = a
       and f1.followee_id = b
   );
+$function$
+
+-- snapshot-fn: _promo_multiplier
+CREATE OR REPLACE FUNCTION public._promo_multiplier()
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select greatest(1, coalesce(bonus_price_multiplier, 3))
+    from public.app_settings where id = 'global';
+$function$
+
+-- snapshot-fn: _promo_payer_ok
+CREATE OR REPLACE FUNCTION public._promo_payer_ok(p_payer uuid, p_recipient uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_gender text;
+  v_reg boolean;
+begin
+  if p_payer is null then
+    return false;
+  end if;
+  if (select points_enabled from public.app_settings where id = 'global') is false then
+    return false;
+  end if;
+  select gender, coalesce(is_registered, false) into v_gender, v_reg
+    from public.profiles where id = p_payer;
+  if v_gender is distinct from 'male' or not v_reg then
+    return false;
+  end if;
+  if not exists (select 1 from public.user_devices
+                  where user_id = p_payer and install_id <> 'unknown') then
+    return false;
+  end if;
+  -- Device dipakai akun lain (termasuk penerima / akun anonim) → tidak.
+  if exists (select 1 from public.user_devices d1
+               join public.user_devices d2 on d2.install_id = d1.install_id
+              where d1.user_id = p_payer and d2.user_id <> p_payer
+                and d1.install_id <> 'unknown') then
+    return false;
+  end if;
+  return public.promo_budget_left_idr() > 0;
+end;
+$function$
+
+-- snapshot-fn: _request_ip
+CREATE OR REPLACE FUNCTION public._request_ip()
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  h jsonb;
+  v text;
+begin
+  begin
+    h := nullif(current_setting('request.headers', true), '')::jsonb;
+  exception when others then
+    return null;
+  end;
+  if h is null then
+    return null;
+  end if;
+  v := coalesce(h->>'cf-connecting-ip',
+                split_part(h->>'x-forwarded-for', ',', 1),
+                h->>'x-real-ip');
+  return nullif(trim(v), '');
+end;
 $function$
 
 -- snapshot-fn: _social_registered_guard
@@ -6991,6 +7104,8 @@ DECLARE
     v_completed boolean;
     v_gender text;
     v_reward_bucket text;
+    v_reason text;
+    v_ip text;
 BEGIN
     if auth.uid() is not null and p_user_id is distinct from auth.uid() then
         return jsonb_build_object('error', 'FORBIDDEN');
@@ -7025,7 +7140,10 @@ BEGIN
     -- 2026-11-09: reward misi SELALU bonus (tidak bisa dicairkan) untuk
     -- semua gender — dulu female → earned = koin gratis bisa jadi uang
     -- lewat multi-akun.
+    -- 2026-11-10: female boleh `earned` (bisa ditarik) bila device & IP
+    -- tidak dipakai akun lain — lihat _mission_payout_eligible.
     v_reward_bucket := 'bonus';
+    v_ip := public._request_ip();
 
     v_is_coins_mission := (v_mission.target_unit = 'coins');
 
@@ -7087,8 +7205,23 @@ BEGIN
         RETURN jsonb_build_object('error', 'ALREADY_CLAIMED');
     END IF;
 
-    INSERT INTO public.coin_ledger (user_id, bucket, type, amount, ref_id)
-    VALUES (p_user_id, v_reward_bucket, 'mission_reward', v_mission.reward_coins, p_mission_key);
+    IF v_gender = 'female' THEN
+        -- Serialisasi klaim earned — cegah 2 akun 1 device klaim bersamaan.
+        PERFORM pg_advisory_xact_lock(hashtext('mission_payout'));
+        v_reason := public._mission_payout_eligible(p_user_id, v_ip);
+        IF v_reason IS NULL THEN
+            v_reward_bucket := 'earned';
+            INSERT INTO public.mission_payout_devices (install_id, user_id)
+            SELECT DISTINCT d.install_id, p_user_id
+              FROM public.user_devices d
+             WHERE d.user_id = p_user_id AND d.install_id <> 'unknown'
+            ON CONFLICT (install_id) DO NOTHING;
+        END IF;
+    END IF;
+
+    INSERT INTO public.coin_ledger (user_id, bucket, type, amount, ref_id, metadata)
+    VALUES (p_user_id, v_reward_bucket, 'mission_reward', v_mission.reward_coins, p_mission_key,
+            jsonb_strip_nulls(jsonb_build_object('ip', v_ip, 'reason', v_reason)));
 
     SELECT points INTO v_new_points
     FROM public.profiles
@@ -7098,6 +7231,7 @@ BEGIN
         'success', true,
         'coins', v_mission.reward_coins,
         'bucket', v_reward_bucket,
+        'reason', v_reason,
         'total_points', v_new_points
     );
 END;
@@ -10318,7 +10452,10 @@ begin
   return jsonb_build_object(
     'bonus', b, 'topup', t, 'earned', e,
     'total', b + t + e,
-    'withdrawable', e
+    'withdrawable', e,
+    -- 2026-11-10: bonus bisa menambal call/gift/kirim/langganan (×mult).
+    'promo_ok', public._promo_payer_ok(auth.uid(), null),
+    'bonus_multiplier', public._promo_multiplier()
   );
 end; $function$
 
@@ -11290,6 +11427,62 @@ begin
   end if;
   return public.wallet_sync_points(p_user);
 end; $function$
+
+-- snapshot-fn: ledger_spend_promo
+CREATE OR REPLACE FUNCTION public.ledger_spend_promo(p_user uuid, p_type text, p_amount integer, p_ref text, p_recipient uuid, p_host_pct integer)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_paid int;
+  v_short int;
+  v_mult int;
+  v_bonus int;
+  v_need int;
+  v_cost numeric;
+  s record;
+begin
+  if p_amount is null or p_amount <= 0 then
+    return public.wallet_sync_points(p_user);
+  end if;
+  perform pg_advisory_xact_lock(hashtext('wallet:' || p_user::text));
+
+  v_paid := public.yukcoin_paid_total(p_user);
+  if v_paid >= p_amount then
+    return public.ledger_spend_paid(p_user, p_type, p_amount, p_ref);
+  end if;
+
+  v_short := p_amount - greatest(v_paid, 0);
+  if not public._promo_payer_ok(p_user, p_recipient) then
+    raise exception 'Not enough paid';
+  end if;
+  v_mult := public._promo_multiplier();
+  v_need := v_short * v_mult;
+  select coalesce(sum(amount), 0) into v_bonus
+    from public.coin_ledger where user_id = p_user and bucket = 'bonus';
+  select withdraw_rate_idr, withdraw_fee_pct into s
+    from public.app_settings where id = 'global';
+  v_cost := round(v_short * greatest(coalesce(p_host_pct, 0), 0) / 100.0
+            * coalesce(s.withdraw_rate_idr, 7)
+            * (100 - coalesce(s.withdraw_fee_pct, 5)) / 100.0, 2);
+  -- Serialkan pemakaian plafon antar user.
+  perform pg_advisory_xact_lock(hashtext('promo_budget'));
+  if v_bonus < v_need or v_cost > public.promo_budget_left_idr() then
+    raise exception 'Not enough paid';
+  end if;
+
+  if v_paid > 0 then
+    perform public.ledger_spend_paid(p_user, p_type, v_paid, p_ref);
+  end if;
+  insert into public.coin_ledger (user_id, bucket, type, amount, ref_id, metadata)
+  values (p_user, 'bonus', p_type, -v_need, p_ref,
+          jsonb_build_object('promo_base', v_short, 'multiplier', v_mult,
+                             'promo_idr', v_cost, 'recipient', p_recipient));
+  return public.wallet_sync_points(p_user);
+end;
+$function$
 
 -- snapshot-fn: ledger_spend_topup
 CREATE OR REPLACE FUNCTION public.ledger_spend_topup(p_user uuid, p_type text, p_amount integer, p_ref text DEFAULT NULL::text)
@@ -14079,6 +14272,34 @@ begin
   return NEW;
 end; $function$
 
+-- snapshot-fn: promo_budget_left_idr
+CREATE OR REPLACE FUNCTION public.promo_budget_left_idr()
+ RETURNS numeric
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with m as (
+    select (date_trunc('month', now() at time zone 'Asia/Jakarta')
+              at time zone 'Asia/Jakarta') as start
+  )
+  select greatest(0,
+           coalesce(s.promo_budget_idr_monthly, 0)
+           - coalesce((select sum((l.metadata->>'promo_idr')::numeric)
+                         from public.coin_ledger l, m
+                        where l.bucket = 'bonus' and l.amount < 0
+                          and l.metadata ? 'promo_idr'
+                          and l.created_at >= m.start), 0)
+           - coalesce((select sum(l.amount)
+                         from public.coin_ledger l, m
+                        where l.type = 'mission_reward' and l.bucket = 'earned'
+                          and l.created_at >= m.start), 0)
+             * coalesce(s.withdraw_rate_idr, 7)
+             * (100 - coalesce(s.withdraw_fee_pct, 5)) / 100.0)
+    from public.app_settings s
+   where s.id = 'global';
+$function$
+
 -- snapshot-fn: purge_deleted_users_90d
 CREATE OR REPLACE FUNCTION public.purge_deleted_users_90d()
  RETURNS integer
@@ -16169,14 +16390,16 @@ begin
        or (b.blocker_id = p_receiver_id and b.blocked_id = uid)) then
     raise exception 'Blocked'; end if;
 
-  -- Hanya koin belian (topup+earned) — koin bonus TIDAK bisa ditransfer.
-  remaining := public.ledger_spend_paid(uid, 'coin_sent', p_amount, p_chat_id);
-
   -- B1: potongan platform (default 30%). Penerima menerima NET ke
   -- `earned` — masih bisa di-withdraw, tapi hasil "pencucian" send_coins
   -- kini dipotong seperti gift sehingga refund-fraud tidak lagi gratis.
   select coalesce(coin_send_cut_pct, 30) into v_cut_pct
     from app_settings where id = 'global';
+
+  -- Koin beli/penghasilan dulu; male boleh menambal dengan bonus
+  -- (×multiplier, plafon promo) — ledger_spend_promo (2026-11-10).
+  remaining := public.ledger_spend_promo(uid, 'coin_sent', p_amount, p_chat_id,
+    p_receiver_id, 100 - v_cut_pct);
   v_cut := (p_amount * v_cut_pct) / 100;
   v_net := p_amount - v_cut;
 
@@ -16303,33 +16526,17 @@ begin
   -- 2026-10-31: gift WAJIB pakai koin beli/penghasilan (topup + earned).
   -- Koin gratis (`bonus`) TIDAK boleh dipakai — mencegah koin gratis male
   -- berubah menjadi saldo withdrawable female (rugi platform).
-  select coalesce(sum(amount) filter (where bucket='topup'), 0)
-       + coalesce(sum(amount) filter (where bucket='earned'), 0)
-    into paid
-    from coin_ledger where user_id = uid;
+  -- 2026-11-10: male boleh menambal dengan bonus (harga ×multiplier,
+  -- plafon promo) — ledger_spend_promo.
+  paid := public.yukcoin_spendable(uid, p_receiver_id, 100 - cut_pct);
 
   if paid < n then
     raise exception 'Gift membutuhkan koin beli/penghasilan (top-up dulu)'
       using errcode = '22023';
   end if;
 
-  -- Potong dari topup dulu, lalu earned.
-  declare
-    take_topup int := least((select coalesce(sum(amount) filter (where bucket='topup'),0)
-                              from coin_ledger where user_id = uid), n);
-    take_earned int := n - take_topup;
-  begin
-    if take_topup > 0 then
-      insert into coin_ledger(user_id,bucket,type,amount,ref_id)
-        values (uid,'topup','gift_sent',-take_topup,p_chat_id);
-    end if;
-    if take_earned > 0 then
-      insert into coin_ledger(user_id,bucket,type,amount,ref_id)
-        values (uid,'earned','gift_sent',-take_earned,p_chat_id);
-    end if;
-  end;
-
-  remaining := public.wallet_sync_points(uid);
+  remaining := public.ledger_spend_promo(uid, 'gift_sent', n, p_chat_id,
+    p_receiver_id, 100 - cut_pct);
 
   -- Platform ambil cut; penerima SELALU bucket `earned`.
   cut := (n * cut_pct) / 100;
@@ -17382,8 +17589,10 @@ begin
   cut := (cost * cut_pct) / 100;
   net := cost - cut;
 
-  -- Paid-only: hanya topup+earned (bonus tidak berlaku).
-  remaining := public.ledger_spend_paid(me, 'subscribe', cost, p_creator::text);
+  -- Koin beli/penghasilan dulu; male boleh menambal dengan bonus
+  -- (×multiplier, plafon promo) — ledger_spend_promo (2026-11-10).
+  remaining := public.ledger_spend_promo(me, 'subscribe', cost, p_creator::text,
+    p_creator, 100 - cut_pct);
 
   -- Perpanjang / buat subscription.
   select expires_at into expire from subscriptions
@@ -18701,6 +18910,38 @@ CREATE OR REPLACE FUNCTION public.yukcoin_paid_total(p_user uuid)
 AS $function$
   select coalesce(sum(amount) filter (where bucket in ('topup','earned')), 0)::int
     from public.coin_ledger where user_id = p_user;
+$function$
+
+-- snapshot-fn: yukcoin_spendable
+CREATE OR REPLACE FUNCTION public.yukcoin_spendable(p_user uuid, p_recipient uuid, p_host_pct integer)
+ RETURNS integer
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_paid int := public.yukcoin_paid_total(p_user);
+  v_bonus int;
+  v_units int;
+  v_per_unit numeric;
+  s record;
+begin
+  if not public._promo_payer_ok(p_user, p_recipient) then
+    return v_paid;
+  end if;
+  select coalesce(sum(amount), 0) into v_bonus
+    from public.coin_ledger where user_id = p_user and bucket = 'bonus';
+  v_units := greatest(v_bonus, 0) / public._promo_multiplier();
+  select withdraw_rate_idr, withdraw_fee_pct into s
+    from public.app_settings where id = 'global';
+  v_per_unit := greatest(coalesce(p_host_pct, 0), 0) / 100.0
+              * coalesce(s.withdraw_rate_idr, 7)
+              * (100 - coalesce(s.withdraw_fee_pct, 5)) / 100.0;
+  if v_per_unit > 0 then
+    v_units := least(v_units, floor(public.promo_budget_left_idr() / v_per_unit)::int);
+  end if;
+  return v_paid + greatest(v_units, 0);
+end;
 $function$
 
 -- snapshot-fn: yukcoin_total

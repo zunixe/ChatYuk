@@ -36,6 +36,7 @@ class PointsState {
   final int roomCreatePwPaid;
   final int roomExtendPaid;
   final int bonusMultiplier;
+  final bool promoOk;
   final int callAudioCostPerMin;
   final int callVideoCostPerMin;
   final Map<String, dynamic> featureFlags;
@@ -54,6 +55,7 @@ class PointsState {
     this.roomCreatePwPaid = 150,
     this.roomExtendPaid = 50,
     this.bonusMultiplier = 3,
+    this.promoOk = false,
     this.callAudioCostPerMin = 6,
     this.callVideoCostPerMin = 20,
     this.featureFlags = const {},
@@ -75,6 +77,7 @@ class PointsState {
       other.roomCreatePwPaid == roomCreatePwPaid &&
       other.roomExtendPaid == roomExtendPaid &&
       other.bonusMultiplier == bonusMultiplier &&
+      other.promoOk == promoOk &&
       other.callAudioCostPerMin == callAudioCostPerMin &&
       other.callVideoCostPerMin == callVideoCostPerMin &&
       mapEquals(other.featureFlags, featureFlags);
@@ -94,6 +97,7 @@ class PointsState {
     roomCreatePwPaid,
     roomExtendPaid,
     bonusMultiplier,
+    promoOk,
     callAudioCostPerMin,
     callVideoCostPerMin,
     Object.hashAllUnordered(
@@ -102,9 +106,18 @@ class PointsState {
   ]);
 
   bool get enabled => enabledConfirmed && enabledRaw;
+
   /// Koin "beli" = topup + penghasilan. Bucket `bonus` (gratis) TIDAK
   /// dihitung — server (send_gift/unlock_photo) menolak bonus.
   int get paidBalance => topupBalance + earnedBalance;
+
+  /// Saldo untuk call/gift/kirim koin/langganan: koin beli + bonus/×multiplier
+  /// bila server mengizinkan promo (male terdaftar, device unik, plafon ada).
+  int get spendableBalance =>
+      paidBalance +
+      (promoOk
+          ? bonusBalance ~/ (bonusMultiplier < 1 ? 1 : bonusMultiplier)
+          : 0);
 
   int callCostPerMin(String callType) =>
       callType == 'audio' ? callAudioCostPerMin : callVideoCostPerMin;
@@ -115,7 +128,6 @@ class PointsState {
   bool get callBillingPublished => featurePublished('call_billing');
   bool get playTopupPublished => featurePublished('play_topup');
   bool get topupPathOpen => playTopupPublished || yukcoinV2Active;
-
 }
 
 /// Saldo koin + harga fitur + lifecycle online (Riverpod).
@@ -124,9 +136,11 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   final PointsService _service;
   final MissionProgressService _missionProgress;
 
-  PointsNotifier({PointsService? service, MissionProgressService? missionProgress})
-    : _service = service ?? PointsService(Supabase.instance.client),
-      _missionProgress = missionProgress ?? MissionProgressService();
+  PointsNotifier({
+    PointsService? service,
+    MissionProgressService? missionProgress,
+  }) : _service = service ?? PointsService(Supabase.instance.client),
+       _missionProgress = missionProgress ?? MissionProgressService();
 
   var _disposed = false;
   int _points = 50;
@@ -154,12 +168,11 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   bool _ghostMode = false;
   int _extraPhotoSlots = 0;
 
-
-
   int _roomCreatePaid = 100;
   int _roomCreatePwPaid = 150;
   int _roomExtendPaid = 50;
   int _bonusMultiplier = 3;
+  bool _promoOk = false;
 
   int _callAudioCostPerMin = 6;
   int _callVideoCostPerMin = 20;
@@ -222,6 +235,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
       roomCreatePwPaid: _roomCreatePwPaid,
       roomExtendPaid: _roomExtendPaid,
       bonusMultiplier: _bonusMultiplier,
+      promoOk: _promoOk,
       callAudioCostPerMin: _callAudioCostPerMin,
       callVideoCostPerMin: _callVideoCostPerMin,
       featureFlags: Map.unmodifiable(_featureFlags),
@@ -236,6 +250,11 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   int get topupBalance => _topupBalance;
   int get earnedBalance => _earnedBalance;
   int get paidBalance => _topupBalance + _earnedBalance;
+  int get spendableBalance =>
+      paidBalance +
+      (_promoOk
+          ? _bonusBalance ~/ (_bonusMultiplier < 1 ? 1 : _bonusMultiplier)
+          : 0);
   bool get yukcoinV2Active => _yukcoinV2Active;
   bool get ghostMode => _ghostMode;
   int get extraPhotoSlots => _extraPhotoSlots;
@@ -276,7 +295,6 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     }
   }
 
-
   Future<bool> ensureEnoughForCall(
     BuildContext context,
     String callType,
@@ -291,11 +309,10 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     if (myGender == 'female') return true;
     await refreshWallet();
     final need = callCostPerMin(callType);
-    // Server (charge_metered/call_billing_tick sejak 2026-11-01) HANYA
-    // menerima koin beli/penghasilan (topup+earned). Koin `bonus` ditolak
-    // — cek pakai paid, bukan total, agar dialog top-up muncul sebelum
-    // call diputus di tengah.
-    if (_topupBalance + _earnedBalance >= need) return true;
+    // Server: koin beli/penghasilan dulu, lalu bonus ×multiplier bila promo
+    // diizinkan (2026-11-10) — cek pakai spendable, bukan total, agar dialog
+    // top-up muncul sebelum call diputus di tengah.
+    if (spendableBalance >= need) return true;
     if (!context.mounted) return false;
     final s = S(isId: isId);
     showDialog(
@@ -376,13 +393,15 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     }
   }
 
-
   Future<void> refreshWallet() async {
     try {
       final w = await _service.getWallet();
       _bonusBalance = (w['bonus'] as num?)?.toInt() ?? 0;
       _topupBalance = (w['topup'] as num?)?.toInt() ?? 0;
       _earnedBalance = (w['earned'] as num?)?.toInt() ?? 0;
+      _promoOk = w['promo_ok'] == true;
+      _bonusMultiplier =
+          (w['bonus_multiplier'] as num?)?.toInt() ?? _bonusMultiplier;
       _points = (w['total'] as num?)?.toInt() ?? _points;
       _emit();
     } catch (e) {
@@ -446,8 +465,6 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
       dlog('[POINTS] watchOwnPoints error: $e');
     }
   }
-
-
 
   void subscribeEnabled() {
     try {
@@ -567,27 +584,39 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
                   // MENDAPAT. Aturan ekonominya memang asimetris (male bayar,
                   // female menerima), jadi satu teks untuk keduanya menyesatkan.
                   if (isFemale) ...[
-                    _onboardItem('💰', s.pointsOnboardFemaleSub,
-                        highlight: true),
+                    _onboardItem(
+                      '💰',
+                      s.pointsOnboardFemaleSub,
+                      highlight: true,
+                    ),
                     _onboardItem('', s.pointsOnboardFemaleCall),
                     _onboardItem('', s.pointsOnboardFemaleGift),
                     _onboardItem('', s.pointsOnboardFemaleMatch),
                     _onboardItem(
-                        '',
-                        s.pointsOnboardFemaleWithdraw(
-                            _withdrawMinCoins())),
+                      '',
+                      s.pointsOnboardFemaleWithdraw(_withdrawMinCoins()),
+                    ),
                   ] else ...[
                     _onboardItem('🪙', s.pointsOnboardMaleSub, highlight: true),
-                    _onboardItem('', s.pointsOnboardMaleCall(callAudio, callVideo)),
-                    _onboardItem('', s.pointsOnboardMaleMatch(
+                    _onboardItem(
+                      '',
+                      s.pointsOnboardMaleCall(callAudio, callVideo),
+                    ),
+                    _onboardItem(
+                      '',
+                      s.pointsOnboardMaleMatch(
                         (ref.read(matchPricingProvider).value ??
                                 const MatchPricing())
-                            .searchCoins)),
+                            .searchCoins,
+                      ),
+                    ),
                     _onboardItem(
-                        '',
-                        s.pointsOnboardMaleGift(
-                            kGiftCatalog.first.coins,
-                            kGiftCatalog.last.coins)),
+                      '',
+                      s.pointsOnboardMaleGift(
+                        kGiftCatalog.first.coins,
+                        kGiftCatalog.last.coins,
+                      ),
+                    ),
                     _onboardItem('', s.pointsOnboardMaleFree),
                   ],
                   const SizedBox(height: 6),
@@ -709,27 +738,32 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     if (delta <= 0) return;
     _missionOnlineMinutesSent = totalMinutes;
 
-    unawaited(_missionProgress.updateProgress(
-      'daily_online_minutes',
-      increment: delta,
-    ));
-    unawaited(_missionProgress.updateProgress(
-      'daily_online_duration',
-      increment: delta,
-    ));
+    unawaited(
+      _missionProgress.updateProgress('daily_online_minutes', increment: delta),
+    );
+    unawaited(
+      _missionProgress.updateProgress(
+        'daily_online_duration',
+        increment: delta,
+      ),
+    );
 
     // Misi jam khusus: 19:00–23:00 & 01:00–05:00 (waktu device).
     final h = DateTime.now().hour;
     if (h >= 19 && h < 23) {
-      unawaited(_missionProgress.updateProgress(
-        'evening_online_call',
-        increment: delta,
-      ));
+      unawaited(
+        _missionProgress.updateProgress(
+          'evening_online_call',
+          increment: delta,
+        ),
+      );
     } else if (h >= 1 && h < 5) {
-      unawaited(_missionProgress.updateProgress(
-        'night_owl_online_call',
-        increment: delta,
-      ));
+      unawaited(
+        _missionProgress.updateProgress(
+          'night_owl_online_call',
+          increment: delta,
+        ),
+      );
     }
   }
 
@@ -758,10 +792,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
       }
       // Grid streak dibaca missionsProvider — segarkan setelah klaim.
       unawaited(ref.read(missionsProvider.notifier).refresh());
-      return (
-        streak: (res['streak'] as num?)?.toInt() ?? 0,
-        bonus: bonus,
-      );
+      return (streak: (res['streak'] as num?)?.toInt() ?? 0, bonus: bonus);
     } catch (e) {
       dlog('[POINTS] claimDailyLogin error: $e');
       return (streak: 0, bonus: 0);
@@ -775,7 +806,9 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   /// utama (kirim pesan, like, follow) ikut gagal.
   void trackMission(String missionKey, {int increment = 1}) {
     try {
-      unawaited(_missionProgress.updateProgress(missionKey, increment: increment));
+      unawaited(
+        _missionProgress.updateProgress(missionKey, increment: increment),
+      );
     } catch (e) {
       dlog('[MISSIONS] trackMission($missionKey) dilewati: $e');
     }
@@ -828,22 +861,19 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     }
   }
 
-
-
-
-
-
   Future<Map<String, dynamic>> subscribeCreator(
     String creatorUid, {
     int periods = 1,
     int? expectedPrice,
   }) async {
-    final res = await _service.subscribeCreator(creatorUid,
-        periods: periods, expectedPrice: expectedPrice);
+    final res = await _service.subscribeCreator(
+      creatorUid,
+      periods: periods,
+      expectedPrice: expectedPrice,
+    );
     await refreshWallet();
     return res;
   }
-
 
   void showPointsToast(
     BuildContext context,

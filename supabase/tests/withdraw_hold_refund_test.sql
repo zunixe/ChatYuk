@@ -3,7 +3,7 @@
 --   H1: penghasilan < hold_days → HELD_BALANCE; yang lama → bisa ditarik.
 --   H2: batas nominal harian → DAILY_AMOUNT_LIMIT.
 --   H3: KYC dicek SEBELUM nomor DANA disimpan (N8).
---   H4: reward misi female → bonus.
+--   H4: reward misi default bonus (female earned: female_mission_payout_test).
 --   R1: reverse_play_topup — tarik koin pembeli, tahan pembeli+penerima,
 --       withdraw penerima → UNDER_REVIEW; idempoten.
 --   B1: private call tetap ditagih walau flag random_call mati.
@@ -78,7 +78,7 @@ select supabase_tests.check('H2: 3000 + 2500 > 5000 → DAILY_AMOUNT_LIMIT remai
   (select v from _h where k='h2'));
 
 -- ════ H4. Reward misi female → bonus ════
-select supabase_tests.check('H4: claim_mission_reward bucket selalu bonus',
+select supabase_tests.check('H4: claim_mission_reward default bucket bonus (female earned hanya via _mission_payout_eligible)',
   position('v_reward_bucket := ''bonus''' in
     pg_get_functiondef('public.claim_mission_reward'::regproc)) > 0);
 
