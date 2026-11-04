@@ -1,6 +1,6 @@
 -- SNAPSHOT SEMUA fungsi public (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh --all
--- Timestamp: 2026-11-04T12:55:16Z
+-- Timestamp: 2026-11-04T23:10:28Z
 
 -- snapshot-fn: _anon_gate_insert
 CREATE OR REPLACE FUNCTION public._anon_gate_insert()
@@ -2509,7 +2509,9 @@ begin
   if coalesce(auth.email(),'') != 'zunixe@gmail.com' then
     raise exception 'Unauthorized';
   end if;
-  return (select to_jsonb(a) from app_settings a where id = 'global');
+  -- + sisa plafon promo bulan ini (read-only, untuk panel admin).
+  return (select to_jsonb(a) from app_settings a where id = 'global')
+      || jsonb_build_object('promo_budget_left_idr', public.promo_budget_left_idr());
 end; $function$
 
 -- snapshot-fn: admin_ghost_stats
@@ -5112,6 +5114,8 @@ begin
     female_free_call_min_per_day = coalesce((p->>'female_free_call_min_per_day')::int, female_free_call_min_per_day),
     -- ── Anti-fraud: maks transaksi kirim koin/gift per jam ──
     coin_tx_max_per_hour    = coalesce((p->>'coin_tx_max_per_hour')::int, coin_tx_max_per_hour),
+    -- ── Plafon promo bonus (Rp/bulan WIB) — 2026-11-10 ──
+    promo_budget_idr_monthly = greatest(0, coalesce((p->>'promo_budget_idr_monthly')::int, promo_budget_idr_monthly)),
     updated_at = now()
   where id = 'global';
   return (select to_jsonb(a) from app_settings a where id = 'global');

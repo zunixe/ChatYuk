@@ -96,6 +96,8 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
   final Map<String, TextEditingController> _pointCtrls = {};
   final _shareUrlCtrl = TextEditingController();
   bool _pointSettingsLoaded = false;
+  // Sisa plafon promo bonus bulan ini (Rp) — read-only dari server.
+  int? _promoBudgetLeft;
   bool _savingPointSettings = false;
   // Toggle boolean (Switch) pengaturan YukCoin.
   final Map<String, bool> _pointFlags = {};
@@ -123,6 +125,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
     'room_create_pw_paid',
     'room_extend_paid',
     'bonus_price_multiplier',
+    'promo_budget_idr_monthly',
     // ── Gift & subscribe ──
     'gift_cut_pct',
     'subscribe_cut_pct',
@@ -285,6 +288,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
         _pointFlags[key] = data[key] == true;
       }
       _shareUrlCtrl.text = '${data['share_url'] ?? ''}';
+      _promoBudgetLeft = (data['promo_budget_left_idr'] as num?)?.floor();
       if (mounted) setState(() => _pointSettingsLoaded = true);
     } catch (e) {
       dlog('[ADMIN] loadPointSettings error: $e');
@@ -302,7 +306,14 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
       for (final e in _pointFlags.entries) {
         payload[e.key] = e.value;
       }
-      await ProviderScope.containerOf(context, listen: false).read(adminProvider).updatePointSettings(payload);
+      final admin = ProviderScope.containerOf(context, listen: false).read(adminProvider);
+      await admin.updatePointSettings(payload);
+      // Plafon bisa berubah → muat ulang sisa plafon.
+      final fresh = await admin.getPointSettings();
+      if (mounted) {
+        setState(() => _promoBudgetLeft =
+            (fresh['promo_budget_left_idr'] as num?)?.floor());
+      }
       // Sinkron ulang status YukCoin v2 ke provider poin supaya perubahan
       // toggle (mis. membuka jalur topup) langsung terlihat tanpa restart.
       if (mounted) {
@@ -580,6 +591,11 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
                   loaded: _pointSettingsLoaded,
                   shareCtrl: _shareUrlCtrl,
                   fields: _pointFields,
+                  notes: {
+                    if (_promoBudgetLeft != null)
+                      'promo_budget_idr_monthly':
+                          s.adminPromoBudgetLeft(_promoBudgetLeft!),
+                  },
                   ctrls: _pointCtrls,
                   flags: _pointFlags,
                   onFlagChanged: (k, v) => setState(() => _pointFlags[k] = v),

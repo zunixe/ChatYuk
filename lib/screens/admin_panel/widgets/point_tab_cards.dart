@@ -235,6 +235,8 @@ class PointSettingsCard extends StatelessWidget {
   final TextEditingController shareCtrl;
   final List<String> fields;
   final Map<String, TextEditingController> ctrls;
+  // Catatan kecil di bawah baris field tertentu (mis. sisa plafon promo).
+  final Map<String, String> notes;
   final Map<String, bool> flags;
   final void Function(String key, bool value) onFlagChanged;
   final bool saving;
@@ -246,6 +248,7 @@ class PointSettingsCard extends StatelessWidget {
     required this.shareCtrl,
     required this.fields,
     required this.ctrls,
+    this.notes = const {},
     required this.flags,
     required this.onFlagChanged,
     required this.saving,
@@ -323,7 +326,7 @@ class PointSettingsCard extends StatelessWidget {
               style: AppText.caption.copyWith(color: AppTheme.textSecondary),
             ),
           ),
-        for (final f in fields)
+        for (final f in fields) ...[
           Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Row(
@@ -337,7 +340,8 @@ class PointSettingsCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  width: 72,
+                  // Rupiah butuh 6-7 digit.
+                  width: f == 'promo_budget_idr_monthly' ? 96 : 72,
                   child: TextField(
                     controller: ctrls[f],
                     keyboardType: TextInputType.number,
@@ -355,6 +359,15 @@ class PointSettingsCard extends StatelessWidget {
               ],
             ),
           ),
+          if (notes[f] != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 2, bottom: 4),
+              child: Text(
+                notes[f]!,
+                style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+              ),
+            ),
+        ],
         const SizedBox(height: 10),
         SizedBox(
           width: double.infinity,

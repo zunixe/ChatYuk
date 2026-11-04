@@ -468,6 +468,9 @@ extension SAdminX on S {
     'coin_tx_max_per_hour' => isId
         ? 'Maks kirim YukCoin/gift per jam'
         : 'Max YukCoin/gift sends per hour',
+    'promo_budget_idr_monthly' => isId
+        ? 'Plafon promo bonus (Rp/bulan)'
+        : 'Bonus promo budget (Rp/month)',
     _ => key,
   };
 
@@ -527,6 +530,10 @@ extension SAdminX on S {
   String get adminYukcoinV2Off => isId
       ? 'Nonaktif · fitur YukCoin generik disembunyikan dari user'
       : 'Inactive · generic coin features hidden from users';
+
+  String adminPromoBudgetLeft(int idr) => isId
+      ? 'Sisa bulan ini: Rp$idr · 0 = promo bonus mati, hadiah misi female jadi bonus'
+      : 'Left this month: Rp$idr · 0 = bonus promo off, female mission rewards become bonus';
 
   String get adminPointsSystem => isId ? 'Sistem YukCoin' : 'YukCoin System';
 

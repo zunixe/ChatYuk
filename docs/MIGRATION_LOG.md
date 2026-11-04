@@ -1,5 +1,10 @@
 ## 2026-11-10 (b) — Koin bonus untuk fee match (APPLIED 2026-11-04 via API)
 
+### `20261110060000_admin_promo_budget.sql` (APPLIED 2026-11-05)
+- `admin_update_point_settings` menerima `promo_budget_idr_monthly` (min 0);
+  `admin_get_point_settings` + `promo_budget_left_idr`. Panel admin tab Poin:
+  isian plafon + sisa bulan ini. Isi fungsi dari snapshot live (+1 baris).
+
 ### `20261110050000_promo_bonus_spend.sql` (APPLIED 2026-11-04)
 Keputusan user: bonus male bisa untuk call/gift/kirim koin/langganan;
 penghasilan female dari situ bisa ditarik (biaya promosi), plafon Rp300rb/bln.
