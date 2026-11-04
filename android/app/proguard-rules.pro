@@ -62,3 +62,11 @@
 # flutter_webrtc
 -keep class org.webrtc.** { *; }
 -dontwarn org.webrtc.**
+
+# ML Kit text recognition (OCR KYC) — hanya skrip Latin yang dipaketkan;
+# opsi Chinese/Devanagari/Japanese/Korean direferensikan plugin tapi tidak
+# disertakan → R8 gagal "Missing class" tanpa ini.
+-dontwarn com.google.mlkit.vision.text.chinese.**
+-dontwarn com.google.mlkit.vision.text.devanagari.**
+-dontwarn com.google.mlkit.vision.text.japanese.**
+-dontwarn com.google.mlkit.vision.text.korean.**
