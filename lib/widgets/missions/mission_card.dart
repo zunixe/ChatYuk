@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../config/strings.dart';
 import '../../config/theme.dart';
+import '../../providers/riverpod/locale_provider.dart';
 
 /// Card satu misi — progress, reward, status (aktif / selesai / terkunci).
 ///
@@ -44,7 +45,7 @@ class MissionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
+    final s = S(isId: AppLocale.isId);
     final locked = isLocked;
     final done = isCompleted && !locked;
 

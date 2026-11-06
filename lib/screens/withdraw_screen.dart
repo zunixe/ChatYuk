@@ -499,7 +499,7 @@ class _HistoryTile extends StatelessWidget {
       WithdrawStatus.rejected => AppTheme.danger,
       WithdrawStatus.pending => Colors.orange,
     };
-    final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
+    final s = S(isId: AppLocale.isId);
     final statusLabel = switch (request.status) {
       WithdrawStatus.paid => s.wdStatusPaid,
       WithdrawStatus.rejected => s.wdStatusRejected,
@@ -665,7 +665,7 @@ class _ErrorView extends StatelessWidget {
             FilledButton(
               onPressed: onRetry,
               child: Text(
-                S(isId: Localizations.localeOf(context).languageCode == 'id')
+                S(isId: AppLocale.isId)
                     .btnRetry,
               ),
             ),

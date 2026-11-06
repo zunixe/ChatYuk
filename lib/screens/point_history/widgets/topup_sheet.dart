@@ -5,6 +5,7 @@ import '../../../config/strings.dart';
 import '../../../config/theme.dart';
 import '../../../providers/riverpod/points_provider.dart';
 import '../../../providers/riverpod/topup_provider.dart';
+import '../../../providers/riverpod/locale_provider.dart';
 
 /// Bottom sheet pilih paket topup YukCoin (Google Play Billing).
 /// Harga & paket dari server (topup_packages) + product dari Play.
@@ -53,7 +54,7 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
+    final s = S(isId: AppLocale.isId);
     // Tombol beli aktif hanya bila Play Billing tersedia (build Play).
     final canBuy = ref.read(topupProvider).available;
     return SafeArea(

@@ -6,6 +6,7 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../core/nav_gate.dart';
 import '../models/topup_event.dart';
+import '../providers/riverpod/locale_provider.dart';
 
 /// Dialog "koin habis" saat panggilan berjalan.
 ///
@@ -24,7 +25,7 @@ Future<bool> showCallNoCoinDialog(
   Stream<TopupEvent>? topupEvents,
   VoidCallback? onTopupStart,
 }) async {
-  final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
+  final s = S(isId: AppLocale.isId);
 
   final topup = await showDialog<bool>(
     context: context,
@@ -174,7 +175,7 @@ Future<void> showCallFreeLimitDialog(
   required int limitMin,
   required VoidCallback onEnd,
 }) async {
-  final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
+  final s = S(isId: AppLocale.isId);
 
   await showDialog<void>(
     context: context,

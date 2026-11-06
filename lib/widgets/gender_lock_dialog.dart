@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/strings.dart';
 import '../config/theme.dart';
+import '../providers/riverpod/locale_provider.dart';
 
 /// Dialog konfirmasi gender — dipakai saat registrasi & edit profil.
 ///
@@ -15,7 +16,7 @@ Future<bool> confirmGenderLock(
   required String gender, // 'male' | 'female'
   bool isRegister = false,
 }) async {
-  final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
+  final s = S(isId: AppLocale.isId);
   final label = gender == 'female' ? s.labelGenderFemale : s.labelGenderMale;
   final emoji = gender == 'female' ? '👩' : '👨';
 

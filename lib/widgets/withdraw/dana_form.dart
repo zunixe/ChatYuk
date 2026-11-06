@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../config/strings.dart';
 import '../../config/theme.dart';
+import '../../providers/riverpod/locale_provider.dart';
 
 /// Form input akun DANA (nomor + nama pemilik) dengan validasi client.
 class DanaForm extends StatefulWidget {
@@ -54,7 +55,7 @@ class _DanaFormState extends State<DanaForm> {
   }
 
   Future<void> _submit() async {
-    final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
+    final s = S(isId: AppLocale.isId);
     final clean = _validateNumber(_number.text);
     final name = _name.text.trim();
 
@@ -79,7 +80,7 @@ class _DanaFormState extends State<DanaForm> {
 
   @override
   Widget build(BuildContext context) {
-    final s = S(isId: Localizations.localeOf(context).languageCode == 'id');
+    final s = S(isId: AppLocale.isId);
 
     return Form(
       key: _formKey,
