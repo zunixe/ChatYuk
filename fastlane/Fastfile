@@ -4,8 +4,10 @@
 #   - Plugin: `fastlane add_plugin fastlane-plugin-json_key` (opsional)
 #
 # Pemakaian:
-#   fastlane play track:alpha     -> build AAB + upload ke track alpha (pengujian tertutup)
-#   fastlane play track:production-> build AAB + upload ke track production (release)
+#   1) flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
+#        --dart-define=TIKTOK_ACCESS_TOKEN=... --obfuscate --split-debug-info=build/app/symbols
+#   2) fastlane play_upload track:alpha        (atau track:production)
+#   JANGAN `fastlane play`: lane itu dinonaktifkan (gradle polos = tanpa dart-define).
 
 default_platform(:android)
 
@@ -19,26 +21,9 @@ platform :android do
     sh("test -f scripts/check_google_signin.sh && bash scripts/check_google_signin.sh || bash ../scripts/check_google_signin.sh")
   end
 
-  desc "Build AAB flavor play (obfuscated) lalu upload ke track"
+  desc "DINONAKTIFKAN — pakai flutter build appbundle + play_upload"
   lane :play do |options|
-    track = options[:track] || "alpha"
-    check_signin
-
-    gradle(
-      task: "bundlePlayProdRelease",
-      project_dir: "android"
-    )
-
-    upload_to_play_store(
-      package_name: "com.chatyuk.chatyuk",
-      track: track,
-      aab: "build/app/outputs/bundle/playProdRelease/app-play-prod-release.aab",
-      json_key: "fastlane/google-play.json",
-      release_status: "completed",
-      skip_upload_metadata: true,
-      skip_upload_images: true,
-      skip_upload_screenshots: true
-    )
+    UI.user_error!("Lane `play` dinonaktifkan: gradle polos menghilangkan --dart-define (APP_FLAVOR jadi apkpure, top-up mati), obfuscate & token TikTok (insiden 1.2.75+116). Build lewat `flutter build appbundle ... --dart-define=APP_FLAVOR=play --obfuscate` lalu `fastlane play_upload track:#{options[:track] || 'alpha'}`.")
   end
 
   desc "Upload AAB yang sudah di-build flutter (obfuscated) TANPA rebuild gradle — gradle rebuild menghapus obfuscation Dart"

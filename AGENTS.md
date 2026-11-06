@@ -524,8 +524,11 @@ baru) atau plugin native berubah. Untuk perubahan kode Dart murni, pakai cara di
 Upload AAB otomatis ke Google Play (flavor play) pakai fastlane:
 
 ```bash
-fastlane play track:alpha      # upload ke track "Pengujian tertutup - Alpha"
-fastlane play track:production # upload ke production (release)
+# 1) build AAB dulu (prosedur "AAB untuk Google Play" di atas, flag lengkap), lalu:
+fastlane play_upload track:alpha      # upload ke "Pengujian tertutup - Alpha"
+fastlane play_upload track:production # upload ke production (release)
+# JANGAN `fastlane play`: lane dinonaktifkan — gradle polos membuang --dart-define
+# (APP_FLAVOR jadi apkpure → top-up mati), obfuscate & token TikTok (insiden 1.2.75+116).
 ```
 
 Syarat:
@@ -572,7 +575,7 @@ VersionCode hanya boleh dipakai ulang sekali untuk Google Play; kalau di-bump ti
 
 Aturan:
 - Build untuk **install ke HP / APKPure** → **tidak usah bump**. Pakai versi yang sedang aktif di `pubspec.yaml`.
-- **Hanya sebelum `fastlane play track:...`** → bump `version:` lalu `flutter clean` → `flutter build appbundle --flavor play` → upload.
+- **Hanya sebelum `fastlane play_upload track:...`** → bump `version:` lalu `flutter clean` → `flutter build appbundle --flavor playProd` (flag lengkap) → upload.
 - Setelah upload, biarkan versi baru itu tetap aktif sampai upload berikutnya.
 
 ### Cara menentukan versi berikutnya (WAJIB — agar berurutan walau AI beda)
