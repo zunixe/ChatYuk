@@ -547,18 +547,8 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                                   );
                                 },
                               ),
-                            // Info slot foto hanya relevan bila sistem
-                            // koin aktif (biaya per slot). Saat OFF, upload
-                            // foto gratis → baris ini disembunyikan.
-                            if (pointsOn)
-                              Text(
-                                '${s.extraPhotoSlotsLabel}: ${4 + extraSlots}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppText.caption.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.85),
-                                ),
-                              ),
+                            // Slot foto tidak lagi dibeli pakai koin —
+                            // kapasitas sudah tampil di "Foto Saya".
                           ],
                         ),
                       ),

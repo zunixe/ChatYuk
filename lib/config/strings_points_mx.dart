@@ -265,8 +265,8 @@ mixin SPointsMx {
   String get walletPaid => isId ? 'Isi ulang' : 'Topped up';
   String get walletEarned => isId ? 'Penghasilan' : 'Earnings';
   String get walletBucketsHint => isId
-      ? 'Koin isi ulang/penghasilan dipakai lebih dulu. Bonus bisa menambal call, gift, kirim koin & langganan dengan harga ×3 (promo terbatas).'
-      : 'Topped-up/earned coins are used first. Bonus coins can cover calls, gifts, coin transfers & subscriptions at 3× the price (limited promo).';
+      ? 'Isi ulang dipakai duluan. Kalau kurang, bonus menambal dengan harga ×3.'
+      : 'Topped-up coins are used first. If short, bonus covers the rest at 3× the price.';
 
   // ── YukCoin v2 (halaman & fitur berbayar) ──
   String get yukcoinTitle => isId ? 'YukCoin' : 'YukCoin';

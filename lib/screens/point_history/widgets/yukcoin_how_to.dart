@@ -135,7 +135,15 @@ class YukcoinHowTo extends ConsumerWidget {
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: AppTheme.divider),
     ),
-    child: Column(children: children),
+    child: Column(
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0)
+            Divider(height: 1, thickness: 0.5, indent: 46, color: AppTheme.divider),
+          children[i],
+        ],
+      ],
+    ),
   );
 
   Widget _row(
@@ -171,16 +179,24 @@ class YukcoinHowTo extends ConsumerWidget {
             ],
           ),
         ),
-        const SizedBox(width: 8),
-        Text(
-          value,
-          style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
-        ),
-        if (trailing != null) ...[
-          const SizedBox(width: 6),
-          Text(
-            trailing,
-            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+        if (value.isNotEmpty) ...[
+          const SizedBox(width: 12),
+          // Angka di atas, satuan di bawah — rata kanan supaya sejajar.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
+              ),
+              if (trailing != null)
+                Text(
+                  trailing,
+                  style: AppText.caption.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+            ],
           ),
         ],
       ],

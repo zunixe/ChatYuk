@@ -70,7 +70,7 @@ class YukcoinHeader extends StatelessWidget {
             ),
           ),
           if (buckets != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             YukcoinBucketsText(
               s: s,
               bonus: buckets!.bonus,

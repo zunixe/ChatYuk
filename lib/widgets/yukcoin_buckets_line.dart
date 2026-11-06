@@ -21,6 +21,10 @@ class YukcoinBucketsText extends StatelessWidget {
   final bool showHint;
   final Color onColor;
 
+  /// true = kotak per jenis koin (kartu YukCoin); false = satu baris ringkas
+  /// (kartu profil yang sempit).
+  final bool tiles;
+
   const YukcoinBucketsText({
     super.key,
     required this.s,
@@ -29,32 +33,104 @@ class YukcoinBucketsText extends StatelessWidget {
     required this.earned,
     this.showHint = true,
     this.onColor = Colors.white,
+    this.tiles = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final parts = [
-      '${s.walletBonus} ${formatPoints(bonus)}',
-      '${s.walletPaid} ${formatPoints(topup)}',
-      if (earned > 0) '${s.walletEarned} ${formatPoints(earned)}',
+    final items = [
+      (label: s.walletPaid, value: topup),
+      if (earned > 0) (label: s.walletEarned, value: earned),
+      (label: s.walletBonus, value: bonus),
     ];
+    final hint = showHint
+        ? Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: onColor.withValues(alpha: 0.8),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    s.walletBucketsHint,
+                    style: AppText.caption.copyWith(
+                      color: onColor.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        : null;
+    if (!tiles) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Wrap: tiap jenis koin utuh, pindah baris bila sempit (tidak "…").
+          Wrap(
+            spacing: 10,
+            children: [
+              for (final e in items)
+                Text(
+                  '${e.label} ${formatPoints(e.value)}',
+                  style: AppText.caption.copyWith(
+                    color: onColor.withValues(alpha: 0.9),
+                  ),
+                ),
+            ],
+          ),
+          ?hint,
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          parts.join('  ·  '),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppText.caption.copyWith(color: onColor.withValues(alpha: 0.9)),
+        Row(
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: onColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        items[i].label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.caption.copyWith(
+                          color: onColor.withValues(alpha: 0.85),
+                        ),
+                      ),
+                      Text(
+                        formatPoints(items[i].value),
+                        maxLines: 1,
+                        style: AppText.bodyStrong.copyWith(color: onColor),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
-        if (showHint) ...[
-          const SizedBox(height: 2),
-          Text(
-            s.walletBucketsHint,
-            style: AppText.caption.copyWith(color: onColor.withValues(alpha: 0.75)),
-          ),
-        ],
+        ?hint,
       ],
     );
   }
@@ -78,6 +154,7 @@ class YukcoinBucketsLine extends ConsumerWidget {
       topup: b.topup,
       earned: b.earned,
       showHint: showHint,
+      tiles: false,
     );
   }
 }
