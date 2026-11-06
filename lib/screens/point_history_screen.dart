@@ -25,7 +25,10 @@ class PointHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
-  PointsNotifier get _service => ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+  PointsNotifier get _service => ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(pointsProvider.notifier);
   bool _loading = true;
   List<Map<String, dynamic>> _items = [];
   // Paginasi + cache disk.
@@ -130,7 +133,10 @@ class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
         ),
       ),
     );
-    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+    final points = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier);
     return Scaffold(
       appBar: AppBar(title: Text(s.yukcoinTitle)),
       body: _loading
@@ -160,6 +166,7 @@ class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
                           (AppFlavor.topupEnabled ||
                               AdminGate.enabled ||
                               pointsSnap.topup),
+                      canTopup: currentGender != 'female',
                     ),
                   ),
                   // Cara dapat & cara pakai.
@@ -213,7 +220,8 @@ class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
                       itemCount: _items.length,
                       separatorBuilder: (_, i) =>
                           const Divider(height: 1, indent: 64),
-                      itemBuilder: (_, i) => HistoryTile(entry: _items[i], s: s),
+                      itemBuilder: (_, i) =>
+                          HistoryTile(entry: _items[i], s: s),
                     ),
                   if (_hasMore && _items.isNotEmpty)
                     const SliverToBoxAdapter(

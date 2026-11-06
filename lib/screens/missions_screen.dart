@@ -177,33 +177,26 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen> {
                                 .length,
                             st.mainMissions.length,
                           ),
+                    // Female: "x/y selesai" di samping judul supaya tidak
+                    // berebut tempat dengan counter nyonya (dulu overflow).
+                    subtitle: st.nyonyaMission != null
+                        ? s.missionsCompletedCount(
+                            st.mainMissions
+                                .where((m) => m.isCompleted)
+                                .length,
+                            st.mainMissions.length,
+                          )
+                        : null,
                     trailingWidget: st.nyonyaMission != null
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _NyonyaCounter(
-                                s: s,
-                                mission: st.nyonyaMission!,
-                                onClaim: st.nyonyaMission!.canClaim
-                                    ? () => _claimMission(
-                                        st.nyonyaMission!.missionKey,
-                                        st.nyonyaMission!.rewardCoins,
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                s.missionsCompletedCount(
-                                  st.mainMissions
-                                      .where((m) => m.isCompleted)
-                                      .length,
-                                  st.mainMissions.length,
-                                ),
-                                style: AppText.caption.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
+                        ? _NyonyaCounter(
+                            s: s,
+                            mission: st.nyonyaMission!,
+                            onClaim: st.nyonyaMission!.canClaim
+                                ? () => _claimMission(
+                                    st.nyonyaMission!.missionKey,
+                                    st.nyonyaMission!.rewardCoins,
+                                  )
+                                : null,
                           )
                         : null,
                   ),
@@ -426,12 +419,14 @@ class _SectionHeader extends StatelessWidget {
   final Color color;
   final String title;
   final String? trailing;
+  final String? subtitle;
   final Widget? trailingWidget;
   const _SectionHeader({
     required this.icon,
     required this.color,
     required this.title,
     this.trailing,
+    this.subtitle,
     this.trailingWidget,
   });
 
@@ -447,9 +442,16 @@ class _SectionHeader extends StatelessWidget {
             title,
             style: AppText.label.copyWith(color: AppTheme.textPrimary),
           ),
+          if (subtitle != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              subtitle!,
+              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+            ),
+          ],
           const Spacer(),
           if (trailingWidget != null)
-            Flexible(child: trailingWidget!)
+            trailingWidget!
           else if (trailing != null)
             Flexible(
               child: Text(

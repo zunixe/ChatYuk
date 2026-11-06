@@ -1,6 +1,5 @@
 part of '../profile_screen.dart';
 
-
 /// Seksi lanjutan halaman Profil: Foto Saya, Akun, Lainnya, poin, footer.
 mixin _ProfileUiSections2Mx on _ProfileBase {
   /// [6] FOTO SAYA — tile Tambah + foto (92x116) horizontal.
@@ -480,128 +479,137 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
               child: InkWell(
                 onTap: openHistory,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
-                  child: Row(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.22),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          // Akun anonim: poin bisa hilang → ikon gembok.
-                          isAnon
-                              ? Icons.lock_outlined
-                              : Icons.monetization_on_outlined,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s.walletTotal,
-                              style: AppText.caption.copyWith(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            Text(
-                              formatPoints(points),
-                              style: AppText.display.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
-                            if (pointsOn)
-                              const YukcoinBucketsLine(showHint: false),
-                            // Estimasi fiat koin EARNED (yang bisa ditarik):
-                            // Rp untuk pengguna Indonesia, US$ selainnya.
-                            // Rate dari server (get_withdraw_config) — bukan
-                            // angka hardcode. Female only — `earned` male
-                            // selalu 0 (male tak punya pendapatan call).
-                            if (pointsOn && showFiatEst)
-                              rv.Consumer(
-                                builder: (_, ref2, _) {
-                                  final wd = ref2.watch(withdrawProvider);
-                                  final gross =
-                                      wd.earnedBalance * wd.config.rate;
-                                  return Text(
-                                    s.walletEstFiat(
-                                      '${formatPoints(wd.earnedBalance)} 🪙',
-                                      formatFiatEstimate(
-                                        gross,
-                                        isId: s.isId,
-                                      ),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppText.caption.copyWith(
-                                      color: Colors.white
-                                          .withValues(alpha: 0.85),
-                                    ),
-                                  );
-                                },
-                              ),
-                            // Slot foto tidak lagi dibeli pakai koin —
-                            // kapasitas sudah tampil di "Foto Saya".
-                          ],
-                        ),
-                      ),
-                      // Tombol diletakkan di Row sendiri dengan tap-target
-                      // penuh: IconButton 48dp lebih tinggi dari isi kartu,
-                      // jadi tap di atas/bawah ikon dulu jatuh ke InkWell
-                      // kartu (buka riwayat padahal maksudnya "+ Slot").
                       Row(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Halaman Bonus (sign-in streak + tugas) — male
-                          // saja (female tidak dapat tetesan gratis; misi
-                          // tetap terbuka lewat kartu Misi).
-                          if (canTopup)
-                            IconButton(
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const MissionsScreen(),
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.22),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              // Akun anonim: poin bisa hilang → ikon gembok.
+                              isAnon
+                                  ? Icons.lock_outlined
+                                  : Icons.monetization_on_outlined,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.walletTotal,
+                                  style: AppText.caption.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  formatPoints(points),
+                                  style: AppText.display.copyWith(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Tombol diletakkan di Row sendiri dengan tap-target
+                          // penuh: IconButton 48dp lebih tinggi dari isi kartu,
+                          // jadi tap di atas/bawah ikon dulu jatuh ke InkWell
+                          // kartu (buka riwayat padahal maksudnya "+ Slot").
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Halaman Bonus (sign-in streak + tugas) — male
+                              // saja (female tidak dapat tetesan gratis; misi
+                              // tetap terbuka lewat kartu Misi).
+                              if (canTopup)
+                                IconButton(
+                                  onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const MissionsScreen(),
+                                    ),
+                                  ),
+                                  tooltip: s.bonusTitle,
+                                  icon: const Icon(
+                                    Icons.redeem_rounded,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                ),
+                              // Top-up YukCoin (Google Play Billing).
+                              // Female tidak top-up — koinnya dari lawan bicara.
+                              if (canTopup)
+                                IconButton(
+                                  onPressed: () => _openTopupSheet(context, s),
+                                  tooltip: s.yukcoinTopup,
+                                  icon: const Icon(
+                                    Icons.add_shopping_cart,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                ),
+                              // "Beli slot foto" DISEMBUNYIKAN: slot tambahan
+                              // sekarang gratis (poin hanya untuk call/gift).
+                              IconButton(
+                                onPressed: openHistory,
+                                tooltip: s.pointHistoryTitle,
+                                icon: const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.white,
+                                  size: 22,
                                 ),
                               ),
-                              tooltip: s.bonusTitle,
-                              icon: const Icon(
-                                Icons.redeem_rounded,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                            ),
-                          // Top-up YukCoin (Google Play Billing).
-                          // Female tidak top-up — koinnya dari lawan bicara.
-                          if (canTopup)
-                            IconButton(
-                              onPressed: () => _openTopupSheet(context, s),
-                              tooltip: s.yukcoinTopup,
-                              icon: const Icon(
-                                Icons.add_shopping_cart,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                            ),
-                          // "Beli slot foto" DISEMBUNYIKAN: slot tambahan
-                          // sekarang gratis (poin hanya untuk call/gift).
-                          IconButton(
-                            onPressed: openHistory,
-                            tooltip: s.pointHistoryTitle,
-                            icon: const Icon(
-                              Icons.chevron_right,
-                              color: Colors.white,
-                              size: 22,
-                            ),
+                            ],
                           ),
                         ],
                       ),
+                      if (pointsOn) ...[
+                        const SizedBox(height: 10),
+                        YukcoinBucketsLine(
+                          showHint: false,
+                          tiles: true,
+                          canTopup: canTopup,
+                        ),
+                      ],
+                      // Estimasi fiat koin EARNED (yang bisa ditarik):
+                      // Rp untuk pengguna Indonesia, US$ selainnya.
+                      // Rate dari server (get_withdraw_config) — bukan
+                      // angka hardcode. Female only — `earned` male
+                      // selalu 0 (male tak punya pendapatan call).
+                      if (pointsOn && showFiatEst)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: rv.Consumer(
+                            builder: (_, ref2, _) {
+                              final wd = ref2.watch(withdrawProvider);
+                              final gross = wd.earnedBalance * wd.config.rate;
+                              return Text(
+                                s.walletEstFiat(
+                                  '${formatPoints(wd.earnedBalance)} 🪙',
+                                  formatFiatEstimate(gross, isId: s.isId),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppText.caption.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      // Slot foto tidak lagi dibeli pakai koin —
+                      // kapasitas sudah tampil di "Foto Saya".
                     ],
                   ),
                 ),
@@ -638,16 +646,15 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
     );
   }
 
-
   /// Buka sheet top-up YukCoin (wiring `main.dart` → `NavGate.topupSheet`).
   void _openTopupSheet(BuildContext context, S s) {
     final show = NavGate.topupSheet;
     if (show != null) {
       show(context, s);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.yukcoinTopupSoon)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.yukcoinTopupSoon)));
     }
   }
 

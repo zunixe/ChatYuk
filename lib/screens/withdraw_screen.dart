@@ -318,12 +318,28 @@ class _WithdrawableCard extends StatelessWidget {
             '≈ ${rupiah.format(earned * rate)}',
             style: AppText.bodyStrong.copyWith(color: Colors.white),
           ),
-          const SizedBox(height: 4),
-          Text(
-            s.wdWithdrawableHint,
-            style: AppText.caption.copyWith(
-              color: Colors.white.withValues(alpha: 0.85),
-            ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: Colors.white.withValues(alpha: 0.9),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  s.wdWithdrawableHint,
+                  style: AppText.caption.copyWith(
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -150,7 +150,7 @@ void main() {
       state: _state(gender: 'female', main: [nyonya, _m('like_posts')]),
     );
     // Judul misi tidak jadi baris; progresnya jadi counter di header,
-    // counter "x/y selesai" tetap ada berdampingan (rata kanan).
+    // counter "x/y selesai" tetap ada (di samping judul).
     expect(find.text('Misi Nyonya'), findsNothing);
     expect(find.text('0/1000'), findsOneWidget);
     expect(find.text('0/2 selesai'), findsOneWidget);

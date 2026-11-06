@@ -637,7 +637,8 @@ mixin SPointsMx {
       isId ? 'Terkunci' : 'Locked';
 
   // ── Halaman Bonus (ala Vava, male) ──
-  String get bonusTitle => isId ? 'Bonus' : 'Bonus';
+  // Halaman tugas/misi (dulu "Bonus" — tertukar dengan saldo Bonus).
+  String get bonusTitle => isId ? 'Misi' : 'Missions';
   String get bonusSignInRewards =>
       isId ? 'Hadiah Masuk Harian' : 'Sign in rewards';
   String bonusDay(int n) => isId ? 'Hari $n' : 'Day $n';
@@ -649,7 +650,7 @@ mixin SPointsMx {
       isId ? 'Sudah klaim hari ini, kembali besok' : 'Already claimed, come back tomorrow';
   String get bonusBeginnerTasks =>
       isId ? 'Tugas Pemula' : 'Beginner Tasks';
-  String get bonusDailyBonus => isId ? 'Bonus Harian' : 'Daily Bonus';
+  String get bonusDailyBonus => isId ? 'Misi Harian' : 'Daily Missions';
   String get bonusDailyNote => isId
       ? 'Tugas direset setiap hari. Klaim hadiahmu segera setelah tugas selesai.'
       : 'Tasks reset daily. Claim your rewards promptly after completing the tasks.';
@@ -722,8 +723,8 @@ mixin SPointsMx {
   // 2026-11-02: hanya koin PENGHASILAN (bucket earned) yang bisa ditarik.
   // Koin bonus (gratis) menaikkan saldo total tapi tidak bisa dicairkan.
   String get wdWithdrawableHint => isId
-      ? 'Hanya YukCoin penghasilan yang bisa ditarik ke DANA'
-      : 'Only earned YukCoin can be withdrawn to DANA';
+      ? 'Hanya koin penghasilan yang bisa ditarik ke DANA.'
+      : 'Only earned coins can be withdrawn to DANA.';
   String get wdTotalBalance => isId ? 'Total Saldo' : 'Total Balance';
   String get wdNotWithdrawable =>
       isId ? 'Tidak bisa ditarik' : 'Not withdrawable';
@@ -804,8 +805,8 @@ mixin SPointsMx {
       ? 'Sebagian penghasilan masih dalam masa tahan $days hari. Yang bisa ditarik sekarang: $available YukCoin'
       : 'Part of your earnings is still in the $days-day hold period. Withdrawable now: $available YukCoin';
   String wdHeldInfo(int held, int days) => isId
-      ? '$held YukCoin masih ditahan (penghasilan $days hari terakhir)'
-      : '$held YukCoin on hold (earnings from the last $days days)';
+      ? '$held 🪙 ditahan $days hari sebelum bisa ditarik.'
+      : '$held 🪙 on hold for $days days before withdrawal.';
   String wdDailyAmount(int remaining) => isId
       ? 'Melewati batas nominal harian. Sisa hari ini: $remaining YukCoin'
       : 'Over the daily amount limit. Remaining today: $remaining YukCoin';

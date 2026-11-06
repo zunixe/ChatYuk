@@ -13,12 +13,17 @@ class YukcoinHeader extends StatelessWidget {
   /// Rincian per jenis koin (null = tidak ditampilkan).
   final ({int bonus, int topup, int earned})? buckets;
 
+  /// false = user tidak bisa top-up (female) — bucket `Isi ulang`
+  /// disembunyikan; `Bonus` & `Penghasilan` tetap tampil.
+  final bool canTopup;
+
   const YukcoinHeader({
     super.key,
     required this.s,
     required this.total,
     this.showTopup = false,
     this.buckets,
+    this.canTopup = true,
   });
 
   @override
@@ -28,10 +33,7 @@ class YukcoinHeader extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            AppTheme.primary,
-            AppTheme.primary.withValues(alpha: 0.75),
-          ],
+          colors: [AppTheme.primary, AppTheme.primary.withValues(alpha: 0.75)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -58,10 +60,7 @@ class YukcoinHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            '$total',
-            style: AppText.display.copyWith(color: Colors.white),
-          ),
+          Text('$total', style: AppText.display.copyWith(color: Colors.white)),
           const SizedBox(height: 2),
           Text(
             s.yukcoinTitle,
@@ -76,6 +75,7 @@ class YukcoinHeader extends StatelessWidget {
               bonus: buckets!.bonus,
               topup: buckets!.topup,
               earned: buckets!.earned,
+              canTopup: canTopup,
             ),
           ],
           if (showTopup) ...[

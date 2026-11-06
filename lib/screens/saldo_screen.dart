@@ -19,16 +19,18 @@ class SaldoScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(localeProvider).s;
     final state = ref.watch(earningsProvider);
-    final wd = ref.watch(withdrawProvider.select(
-      (w) => (
-        can: w.canWithdraw,
-        min: w.config.minCoins,
-        earned: w.earnedBalance,
-        loading: w.loading,
-        rate: w.config.rate,
-        requireKyc: w.config.requireKyc,
+    final wd = ref.watch(
+      withdrawProvider.select(
+        (w) => (
+          can: w.canWithdraw,
+          min: w.config.minCoins,
+          earned: w.earnedBalance,
+          loading: w.loading,
+          rate: w.config.rate,
+          requireKyc: w.config.requireKyc,
+        ),
       ),
-    ));
+    );
     final kyc = ref.watch(kycProvider);
 
     return Scaffold(
@@ -40,7 +42,10 @@ class SaldoScreen extends ConsumerWidget {
       body: state.loading
           ? const Center(child: CircularProgressIndicator())
           : state.error != null
-          ? _ErrorView(s: s, onRetry: () => ref.read(earningsProvider.notifier).refresh())
+          ? _ErrorView(
+              s: s,
+              onRetry: () => ref.read(earningsProvider.notifier).refresh(),
+            )
           : RefreshIndicator(
               onRefresh: () => ref.read(earningsProvider.notifier).refresh(),
               child: ListView(
@@ -67,11 +72,11 @@ class SaldoScreen extends ConsumerWidget {
                     child: FilledButton.icon(
                       onPressed: wd.can
                           ? () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const WithdrawScreen(),
-                                ),
-                              )
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const WithdrawScreen(),
+                              ),
+                            )
                           : null,
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF2ECC71),
@@ -92,8 +97,9 @@ class SaldoScreen extends ConsumerWidget {
                           wd.min,
                           (wd.min - wd.earned).clamp(0, wd.min),
                         ),
-                        style: AppText.caption
-                            .copyWith(color: AppTheme.textSecondary),
+                        style: AppText.caption.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                     ),
                   const SizedBox(height: 14),
@@ -102,8 +108,9 @@ class SaldoScreen extends ConsumerWidget {
                     padding: const EdgeInsets.only(left: 4, bottom: 6),
                     child: Text(
                       s.saldoTotalHint,
-                      style: AppText.caption
-                          .copyWith(color: AppTheme.textSecondary),
+                      style: AppText.caption.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
                   ),
                   Row(
@@ -195,22 +202,22 @@ class _SaldoKycCard extends StatelessWidget {
     final pending = kyc.isPending;
     final (icon, color, text) = switch (kyc.status) {
       'pending' => (
-          Icons.hourglass_top_outlined,
-          Colors.orange,
-          s.kycPendingBody,
-        ),
+        Icons.hourglass_top_outlined,
+        Colors.orange,
+        s.kycPendingBody,
+      ),
       'rejected' => (
-          Icons.error_outline,
-          AppTheme.danger,
-          kyc.rejectReason != null && kyc.rejectReason!.isNotEmpty
-              ? '${s.kycRejectedTitle} — ${s.kycRejectedReason(kyc.rejectReason!)}'
-              : s.kycRejectedTitle,
-        ),
+        Icons.error_outline,
+        AppTheme.danger,
+        kyc.rejectReason != null && kyc.rejectReason!.isNotEmpty
+            ? '${s.kycRejectedTitle} — ${s.kycRejectedReason(kyc.rejectReason!)}'
+            : s.kycRejectedTitle,
+      ),
       _ => (
-          Icons.verified_user_outlined,
-          AppTheme.primary,
-          s.kycBannerWithdraw,
-        ),
+        Icons.verified_user_outlined,
+        AppTheme.primary,
+        s.kycBannerWithdraw,
+      ),
     };
 
     return Padding(
@@ -229,8 +236,7 @@ class _SaldoKycCard extends StatelessWidget {
             Expanded(
               child: Text(
                 text,
-                style:
-                    AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
+                style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
               ),
             ),
             if (!pending) ...[
@@ -291,8 +297,7 @@ class _BalanceCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.savings_outlined,
-                  color: Colors.white, size: 20),
+              const Icon(Icons.savings_outlined, color: Colors.white, size: 20),
               const SizedBox(width: 8),
               Text(
                 s.wdWithdrawable,
@@ -305,15 +310,9 @@ class _BalanceCard extends StatelessWidget {
             '$_headline 🪙',
             style: AppText.display.copyWith(color: Colors.white),
           ),
-          Text(
-            s.wdWithdrawableHint,
-            style: AppText.caption.copyWith(
-              color: Colors.white.withValues(alpha: 0.85),
-            ),
-          ),
+          const SizedBox(height: 2),
           // Estimasi nilai fiat dari rate server (get_withdraw_config) —
           // gambaran kasar sebelum withdraw; bukan janji payout.
-          const SizedBox(height: 4),
           Text(
             '≈ ${formatFiatEstimate(withdrawable * rate, isId: s.isId)}',
             style: AppText.caption.copyWith(
@@ -321,41 +320,68 @@ class _BalanceCard extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          if (held > 0) ...[
-            const SizedBox(height: 6),
-            Row(
+          const SizedBox(height: 10),
+          // Keterangan sekunder dikelompokkan satu kotak translusen supaya
+          // tidak berderet longgar di bawah headline.
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.lock_clock_outlined,
-                    size: 14, color: Colors.white.withValues(alpha: 0.9)),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
+                _InfoLine(Icons.info_outline, s.wdWithdrawableHint),
+                if (held > 0)
+                  _InfoLine(
+                    Icons.lock_clock_outlined,
                     s.wdHeldInfo(held, holdDays),
-                    style: AppText.caption.copyWith(
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
                   ),
-                ),
+                // Total semua bucket ditampilkan terpisah supaya tidak
+                // tertukar dengan angka yang benar-benar bisa ditarik.
+                if (totalBalance != withdrawable)
+                  _InfoLine(
+                    Icons.account_balance_wallet_outlined,
+                    '${s.wdTotalBalance}: $totalBalance 🪙',
+                  ),
               ],
             ),
-          ],
-          // Total semua bucket ditampilkan terpisah supaya tidak tertukar
-          // dengan angka yang benar-benar bisa ditarik.
-          if (totalBalance != withdrawable) ...[
-            const SizedBox(height: 6),
-            Text(
-              '${s.wdTotalBalance}: $totalBalance 🪙',
-              style: AppText.caption.copyWith(
-                color: Colors.white.withValues(alpha: 0.75),
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
   }
 }
 
+/// Baris keterangan di kotak translusen kartu saldo: ikon + teks, rata.
+class _InfoLine extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _InfoLine(this.icon, this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Colors.white.withValues(alpha: 0.92);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(icon, size: 14, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: AppText.caption.copyWith(color: color)),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _SectionTitle extends StatelessWidget {
   final String text;
@@ -441,9 +467,7 @@ class _Row extends StatelessWidget {
       decoration: BoxDecoration(
         border: last
             ? null
-            : Border(
-                bottom: BorderSide(color: AppTheme.divider, width: 0.6),
-              ),
+            : Border(bottom: BorderSide(color: AppTheme.divider, width: 0.6)),
       ),
       child: Row(
         children: [
@@ -478,9 +502,7 @@ class _InfoRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: last
             ? null
-            : Border(
-                bottom: BorderSide(color: AppTheme.divider, width: 0.6),
-              ),
+            : Border(bottom: BorderSide(color: AppTheme.divider, width: 0.6)),
       ),
       child: Row(
         children: [

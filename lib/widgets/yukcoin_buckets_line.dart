@@ -25,6 +25,10 @@ class YukcoinBucketsText extends StatelessWidget {
   /// (kartu profil yang sempit).
   final bool tiles;
 
+  /// false = user tidak bisa top-up (female): bucket `Isi ulang` memang
+  /// tidak ada untuknya — `Bonus` & `Penghasilan` tetap tampil.
+  final bool canTopup;
+
   const YukcoinBucketsText({
     super.key,
     required this.s,
@@ -34,16 +38,19 @@ class YukcoinBucketsText extends StatelessWidget {
     this.showHint = true,
     this.onColor = Colors.white,
     this.tiles = true,
+    this.canTopup = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final items = [
-      (label: s.walletPaid, value: topup),
+      if (canTopup) (label: s.walletPaid, value: topup),
       if (earned > 0) (label: s.walletEarned, value: earned),
       (label: s.walletBonus, value: bonus),
     ];
-    final hint = showHint
+    if (items.isEmpty) return const SizedBox.shrink();
+    // Hint menjelaskan mekanik top-up/bonus — tak relevan untuk female.
+    final hint = showHint && canTopup
         ? Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Row(
@@ -102,7 +109,10 @@ class YukcoinBucketsText extends StatelessWidget {
               if (i > 0) const SizedBox(width: 8),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: onColor.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(10),
@@ -139,13 +149,29 @@ class YukcoinBucketsText extends StatelessWidget {
 /// Versi yang membaca saldo dari [pointsProvider] (kartu profil).
 class YukcoinBucketsLine extends ConsumerWidget {
   final bool showHint;
-  const YukcoinBucketsLine({super.key, this.showHint = true});
+
+  /// true = kotak per jenis koin; false = satu baris ringkas.
+  final bool tiles;
+
+  /// false = user tidak bisa top-up (female) — `Isi ulang` disembunyikan.
+  final bool canTopup;
+
+  const YukcoinBucketsLine({
+    super.key,
+    this.showHint = true,
+    this.tiles = false,
+    this.canTopup = true,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final b = ref.watch(
       pointsProvider.select(
-        (p) => (bonus: p.bonusBalance, topup: p.topupBalance, earned: p.earnedBalance),
+        (p) => (
+          bonus: p.bonusBalance,
+          topup: p.topupBalance,
+          earned: p.earnedBalance,
+        ),
       ),
     );
     return YukcoinBucketsText(
@@ -154,7 +180,8 @@ class YukcoinBucketsLine extends ConsumerWidget {
       topup: b.topup,
       earned: b.earned,
       showHint: showHint,
-      tiles: false,
+      tiles: tiles,
+      canTopup: canTopup,
     );
   }
 }
