@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/theme.dart';
 import '../models/room_model.dart';
+import '../models/room_session_model.dart';
 import '../core/nav_guard.dart';
 import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/room_provider.dart';
+import '../providers/riverpod/room_session_provider.dart';
 import '../providers/riverpod/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import 'room_chat_screen.dart';
@@ -129,6 +131,26 @@ class _RoomsExploreScreenState extends ConsumerState<RoomsExploreScreen> {
         : rp.exploreRooms;
     final isRame = exploreCategory == 'rame' && !searching;
 
+    // Room v2: sesi terjadwal/live per room. Muat sekali per daftar room
+    // (cooldown 20 dtk di notifier); live didahulukan di urutan.
+    final sessions = ref.watch(roomSessionProvider).byRoom;
+    ref.watch(roomProvider.select((rp) => rp.exploreSig));
+    if (rooms.isNotEmpty) {
+      Future.microtask(() => ref
+          .read(roomSessionProvider.notifier)
+          .loadFor(rooms.map((r) => r.id).toList()));
+    }
+    final idx = {for (var i = 0; i < rooms.length; i++) rooms[i].id: i};
+    final ordered = [...rooms]..sort((a, b) {
+        final sa = sessions[a.id];
+        final sb = sessions[b.id];
+        final aLive = (sa?.isLive ?? false) || a.isLive;
+        final bLive = (sb?.isLive ?? false) || b.isLive;
+        if (aLive != bLive) return aLive ? -1 : 1;
+        if ((sa != null) != (sb != null)) return sa != null ? -1 : 1;
+        return (idx[a.id] ?? 0).compareTo(idx[b.id] ?? 0);
+      });
+
     return Stack(
       children: [
         Column(
@@ -140,7 +162,8 @@ class _RoomsExploreScreenState extends ConsumerState<RoomsExploreScreen> {
             ),
             const SizedBox(height: 4),
             Expanded(
-              child: _buildList(s, rp, rooms, isRame, searching, exploreLoading),
+              child: _buildList(s, rp, rooms, isRame, searching, exploreLoading,
+                  ordered, sessions, idx),
             ),
           ],
         ),
@@ -209,6 +232,9 @@ class _RoomsExploreScreenState extends ConsumerState<RoomsExploreScreen> {
     bool isRame,
     bool searching,
     bool exploreLoading,
+    List<RoomModel> ordered,
+    Map<String, RoomSessionInfo> sessions,
+    Map<String, int> idx,
   ) {
     if (exploreLoading && rooms.isEmpty && !searching) {
       return const Center(
@@ -243,11 +269,21 @@ class _RoomsExploreScreenState extends ConsumerState<RoomsExploreScreen> {
           10,
           MediaQuery.of(context).padding.bottom + 88,
         ),
-        itemCount: rooms.length,
-        itemBuilder: (_, i) => RoomExploreCard(
-          room: rooms[i],
-          onTap: () => _openRoom(rooms[i].id, i),
-        ),
+        itemCount: ordered.length,
+        itemBuilder: (_, i) {
+          final room = ordered[i];
+          final session = sessions[room.id];
+          return RoomExploreCard(
+            room: room,
+            session: session,
+            onToggleReminder: session == null
+                ? null
+                : () => ref
+                    .read(roomSessionProvider.notifier)
+                    .toggleReminder(room.id),
+            onTap: () => _openRoom(room.id, idx[room.id] ?? i),
+          );
+        },
       ),
     );
   }

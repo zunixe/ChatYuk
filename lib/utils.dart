@@ -182,6 +182,22 @@ String formatExploreTime(DateTime dt, {bool isId = false}) {
   return DateFormat('d MMM').format(dt.toLocal());
 }
 
+/// Waktu mulai sesi room: 'Hari ini 21.00' / 'Besok 21.00' / '12 Nov 21.00'.
+/// [isId] memilih label Hari ini/Besok; jam selalu format 24 jam.
+String formatSessionStart(DateTime dt, {bool isId = true}) {
+  final local = dt.toLocal();
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(local.year, local.month, local.day);
+  final hh = local.hour.toString().padLeft(2, '0');
+  final mm = local.minute.toString().padLeft(2, '0');
+  final time = '$hh.$mm';
+  final diff = day.difference(today).inDays;
+  if (diff == 0) return isId ? 'Hari ini $time' : 'Today $time';
+  if (diff == 1) return isId ? 'Besok $time' : 'Tomorrow $time';
+  return '${DateFormat('d MMM').format(local)} $time';
+}
+
 /// Angka ringkas ala kartu explore: 942 → '942', 1800 → '1.8rb', 3100 → '3.1rb'.
 String formatCompactCount(int n, {bool isId = false}) {
   if (n < 1000) return '$n';

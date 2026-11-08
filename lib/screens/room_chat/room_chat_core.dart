@@ -371,10 +371,20 @@ mixin _RcCoreMx on _RoomChatBase {
   @override
   bool get canModerate =>
       isPrivateRoom && (_myRole == 'owner' || _myRole == 'admin');
-  // Moderasi voice global room: owner room ATAU app admin (server cek ulang).
+  // Moderasi voice global room: owner room, app admin, ATAU host sesi live
+  // di room ini (Room v2 — server cek ulang di session_host_mute).
   @override
   bool get canModerateVoice =>
-      !isPrivateRoom && (widget.room.ownerId == _auth.uid || _auth.isRealAdmin);
+      !isPrivateRoom &&
+      (widget.room.ownerId == _auth.uid ||
+          _auth.isRealAdmin ||
+          _iHostLiveSession);
+
+  /// Saya host sesi yang sedang live di room ini?
+  bool get _iHostLiveSession {
+    final s = ref.read(roomSessionProvider).byRoom[widget.room.id];
+    return s != null && s.isLive && s.hostUid == _auth.uid;
+  }
 
 
   @override
@@ -566,9 +576,13 @@ mixin _RcCoreMx on _RoomChatBase {
       ),
     );
     if (confirm != true || !mounted) return;
+    // Host sesi live yang bukan owner/admin pakai RPC khusus (izin diperluas).
+    final sessionOnly = _iHostLiveSession &&
+        widget.room.ownerId != _auth.uid &&
+        !_auth.isRealAdmin;
     try {
       await Supabase.instance.client.rpc(
-        'room_voice_mute',
+        sessionOnly ? 'session_host_mute' : 'room_voice_mute',
         params: {'p_room_id': widget.room.id, 'p_target': uid},
       );
     } catch (_) {}

@@ -695,6 +695,22 @@ mixin ChatServiceRoomMx on ChatBase {
     }
   }
 
+  /// Gift di room (Room v2): room global saat sesi live → penerima host
+  /// sesi (server yang menentukan); private room → owner. Ekonomi server
+  /// paid-only (bonus hanya lewat promo), female ditolak.
+  Future<Map<String, dynamic>> sendRoomGift(
+    String roomId,
+    String giftId, {
+    int qty = 1,
+  }) async {
+    final res = await measuredRpc(_sb, 'send_room_gift', params: {
+      'p_room_id': roomId,
+      'p_gift_id': giftId,
+      'p_qty': qty,
+    });
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
   Future<void> joinRoom(String roomId, UserModel user) async {
     // nickname, gender, age di-set oleh trigger DB dari profiles
     // tidak dikirim dari client untuk mencegah impersonasi

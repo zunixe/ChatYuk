@@ -564,6 +564,35 @@ dijawab. Konsumen WAJIB baca `sess.status`, bukan `sess.call.status`
 
 ---
 
+### 7c. Room v2 — sesi terjadwal + host (2026-11-11)
+
+| Lapis | Lokasi |
+|---|---|
+| UI | `rooms_explore/widgets/room_explore_card.dart` (badge LIVE/jadwal + tombol "Ingatkan"), `room_chat/widgets/room_session_banner.dart` (banner + kontrol host Mulai/Akhiri), tombol gift room di AppBar (`room_chat_build.dart`), admin tab `admin_room_sessions_tab.dart` (menu `roomSessions`) |
+| Provider | `lib/providers/riverpod/room_session_provider.dart` (map sesi per room, cooldown 20 dtk, tick peak 60 dtk di room) |
+| Service | `lib/services/room_session_service.dart` (RPC passthrough — screen TIDAK import) |
+| SQL inti | `room_sessions` (jadwal + KPI `peak_viewers`/`gifts_total`), `room_session_reminders` (opt-in), `profiles.is_host`; RPC `schedule_room_session`, `start_room_session`, `end_room_session`, `next_room_sessions`, `toggle_session_reminder`, `session_host_mute`, `room_session_tick`, `room_session_sweep`, `admin_set_host`, `admin_room_session_stats`, `send_room_gift` (aktif lagi) |
+| Test | pgTAP `supabase/tests/room_sessions_test.sql` (23 assert), `test/admin_panel_tab_order_test.dart` |
+
+**Invariant:**
+1. **Gift room global HANYA saat sesi live** — penerima = `room_sessions.host_uid`
+   (bukan `rooms.owner_id`); tanpa sesi live server menolak (pesan friendly
+   `s.sessionGiftOffline`). Private room tetap ke owner.
+2. Ekonomi gift SAMA dengan `send_gift`: paid-only (`yukcoin_spendable` +
+   `ledger_spend_promo`, bonus hanya lewat promo plafon), female diblok,
+   `is_registered` wajib, rate limit `coin_tx_max_per_hour`, penerima bucket
+   `earned`, cut → `platform_revenue`. JANGAN kembalikan debit bonus langsung.
+3. `peak_viewers` dihitung dari `room_presence` **tanpa `dummy_accounts`** —
+   angka ini dasar fee host, dummy tidak boleh menggelembungkan.
+4. Maks 1 sesi `scheduled`/`live` per room pada rentang overlap; maks 1 live
+   per room (dijaga RPC, bukan UI).
+5. Notif "Ingatkan" lewat `social_push` (user_devices + fallback fcm_token)
+   ke baris `room_session_reminders` sesi — bukan topic fanout.
+6. Tulis `room_sessions`/`room_session_reminders` HANYA via RPC security
+   definer (RLS tanpa policy tulis); grant tabel hanya SELECT.
+
+---
+
 ## 8. Admin Panel (flavor terpisah)
 
 | Lapis | Lokasi |
@@ -691,6 +720,7 @@ selalu di server saat lamaran. Moderator yang pindah negara otomatis dicabut
 | `profiles.share_location` | lokasi peta — **SELECT di-revoke**; admin lewat RPC admin |
 | `profiles.location_mocked` / `location_mock_reason` / `location_accuracy_m` / `location_flagged_at` | deteksi Fake GPS (2026-10-02) — **SELECT di-revoke**; ditulis `update_my_location()`, dibaca admin lewat `admin_stats_detail()` / `admin_user_detail()`. **Hanya MENANDAI** (badge merah di peta/detail) — tak memblokir |
 | `user_photos.photo` | galeri — **SELECT di-revoke** (paywall); baca lewat `get_user_photos_access()` / `my_photos()`; `photo_preview` tetap publik |
+| `profiles.avatar_face_verified_at`, `user_photos.face_verified_at` | Verifikasi wajah foto profil **female** (2026-11-08): ditulis klien setelah selfie liveness (kamera in-app + kedip/toleh); dibaca lewat `profile_public()` (`avatar_face_verified`, hanya diri sendiri) & `my_photos()` (`face_verified`). Foto lama tanpa cap = "perlu diganti". Male tidak berubah |
 | `dummy_accounts.ai_*` (enabled/always_online/no_sleep/wake/offline/mood/persona) | AI reply, presence tick, admin, daily-life, proaktif |
 | `app_settings.ai_global_enabled` | AI reply, admin toggle |
 | `ai_internal_config.callback_secret` | ai_reply_post, semua AI |
@@ -704,6 +734,8 @@ selalu di server saat lamaran. Moderator yang pindah negara otomatis dicabut
 | `private_chats.last_read_at` (map uid→ts) | centang-2 di chat, unread badge, mark_chat_read, admin monitor |
 | Registrasi: 12 kolom `profiles` wajib tulis | `id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen` harus tetap `INSERT`+`UPDATE` untuk `authenticated` — pola tulis **split-write**: **INSERT polos** (`insert()`, TANPA `on_conflict`/`upsert` → tidak butuh SELECT sama sekali) lalu `PATCH` terpisah untuk kolom pasca-insert + kolom sensitif. Duplikat (23505) ditangani klien → lanjut PATCH. JANGAN pakai `upsert` `merge-duplicates` MAUPUN `ignore-duplicates` (keduanya `ON CONFLICT` → butuh SELECT → 42501 bila kolom di-revoke). Insiden: `docs/INCIDENT_ANON_REGISTER_42501.md`. Dikunci: `supabase/tests/auth_write_path_test.sql` + `scripts/smoke_anon_register.sh` |
 | `private_chats.last_message_at` | urutan list chat, pinned sort, cache warm |
+| `profiles.is_host` | Room v2 (2026-11-11): flag host admin-set — syarat `schedule_room_session`, tampil di admin form jadwal & `start_room_session`. Ditulis HANYA via RPC `admin_set_host` (admin). Tidak dipakai presence/chat. |
+| `room_sessions.status/started_at/peak_viewers/gifts_total` | Room v2: KPI host (on-time %, durasi, peak, gift). `peak_viewers` dihitung `room_session_tick` dari `room_presence` TANPA `dummy_accounts`; `gifts_total` ditambah `send_room_gift`. JANGAN tulis langsung dari client (RLS tanpa policy tulis). |
 
 ---
 

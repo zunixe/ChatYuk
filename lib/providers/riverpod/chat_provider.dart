@@ -144,6 +144,11 @@ class ChatNotifier extends Notifier<ChatState> {
     return _service.sendGift(chatId, receiverId, giftId);
   }
 
+  Future<Map<String, dynamic>> sendRoomGift(String roomId, String giftId,
+      {int qty = 1}) {
+    return _service.sendRoomGift(roomId, giftId, qty: qty);
+  }
+
   /// Daftar hadiah dari server (fallback katalog lokal bila gagal).
   Future<List<Map<String, dynamic>>> listGifts() => _service.listGifts();
 

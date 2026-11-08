@@ -1,3 +1,30 @@
+## 2026-11-11 — Room v2: sesi terjadwal + host (APPLIED 2026-11-11 via API)
+
+### `20261111120000_room_sessions_v2.sql` (APPLIED 2026-11-11)
+- **Tabel baru** `room_sessions` (jadwal sesi per room global + KPI
+  `peak_viewers`/`gifts_total`) dan `room_session_reminders` (opt-in
+  "Ingatkan"), plus `profiles.is_host` (admin-set, bukan role baru).
+  RLS: SELECT publik untuk `room_sessions`, own-rows untuk reminders;
+  semua write lewat RPC `security definer`. Grant hanya SELECT.
+- **RPC baru**: `schedule_room_session` (admin; validasi host `is_host`,
+  format, jam, overlap 1 sesi scheduled/live per room), `start_room_session`
+  (host/admin; guard sesi live ganda; notif `social_push` ke reminders),
+  `end_room_session` (live→ended, scheduled→cancelled),
+  `next_room_sessions` (live/terdekat per room + host + reminded),
+  `toggle_session_reminder`, `session_host_mute` (izin diperluas ke host
+  sesi live), `room_session_tick` (peak dari `room_presence` TANPA
+  `dummy_accounts`), `room_session_sweep` (auto-end > ends_at+2j, service
+  role), `admin_set_host`, `admin_room_session_stats`.
+- **`send_room_gift` diaktifkan lagi** (dimatikan 20261101100200) dengan
+  ekonomi PAID-ONLY terkini (pola `send_gift`): advisory lock, kill-switch
+  `points_enabled`, wajib `is_registered`, female diblok, rate limit
+  `coin_tx_max_per_hour`, `yukcoin_spendable` + `ledger_spend_promo`
+  (bonus hanya lewat promo plafon), penerima SELALU bucket `earned`.
+  Cabang baru: room global + sesi live → penerima host sesi +
+  `room_sessions.gifts_total += koin kotor`; tanpa sesi live → ditolak
+  pesan friendly. Grant execute dikembalikan ke `authenticated`.
+- pgTAP `supabase/tests/room_sessions_test.sql` 23/23 hijau (dummy-only,
+  transaksional). `check_migrations.sh --all` bersih.
 ## 2026-11-10 (b) — Koin bonus untuk fee match (APPLIED 2026-11-04 via API)
 
 ### `20261110060000_admin_promo_budget.sql` (APPLIED 2026-11-05)

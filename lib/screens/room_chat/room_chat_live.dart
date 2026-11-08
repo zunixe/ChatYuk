@@ -191,6 +191,53 @@ mixin _RcLiveMx on _RoomChatBase {
     );
   }
 
+  /// Gift room (Room v2): hanya saat ada sesi live — penerima = host sesi
+  /// (server yang menentukan; tanpa sesi live server menolak). Guard
+  /// gender/registrasi/paid sama dengan gift private.
+  @override
+  Future<void> _showRoomGiftPicker() async {
+    final s = ref.read(localeProvider).s;
+    final session = ref.read(roomSessionProvider).byRoom[widget.room.id];
+    if (session == null || !session.isLive) {
+      showChatSnack(context, s.sessionGiftOffline);
+      return;
+    }
+    final points = ref.read(pointsProvider.notifier);
+    final auth = ref.read(authProvider.notifier);
+    if (!canSendGiftForGender(auth.profile?.gender)) return;
+    if (!auth.canUsePaid) {
+      showChatSnack(
+        context,
+        auth.profile?.isRegistered != true
+            ? s.errCoinRegisterOnly
+            : s.msgVerifyToUsePaid,
+      );
+      return;
+    }
+    final gift = await showGiftPickerSheet(
+      context,
+      pointsEnabled: points.enabled,
+      paidBalance: points.spendableBalance,
+    );
+    if (gift == null || !mounted) return;
+    try {
+      final res = await ref
+          .read(chat_riverpod.chatProvider.notifier)
+          .sendRoomGift(widget.room.id, gift.id);
+      if (!mounted) return;
+      showChatSnack(
+        context,
+        s.giftSentToast(s.isId ? gift.nameId : gift.nameEn),
+      );
+      final net = (res['net'] as num?)?.toInt();
+      if (net != null) {
+        ref.read(roomSessionProvider.notifier).refreshRoom(widget.room.id);
+      }
+    } catch (e) {
+      if (mounted) showChatSnack(context, '$e');
+    }
+  }
+
   @override
   void outboxOnSent() {
     // Bonus "first room chat" DIHAPUS (overhaul coin: tidak ada poin gratis).
@@ -722,6 +769,8 @@ mixin _RcLiveMx on _RoomChatBase {
             onMinimize: () => setState(() => _stageMinimized = true),
           ),
         ],
+        // Room v2: banner sesi terjadwal/live + kontrol host (global room).
+        if (!isPrivateRoom) RoomSessionBanner(roomId: widget.room.id),
         // Strip speaker voice (global room): tampil bila ikut voice.
         // Tap avatar SENDIRI → sheet diagnostik (debug suara).
         if (!isPrivateRoom && _voiceSession != null)

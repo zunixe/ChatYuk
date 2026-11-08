@@ -44,6 +44,8 @@ import 'room_chat/widgets/room_widgets.dart';
 import 'room_chat/widgets/room_message_bubble.dart';
 import 'room_chat/widgets/voice_stage_strip.dart';
 import 'room_chat/widgets/broadcast_stage.dart';
+import 'room_chat/widgets/room_session_banner.dart';
+import '../providers/riverpod/room_session_provider.dart';
 import '../widgets/photo_album_bubble.dart';
 import '../widgets/reply_composer_preview.dart';
 import '../widgets/message/swipe_to_reply.dart';
@@ -247,6 +249,7 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   Future<void> _startBroadcastSession();
   Future<void> _showVoiceDiagnostics();
   Future<void> _onSpeakerTap(String uid);
+  Future<void> _showRoomGiftPicker();
   List<Mention> _mentionAllExpansion();
   void _startPresenceHeartbeat();
   Future<void> _joinRoom();

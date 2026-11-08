@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
 import '../../../config/theme.dart';
 import '../../../models/room_model.dart';
+import '../../../models/room_session_model.dart';
 import '../../../providers/riverpod/locale_provider.dart';
 import '../../../utils.dart';
 import '../../../widgets/room_icon.dart';
@@ -9,10 +10,20 @@ import '../../../config/strings.dart';
 
 /// Kartu room ala gambar: ikon | nama + preview + member•online |
 /// waktu/Live + badge unread. Live HANYA grup (isLive dari server).
+/// Room v2: sesi terjadwal menampilkan badge jam + tombol "Ingatkan";
+/// sesi live menampilkan judul + host + jumlah penonton (menang dari preview).
 class RoomExploreCard extends ConsumerWidget {
   final RoomModel room;
   final VoidCallback onTap;
-  const RoomExploreCard({super.key, required this.room, required this.onTap});
+  final RoomSessionInfo? session;
+  final VoidCallback? onToggleReminder;
+  const RoomExploreCard({
+    super.key,
+    required this.room,
+    required this.onTap,
+    this.session,
+    this.onToggleReminder,
+  });
 
   String _preview(S s) {
     if (room.lastText.isNotEmpty) {
@@ -84,14 +95,54 @@ class RoomExploreCard extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        _preview(s),
-                        style: AppText.bodySmall.copyWith(
-                          color: AppTheme.textSecondary,
+                      if (session != null && session!.isLive) ...[
+                        Text(
+                          '${s.exploreLive} · ${session!.title}',
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.danger,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${s.sessionHostBy(session!.hostName)} · '
+                          '${s.sessionViewers(formatCompactCount(session!.peakViewers, isId: s.isId))}',
+                          style: AppText.caption.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ] else if (session != null) ...[
+                        Text(
+                          '⏰ ${formatSessionStart(session!.startsAt, isId: s.isId)} — ${session!.title}',
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          s.sessionHostBy(session!.hostName),
+                          style: AppText.caption.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ] else
+                        Text(
+                          _preview(s),
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       const SizedBox(height: 2),
                       Text(
                         s.roomMembersOnline(
@@ -117,12 +168,49 @@ class RoomExploreCard extends ConsumerWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (room.isLive)
+                    if ((session?.isLive ?? false) || room.isLive)
                       Text(
                         s.exploreLive,
                         style: AppText.caption.copyWith(
                           color: AppTheme.danger,
                           fontWeight: FontWeight.w700,
+                        ),
+                      )
+                    else if (session != null && onToggleReminder != null)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: onToggleReminder,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                session!.reminded
+                                    ? Icons.notifications_active_rounded
+                                    : Icons.notifications_none_rounded,
+                                size: 14,
+                                color: session!.reminded
+                                    ? AppTheme.primary
+                                    : AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                session!.reminded
+                                    ? s.sessionReminded
+                                    : s.sessionRemind,
+                                style: AppText.caption.copyWith(
+                                  color: session!.reminded
+                                      ? AppTheme.primary
+                                      : AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       )
                     else if (room.lastAt != null)

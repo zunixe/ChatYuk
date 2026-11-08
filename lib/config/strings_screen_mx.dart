@@ -212,6 +212,30 @@ mixin SScreenMx {
   String get exploreRoomCreated =>
       isId ? 'Room berhasil dibuat' : 'Room created';
   String get exploreLive => isId ? 'Live' : 'Live';
+
+  // ── Room v2: sesi terjadwal + host ──
+  String get sessionRemind => isId ? 'Ingatkan' : 'Remind me';
+  String get sessionReminded => isId ? 'Diingatkan' : 'Reminder on';
+  String sessionTodayAt(String time) =>
+      isId ? 'Hari ini $time' : 'Today $time';
+  String sessionTomorrowAt(String time) =>
+      isId ? 'Besok $time' : 'Tomorrow $time';
+  String sessionHostBy(String name) =>
+      isId ? 'Host: $name' : 'Host: $name';
+  String sessionViewers(String n) =>
+      isId ? '$n nonton' : '$n watching';
+  String get sessionStart => isId ? 'Mulai Sesi' : 'Start Session';
+  String get sessionEnd => isId ? 'Akhiri Sesi' : 'End Session';
+  String get sessionStartedToast =>
+      isId ? 'Sesi dimulai' : 'Session started';
+  String get sessionEndedToast => isId ? 'Sesi diakhiri' : 'Session ended';
+  String get sessionNoLive =>
+      isId ? 'Belum ada sesi live' : 'No live session yet';
+  String get sessionGiftOffline => isId
+      ? 'Gift hanya saat sesi live di room ini'
+      : 'Gifts only during a live session in this room';
+  String get sessionHostBadge => isId ? 'HOST' : 'HOST';
+  String get menuGift => isId ? 'Hadiah' : 'Gift';
   String get roomIconPhotoLabel => isId ? 'Foto sendiri' : 'Custom photo';
   String get roomIconPick => isId ? 'Pilih foto' : 'Choose photo';
   String get roomIconChange => isId ? 'Ganti foto' : 'Change photo';

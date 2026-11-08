@@ -484,6 +484,18 @@ mixin _RcBuildMx on _RoomChatBase {
               icon: const Icon(Icons.shield_rounded),
               onPressed: _openModerationConsole,
             ),
+          // Gift room (Room v2): hanya tampil saat sesi live berjalan.
+          if (ProviderScope.containerOf(context, listen: false)
+                  .read(roomSessionProvider)
+                  .byRoom[widget.room.id]
+                  ?.isLive ??
+              false)
+            tightIcon(
+              tooltip: s.menuGift,
+              icon: const Icon(Icons.card_giftcard_rounded,
+                  color: AppTheme.primary),
+              onPressed: _showRoomGiftPicker,
+            ),
           // Mic voice stage (global room): status sesuai sesi.
           VoiceMicButton(
             session: _voiceSession,

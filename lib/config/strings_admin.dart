@@ -45,6 +45,37 @@ extension SAdminX on S {
 
   // ── Monitor Grup (private rooms user) ──
   String get adminRoomMonitor => isId ? 'Monitor Grup' : 'Group Monitor';
+
+  // ── Room v2: sesi terjadwal + host ──
+  String get adminRoomSessionsTab => isId ? 'Sesi Room' : 'Room Sessions';
+  String get adminRsKpiSessions => isId ? 'Total sesi' : 'Total sessions';
+  String get adminRsKpiOnTime => isId ? 'Mulai tepat waktu' : 'On-time start';
+  String get adminRsKpiDuration => isId ? 'Durasi rata-rata' : 'Avg duration';
+  String get adminRsKpiPeak => isId ? 'Peak viewers' : 'Peak viewers';
+  String get adminRsKpiGifts => isId ? 'Total gift (koin)' : 'Total gifts (coins)';
+  String get adminRsScheduleTitle => isId ? 'Jadwalkan Sesi' : 'Schedule Session';
+  String get adminRsRoom => isId ? 'Room' : 'Room';
+  String get adminRsHost => isId ? 'Host' : 'Host';
+  String get adminRsTitle => isId ? 'Judul sesi' : 'Session title';
+  String get adminRsFormat => isId ? 'Format' : 'Format';
+  String get adminRsStart => isId ? 'Mulai' : 'Starts';
+  String get adminRsEnd => isId ? 'Selesai' : 'Ends';
+  String get adminRsSave => isId ? 'Simpan jadwal' : 'Save schedule';
+  String get adminRsSaved => isId ? 'Sesi terjadwal' : 'Session scheduled';
+  String get adminRsNoHost => isId
+      ? 'Belum ada host. Aktifkan is_host di bagian Kelola Host.'
+      : 'No host yet. Enable is_host in Manage Host.';
+  String get adminRsManageHost => isId ? 'Kelola Host' : 'Manage Host';
+  String adminRsHostActive(String n) =>
+      isId ? '$n aktif sebagai host' : '$n is now a host';
+  String get adminRsSearchUser => isId ? 'Cari user (nickname)' : 'Search user (nickname)';
+  String get adminRsTableTitle => isId ? 'Daftar Sesi' : 'Session List';
+  String get adminRsColSession => isId ? 'Sesi' : 'Session';
+  String get adminRsColSchedule => isId ? 'Jadwal → Mulai' : 'Schedule → Start';
+  String get adminRsColStatus => isId ? 'Status' : 'Status';
+  String get adminRsEmpty => isId ? 'Belum ada sesi' : 'No sessions yet';
+  String get adminRsMinutes => isId ? 'mnt' : 'min';
+  String get adminRsLate => isId ? 'telat' : 'late';
   String get adminRoomSearch =>
       isId ? 'Cari grup / pemilik...' : 'Search group / owner...';
   String get adminRoomCountryAll => isId ? 'Semua negara' : 'All countries';
