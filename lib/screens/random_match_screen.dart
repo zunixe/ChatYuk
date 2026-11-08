@@ -15,7 +15,6 @@ import '../providers/riverpod/random_match_provider.dart';
 import '../widgets/gender_avatar.dart';
 import '../widgets/call_permission_dialog.dart';
 import 'random_call_history_screen.dart';
-import '../providers/riverpod/match_pricing_provider.dart';
 import 'random_call_screen.dart';
 
 /// Layar utama Random Video Call: radar orang sekitar + tombol Match.
@@ -48,11 +47,21 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
   /// disposed" → timer & antrean jadi bocor).
   late final RandomMatchNotifier _notifier;
 
-  String get _myGender {
+  /// Versi `watch` (rebuild saat profil termuat). Aman bila auth belum siap.
+  String? _watchGender() {
     try {
-      return ref.read(authProvider).profile?.gender ?? 'male';
+      return ref.watch(authProvider.select((a) => a.profile?.gender));
     } catch (_) {
-      return 'male';
+      return null;
+    }
+  }
+
+  /// Gender sendiri; null = profil belum termuat (JANGAN dianggap male).
+  String? get _myGender {
+    try {
+      return ref.read(authProvider).profile?.gender;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -77,44 +86,6 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
     // Keluar layar = keluar antrean + tutup call (tanpa menunggu UI).
     _notifier.leaveScreen();
     super.dispose();
-  }
-
-  /// Dialog "koin tidak cukup" → arahkan ke top-up.
-  Future<void> _showNeedCoinDialog(S s) async {
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        title: Text(
-          s.randomNeedCoinTitle,
-          style: AppText.title.copyWith(color: AppTheme.textPrimary),
-        ),
-        content: Text(
-          s.randomNeedCoinBody(
-            (ref.read(matchPricingProvider).value ?? const MatchPricing())
-                .searchCoins,
-          ),
-          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(s.yukcoinCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: Text(s.callNoCoinTopup),
-          ),
-        ],
-      ),
-    );
-    if (go == true && mounted) {
-      NavGate.topupSheet?.call(context, s);
-    }
   }
 
   String _errorText(S s, String? code) {
@@ -168,13 +139,11 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (st.errorCode == 'MATCH_NEED_COIN') {
-          // Male + koin kosong → LANGSUNG sheet top-up dari bawah (tanpa
-          // dialog perantara). `no_funds` server hanya untuk male; bila
-          // gender lain entah kenapa kena, tetap dialog penjelasan.
-          if (_myGender == 'male') {
+          // Male + koin kosong → LANGSUNG sheet top-up dari bawah.
+          // `no_funds` server hanya untuk male; perempuan tidak pernah
+          // ditagih match → tidak ada top-up (sheet juga menolak female).
+          if (_myGender != 'female') {
             NavGate.topupSheet?.call(context, s);
-          } else {
-            _showNeedCoinDialog(s);
           }
         } else {
           ScaffoldMessenger.of(
@@ -226,7 +195,9 @@ class _RandomMatchScreenState extends ConsumerState<RandomMatchScreen>
                 const Spacer(),
                 _Counter(s: s, state: st),
                 const SizedBox(height: 18),
-                _OppositeGenderBadge(s: s, myGender: _myGender),
+                // Badge baru tampil setelah gender termuat (watch → rebuild).
+                if (_watchGender() case final g?)
+                  _OppositeGenderBadge(s: s, myGender: g),
                 const SizedBox(height: 18),
                 _MatchButton(
                   s: s,

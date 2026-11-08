@@ -45,8 +45,10 @@ class YukcoinBucketsText extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       if (canTopup) (label: s.walletPaid, value: topup),
-      if (earned > 0) (label: s.walletEarned, value: earned),
-      (label: s.walletBonus, value: bonus),
+      // Female (tanpa top-up): Penghasilan = saldo utamanya → selalu tampil;
+      // Bonus hampir tak pernah ia punya → hanya bila > 0.
+      if (earned > 0 || !canTopup) (label: s.walletEarned, value: earned),
+      if (canTopup || bonus > 0) (label: s.walletBonus, value: bonus),
     ];
     if (items.isEmpty) return const SizedBox.shrink();
     // Hint menjelaskan mekanik top-up/bonus — tak relevan untuk female.

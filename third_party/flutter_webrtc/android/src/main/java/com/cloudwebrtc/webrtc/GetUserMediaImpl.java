@@ -1067,6 +1067,11 @@ public class GetUserMediaImpl {
             return;
         }
 
+        if (!(videoCapturer instanceof CameraVideoCapturer)) {
+            resultError("switchCamera", "Track is not a camera capturer: " + id, result);
+            return;
+        }
+
         CameraEnumerator cameraEnumerator;
 
         if (Camera2Enumerator.isSupported(applicationContext)) {
@@ -1076,28 +1081,66 @@ public class GetUserMediaImpl {
             Log.d(TAG, "Creating video capturer using Camera1 API.");
             cameraEnumerator = new Camera1Enumerator(false);
         }
+        // Arah kamera saat ini dibaca dari ENTRY capturer ini (facingMode
+        // di-update tiap switch sukses), BUKAN field global `isFacing` — field
+        // itu dibagi semua track dan basi setelah sesi lain berganti kamera,
+        // sehingga loop bisa memilih kamera yang sudah aktif → switch macet.
+        boolean frontNow = info.facingMode != null
+                ? "user".equals(info.facingMode)
+                : isFacing;
         // if sourceId given, use specified sourceId first
-        final String[] deviceNames = cameraEnumerator.getDeviceNames();
-        for (String name : deviceNames) {
-            if (cameraEnumerator.isFrontFacing(name) == !isFacing) {
-                CameraVideoCapturer cameraVideoCapturer = (CameraVideoCapturer) videoCapturer;
-                cameraVideoCapturer.switchCamera(
-                        new CameraVideoCapturer.CameraSwitchHandler() {
-                            @Override
-                            public void onCameraSwitchDone(boolean b) {
-                                isFacing = !isFacing;
-                                result.success(b);
-                            }
-
-                            @Override
-                            public void onCameraSwitchError(String s) {
-                                resultError("switchCamera", "Switching camera failed: " + id, result);
-                            }
-                        }, name);
-                return;
+        List<String> candidates = new ArrayList<>();
+        for (String name : cameraEnumerator.getDeviceNames()) {
+            if (cameraEnumerator.isFrontFacing(name) == !frontNow) {
+                candidates.add(name);
             }
         }
-        resultError("switchCamera", "Switching camera failed: " + id, result);
+        if (candidates.isEmpty()) {
+            resultError("switchCamera", "No opposite-facing camera for id: " + id, result);
+            return;
+        }
+        trySwitchCamera((CameraVideoCapturer) videoCapturer, info, candidates, 0, result);
+    }
+
+    /**
+     * Coba ganti ke kamera kandidat ke-[idx]; kalau lensa itu gagal dibuka
+     * (mis. ID aux/ultrawide di Xiaomi yang ditolak Camera2), lanjut ke
+     * kandidat berikutnya sebelum melaporkan gagal.
+     */
+    private void trySwitchCamera(CameraVideoCapturer capturer, VideoCapturerInfoEx entry,
+                                 List<String> candidates, int idx, Result result) {
+        final String name = candidates.get(idx);
+        capturer.switchCamera(
+                new CameraVideoCapturer.CameraSwitchHandler() {
+                    @Override
+                    public void onCameraSwitchDone(boolean isFrontCamera) {
+                        isFacing = isFrontCamera;
+                        entry.facingMode = isFrontCamera ? "user" : "environment";
+                        entry.cameraName = name;
+                        // Entri shared meniru facing primary supaya keputusan
+                        // reuse getUserMedia berikutnya tetap benar.
+                        for (Map.Entry<String, VideoCapturerInfoEx> e : mVideoCapturers.entrySet()) {
+                            VideoCapturerInfoEx v = e.getValue();
+                            if (v != entry && v.primaryTrackId != null
+                                    && v.videoSource == entry.videoSource) {
+                                v.facingMode = entry.facingMode;
+                                v.cameraName = entry.cameraName;
+                            }
+                        }
+                        result.success(isFrontCamera);
+                    }
+
+                    @Override
+                    public void onCameraSwitchError(String s) {
+                        Log.w(TAG, "switchCamera: device " + name + " failed (" + s
+                                + "), candidates left=" + (candidates.size() - idx - 1));
+                        if (idx + 1 < candidates.size()) {
+                            trySwitchCamera(capturer, entry, candidates, idx + 1, result);
+                        } else {
+                            resultError("switchCamera", "Switching camera failed for all candidates", result);
+                        }
+                    }
+                }, name);
     }
 
     /**

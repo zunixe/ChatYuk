@@ -75,7 +75,9 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
     context,
     s: s,
     // Biaya + saldo — sembunyi saat sistem poin OFF / build admin.
-    costLabel: (points.enabled && !isAdmin)
+    costLabel: (points.enabled && !isAdmin && points.spendsFree)
+        ? (_) => s.labelFree
+        : (points.enabled && !isAdmin)
         ? (withPw) {
             final paid = paidCostOf(withPw);
             return '${s.paidOrBonus(paid, paid * points.bonusMultiplier)}'
@@ -90,6 +92,7 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
       // lalu ditolak server.
       if (points.enabled &&
           !isAdmin &&
+          !points.spendsFree &&
           points.paidBalance < paid &&
           points.bonusBalance < bonusCost) {
         outOfPoints = true;

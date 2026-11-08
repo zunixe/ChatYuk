@@ -260,8 +260,13 @@ mixin _AuthActionsMx on _AuthBase {
   Future<List<UserPhoto>> getPhotos(String uid) => _auth.getPhotos(uid);
   Future<List<UserPhoto>> getPhotosWithAccess(String uid) =>
       _auth.getPhotosWithAccess(uid);
-  Future<void> uploadPhoto(String base64, {String? preview}) =>
-      _auth.uploadPhoto(base64, preview: preview);
+  Future<int> unlockPhoto(String photoId, String ownerId) =>
+      _auth.unlockPhoto(photoId, ownerId);
+  Future<void> uploadPhoto(
+    String base64, {
+    String? preview,
+    bool faceVerified = false,
+  }) => _auth.uploadPhoto(base64, preview: preview, faceVerified: faceVerified);
   Future<void> deletePhoto(String photoId) => _auth.deletePhoto(photoId);
   Future<void> deleteMyAccount() => _auth.deleteMyAccount();
 
@@ -305,8 +310,11 @@ mixin _AuthActionsMx on _AuthBase {
   /// Update IP address di server (tidak disimpan di aplikasi).
   Future<void> updateIpAddress(String ip) => _auth.updateIpAddress(ip);
 
-  Future<void> updateAvatar(String base64) async {
-    final serverPath = await _auth.updateAvatar(base64);
+  Future<void> updateAvatar(String base64, {bool faceVerified = false}) async {
+    final serverPath = await _auth.updateAvatar(
+      base64,
+      faceVerified: faceVerified,
+    );
     final uid = _profile?.uid ?? _auth.uid ?? '';
     if (uid.isNotEmpty) {
       AvatarB64Service.instance.setForUid(uid, base64);
@@ -316,7 +324,10 @@ mixin _AuthActionsMx on _AuthBase {
         AvatarB64Service.instance.setForPath(serverPath, base64);
       }
     }
-    _profile = _profile?.copyWith(avatar: base64);
+    _profile = _profile?.copyWith(
+      avatar: base64,
+      avatarFaceVerified: faceVerified ? true : _profile?.avatarFaceVerified,
+    );
     _emit();
   }
 
@@ -411,9 +422,9 @@ mixin _AuthActionsMx on _AuthBase {
   @override
   Future<void> _deleteLocalFcmToken() async {
     try {
-      await FirebaseMessaging.instance
-          .deleteToken()
-          .timeout(const Duration(seconds: 3));
+      await FirebaseMessaging.instance.deleteToken().timeout(
+        const Duration(seconds: 3),
+      );
     } catch (e) {
       dlog('[AUTH] FCM deleteToken gagal: $e');
     }

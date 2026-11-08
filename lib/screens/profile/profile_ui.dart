@@ -180,7 +180,7 @@ mixin _ProfileUiMx on _ProfileBase {
                 // Female TIDAK top-up: koinnya masuk dari lawan bicara
                 // (call/gift/match). Yang dia butuh hanya lihat jumlah
                 // saldo + tarik ke DANA.
-                canTopup: profile?.gender != 'female',
+                canTopup: profile?.gender == 'male',
                 // Estimasi fiat hanya bermakna untuk female — bucket
                 // `earned` (yang bisa di-withdraw) hanya terisi dari
                 // pendapatan call. Untuk male selalu 0 → sembunyikan.

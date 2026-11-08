@@ -14,8 +14,9 @@ mixin _ProfileCoreMx on _ProfileBase {
     Future.microtask(() {
       final pp = scope.read(pointsProvider.notifier);
       final s = scope.read(localeProvider).s;
-      final gender = scope.read(authProvider.notifier).profile?.gender;
       pp.refreshEnabled().then((_) {
+        // Baca gender SETELAH refresh — profil mungkin baru termuat.
+        final gender = scope.read(authProvider.notifier).profile?.gender;
         if (mounted) pp.showOnboardingIfNeeded(context, s, gender: gender);
       });
     });

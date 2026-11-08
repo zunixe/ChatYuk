@@ -3,12 +3,17 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/core/nav_gate.dart';
+import 'package:chatyuk/providers/riverpod/locale_provider.dart';
 import 'package:chatyuk/widgets/call_no_coin_dialog.dart';
 
 /// Dialog "koin habis" & "batas gratis" — panggilan dijeda sampai user
 /// memilih: isi koin (buka sheet top-up + onContinue) atau akhiri (onEnd).
 void main() {
   final sEn = S(isId: false);
+  // Dialog mengikuti bahasa app (AppLocale, commit 2d11d886) — test ini
+  // memeriksa teks Inggris.
+  setUp(() => AppLocale.lang = 'en');
+  tearDown(() => AppLocale.lang = 'id');
   bool? result;
 
   tearDown(() {

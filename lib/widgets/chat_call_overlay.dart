@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -349,7 +350,13 @@ class _ChatCallOverlayState extends ConsumerState<ChatCallOverlay> {
         if (isVideo)
           CallControlButton(
             icon: Icons.cameraswitch_rounded,
-            onTap: sess.switchCamera,
+            onTap: () async {
+              final ok = await sess.switchCamera();
+              if (!mounted || ok) return;
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(s.callCameraSwitchFailed)));
+            },
           ),
         CallControlButton(
           icon: sess.speakerOn
@@ -446,8 +453,7 @@ class _ChatCallOverlayState extends ConsumerState<ChatCallOverlay> {
                   child: RTCVideoView(
                     effSwap ? sess.remoteRenderer : sess.localRenderer,
                     mirror: !effSwap,
-                    objectFit: RTCVideoViewObjectFit
-                        .RTCVideoViewObjectFitCover,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                   ),
                 ),
               ),

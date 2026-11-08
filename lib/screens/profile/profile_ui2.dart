@@ -6,10 +6,18 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
   @override
   Widget _photosSection(BuildContext context, S s) {
     final maxPhotos = 4 + _extraSlotsCache;
+    final me = ref.watch(authProvider.select((a) => a.profile));
+    final isFemale = requiresFaceVerifiedPhoto(me?.gender);
+    // Female + avatar lama (belum lewat selfie liveness) → minta ganti.
+    final avatarNeedsReplace =
+        isFemale &&
+        (me?.avatar ?? '').isNotEmpty &&
+        me?.avatarFaceVerified != true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 20),
+        if (avatarNeedsReplace) _photoReplaceBanner(s),
         _sectionTitle(
           s.titleMyPhotos,
           trailing: Text(
@@ -127,6 +135,35 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                                 ),
                               ),
                             ),
+                            // Foto female lama (belum lewat selfie liveness) →
+                            // tandai supaya user tahu harus diganti.
+                            if (isFemale && !ph.faceVerified)
+                              Positioned(
+                                left: 4,
+                                right: 4,
+                                bottom: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.62),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    s.photoNeedsReplace,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: AppTextSize.s11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             // Tombol HAPUS per foto (pojok kanan atas) — tetap ada
                             // di samping long-press supaya jelas & mudah ditemukan.
                             Positioned(
@@ -160,6 +197,57 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
           ),
         ),
       ],
+    );
+  }
+
+  /// Banner: avatar female lama belum lolos verifikasi selfie.
+  Widget _photoReplaceBanner(S s) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+        decoration: BoxDecoration(
+          color: AppTheme.primary.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.face_retouching_natural,
+              size: 18,
+              color: AppTheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                s.photoReplaceBanner,
+                style: TextStyle(
+                  fontSize: AppTextSize.s125,
+                  height: AppTextSize.lh135,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: _uploading ? null : _showAvatarOptions,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                s.photoReplaceNow,
+                style: TextStyle(
+                  fontSize: AppTextSize.s125,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -665,32 +753,34 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
       padding: const EdgeInsets.only(top: 16, bottom: 20),
       child: Column(
         children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => DonateScreen()),
-            ),
-            child: SizedBox(
-              height: 40,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.favorite, size: 18, color: AppTheme.danger),
-                  const SizedBox(width: 6),
-                  Text(
-                    s.titleDonate,
-                    style: TextStyle(
-                      fontSize: AppTextSize.s14,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textSecondary,
+          // Donasi disembunyikan (kDonateEnabled).
+          if (kDonateEnabled)
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => DonateScreen()),
+              ),
+              child: SizedBox(
+                height: 40,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.favorite, size: 18, color: AppTheme.danger),
+                    const SizedBox(width: 6),
+                    Text(
+                      s.titleDonate,
+                      style: TextStyle(
+                        fontSize: AppTextSize.s14,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
           const SizedBox(height: 2),
           FutureBuilder<String>(
             future: _appVersion(),

@@ -104,6 +104,7 @@ abstract class _CallBase extends ChangeNotifier {
   StreamSubscription<String>? _statusSub;
   Timer? _ringTimer;
   Timer? _syncTimer;
+
   /// Pengawas cepat fase: sebagian device (dilaporkan di Xiaomi) tidak
   /// memanggil onConnectionState/onIceConnectionState walau media sudah
   /// mengalir → layar tertahan "Menyambungkan…" sampai sync 12 dtk.
@@ -157,6 +158,7 @@ abstract class _CallBase extends ChangeNotifier {
   // Penelepon didebit per menit oleh server (call_billing_tick) — server
   // otoritatif dari calls.answered_at. Client hanya PEMICU tick tiap menit.
   Timer? _billingTimer;
+
   /// Auto-hangup saat call dijeda karena koin habis — tanpa ini panggilan
   /// jalan terus GRATIS selamanya sampai salah satu pihak hangup manual.
   Timer? _pauseTimer;
@@ -164,18 +166,24 @@ abstract class _CallBase extends ChangeNotifier {
   int _billingCharged = 0;
   int _billingIncome = 0;
   bool _billingEndedNoCoin = false;
+
   /// Error tick terakhir (jaringan/server) — untuk indikator kecil di UI.
   String? _billingTickError;
   String? get billingTickError => _billingTickError;
+
   /// Saldo habis di tengah panggilan → panggilan DIJEDA (bukan diputus) dan
   /// UI menampilkan dialog "lanjutkan + isi koin". Di-set oleh _billingTick.
   bool _awaitingContinue = false;
+
   /// Alasan server saat can_continue=false ('insufficient' | 'free_limit').
   /// 'free_limit' = kuota gratis female harian habis — top-up TIDAK bisa
   /// melanjutkan, UI harus menawarkan Akhiri saja.
   String? _billingPauseReason;
+
   /// Batas menit gratis female/hari dari server (untuk teks dialog).
   int _billingFreeLimitMin = 0;
+  // Menit gratis harian female yang sudah terpakai (server call_billing_tick).
+  int _billingFreeUsedMin = 0;
   int get billingPerMinute => _billingPerMin;
   int get billingChargedTotal => _billingCharged;
   // Pendapatan live sisi penerima (female): diisi dari income_total pada
@@ -209,10 +217,14 @@ abstract class _CallBase extends ChangeNotifier {
   bool get awaitingContinue => _awaitingContinue;
   String? get billingPauseReason => _billingPauseReason;
   int get billingFreeLimitMin => _billingFreeLimitMin;
+  int get billingFreeUsedMin => _billingFreeUsedMin;
 
   /// Tarif per menit call ini (dari client pricing) — dipakai UI untuk
   /// menampilkan banner SEBELUM tick pertama tiba.
-  void setBillingPerMinute(int v) => _billingPerMin = v;
+  /// Female penelepon = GRATIS (server `call_billing_tick`, batas menit
+  /// harian) → jangan tampilkan tarif berbayar.
+  void setBillingPerMinute(int v) =>
+      _billingPerMin = myGender == 'female' ? 0 : v;
 
   /// Test-only: paksa fase & alasan kegagalan media untuk memverifikasi UI
   /// (mis. overlay menampilkan pesan error + tombol sambung ulang).
@@ -437,7 +449,9 @@ class CallSession extends _CallBase
           );
           return;
         }
-      } catch (e) { dlog('[CALL] cek status awal callee gagal: $e'); }
+      } catch (e) {
+        dlog('[CALL] cek status awal callee gagal: $e');
+      }
     }
 
     if (isCaller) {
@@ -531,7 +545,9 @@ class CallSession extends _CallBase
           _finish(CallEndReason.canceled);
           return;
         }
-      } catch (e) { dlog('[CALL] poll status callee gagal: $e'); }
+      } catch (e) {
+        dlog('[CALL] poll status callee gagal: $e');
+      }
     }
   }
 
@@ -566,9 +582,7 @@ class CallSession extends _CallBase
         _phase = CallPhase.connecting;
       }
       notifyListeners();
-      unawaited(
-        _service.sendSignal(callId, 'ice_retry').catchError((_) {}),
-      );
+      unawaited(_service.sendSignal(callId, 'ice_retry').catchError((_) {}));
       // Recheck seperti jalur caller: masih tak connect → cek dulu apakah
       // lawan sudah menutup call (ice_retry-nya tak akan pernah dibalas),
       // baru tawarkan tombol manual.
@@ -681,7 +695,9 @@ class CallSession extends _CallBase
           return;
         }
       }
-    } catch (e) { dlog('[CALL] fallback cek status gagal: $e'); }
+    } catch (e) {
+      dlog('[CALL] fallback cek status gagal: $e');
+    }
     if (_closed) return;
     // Safety-net fase: kadang callback onConnectionState/onIceConnectionState
     // tidak dipanggil di sebagian device sehingga UI nyangkut "Menghubungkan"
@@ -710,7 +726,9 @@ class CallSession extends _CallBase
         final payload = (row['payload'] as Map?)?.cast<String, dynamic>() ?? {};
         await _onSignal({'id': id, 'type': type, ...payload});
       }
-    } catch (e) { dlog('[CALL] catch-up sinyal gagal: $e'); }
+    } catch (e) {
+      dlog('[CALL] catch-up sinyal gagal: $e');
+    }
   }
 
   // ── Kontrol ──
@@ -735,13 +753,24 @@ class CallSession extends _CallBase
         'camera',
         payload: {'enabled': _cameraOn},
       );
-    } catch (e) { dlog('[CALL] kirim sinyal camera gagal: $e'); }
+    } catch (e) {
+      dlog('[CALL] kirim sinyal camera gagal: $e');
+    }
   }
 
-  Future<void> switchCamera() async {
+  /// Ganti kamera depan↔belakang. Return true bila switch berhasil; false
+  /// bila track tak ada / native gagal (MIUI kadang menolak membuka lensa
+  /// aux — error dilog supaya kegagalan tidak hilang senyap di UI).
+  Future<bool> switchCamera() async {
     final tracks = _localStream?.getVideoTracks();
-    if (tracks == null || tracks.isEmpty) return;
-    await Helper.switchCamera(tracks.first);
+    if (tracks == null || tracks.isEmpty) return false;
+    try {
+      await Helper.switchCamera(tracks.first);
+      return true;
+    } catch (e) {
+      dlog('[CALL] switchCamera gagal: $e');
+      return false;
+    }
   }
 
   /// Route audio awal sesi (dipanggil sekali di init()).
@@ -812,7 +841,17 @@ class CallSession extends _CallBase
       if (remaining != null) onBalanceUpdate?.call(remaining);
       // Tarif per menit dari server → banner "N coin/menit" hidup.
       final perMin = (res['per_minute'] as num?)?.toInt();
-      if (perMin != null && perMin > 0) _billingPerMin = perMin;
+      if (perMin != null && perMin > 0 && myGender != 'female') {
+        _billingPerMin = perMin;
+      } else if (perMin == 0 && res['free_limit_min'] != null) {
+        // Jalur gratis female dari server → banner tarif disembunyikan.
+        _billingPerMin = 0;
+      }
+      // Kuota menit gratis female (untuk banner "Gratis X/Y menit").
+      final freeLimit = (res['free_limit_min'] as num?)?.toInt();
+      if (freeLimit != null) _billingFreeLimitMin = freeLimit;
+      final freeUsed = (res['free_used_min'] as num?)?.toInt();
+      if (freeUsed != null) _billingFreeUsedMin = freeUsed;
       if (res['can_continue'] == false) {
         // 2026-10-31: JANGAN putus. Jeda + minta user lanjutkan/top-up.
         // Hanya sisi PAYER yang menjeda+dialog — recipient (female) tak
@@ -954,7 +993,9 @@ class CallSession extends _CallBase
     for (final pc in _watchPcs.values) {
       try {
         await pc.close();
-      } catch (_) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
+      } catch (
+        _
+      ) {} // cleanup best-effort: kegagalan tutup tidak memengaruhi UX
     }
     _watchPcs.clear();
     _watchPendingCands.clear();

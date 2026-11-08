@@ -367,6 +367,17 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
     final auth = ref.read(authProvider.notifier);
     final s = ref.read(localeProvider).s;
     final profile = auth.profile;
+    // Gender sendiri: dari profil; bila profil belum termuat, simpulkan dari
+    // pasangan — match SELALU lawan jenis (server random_match_join).
+    final myGender = switch (profile?.gender) {
+      'male' => 'male',
+      'female' => 'female',
+      _ => switch (partner.gender) {
+        'female' => 'male',
+        'male' => 'female',
+        _ => null,
+      },
+    };
     try {
       await ref
           .read(callProvider.notifier)
@@ -378,13 +389,13 @@ class RandomMatchNotifier extends Notifier<RandomMatchState> {
             isCaller: res['is_caller'] == true,
             mode: CallMode.fullscreen,
             myName: profile?.nickname ?? '',
-            myGender: profile?.gender ?? 'other',
+            myGender: myGender ?? 'other',
             // Random match: server menagih pihak MALE siapa pun caller
             // signaling-nya. Tick billing hanya di device payer; gender
             // tak dikenal → fallback isCaller (perilaku lama).
-            billingPayer: profile?.gender == 'male'
+            billingPayer: myGender == 'male'
                 ? true
-                : (profile?.gender == 'female' ? false : null),
+                : (myGender == 'female' ? false : null),
             // Grace 30 detik dari media connect — UI countdown + jangkar
             // billing server (media_connected_at) menunjuk momen yang sama.
             billingFreeGraceSec: 30,

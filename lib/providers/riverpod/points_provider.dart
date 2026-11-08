@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../config/app_flavor.dart';
-import '../../config/gifts.dart';
 import 'auth_provider.dart';
 import 'withdraw_provider.dart';
 import '../../config/strings.dart';
@@ -20,6 +19,7 @@ import 'missions_provider.dart';
 import '../../utils.dart';
 import 'match_pricing_provider.dart';
 import '../../widgets/points_toast.dart';
+import '../../widgets/points_onboard_items.dart';
 
 /// State poin/koin (immutable — yang di-watch widget).
 class PointsState {
@@ -39,6 +39,7 @@ class PointsState {
   final bool promoOk;
   final int callAudioCostPerMin;
   final int callVideoCostPerMin;
+  final int photoUnlockCost;
   final Map<String, dynamic> featureFlags;
 
   const PointsState({
@@ -58,6 +59,7 @@ class PointsState {
     this.promoOk = false,
     this.callAudioCostPerMin = 6,
     this.callVideoCostPerMin = 20,
+    this.photoUnlockCost = 15,
     this.featureFlags = const {},
   });
 
@@ -80,6 +82,7 @@ class PointsState {
       other.promoOk == promoOk &&
       other.callAudioCostPerMin == callAudioCostPerMin &&
       other.callVideoCostPerMin == callVideoCostPerMin &&
+      other.photoUnlockCost == photoUnlockCost &&
       mapEquals(other.featureFlags, featureFlags);
 
   @override
@@ -100,6 +103,7 @@ class PointsState {
     promoOk,
     callAudioCostPerMin,
     callVideoCostPerMin,
+    photoUnlockCost,
     Object.hashAllUnordered(
       featureFlags.entries.map((e) => Object.hash(e.key, e.value)),
     ),
@@ -176,6 +180,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
 
   int _callAudioCostPerMin = 6;
   int _callVideoCostPerMin = 20;
+  int _photoUnlockCost = 15;
 
   Map<String, dynamic> _featureFlags = {};
 
@@ -238,6 +243,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
       promoOk: _promoOk,
       callAudioCostPerMin: _callAudioCostPerMin,
       callVideoCostPerMin: _callVideoCostPerMin,
+      photoUnlockCost: _photoUnlockCost,
       featureFlags: Map.unmodifiable(_featureFlags),
     );
   }
@@ -264,6 +270,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   int get bonusMultiplier => _bonusMultiplier;
   int get callAudioCostPerMin => _callAudioCostPerMin;
   int get callVideoCostPerMin => _callVideoCostPerMin;
+  int get photoUnlockCost => _photoUnlockCost;
   int callCostPerMin(String callType) =>
       callType == 'audio' ? _callAudioCostPerMin : _callVideoCostPerMin;
   bool featurePublished(String feature) =>
@@ -288,6 +295,8 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
       _callVideoCostPerMin =
           (p['call_video_cost_per_min'] as num?)?.toInt() ??
           _callVideoCostPerMin;
+      _photoUnlockCost =
+          (p['photo_unlock_cost'] as num?)?.toInt() ?? _photoUnlockCost;
       _featureFlags = await _service.featureFlags();
       _emit();
     } catch (e) {
@@ -531,6 +540,9 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     await refreshEnabled();
     if (_onboardingShown || !enabled) return;
     if (!context.mounted) return;
+    // Gender belum termuat → tunda (jangan tandai), supaya female tidak
+    // terlanjur melihat versi male.
+    if (gender == null || gender.isEmpty) return;
     markOnboardingShown();
     final isFemale = gender == 'female';
     final callAudio = _callAudioCostPerMin;
@@ -563,7 +575,9 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
                           style: AppText.title.copyWith(color: Colors.white),
                         ),
                         Text(
-                          s.pointsOnboardSub,
+                          isFemale
+                              ? s.pointsOnboardFemaleTitle
+                              : s.pointsOnboardMaleTitle,
                           style: AppText.caption.copyWith(
                             color: Colors.white70,
                           ),
@@ -576,65 +590,16 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Kopi per gender: male = apa yang DIBAYAR, female = cara
-                  // MENDAPAT. Aturan ekonominya memang asimetris (male bayar,
-                  // female menerima), jadi satu teks untuk keduanya menyesatkan.
-                  if (isFemale) ...[
-                    _onboardItem(
-                      '💰',
-                      s.pointsOnboardFemaleSub,
-                      highlight: true,
-                    ),
-                    _onboardItem('', s.pointsOnboardFemaleCall),
-                    _onboardItem('', s.pointsOnboardFemaleGift),
-                    _onboardItem('', s.pointsOnboardFemaleMatch),
-                    _onboardItem(
-                      '',
-                      s.pointsOnboardFemaleWithdraw(_withdrawMinCoins()),
-                    ),
-                  ] else ...[
-                    _onboardItem('🪙', s.pointsOnboardMaleSub, highlight: true),
-                    _onboardItem(
-                      '',
-                      s.pointsOnboardMaleCall(callAudio, callVideo),
-                    ),
-                    _onboardItem(
-                      '',
-                      s.pointsOnboardMaleMatch(
-                        (ref.read(matchPricingProvider).value ??
-                                const MatchPricing())
-                            .searchCoins,
-                      ),
-                    ),
-                    _onboardItem(
-                      '',
-                      s.pointsOnboardMaleGift(
-                        kGiftCatalog.first.coins,
-                        kGiftCatalog.last.coins,
-                      ),
-                    ),
-                    _onboardItem('', s.pointsOnboardMaleFree),
-                  ],
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Text('🎉', style: TextStyle(fontSize: AppGlyph.sm)),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          s.pointsOnboardStart,
-                          style: AppText.bodySmall.copyWith(
-                            color: Colors.amber,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              child: PointsOnboardItems(
+                s: s,
+                isFemale: isFemale,
+                callAudio: callAudio,
+                callVideo: callVideo,
+                matchFee:
+                    (ref.read(matchPricingProvider).value ??
+                            const MatchPricing())
+                        .searchCoins,
+                withdrawMin: _withdrawMinCoins(),
               ),
             ),
             Padding(
@@ -657,40 +622,6 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _onboardItem(String emoji, String text, {bool highlight = false}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: highlight
-            ? const Color(0xFF2ECC71).withValues(alpha: 0.14)
-            : Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: highlight
-              ? const Color(0xFF2ECC71).withValues(alpha: 0.5)
-              : Colors.transparent,
-          width: 1.2,
-        ),
-      ),
-      child: Row(
-        children: [
-          Text(emoji, style: TextStyle(fontSize: AppGlyph.md)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: AppText.body.copyWith(
-                color: highlight ? Colors.white : Colors.white70,
-                fontWeight: highlight ? FontWeight.w700 : FontWeight.w400,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -829,11 +760,19 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
     }
   }
 
+  /// Perempuan gratis semua (server: deduct_chat_point, create/extend
+  /// private room, boost_post, subscribe_creator tidak memotong koin
+  /// female). Gender belum termuat → false (perilaku berbayar biasa).
+  bool get spendsFree =>
+      ref.read(authProvider.notifier).profile?.gender == 'female';
+
   Future<int> deductBeforeSend(String msgType) async {
     // 2026-10-31: pesan teks GRATIS di server (deduct_chat_point no-op).
     // Jangan tembak RPC per pesan — hemat radio/baterai di chat aktif.
     if (msgType == 'text') return _points;
     if (!_enabled) return _points;
+    // Perempuan gratis semua (server deduct_chat_point juga 0 untuk female).
+    if (spendsFree) return _points;
     try {
       final remaining = await _service.deductChatPoint(msgType);
       _points = remaining;
@@ -912,6 +851,12 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   void showOutOfPointsDialog(BuildContext context, bool isId) {
     if (!enabled) return;
     final s = S(isId: isId);
+    // Female tidak top-up (sama dgn profil: canTopup = gender != female) —
+    // koin didapat dari telepon/hadiah → teks beda & tanpa tombol top-up.
+    final gender = ref.read(authProvider.notifier).profile?.gender;
+    final isFemale = gender == 'female';
+    // Top-up hanya untuk male; gender belum termuat → teks netral tanpa top-up.
+    final canTopup = gender == 'male';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -926,25 +871,31 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                s.pointsOutOfCoinBody,
+                isFemale
+                    ? s.pointsOutOfCoinBodyFemale
+                    : canTopup
+                    ? s.pointsOutOfCoinBody
+                    : s.errCoinInsufficient,
                 style: AppText.bodySmall.copyWith(color: Colors.white70),
               ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                    _openTopupOrSoon(context, s);
-                  },
-                  icon: const Icon(Icons.add_circle_outline, size: 20),
-                  label: Text(s.yukcoinTopup),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
+              if (canTopup) ...[
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _openTopupOrSoon(context, s);
+                    },
+                    icon: const Icon(Icons.add_circle_outline, size: 20),
+                    label: Text(s.yukcoinTopup),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

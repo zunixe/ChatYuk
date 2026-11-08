@@ -54,9 +54,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   late final CallSession _session;
   bool _ownsSession = true;
   Timer? _autoClose;
+
   /// Timer durasi call — hanya memperbarui `_elapsed` (ValueNotifier), jadi
   /// tidak memicu rebuild seluruh layar tiap detik.
   Timer? _elapsedTimer;
+
   /// Durasi call via ValueNotifier — timer 1 dtk TIDAK memicu setState
   /// seluruh layar (dulu rebuild 2× RTCVideoView + kontrol tiap detik).
   final ValueNotifier<String> _elapsed = ValueNotifier<String>('00:00');
@@ -83,9 +85,18 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   void initState() {
     super.initState();
     WakelockPlus.enable();
-    ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).registerCall(widget.callId);
-    final profile = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).profile;
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(callProvider.notifier).registerCall(widget.callId);
+    final profile = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier).profile;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     if (widget.session != null) {
       // Session sudah dibuat & di-init oleh CallProvider (mode chat / expand).
       _session = widget.session!;
@@ -107,16 +118,18 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     if (_ownsSession) {
       unawaited(
-        ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifShowActive(
-          body: widget.callType == 'video'
-              ? s.callNotifActiveVideo
-              : s.callNotifActiveAudio,
-          channelName: s.callNotifActiveAudio,
-          channelDesc: s.callNotifActiveAudio,
-          chatId: widget.chatId,
-          otherUid: widget.remoteUid,
-          otherName: widget.remoteName,
-        ),
+        ProviderScope.containerOf(context, listen: false)
+            .read(callProvider.notifier)
+            .notifShowActive(
+              body: widget.callType == 'video'
+                  ? s.callNotifActiveVideo
+                  : s.callNotifActiveAudio,
+              channelName: s.callNotifActiveAudio,
+              channelDesc: s.callNotifActiveAudio,
+              chatId: widget.chatId,
+              otherUid: widget.remoteUid,
+              otherName: widget.remoteName,
+            ),
       );
       unawaited(_session.init());
     }
@@ -131,8 +144,16 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     _elapsed.dispose();
     if (_ownsSession) {
       unawaited(_session.close());
-      unawaited(ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifCancel());
-      ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).unregisterCall(widget.callId);
+      unawaited(
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(callProvider.notifier).notifCancel(),
+      );
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(callProvider.notifier).unregisterCall(widget.callId);
     }
     super.dispose();
   }
@@ -141,7 +162,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     if (!mounted) return;
     setState(() {});
     if (_session.phase == CallPhase.ended) {
-      unawaited(ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).notifCancel());
+      unawaited(
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(callProvider.notifier).notifCancel(),
+      );
     }
     if (_session.phase == CallPhase.ended && _autoClose == null) {
       _autoClose = Timer(const Duration(milliseconds: 400), () {
@@ -155,7 +181,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   /// Layar ditutup SEGERA (jeda 250ms agar animasi tap terlihat), TIDAK
   /// menunggu cleanup WebRTC yang lambat.
   void _endCall() {
-    unawaited(ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).hangup());
+    unawaited(
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(callProvider.notifier).hangup(),
+    );
     _autoClose?.cancel();
     _autoClose = Timer(const Duration(milliseconds: 250), () {
       if (mounted) Navigator.of(context).pop();
@@ -179,6 +210,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   /// Menit panggilan yang SUDAH dikirim ke misi (dasar hitung delta).
   int _missionCallMinutesSent = 0;
+
   /// Misi "Panggilan Pribadi" sudah dicatat untuk sesi ini?
   bool _missionPrivateCounted = false;
 
@@ -205,8 +237,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         );
         return;
       }
-      final perMin =
-          _session.billingPerMinute > 0 ? _session.billingPerMinute : 20;
+      final perMin = _session.billingPerMinute > 0
+          ? _session.billingPerMinute
+          : 20;
       await showCallNoCoinDialog(
         context,
         perMinute: perMin,
@@ -220,9 +253,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
           _noCoinDialogShown = false;
           final ok = await _session.resumeBillingAfterTopup();
           if (!ok && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(s.callNoCoinStillEmpty)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(s.callNoCoinStillEmpty)));
           }
         },
       );
@@ -242,8 +275,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   void _trackCallMissions() {
     final start = _session.connectedAt;
     if (start == null) return;
-    final pp = ProviderScope.containerOf(context, listen: false)
-        .read(pointsProvider.notifier);
+    final pp = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier);
 
     // Hitung sekali per sesi: panggilan 1:1 (bukan random match).
     if (!_missionPrivateCounted) {
@@ -251,8 +286,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       pp.trackMission('private_calls');
     }
 
-    final totalMinutes =
-        DateTime.now().difference(start).inSeconds ~/ 60;
+    final totalMinutes = DateTime.now().difference(start).inSeconds ~/ 60;
     final delta = totalMinutes - _missionCallMinutesSent;
     if (delta <= 0) return;
     _missionCallMinutesSent = totalMinutes;
@@ -266,7 +300,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   void _minimize() {
     if (!_minimizable || _minimizing) return;
     setState(() => _minimizing = true);
-    ProviderScope.containerOf(context, listen: false).read(callProvider.notifier).setMode(CallMode.chat);
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(callProvider.notifier).setMode(CallMode.chat);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) Navigator.of(context).pop();
     });
@@ -471,8 +508,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style:
-                              AppText.headline.copyWith(color: Colors.white),
+                          style: AppText.headline.copyWith(color: Colors.white),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -552,7 +588,15 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                           ),
                           CallControlButton(
                             icon: Icons.cameraswitch_rounded,
-                            onTap: _session.switchCamera,
+                            onTap: () async {
+                              final ok = await _session.switchCamera();
+                              if (ok || !context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(s.callCameraSwitchFailed),
+                                ),
+                              );
+                            },
                           ),
                           CallControlButton(
                             icon: _session.speakerOn
@@ -561,11 +605,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                             off: !_session.speakerOn,
                             onTap: _session.toggleSpeaker,
                           ),
-                        if (_minimizable)
-                          CallControlButton(
-                            icon: Icons.picture_in_picture_alt_rounded,
-                            onTap: _minimize,
-                          ),
+                          if (_minimizable)
+                            CallControlButton(
+                              icon: Icons.picture_in_picture_alt_rounded,
+                              onTap: _minimize,
+                            ),
                         ],
                         // ICE gagal menetap saat call → sambung-ulang manual.
                         if (_session.canReconnect &&
@@ -573,8 +617,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                                 _session.phase == CallPhase.error))
                           CallControlButton(
                             icon: Icons.refresh_rounded,
-                            onTap: () =>
-                                unawaited(_session.reconnect()),
+                            onTap: () => unawaited(_session.reconnect()),
                           ),
                         CallControlButton(
                           icon: Icons.call_end_rounded,
@@ -607,8 +650,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                           CallControlButton(
                             icon: Icons.refresh_rounded,
                             size: 72,
-                            onTap: () =>
-                                unawaited(_session.reconnect()),
+                            onTap: () => unawaited(_session.reconnect()),
                           ),
                           const SizedBox(width: 24),
                         ],
@@ -661,8 +703,6 @@ class _RemoteFallback extends StatelessWidget {
   }
 }
 
-
-
 /// Banner billing call: caller melihat saldo + total tertagih (−N), callee
 /// (penerima) melihat saldo + pendapatan (+N). Tarif/menit tetap tampil
 /// selama tick pertama belum mengembalikan angka tagihan.
@@ -681,13 +721,21 @@ class _BillingBanner extends StatelessWidget {
     final s = S(isId: isId);
     final charged = session.billingChargedTotal;
     final income = session.billingIncome;
+    final isFemale = session.myGender == 'female';
+    // Female penelepon = gratis (kuota menit harian); penerima hanya
+    // berpenghasilan bila perempuan (server call_billing_tick).
     final text = session.isBillingPayer
-        ? (charged > 0
-            ? '$coins (−$charged)'
-            : (session.billingPerMinute > 0
-                ? s.callCostPerMin(session.billingPerMinute)
-                : '$coins'))
-        : '$coins (+$income)';
+        ? (isFemale && session.billingFreeLimitMin > 0
+              ? s.callFreeMinutes(
+                  session.billingFreeUsedMin,
+                  session.billingFreeLimitMin,
+                )
+              : charged > 0
+              ? '$coins (−$charged)'
+              : (session.billingPerMinute > 0
+                    ? s.callCostPerMin(session.billingPerMinute)
+                    : '$coins'))
+        : (isFemale ? '$coins (+$income)' : '$coins');
     // Tick billing gagal (jaringan/server) → angka bisa basi; tandai kecil.
     final tickStale = session.billingTickError != null;
     return Container(
@@ -700,9 +748,7 @@ class _BillingBanner extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            tickStale
-                ? Icons.error_outline
-                : Icons.monetization_on_outlined,
+            tickStale ? Icons.error_outline : Icons.monetization_on_outlined,
             color: tickStale ? Colors.orange : Colors.amber,
             size: 16,
           ),

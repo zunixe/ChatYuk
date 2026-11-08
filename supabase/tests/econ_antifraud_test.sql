@@ -14,13 +14,15 @@ update public.app_settings set withdraw_hold_days = 0 where id = 'global';
 
 select supabase_tests.mk_dummy('ed070000-0000-4000-8000-0000000000a1'::uuid, '[TEST] B-M1', 'online');
 select supabase_tests.mk_dummy('ed070000-0000-4000-8000-0000000000f1'::uuid, '[TEST] B-F1', 'online');
-update public.profiles set gender='female',
+-- Pengirim (M1) = male: sejak 20261110080000 perempuan tidak bisa
+-- send_coins. (Gender di-set sekali — guard_gender_lock menolak ganti.)
+update public.profiles set gender = case
+         when id = 'ed070000-0000-4000-8000-0000000000a1' then 'male'
+         else 'female' end,
        created_at = now() - interval '30 days',
        is_registered = true
  where id in ('ed070000-0000-4000-8000-0000000000a1',
               'ed070000-0000-4000-8000-0000000000f1');
-update public.profiles set is_registered = true
- where id = 'ed070000-0000-4000-8000-0000000000a1';
 
 -- Pengirim berkantong topup; female punya earned untuk withdraw.
 insert into public.coin_ledger (user_id, bucket, type, amount, ref_id)

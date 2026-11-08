@@ -89,6 +89,54 @@ mixin SChatMx {
   String get msgProfileSaved =>
       isId ? 'Profil berhasil disimpan' : 'Profile saved';
 
+  // ── Verifikasi wajah foto profil ──
+  String get photoVerifySheetBody => isId
+      ? 'Wajib pakai foto wajah asli. Foto tanpa wajah (pemandangan, '
+            'kartun, gambar AI) tidak bisa diupload.'
+      : 'A real face photo is required. Photos without a face (landscapes, '
+            'cartoons, AI images) cannot be uploaded.';
+  String get photoVerifyDialogTitle =>
+      isId ? 'Verifikasi wajah gagal' : 'Face check failed';
+  String get photoVerifyRetry =>
+      isId ? 'Pilih Foto Lagi' : 'Pick Another Photo';
+  String get faceCamNoFace =>
+      isId ? 'Hadapkan wajah ke kamera' : 'Face the camera';
+  String get faceCamReady =>
+      isId ? 'Wajah terdeteksi — jepret' : 'Face detected — take the shot';
+  String get faceCamMulti => isId
+      ? 'Lebih dari satu wajah — satu orang saja'
+      : 'More than one face — one person only';
+  String get faceCamBroken => isId
+      ? 'Deteksi wajah tidak jalan — jepret manual'
+      : 'Face detection unavailable — capture manually';
+  String get photoVerifyCameraFailed => isId
+      ? 'Kamera verifikasi tidak bisa dimulai — coba lagi'
+      : 'Verification camera could not start — try again';
+  String get photoVerifyNoFace => isId
+      ? 'Wajah tidak terdeteksi di foto ini. Pilih foto yang memuat wajahmu.'
+      : 'No face detected in this photo. Pick a photo that shows your face.';
+  String get photoVerifyMultiFace => isId
+      ? 'Terdeteksi lebih dari satu wajah. Pilih foto dirimu sendiri saja.'
+      : 'More than one face detected. Pick a photo of yourself only.';
+  String get photoNeedsReplace => isId ? 'Perlu diganti' : 'Needs replacement';
+  String get photoReplaceBanner => isId
+      ? 'Foto profil kamu perlu diganti dengan foto wajah asli.'
+      : 'Your profile photo needs to be replaced with a real face photo.';
+  String get photoReplaceNow => isId ? 'Ganti Sekarang' : 'Replace Now';
+
+  // ── Paywall foto profil (female) ──
+  String get photoUnlockTitle => isId ? 'Buka Foto' : 'Unlock Photo';
+  String photoUnlockBody(int cost) => isId
+      ? 'Buka foto ini permanen dengan $cost koin?'
+      : 'Unlock this photo permanently for $cost coins?';
+  String get photoUnlockInsufficient => isId
+      ? 'Koin berbayar tidak cukup — isi ulang dulu'
+      : 'Not enough paid coins — top up first';
+  String get btnUnlock => isId ? 'Buka' : 'Unlock';
+  String get photoUnlockDone => isId ? 'Foto terbuka' : 'Photo unlocked';
+  String get photoUnlockFailed =>
+      isId ? 'Gagal membuka foto' : 'Failed to unlock photo';
+
   // ── Avatar Options ──
   String get avatarCamera => isId ? 'Ambil Foto' : 'Take Photo';
   String get avatarGallery => isId ? 'Dari Galeri' : 'From Gallery';
@@ -142,8 +190,9 @@ mixin SChatMx {
       ? 'Akun, privasi, notifikasi & lainnya'
       : 'Account, privacy, notifications & more';
   String get titleAccount => isId ? 'Akun' : 'Account';
-  String get descAccount =>
-      isId ? 'Keamanan, email, keluar & hapus akun' : 'Security, email, logout & delete account';
+  String get descAccount => isId
+      ? 'Keamanan, email, keluar & hapus akun'
+      : 'Security, email, logout & delete account';
   String get menuDisplay => isId ? 'Tampilan' : 'Appearance';
   String get descDisplay =>
       isId ? 'Bahasa, tema & font chat' : 'Language, theme & chat font';
@@ -161,19 +210,20 @@ mixin SChatMx {
   String get privacyFriends => isId ? 'Teman saya' : 'My friends';
   String get privacyFriendsExcept =>
       isId ? 'Teman saya kecuali...' : 'My friends except...';
-  String get privacyOnly => isId ? 'Hanya orang tertentu' : 'Only certain people';
+  String get privacyOnly =>
+      isId ? 'Hanya orang tertentu' : 'Only certain people';
   String get privacyNobody => isId ? 'Tidak ada' : 'Nobody';
   // Deskripsi tiap opsi (sub-judul di sheet pemilih).
   String get privacyEveryoneDesc =>
       isId ? 'Siapa pun bisa melihat' : 'Anyone can see';
-  String get privacyEveryoneExceptDesc =>
-      isId ? 'Semua bisa melihat, kecuali orang terpilih'
-          : 'Anyone except selected people';
+  String get privacyEveryoneExceptDesc => isId
+      ? 'Semua bisa melihat, kecuali orang terpilih'
+      : 'Anyone except selected people';
   String get privacyFriendsDesc =>
       isId ? 'Hanya teman kamu' : 'Only your friends';
-  String get privacyFriendsExceptDesc =>
-      isId ? 'Hanya teman, kecuali orang terpilih'
-          : 'Only friends, except selected people';
+  String get privacyFriendsExceptDesc => isId
+      ? 'Hanya teman, kecuali orang terpilih'
+      : 'Only friends, except selected people';
   String get privacyOnlyDesc =>
       isId ? 'Hanya orang yang kamu pilih' : 'Only people you pick';
   String get privacyNobodyDesc =>
@@ -199,8 +249,7 @@ mixin SChatMx {
   String get privacyReadReceiptsDesc => isId
       ? 'Pesan tetap terkirim, tetapi pengirim tidak melihat centang biru.'
       : 'Messages still send, but senders will not see blue read checks.';
-  String get privacyExceptTitle =>
-      isId ? 'Yang dikecualikan' : 'Excluded';
+  String get privacyExceptTitle => isId ? 'Yang dikecualikan' : 'Excluded';
   String get privacyExceptDesc => isId
       ? 'Orang yang dipilih di sini TIDAK bisa melihat bagian ini.'
       : 'People picked here CANNOT see this.';
@@ -361,16 +410,18 @@ mixin SChatMx {
   String get callDirOutgoing => isId ? 'Keluar' : 'Outgoing';
   String get callDirIncoming => isId ? 'Masuk' : 'Incoming';
   String get callRedial => isId ? 'Panggil ulang' : 'Call back';
-  String get errCallPermission =>
-      isId ? 'Izin kamera & mikrofon diperlukan untuk panggilan' : 'Camera & microphone permission needed for calls';
-  String get errCallPermissionVideo =>
-      isId ? 'Izin kamera diperlukan untuk panggilan video' : 'Camera permission needed for video calls';
-  String get errCallMediaInUse =>
-      isId ? 'Kamera/mikrofon sedang dipakai aplikasi lain' : 'Camera/microphone is used by another app';
+  String get errCallPermission => isId
+      ? 'Izin kamera & mikrofon diperlukan untuk panggilan'
+      : 'Camera & microphone permission needed for calls';
+  String get errCallPermissionVideo => isId
+      ? 'Izin kamera diperlukan untuk panggilan video'
+      : 'Camera permission needed for video calls';
+  String get errCallMediaInUse => isId
+      ? 'Kamera/mikrofon sedang dipakai aplikasi lain'
+      : 'Camera/microphone is used by another app';
   String get errCallMediaNotFound =>
       isId ? 'Kamera/mikrofon tidak ditemukan' : 'Camera/microphone not found';
-  String get btnOpenSettings =>
-      isId ? 'Buka Pengaturan' : 'Open Settings';
+  String get btnOpenSettings => isId ? 'Buka Pengaturan' : 'Open Settings';
   String get btnTryAgain => isId ? 'Coba lagi' : 'Try again';
   String get btnReconnect => isId ? 'Sambung ulang' : 'Reconnect';
   String get msgCallRegisterOnly => isId
@@ -378,8 +429,9 @@ mixin SChatMx {
       : 'Only registered accounts can make calls.';
   String get msgCallInProgress =>
       isId ? 'Kamu sedang dalam panggilan lain.' : 'You are in another call.';
-  String get errCallNetwork =>
-      isId ? 'Tidak ada koneksi — periksa internet lalu coba lagi' : 'No connection — check internet and retry';
+  String get errCallNetwork => isId
+      ? 'Tidak ada koneksi — periksa internet lalu coba lagi'
+      : 'No connection — check internet and retry';
   String get callBannerTap =>
       isId ? 'Ketuk untuk kembali ke panggilan' : 'Tap to return to call';
 
@@ -434,11 +486,9 @@ mixin SChatMx {
       ? 'Tunggu giliran atau angkat tangan'
       : 'Wait your turn or raise hand';
 
-  String get labelAccountDeleted =>
-      isId ? 'Akun dihapus' : 'Deleted account';
-  String get msgAccountDeleted => isId
-      ? 'Akun ini sudah dihapus'
-      : 'This account has been deleted';
+  String get labelAccountDeleted => isId ? 'Akun dihapus' : 'Deleted account';
+  String get msgAccountDeleted =>
+      isId ? 'Akun ini sudah dihapus' : 'This account has been deleted';
 
   // ── Voice stage global room (audio-only, max 6 mic) ──
 }

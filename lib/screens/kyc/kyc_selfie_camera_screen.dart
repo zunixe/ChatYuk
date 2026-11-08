@@ -29,7 +29,13 @@ import 'widgets/kyc_camera_widgets.dart';
 class KycSelfieCameraScreen extends StatefulWidget {
   static bool lastInitFailed = false;
 
-  const KycSelfieCameraScreen({super.key});
+  /// true (default, alur KYC) = bila deteksi/stream gagal terus, tombol
+  /// jepret MANUAL muncul dan hasilnya `live=false` (admin cek).
+  /// false = mode KETAT (verifikasi foto profil female): tidak ada jalan
+  /// pintas manual — wajah harus lolos liveness.
+  final bool allowManualFallback;
+
+  const KycSelfieCameraScreen({super.key, this.allowManualFallback = true});
 
   @override
   State<KycSelfieCameraScreen> createState() => _KycSelfieCameraScreenState();
@@ -57,6 +63,7 @@ class _KycSelfieCameraScreenState extends State<KycSelfieCameraScreen>
   bool _detecting = false;
   bool _capturing = false;
   bool _manualAllowed = false;
+  bool _streamFailed = false;
   int _errors = 0;
   bool _showRestart = false;
   Timer? _restartTimer;
@@ -133,8 +140,9 @@ class _KycSelfieCameraScreenState extends State<KycSelfieCameraScreen>
       _cam!,
       ResolutionPreset.medium,
       enableAudio: false,
-      imageFormatGroup:
-          Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.nv21
+          : ImageFormatGroup.bgra8888,
     );
     try {
       await ctrl.initialize().timeout(const Duration(seconds: 10));
@@ -152,13 +160,25 @@ class _KycSelfieCameraScreenState extends State<KycSelfieCameraScreen>
     setState(() {
       _ctrl = ctrl;
       _initializing = false;
+      _streamFailed = false;
     });
     try {
       ctrl.startImageStream(_onFrame);
       _streamOn = true;
     } catch (e) {
       dlog('[KycFace] stream error: $e');
+      _onStreamUnavailable();
+    }
+  }
+
+  /// Stream deteksi tak bisa jalan. Mode longgar → tombol manual; mode
+  /// ketat → tampilkan pesan (tanpa jalan pintas).
+  void _onStreamUnavailable() {
+    if (!mounted) return;
+    if (widget.allowManualFallback) {
       setState(() => _manualAllowed = true);
+    } else {
+      setState(() => _streamFailed = true);
     }
   }
 
@@ -178,27 +198,31 @@ class _KycSelfieCameraScreenState extends State<KycSelfieCameraScreen>
     final input = cameraFrameToInputImage(img, _rotation);
     if (input == null) return _onDetectError('format ${img.format.group}');
     _detecting = true;
-    _detector.processImage(input).then((faces) {
-      if (!mounted || _capturing) return;
-      _errors = 0;
-      final sample = _toSample(faces, img);
-      final before = _tracker.phase;
-      final phase = _tracker.feed(sample);
-      if (_tracker.restarted) _flashRestart();
-      if (phase == LivenessPhase.done) {
-        _capture(live: true);
-      } else if (phase != before || _tracker.current != null) {
-        setState(() {});
-      }
-    }).catchError((Object e) {
-      _onDetectError(e);
-    }).whenComplete(() => _detecting = false);
+    _detector
+        .processImage(input)
+        .then((faces) {
+          if (!mounted || _capturing) return;
+          _errors = 0;
+          final sample = _toSample(faces, img);
+          final before = _tracker.phase;
+          final phase = _tracker.feed(sample);
+          if (_tracker.restarted) _flashRestart();
+          if (phase == LivenessPhase.done) {
+            _capture(live: true);
+          } else if (phase != before || _tracker.current != null) {
+            setState(() {});
+          }
+        })
+        .catchError((Object e) {
+          _onDetectError(e);
+        })
+        .whenComplete(() => _detecting = false);
   }
 
   void _onDetectError(Object e) {
     dlog('[KycFace] detect error: $e');
     if (++_errors >= 15 && !_manualAllowed && mounted) {
-      setState(() => _manualAllowed = true);
+      _onStreamUnavailable();
     }
   }
 
@@ -207,14 +231,16 @@ class _KycSelfieCameraScreenState extends State<KycSelfieCameraScreen>
     if (faces.length > 1) return FaceSample(count: faces.length);
     final f = faces.first;
     // Ukuran frame setelah rotasi (sensor portrait-kan 90/270°).
-    final rotated = _rotation == InputImageRotation.rotation90deg ||
+    final rotated =
+        _rotation == InputImageRotation.rotation90deg ||
         _rotation == InputImageRotation.rotation270deg;
     final fw = rotated ? img.height : img.width;
     final fh = rotated ? img.width : img.height;
     final box = f.boundingBox;
     final cx = box.center.dx / fw;
     final cy = box.center.dy / fh;
-    final framed = box.width >= fw * 0.30 &&
+    final framed =
+        box.width >= fw * 0.30 &&
         (cx - 0.5).abs() < 0.2 &&
         (cy - 0.45).abs() < 0.25;
     return FaceSample(
@@ -265,98 +291,114 @@ class _KycSelfieCameraScreenState extends State<KycSelfieCameraScreen>
   }
 
   (String, Color, IconData) _hint(S s) {
+    if (_streamFailed) {
+      return (s.photoVerifyCameraFailed, kKycWarn, Icons.error_outline);
+    }
     if (_showRestart) return (s.kycLiveRestart, kKycWarn, Icons.refresh);
     return switch (_tracker.phase) {
       LivenessPhase.multiple => (s.kycCamMulti, kKycWarn, Icons.group_outlined),
-      LivenessPhase.position =>
-        (s.kycFaceGuide, Colors.white, Icons.face_outlined),
-      LivenessPhase.challenge => _tracker.current == LivenessChallenge.blink
-          ? (s.kycLiveBlink, Colors.white, Icons.remove_red_eye_outlined)
-          : (s.kycLiveTurn, Colors.white, Icons.swap_horiz),
-      LivenessPhase.straight ||
-      LivenessPhase.done =>
-        (s.kycLiveStraight, kKycOk, Icons.check_circle_outline),
+      LivenessPhase.position => (
+        s.kycFaceGuide,
+        Colors.white,
+        Icons.face_outlined,
+      ),
+      LivenessPhase.challenge =>
+        _tracker.current == LivenessChallenge.blink
+            ? (s.kycLiveBlink, Colors.white, Icons.remove_red_eye_outlined)
+            : (s.kycLiveTurn, Colors.white, Icons.swap_horiz),
+      LivenessPhase.straight || LivenessPhase.done => (
+        s.kycLiveStraight,
+        kKycOk,
+        Icons.check_circle_outline,
+      ),
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = ProviderScope.containerOf(context, listen: false)
-        .read(localeProvider)
-        .s;
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     final ctrl = _ctrl;
     final (hint, color, icon) = _hint(s);
-    final done = _tracker.phase == LivenessPhase.straight ||
+    final done =
+        _tracker.phase == LivenessPhase.straight ||
         _tracker.phase == LivenessPhase.done;
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: _permDenied
-            ? Stack(children: [
-                KycCameraPermissionView(s: s),
-                const Positioned(top: 8, left: 8, child: KycCloseButton()),
-              ])
+            ? Stack(
+                children: [
+                  KycCameraPermissionView(s: s),
+                  const Positioned(top: 8, left: 8, child: KycCloseButton()),
+                ],
+              )
             : _initializing || ctrl == null || !ctrl.value.isInitialized
-                ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white))
-                : LayoutBuilder(builder: (context, box) {
-                    final oval = KycViewfinderPainter.ovalRect(box.biggest);
-                    return Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        KycCameraPreview(controller: ctrl),
-                        IgnorePointer(
-                          child: CustomPaint(
-                            painter: KycViewfinderPainter(
-                              oval: true,
-                              color: done ? kKycOk : Colors.white,
-                              progress: _tracker.progress,
-                            ),
+            ? const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              )
+            : LayoutBuilder(
+                builder: (context, box) {
+                  final oval = KycViewfinderPainter.ovalRect(box.biggest);
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      KycCameraPreview(controller: ctrl),
+                      IgnorePointer(
+                        child: CustomPaint(
+                          painter: KycViewfinderPainter(
+                            oval: true,
+                            color: done ? kKycOk : Colors.white,
+                            progress: _tracker.progress,
                           ),
                         ),
-                        Positioned(
-                          left: 16,
-                          right: 16,
-                          top: 16,
-                          child: Text(
-                            s.kycLiveProgress(
-                              _tracker.step,
-                              _tracker.totalSteps,
-                            ),
-                            textAlign: TextAlign.center,
-                            style: AppText.label.copyWith(color: Colors.white70),
+                      ),
+                      Positioned(
+                        left: 16,
+                        right: 16,
+                        top: 16,
+                        child: Text(
+                          s.kycLiveProgress(_tracker.step, _tracker.totalSteps),
+                          textAlign: TextAlign.center,
+                          style: AppText.label.copyWith(color: Colors.white70),
+                        ),
+                      ),
+                      Positioned(
+                        left: 20,
+                        right: 20,
+                        top: oval.bottom + 24,
+                        child: Center(
+                          child: KycHintPill(
+                            text: hint,
+                            color: color,
+                            icon: icon,
                           ),
                         ),
+                      ),
+                      const Positioned(
+                        top: 4,
+                        left: 4,
+                        child: KycCloseButton(),
+                      ),
+                      if (_manualAllowed || _capturing)
                         Positioned(
-                          left: 20,
-                          right: 20,
-                          top: oval.bottom + 24,
+                          bottom: 28,
+                          left: 0,
+                          right: 0,
                           child: Center(
-                            child: KycHintPill(
-                              text: hint,
-                              color: color,
-                              icon: icon,
+                            child: KycShutterButton(
+                              enabled: _manualAllowed,
+                              busy: _capturing,
+                              onTap: () => _capture(live: false),
                             ),
                           ),
                         ),
-                        const Positioned(
-                            top: 4, left: 4, child: KycCloseButton()),
-                        if (_manualAllowed || _capturing)
-                          Positioned(
-                            bottom: 28,
-                            left: 0,
-                            right: 0,
-                            child: Center(
-                              child: KycShutterButton(
-                                enabled: _manualAllowed,
-                                busy: _capturing,
-                                onTap: () => _capture(live: false),
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  }),
+                    ],
+                  );
+                },
+              ),
       ),
     );
   }

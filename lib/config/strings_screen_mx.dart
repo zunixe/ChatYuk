@@ -161,8 +161,15 @@ mixin SScreenMx {
   String get btnResetPassword => isId ? 'Reset Password' : 'Reset Password';
   String get btnRemovePassword => isId ? 'Hapus Password' : 'Remove Password';
   String get roomByOwner => isId ? 'oleh' : 'by';
-  String get btnExtendRoom =>
-      isId ? 'Perpanjang 7 hari (50 YukCoin)' : 'Extend 7 days (50 YukCoin)';
+  // Harga dari server (app_settings.room_extend_paid), bukan angka tetap.
+  String btnExtendRoom(int coins) => isId
+      ? 'Perpanjang 7 hari ($coins YukCoin)'
+      : 'Extend 7 days ($coins YukCoin)';
+  String get btnExtendRoomFree =>
+      isId ? 'Perpanjang 7 hari (Gratis)' : 'Extend 7 days (Free)';
+  String get errExtendRoom => isId
+      ? 'Gagal memperpanjang room. Coba lagi.'
+      : 'Could not extend the room. Try again.';
   String get btnDeleteRoom => isId ? 'Hapus Room' : 'Delete Room';
   String get deleteRoomConfirm => isId
       ? 'Hapus room ini? Semua pesan ikut terhapus.'
@@ -291,13 +298,13 @@ mixin SScreenMx {
   String get errCoinInsufficient =>
       isId ? 'YukCoin kamu tidak cukup' : 'Not enough YukCoin';
   String get errCoinRegisterOnly => isId
-      ? 'Hanya akun terdaftar yang bisa kirim YukCoin. Daftar email dulu (+100 YukCoin)!'
-      : 'Only registered accounts can send YukCoin. Register email first (+100 YukCoin)!';
+      ? 'Hanya akun terdaftar yang bisa kirim YukCoin. Daftar email dulu, yuk!'
+      : 'Only registered accounts can send YukCoin. Register your email first!';
   String coinSentToast(int n) => isId ? '-$n YukCoin terkirim' : '-$n YukCoin sent';
   String coinBubbleSent(int n) =>
-      isId ? '🪙 You sent $n YukCoin' : '🪙 You sent $n YukCoin';
+      isId ? '🪙 Kamu mengirim $n YukCoin' : '🪙 You sent $n YukCoin';
   String coinBubbleReceived(int n) =>
-      isId ? '🪙 Received $n YukCoin' : '🪙 Received $n YukCoin';
+      isId ? '🪙 Menerima $n YukCoin' : '🪙 Received $n YukCoin';
   String get errSendCoin => isId ? 'Gagal kirim YukCoin' : 'Failed to send YukCoin';
   // ── Umum ──
   String get btnConfirm => isId ? 'Konfirmasi' : 'Confirm';
@@ -428,24 +435,8 @@ mixin SScreenMx {
   // ── Onboarding YukCoin ──
   String get pointsOnboardTitle =>
       isId ? 'YukCoin' : 'YukCoin';
-  String get pointsOnboardSub =>
-      isId ? 'Cara dapat & pakai YukCoin' : 'How to earn & spend';
-  String get pointsOnboardEmail => isId
-      ? 'Daftar email = +100, dan data aman!'
-      : 'Register email = +100, fully safe!';
-  String get pointsOnboardChat => isId
-      ? 'Chat = pakai YukCoin (-1 per pesan)'
-      : 'Chat = uses YukCoin (-1 per msg)';
-  String get pointsOnboardDaily =>
-      isId ? 'Login tiap hari = +25 YukCoin' : 'Daily login = +25 YukCoin';
-  String get pointsOnboardOnline =>
-      isId ? 'Online 60 menit = +45 bonus' : 'Online 60 min = +45 bonus';
-  String get pointsOnboardSpend => isId
-      ? 'Fitur berbayar: undo, edit, mode hantu, slot foto'
-      : 'Paid features: undo, edit, ghost mode, photo slots';
-  String get pointsOnboardStart =>
-      isId ? 'Mulai dengan 50 YukCoin gratis' : 'Start with 50 free YukCoin';
-  String get pointsOnboardOk => isId ? 'OK, Paham!' : 'OK, Got it!';
+  String get pointsOnboardOk =>
+      isId ? 'Siap, ayo mulai!' : "Got it, let's go!";
   String get statusOnline => isId ? 'Online' : 'Online';
   String get statusIdle => isId ? 'Idle' : 'Idle';
   String get statusOffline => isId ? 'Offline' : 'Offline';

@@ -13,6 +13,7 @@ import '../widgets/async_photo.dart';
 import '../widgets/verified_badge.dart';
 import '../providers/riverpod/phone_verify_provider.dart';
 import 'package:image_picker/image_picker.dart';
+import '../config/app_flavor.dart';
 import '../config/theme.dart';
 import 'profile/widgets/profile_widgets.dart';
 import 'profile/widgets/my_level_entry.dart';
@@ -49,6 +50,8 @@ import 'package:share_plus/share_plus.dart';
 import '../providers/riverpod/locale_provider.dart';
 import '../providers/riverpod/chat_provider.dart';
 import '../widgets/yukcoin_buckets_line.dart';
+import '../core/profile/photo_verification.dart';
+import '../widgets/verified_selfie_capture.dart';
 import 'moderation_screen.dart';
 
 part 'profile/profile_core.dart';

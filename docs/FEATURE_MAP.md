@@ -406,6 +406,12 @@ hanya `service_role` (user tak bisa mendebit orang lain); saldo = cache ledger
 - **Fitur buka foto DINONAKTIFKAN** (`unlock_photo` dicabut EXECUTE-nya) —
   tidak ada UI yang memanggilnya dan `user_info` justru membuang foto
   terkunci, jadi `photo_income` tidak pernah bisa terjadi.
+  **→ REAKTIF 2026-11-08** (`20261110130000_photo_paywall_unlock.sql`):
+  viewer profil **female** = 4 foto gratis, sisanya blur+kunci; unlock
+  permanen 15 koin (`photo_unlock_perm`, admin-editable) — **koin berbayar
+  saja** (`ledger_spend_paid`, bonus ditolak). Pemilik dapat 60%
+  (`photo_unlock_owner_pct`) ke `earned` via `photo_income`. Profil male /
+  sendiri / points-off = semua terbuka.
 
 ### Hardening 2026-11-01 (audit ekosistem koin)
 

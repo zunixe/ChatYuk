@@ -31,3 +31,7 @@ class AppFlavor {
   /// apkpure/admin tidak menampilkan tombol top-up.
   static bool get topupEnabled => isPlay;
 }
+
+/// Menu Donasi disembunyikan (permintaan user 2026-11-07). Layar
+/// `DonateScreen` tetap ada — ubah ke true untuk menampilkannya lagi.
+const bool kDonateEnabled = false;

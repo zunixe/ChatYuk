@@ -317,46 +317,64 @@ mixin SPointsMx {
   String get yukcoinPickPackage =>
       isId ? 'Pilih paket YukCoin' : 'Pick a YukCoin package';
   // Overhaul coin (2026-10): tidak ada poin gratis — coin hanya dari topup.
+  String callFreeMinutes(int used, int limit) => isId
+      ? 'Gratis · $used/$limit menit hari ini'
+      : 'Free · $used/$limit min today';
+  String get pointsOutOfCoinBodyFemale => isId
+      ? 'YukCoin kamu belum cukup untuk ini. Tenang, kamu nggak perlu top-up — YukCoin terus bertambah dari telepon & hadiah yang kamu terima.'
+      : "You don't have enough YukCoin for this yet. No top-up needed — your YukCoin keeps growing from the calls and gifts you receive.";
   String get pointsOutOfCoinBody => isId
-      ? 'YukCoin kamu habis. Isi YukCoin lewat top-up untuk lanjut menelepon, match video, atau kirim hadiah.'
-      : 'You are out of YukCoin. Top up to keep calling, video matching, or sending gifts.';
+      ? 'YukCoin kamu habis. Top-up sekarang biar bisa lanjut telepon, match video, dan kirim hadiah.'
+      : 'You are out of YukCoin. Top up now to keep calling, video matching, and sending gifts.';
   // ── Onboarding MALE: apa saja yang memakai YukCoin ──
-  String get pointsOnboardMaleTitle =>
-      isId ? 'YukCoin kamu dipakai untuk ini' : 'What your YukCoin pays for';
+  String get pointsOnboardMaleTitle => isId
+      ? 'Satu koin untuk semua fitur seru'
+      : 'One coin for all the fun stuff';
   String get pointsOnboardMaleSub => isId
-      ? 'Isi dulu lewat top-up, lalu pakai untuk:'
-      : 'Top up first, then spend it on:';
+      ? 'Isi YukCoin sekali, pakai buat semua ini:'
+      : 'Top up once, use it for all of this:';
   String pointsOnboardMaleCall(int audio, int video) => isId
-      ? '🪙 $audio/menit audio · $video/menit video'
-      : '🪙 $audio/min audio · $video/min video';
+      ? '📞 Telepon: $audio YC/menit audio · $video YC/menit video'
+      : '📞 Calls: $audio YC/min audio · $video YC/min video';
   String pointsOnboardMaleMatch(int fee) => isId
-      ? '🪙 $fee YC per match — dipotong saat dapat pasangan'
-      : '🪙 $fee YC per match — charged when you get a match';
+      ? '🎥 Match video: $fee YC — dipotong hanya kalau dapat pasangan'
+      : '🎥 Video match: $fee YC — charged only when you get a match';
   String pointsOnboardMaleGift(int min, int max) => isId
-      ? '🪙 $min–$max YC per hadiah, hanya di chat berdua'
-      : '🪙 $min–$max YC per gift, one-to-one chats only';
+      ? '🎁 Kirim hadiah $min–$max YC di chat berdua, biar obrolan makin akrab'
+      : '🎁 Send gifts ($min–$max YC) in one-to-one chats to warm things up';
   String get pointsOnboardMaleFree => isId
-      ? 'Gratis: chat teks, filter gender, cari orang sekitar'
-      : 'Free: text chat, gender filter, find people nearby';
+      ? '💬 Gratis: chat teks, filter gender & cari orang sekitar'
+      : '💬 Free: text chat, gender filter & people nearby';
+  // Bonus selamat datang HANYA male/non-female (server: credit_welcome_bonus).
+  String get pointsOnboardMaleWelcome => isId
+      ? 'Pengguna baru langsung dapat bonus YukCoin gratis buat dicoba!'
+      : 'New users get free bonus YukCoin to try things out!';
 
   // ── Onboarding FEMALE: cara MENDAPAT YukCoin ──
-  String get pointsOnboardFemaleTitle =>
-      isId ? 'Dapat YukCoin dari lawan bicara' : 'Earn YukCoin from your callers';
+  String get pointsOnboardFemaleTitle => isId
+      ? 'Kamu dapat YukCoin, bukan bayar'
+      : 'You earn YukCoin — no paying';
   String get pointsOnboardFemaleSub => isId
-      ? 'Kamu tidak perlu top-up. YukCoin masuk saat mereka memakai fitur berbayar ke kamu:'
-      : 'No top-up needed. YukCoin comes in when others pay to reach you:';
+      ? 'Tanpa top-up! YukCoin masuk tiap kali ada yang menelepon atau kasih hadiah ke kamu'
+      : 'No top-up needed! YukCoin comes in whenever someone calls you or sends you a gift';
   String get pointsOnboardFemaleCall => isId
-      ? '📞 Terima panggilan audio & video'
-      : '📞 Take audio & video calls';
+      ? '📞 Terima telepon audio & video — makin lama ngobrol, makin banyak YukCoin'
+      : '📞 Take audio & video calls — the longer you talk, the more you earn';
   String get pointsOnboardFemaleGift => isId
-      ? '🎁 Terima hadiah di chat berdua'
-      : '🎁 Receive gifts in one-to-one chats';
+      ? '🎁 Terima hadiah di chat berdua, langsung jadi YukCoin kamu'
+      : '🎁 Gifts in one-to-one chats turn straight into your YukCoin';
   String get pointsOnboardFemaleMatch => isId
-      ? '👥 Ikut match video — kamu tidak ditagih'
-      : '👥 Join video match — you are never charged';
+      ? '🎥 Match video selalu gratis buat kamu, tetap dapat YukCoin dari panggilannya'
+      : '🎥 Video match is always free for you, and the call still earns you YukCoin';
+  String get pointsOnboardFemaleAllFree => isId
+      ? '✨ Semua fitur gratis buat kamu: kirim foto, bikin grup, boost postingan, langganan kreator'
+      : '✨ Every feature is free for you: photos, groups, post boosts, creator subscriptions';
+  String get pointsOnboardFemaleCallOut => isId
+      ? '📲 Nelpon duluan juga gratis (ada batas menit per hari)'
+      : '📲 Calling first is free too (daily minute limit applies)';
   String pointsOnboardFemaleWithdraw(int min) => isId
-      ? '💰 Tarik ke DANA lewat menu Saldo (min. $min YukCoin)'
-      : '💰 Cash out to DANA from the Saldo menu (min. $min coins)';
+      ? '💸 Cairkan ke DANA dari menu Saldo (min. $min YukCoin)'
+      : '💸 Cash out to DANA from the Saldo menu (min. $min YukCoin)';
 
   String get pointsOnboardCoinTitle =>
       isId ? 'YukCoin untuk menelepon' : 'YukCoin for calling';
@@ -383,6 +401,22 @@ mixin SPointsMx {
       : 'You need at least $need YukCoin to call (first minute). Top up to start calling.';
   String get yukcoinTopupSoon =>
       isId ? 'Top-up segera hadir' : 'Top-up coming soon';
+  String get yukcoinEarnMission =>
+      isId ? 'Selesaikan misi' : 'Complete missions';
+  String get yukcoinEarnMissionNote => isId
+      ? 'Hadiahnya masuk ke penghasilan kamu'
+      : 'Rewards go to your earnings';
+  String get yukcoinCashOut => isId ? 'Cairkan ke DANA' : 'Cash out to DANA';
+  String get yukcoinCashOutNote =>
+      isId ? 'Lewat menu Saldo di profil' : 'From the Saldo menu in your profile';
+  String get yukcoinFemaleAllFree =>
+      isId ? 'Semua fitur gratis buat kamu' : 'Every feature is free for you';
+  String get yukcoinFemaleAllFreeNote => isId
+      ? 'Kirim foto, bikin grup, boost postingan, langganan kreator'
+      : 'Photos, groups, post boosts, creator subscriptions';
+  String get yukcoinEarnLoginNote => isId
+      ? 'Bonus beruntun dari menu Misi'
+      : 'Streak bonus from the Missions menu';
   String get yukcoinEarnLogin => isId ? 'Login harian' : 'Daily login';
   String get yukcoinEarnOnline => isId ? 'Online harian' : 'Daily online';
   String get yukcoinEarnRoomRead => isId ? 'Baca room' : 'Read rooms';
@@ -444,6 +478,12 @@ mixin SPointsMx {
   String get giftInsufficient => isId
       ? 'YukCoin tidak cukup untuk hadiah ini'
       : 'Not enough YukCoin for this gift';
+  String get coinFemaleBlocked => isId
+      ? 'Pengguna perempuan tidak bisa mengirim YukCoin'
+      : 'Female users cannot send YukCoin';
+  String get giftFemaleBlocked => isId
+      ? 'Pengguna perempuan tidak bisa mengirim hadiah'
+      : 'Female users cannot send gifts';
   String get menuSendGift => isId ? 'Hadiah' : 'Gift';
   // ── Leaderboard ──
   String get lbTitle => isId ? 'Papan Peringkat' : 'Leaderboard';

@@ -165,9 +165,9 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
           _noCoinDialogShown = false;
           final ok = await session.resumeBillingAfterTopup();
           if (!ok && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(s.callNoCoinStillEmpty)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(s.callNoCoinStillEmpty)));
           }
         },
       );
@@ -262,7 +262,11 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
       try {
         await ref
             .read(chatProvider.notifier)
-            .reportUser(reporterId: me, reportedId: p.uid, reason: 'random_call');
+            .reportUser(
+              reporterId: me,
+              reportedId: p.uid,
+              reason: 'random_call',
+            );
       } catch (e) {
         dlog('[RandomCall] report error: $e');
       }
@@ -402,8 +406,8 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
     // Pesan akhir: error media lokal (izin/kamera) ≠ lawan menutup call.
     final endText = partnerEnded
         ? (_endMediaError != null
-            ? callMediaErrorMessage(s, _endMediaError)
-            : s.randomCallPartnerLeft(partner?.nickname ?? ''))
+              ? callMediaErrorMessage(s, _endMediaError)
+              : s.randomCallPartnerLeft(partner?.nickname ?? ''))
         : null;
     final searching = st.phase == RandomMatchPhase.searching;
 
@@ -412,12 +416,15 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
     // padahal track video sudah mengalir. Track yang ada = tampilkan.
     final hasRemoteVideo = session != null && session.hasRemoteVideo;
     final hasLocalVideo =
-        session != null && session.cameraOn && session.localRenderer.srcObject != null;
+        session != null &&
+        session.cameraOn &&
+        session.localRenderer.srcObject != null;
 
     // Panggilan masih hidup → back TIDAK boleh langsung pop: tampilkan
     // konfirmasi (keluar = mengakhiri call). Setelah call berakhir
     // (ended/error) back bebas.
-    final liveCall = session != null &&
+    final liveCall =
+        session != null &&
         session.phase != CallPhase.ended &&
         session.phase != CallPhase.error;
 
@@ -429,355 +436,365 @@ class _RandomCallScreenState extends ConsumerState<RandomCallScreen> {
         _confirmExit();
       },
       child: Scaffold(
-      backgroundColor: const Color(0xFF0E1116),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Video lawan — SELALU di-mount supaya audio remote tetap berbunyi
-          // walau video belum/tidak ada (pola CallScreen). Double tap di
-          // fullscreen → tukar dengan bubble kecil.
-          if (session != null)
-            RepaintBoundary(
-              child: RTCVideoView(
-                _swapped && hasRemoteVideo
-                    ? session.localRenderer
-                    : session.remoteRenderer,
-                mirror: _swapped && hasRemoteVideo,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+        backgroundColor: const Color(0xFF0E1116),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Video lawan — SELALU di-mount supaya audio remote tetap berbunyi
+            // walau video belum/tidak ada (pola CallScreen). Double tap di
+            // fullscreen → tukar dengan bubble kecil.
+            if (session != null)
+              RepaintBoundary(
+                child: RTCVideoView(
+                  _swapped && hasRemoteVideo
+                      ? session.localRenderer
+                      : session.remoteRenderer,
+                  mirror: _swapped && hasRemoteVideo,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                ),
               ),
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onDoubleTap: hasLocalVideo && hasRemoteVideo ? _toggleSwap : null,
             ),
-          GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onDoubleTap: hasLocalVideo && hasRemoteVideo
-                ? _toggleSwap
-                : null,
-          ),
-          if (!hasRemoteVideo)
-            _PartnerBackdrop(
-              partner: partner,
-              searching: (searching || connecting) && !partnerEnded,
-              endedText: endText,
-            ),
+            if (!hasRemoteVideo)
+              _PartnerBackdrop(
+                partner: partner,
+                searching: (searching || connecting) && !partnerEnded,
+                endedText: endText,
+              ),
 
-          // Info atas.
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-                child: Row(
-                  children: [
-                    if (partner != null)
-                      GenderAvatar(
-                        uid: partner.uid,
-                        name: partner.nickname,
-                        gender: partner.gender,
-                        size: 38,
-                      ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            partner?.nickname ?? s.randomSearching,
-                            style: AppText.bodyStrong.copyWith(
-                              color: Colors.white,
+            // Info atas.
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                  child: Row(
+                    children: [
+                      if (partner != null)
+                        GenderAvatar(
+                          uid: partner.uid,
+                          name: partner.nickname,
+                          gender: partner.gender,
+                          size: 38,
+                        ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              partner?.nickname ?? s.randomSearching,
+                              style: AppText.bodyStrong.copyWith(
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            _subtitle(
-                              s,
-                              partner,
-                              searching,
-                              connecting,
-                              partnerEnded,
-                              endText,
+                            Text(
+                              _subtitle(
+                                s,
+                                partner,
+                                searching,
+                                connecting,
+                                partnerEnded,
+                                endText,
+                              ),
+                              style: AppText.caption.copyWith(
+                                color: Colors.white70,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            style: AppText.caption.copyWith(
-                              color: Colors.white70,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Countdown gratis: selama 30 detik pertama match,
-                    // call belum menagih — user lihat sisa waktu gratis.
-                    if (coinSnap.on && freeSec > 0 && !partnerEnded) ...[
-                      const SizedBox(width: 8),
-                      const Icon(
-                        Icons.timer_outlined,
-                        color: AppTheme.quickTimeline,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        s.randomCallFreeLeft(freeSec),
-                        style: AppText.label.copyWith(color: Colors.white),
-                      ),
-                    ],
-                    // Counter koin: angka = sisa saldo, "−N" = terpakai
-                    // call ini. Sembunyi bila sistem koin dimatikan admin.
-                    if (coinSnap.on) ...[
-                      const SizedBox(width: 8),
-                      // Tick billing gagal → angka bisa basi; tandai kecil.
-                      Icon(
-                        session?.billingTickError != null
-                            ? Icons.error_outline
-                            : Icons.monetization_on_outlined,
-                        color: session?.billingTickError != null
-                            ? Colors.orange
-                            : Colors.amber,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        isPayer
-                            ? (charged > 0
-                                ? '${coinSnap.coins} (−$charged)'
-                                : '${coinSnap.coins}')
-                            : '${coinSnap.coins} (+$income)',
-                        style: AppText.label.copyWith(color: Colors.white),
-                      ),
-                    ],
-                    if (partner != null)
-                      IconButton(
-                        tooltip: s.randomCallReport,
-                        onPressed: () => _reportBlock(partner),
-                        icon: const Icon(
-                          Icons.flag_outlined,
-                          color: Colors.white,
+                          ],
                         ),
                       ),
-                  ],
+                      // Countdown gratis: selama 30 detik pertama match,
+                      // call belum menagih — HANYA pembayar (female tak pernah ditagih).
+                      if (coinSnap.on &&
+                          isPayer &&
+                          freeSec > 0 &&
+                          !partnerEnded) ...[
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.timer_outlined,
+                          color: AppTheme.quickTimeline,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          s.randomCallFreeLeft(freeSec),
+                          style: AppText.label.copyWith(color: Colors.white),
+                        ),
+                      ],
+                      // Counter koin: angka = sisa saldo, "−N" = terpakai
+                      // call ini. Sembunyi bila sistem koin dimatikan admin.
+                      if (coinSnap.on) ...[
+                        const SizedBox(width: 8),
+                        // Tick billing gagal → angka bisa basi; tandai kecil.
+                        Icon(
+                          session?.billingTickError != null
+                              ? Icons.error_outline
+                              : Icons.monetization_on_outlined,
+                          color: session?.billingTickError != null
+                              ? Colors.orange
+                              : Colors.amber,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isPayer
+                              ? (charged > 0
+                                    ? '${coinSnap.coins} (−$charged)'
+                                    : '${coinSnap.coins}')
+                              // Penghasilan call hanya untuk perempuan.
+                              : session?.myGender == 'female'
+                              ? '${coinSnap.coins} (+$income)'
+                              : '${coinSnap.coins}',
+                          style: AppText.label.copyWith(color: Colors.white),
+                        ),
+                      ],
+                      if (partner != null)
+                        IconButton(
+                          tooltip: s.randomCallReport,
+                          onPressed: () => _reportBlock(partner),
+                          icon: const Icon(
+                            Icons.flag_outlined,
+                            color: Colors.white,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // Kamera sendiri (PiP) — BISA digeser, di-resize dari pojok
-          // kanan bawah, dan double tap untuk tukar dengan video besar
-          // (pola CallScreen). Default: KANAN ATAS di bawah info bar.
-          if (hasLocalVideo)
-            Builder(
-              builder: (ctx) {
-                final mq = MediaQuery.of(ctx);
-                const minW = 70.0;
-                const minH = 100.0;
-                const handle = 44.0;
-                final maxW = mq.size.width * 0.6;
-                final maxH = mq.size.height * 0.6;
-                final w = _pipSize.width.clamp(minW, maxW);
-                final h = _pipSize.height.clamp(minH, maxH);
-                _pipPos ??= Offset(
-                  mq.size.width - w - 12,
-                  mq.padding.top + 70,
-                );
-                final pos = Offset(
-                  _pipPos!.dx.clamp(8.0, mq.size.width - w - 8),
-                  _pipPos!.dy.clamp(8.0, mq.size.height - h - 8),
-                );
-                return Positioned(
-                  left: pos.dx,
-                  top: pos.dy,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onDoubleTap: hasRemoteVideo ? _toggleSwap : null,
-                    onPanStart: (d) {
-                      _resizing =
-                          d.localPosition.dx > w - handle &&
-                          d.localPosition.dy > h - handle;
-                      _resizeStartSize = Size(w, h);
-                      _resizeStartLocal = d.localPosition;
-                    },
-                    onPanUpdate: (d) {
-                      setState(() {
-                        if (_resizing) {
-                          _pipSize = Size(
-                            (_resizeStartSize.width +
-                                    d.localPosition.dx -
-                                    _resizeStartLocal.dx)
-                                .clamp(minW, maxW),
-                            (_resizeStartSize.height +
-                                    d.localPosition.dy -
-                                    _resizeStartLocal.dy)
-                                .clamp(minH, maxH),
-                          );
-                        } else {
-                          _pipPos = Offset(
-                            (_pipPos!.dx + d.delta.dx).clamp(
-                              8.0,
-                              mq.size.width - w - 8,
+            // Kamera sendiri (PiP) — BISA digeser, di-resize dari pojok
+            // kanan bawah, dan double tap untuk tukar dengan video besar
+            // (pola CallScreen). Default: KANAN ATAS di bawah info bar.
+            if (hasLocalVideo)
+              Builder(
+                builder: (ctx) {
+                  final mq = MediaQuery.of(ctx);
+                  const minW = 70.0;
+                  const minH = 100.0;
+                  const handle = 44.0;
+                  final maxW = mq.size.width * 0.6;
+                  final maxH = mq.size.height * 0.6;
+                  final w = _pipSize.width.clamp(minW, maxW);
+                  final h = _pipSize.height.clamp(minH, maxH);
+                  _pipPos ??= Offset(
+                    mq.size.width - w - 12,
+                    mq.padding.top + 70,
+                  );
+                  final pos = Offset(
+                    _pipPos!.dx.clamp(8.0, mq.size.width - w - 8),
+                    _pipPos!.dy.clamp(8.0, mq.size.height - h - 8),
+                  );
+                  return Positioned(
+                    left: pos.dx,
+                    top: pos.dy,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onDoubleTap: hasRemoteVideo ? _toggleSwap : null,
+                      onPanStart: (d) {
+                        _resizing =
+                            d.localPosition.dx > w - handle &&
+                            d.localPosition.dy > h - handle;
+                        _resizeStartSize = Size(w, h);
+                        _resizeStartLocal = d.localPosition;
+                      },
+                      onPanUpdate: (d) {
+                        setState(() {
+                          if (_resizing) {
+                            _pipSize = Size(
+                              (_resizeStartSize.width +
+                                      d.localPosition.dx -
+                                      _resizeStartLocal.dx)
+                                  .clamp(minW, maxW),
+                              (_resizeStartSize.height +
+                                      d.localPosition.dy -
+                                      _resizeStartLocal.dy)
+                                  .clamp(minH, maxH),
+                            );
+                          } else {
+                            _pipPos = Offset(
+                              (_pipPos!.dx + d.delta.dx).clamp(
+                                8.0,
+                                mq.size.width - w - 8,
+                              ),
+                              (_pipPos!.dy + d.delta.dy).clamp(
+                                8.0,
+                                mq.size.height - h - 8,
+                              ),
+                            );
+                          }
+                        });
+                      },
+                      onPanEnd: (_) => _resizing = false,
+                      child: Container(
+                        width: w,
+                        height: h,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
                             ),
-                            (_pipPos!.dy + d.delta.dy).clamp(
-                              8.0,
-                              mq.size.height - h - 8,
-                            ),
-                          );
-                        }
-                      });
-                    },
-                    onPanEnd: (_) => _resizing = false,
-                    child: Container(
-                      width: w,
-                      height: h,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: RepaintBoundary(
-                              child: RTCVideoView(
-                                _swapped && hasRemoteVideo
-                                    ? session.remoteRenderer
-                                    : session.localRenderer,
-                                mirror: !(_swapped && hasRemoteVideo),
-                                objectFit: RTCVideoViewObjectFit
-                                    .RTCVideoViewObjectFitCover,
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: RepaintBoundary(
+                                child: RTCVideoView(
+                                  _swapped && hasRemoteVideo
+                                      ? session.remoteRenderer
+                                      : session.localRenderer,
+                                  mirror: !(_swapped && hasRemoteVideo),
+                                  objectFit: RTCVideoViewObjectFit
+                                      .RTCVideoViewObjectFitCover,
+                                ),
                               ),
                             ),
-                          ),
-                          // Handle resize di pojok kanan bawah.
-                          const Align(
-                            alignment: Alignment.bottomRight,
-                            child: Icon(
-                              Icons.open_in_full_rounded,
-                              size: 22,
-                              color: Colors.white70,
+                            // Handle resize di pojok kanan bawah.
+                            const Align(
+                              alignment: Alignment.bottomRight,
+                              child: Icon(
+                                Icons.open_in_full_rounded,
+                                size: 22,
+                                color: Colors.white70,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-
-          // Aksi cepat (follow / chat) — hanya saat tersambung.
-          if (partner != null && session?.phase == CallPhase.inCall)
-            Positioned(
-              right: 12,
-              bottom: 168,
-              child: Column(
-                children: [
-                  _QuickAction(
-                    icon: ref.watch(socialProvider).isFollowing(partner.uid)
-                        ? Icons.person_remove_alt_1_outlined
-                        : Icons.person_add_alt_1_outlined,
-                    label: s.btnFollow,
-                    onTap: () => _toggleFollow(partner),
-                  ),
-                  const SizedBox(height: 12),
-                  _QuickAction(
-                    icon: Icons.chat_bubble_outline_rounded,
-                    label: s.randomCallChat,
-                    onTap: () => _openChat(partner),
-                  ),
-                ],
+                  );
+                },
               ),
-            ),
 
-          // Kontrol bawah.
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [Color(0xE6000000), Color(0x00000000)],
-                  ),
-                ),
+            // Aksi cepat (follow / chat) — hanya saat tersambung.
+            if (partner != null && session?.phase == CallPhase.inCall)
+              Positioned(
+                right: 12,
+                bottom: 168,
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (searching || partnerEnded)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Text(
-                          partnerEnded
-                              ? (endText ?? '')
-                              : s.randomCallSearchingAgain,
-                          style: AppText.bodySmall.copyWith(
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ),
-                    // Kontrol call (mic/kamera/end) disembunyikan saat lawan
-                    // sudah keluar — tidak ada lagi yang dikontrol.
-                    if (!partnerEnded)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _RoundBtn(
-                            icon: session?.micOn == true
-                                ? Icons.mic_rounded
-                                : Icons.mic_off_rounded,
-                            onTap: () async {
-                              await session?.toggleMic();
-                              if (mounted) setState(() {});
-                            },
-                          ),
-                          const SizedBox(width: 14),
-                          _RoundBtn(
-                            icon: Icons.cameraswitch_rounded,
-                            onTap: () async {
-                              await session?.switchCamera();
-                            },
-                          ),
-                          const SizedBox(width: 14),
-                          _RoundBtn(
-                            icon: Icons.call_end_rounded,
-                            color: AppTheme.danger,
-                            onTap: _end,
-                          ),
-                        ],
-                      ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 54,
-                      child: FilledButton.icon(
-                        onPressed: _busy ? null : _next,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppTheme.quickTimeline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(27),
-                          ),
-                        ),
-                        icon: const Icon(Icons.skip_next_rounded),
-                        label: Text(s.randomCallNext),
-                      ),
+                    _QuickAction(
+                      icon: ref.watch(socialProvider).isFollowing(partner.uid)
+                          ? Icons.person_remove_alt_1_outlined
+                          : Icons.person_add_alt_1_outlined,
+                      label: s.btnFollow,
+                      onTap: () => _toggleFollow(partner),
+                    ),
+                    const SizedBox(height: 12),
+                    _QuickAction(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      label: s.randomCallChat,
+                      onTap: () => _openChat(partner),
                     ),
                   ],
                 ),
               ),
+
+            // Kontrol bawah.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [Color(0xE6000000), Color(0x00000000)],
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (searching || partnerEnded)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            partnerEnded
+                                ? (endText ?? '')
+                                : s.randomCallSearchingAgain,
+                            style: AppText.bodySmall.copyWith(
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ),
+                      // Kontrol call (mic/kamera/end) disembunyikan saat lawan
+                      // sudah keluar — tidak ada lagi yang dikontrol.
+                      if (!partnerEnded)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _RoundBtn(
+                              icon: session?.micOn == true
+                                  ? Icons.mic_rounded
+                                  : Icons.mic_off_rounded,
+                              onTap: () async {
+                                await session?.toggleMic();
+                                if (mounted) setState(() {});
+                              },
+                            ),
+                            const SizedBox(width: 14),
+                            _RoundBtn(
+                              icon: Icons.cameraswitch_rounded,
+                              onTap: () async {
+                                final ok = await session?.switchCamera();
+                                if (ok != false || !context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(s.callCameraSwitchFailed),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 14),
+                            _RoundBtn(
+                              icon: Icons.call_end_rounded,
+                              color: AppTheme.danger,
+                              onTap: _end,
+                            ),
+                          ],
+                        ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 54,
+                        child: FilledButton.icon(
+                          onPressed: _busy ? null : _next,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppTheme.quickTimeline,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(27),
+                            ),
+                          ),
+                          icon: const Icon(Icons.skip_next_rounded),
+                          label: Text(s.randomCallNext),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -886,10 +903,7 @@ class _QuickAction extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: AppText.caption.copyWith(color: Colors.white70),
-        ),
+        Text(label, style: AppText.caption.copyWith(color: Colors.white70)),
       ],
     );
   }

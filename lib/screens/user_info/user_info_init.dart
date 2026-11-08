@@ -144,7 +144,9 @@ mixin _UiInitMx on _UserInfoBase {
           content: Text(
             _friend
                 ? s.snackNowFriends(name)
-                : (_following ? s.snackNowFollowing(name) : s.snackUnfollowed(name)),
+                : (_following
+                      ? s.snackNowFollowing(name)
+                      : s.snackUnfollowed(name)),
           ),
         ),
       );
@@ -365,9 +367,12 @@ mixin _UiInitMx on _UserInfoBase {
     ).read(pointsProvider.notifier);
     // Server (subscribe_creator): koin beli dulu, lalu bonus ×multiplier bila
     // promo diizinkan — cek SEBELUM dialog konfirmasi.
-    final paidBalance =
-        ProviderScope.containerOf(context, listen: false).read(pointsProvider).spendableBalance;
-    if (paidBalance < price) {
+    final free = points.spendsFree;
+    final paidBalance = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider).spendableBalance;
+    if (!free && paidBalance < price) {
       points.showOutOfPointsDialog(context, s.isId);
       return;
     }
@@ -387,7 +392,9 @@ mixin _UiInitMx on _UserInfoBase {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              s.subscribeConfirmBody(profile.nickname, price, 1),
+              free
+                  ? s.subscribeConfirmBodyFree(profile.nickname)
+                  : s.subscribeConfirmBody(profile.nickname, price, 1),
               style: AppText.bodyStrong,
             ),
             SizedBox(height: 12),

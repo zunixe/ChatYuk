@@ -289,6 +289,10 @@ class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScree
     final points = ref.watch(pointsProvider);
     if (!points.enabled) return const SizedBox.shrink();
     final paid = points.roomCreatePaid;
+    // Perempuan gratis semua.
+    final isFemale = ref.watch(
+      authProvider.select((a) => a.profile?.gender == 'female'),
+    );
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Row(
@@ -298,7 +302,9 @@ class _CreatePrivateRoomScreenState extends ConsumerState<CreatePrivateRoomScree
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              s.paidOrBonus(paid, paid * points.bonusMultiplier),
+              isFemale
+                  ? s.labelFree
+                  : s.paidOrBonus(paid, paid * points.bonusMultiplier),
               style: AppText.caption.copyWith(color: AppTheme.textSecondary),
             ),
           ),

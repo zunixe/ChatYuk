@@ -142,6 +142,10 @@ mixin SSocialMx {
   String subscribeConfirmBody(String name, int c, int periods) => isId
       ? 'Berlangganan ke $name selama $periods bulan seharga ${c * periods} YukCoin?'
       : 'Subscribe to $name for $periods months at ${c * periods} YukCoin?';
+  // Perempuan gratis semua (server subscribe_creator tidak memotong female).
+  String subscribeConfirmBodyFree(String name) => isId
+      ? 'Berlangganan ke $name selama 1 bulan — gratis untuk kamu!'
+      : 'Subscribe to $name for 1 month — free for you!';
   String get subscribeSuccess => isId ? 'Berhasil berlangganan' : 'Subscribed';
   String get unsubscribeSuccess =>
       isId ? 'Berhenti berlangganan' : 'Unsubscribed';

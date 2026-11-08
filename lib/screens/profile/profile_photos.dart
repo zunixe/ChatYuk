@@ -1,6 +1,5 @@
 part of '../profile_screen.dart';
 
-
 mixin _ProfilePhotosMx on _ProfileBase {
   @override
   Future<void> _loadPhotos() async {
@@ -19,8 +18,17 @@ mixin _ProfilePhotosMx on _ProfileBase {
     if (mounted) setState(() => _loadingPhotos = false);
   }
 
+  /// Female: semua upload foto profil WAJIB selfie asli (liveness).
+  bool get _isFemaleAccount => requiresFaceVerifiedPhoto(
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider).profile?.gender,
+  );
+
   @override
   void _pickGalleryFromSource() {
+    final isFemale = _isFemaleAccount;
     final s = ProviderScope.containerOf(
       context,
       listen: false,
@@ -45,6 +53,17 @@ mixin _ProfilePhotosMx on _ProfileBase {
               ),
             ),
             const SizedBox(height: 16),
+            // Female: foto wajib memuat wajah — cek langsung saat dipilih.
+            if (isFemale)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  s.photoVerifySheetBody,
+                  style: AppText.caption.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
             ListTile(
               leading: const Icon(Icons.photo_camera, color: AppTheme.primary),
               title: Text(s.avatarCamera),
@@ -73,26 +92,48 @@ mixin _ProfilePhotosMx on _ProfileBase {
       context,
       listen: false,
     ).read(localeProvider).s;
-    final picker = ImagePicker();
-    final XFile? picked;
-    try {
-      picked = await picker.pickImage(
+    String? path;
+    if (_isFemaleAccount) {
+      // Female: cek wajah LANGSUNG saat foto dipilih — bukan wajah →
+      // ditolak + picker dibuka lagi (user langsung ganti).
+      path = await pickVerifiedFacePhoto(
+        context,
         source: source,
         maxWidth: 1200,
         imageQuality: 85,
       );
-    } catch (e) {
-      dlog('[PROFILE] pickImage error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errPhotoPermission)));
+      if (path == null || !mounted) return;
+    } else {
+      final picker = ImagePicker();
+      final XFile? picked;
+      try {
+        picked = await picker.pickImage(
+          source: source,
+          maxWidth: 1200,
+          imageQuality: 85,
+        );
+      } catch (e) {
+        dlog('[PROFILE] pickImage error: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(s.errPhotoPermission)));
+        }
+        return;
       }
-      return;
+      if (picked == null) return;
+      path = picked.path;
     }
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
+    final bytes = await XFile(path).readAsBytes();
     if (!mounted) return;
+    await _uploadGalleryBytes(bytes);
+  }
+
+  Future<void> _uploadGalleryBytes(Uint8List bytes) async {
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
     final processed = await NativeImage.processGalleryPhoto(bytes);
     if (!mounted) return;
     if (processed == null) {
@@ -106,7 +147,11 @@ mixin _ProfilePhotosMx on _ProfileBase {
     try {
       await ProviderScope.containerOf(context, listen: false)
           .read(authProvider.notifier)
-          .uploadPhoto(processed.full, preview: processed.preview);
+          .uploadPhoto(
+            processed.full,
+            preview: processed.preview,
+            faceVerified: _isFemaleAccount,
+          );
       await _loadPhotos();
       // Reward koin upload DIHAPUS (overhaul coin: tidak ada poin gratis).
     } catch (e) {
@@ -210,6 +255,20 @@ mixin _ProfilePhotosMx on _ProfileBase {
   Future<void> _pickAndUpload(ImageSource source) async {
     final scope = ProviderScope.containerOf(context, listen: false);
     final s = scope.read(localeProvider).s;
+    if (_isFemaleAccount) {
+      // Female: cek wajah pada HASIL CROP (yang diupload harus benar-benar
+      // memuat wajah). Bukan wajah → ditolak + picker dibuka lagi.
+      final path = await pickVerifiedFacePhoto(
+        context,
+        source: source,
+        crop: (p) async => (await _cropAvatar(p, s))?.path,
+      );
+      if (path == null || !mounted) return;
+      final bytes = await XFile(path).readAsBytes();
+      if (!mounted) return;
+      await _saveAvatarBytes(bytes, s);
+      return;
+    }
     final picker = ImagePicker();
     final XFile? picked;
     try {
@@ -227,13 +286,15 @@ mixin _ProfilePhotosMx on _ProfileBase {
       return;
     }
     if (picked == null) return;
+    await _cropAndSaveAvatar(picked.path, s);
+  }
 
-    // Crop interaktif 1:1 — geser/zoom pilih bagian yang masuk avatar.
-    // Apa yang dilihat user di lingkaran = persis yang tersimpan.
-    final CroppedFile? cropped;
+  /// Crop interaktif 1:1 — geser/zoom pilih bagian yang masuk avatar.
+  /// Apa yang dilihat user di lingkaran = persis yang tersimpan.
+  Future<CroppedFile?> _cropAvatar(String sourcePath, S s) async {
     try {
-      cropped = await ImageCropper().cropImage(
-        sourcePath: picked.path,
+      return await ImageCropper().cropImage(
+        sourcePath: sourcePath,
         aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
         maxWidth: 1024,
         maxHeight: 1024,
@@ -255,31 +316,37 @@ mixin _ProfilePhotosMx on _ProfileBase {
       );
     } catch (e) {
       dlog('[PROFILE] crop error: $e');
-      return;
+      return null;
     }
-    if (cropped == null) return;
+  }
 
+  Future<void> _cropAndSaveAvatar(String sourcePath, S s) async {
+    final cropped = await _cropAvatar(sourcePath, s);
+    if (cropped == null) return;
     final bytes = await cropped.readAsBytes();
     if (!mounted) return;
+    await _saveAvatarBytes(bytes, s);
+  }
 
+  Future<void> _saveAvatarBytes(Uint8List bytes, S s) async {
+    final scope = ProviderScope.containerOf(context, listen: false);
     // Proses image di background isolate — tidak block UI thread
     final base64 = await processAvatar(bytes);
+    if (!mounted) return;
     if (base64 == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errPhotoLoad)));
-      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errPhotoLoad)));
       return;
     }
 
     setState(() => _uploading = true);
     try {
-      await scope.read(authProvider.notifier).updateAvatar(base64);
+      await scope
+          .read(authProvider.notifier)
+          .updateAvatar(base64, faceVerified: _isFemaleAccount);
       if (mounted) {
-        final uid =
-            scope.read(authProvider.notifier).profile?.uid ??
-            '';
+        final uid = scope.read(authProvider.notifier).profile?.uid ?? '';
         if (uid.isNotEmpty) {
           try {
             scope
@@ -287,7 +354,9 @@ mixin _ProfilePhotosMx on _ProfileBase {
                 .updateAvatarForUid(uid, base64);
           } catch (_) {}
           try {
-            scope.read(timelineProvider.notifier).refreshAvatarForUid(uid, base64);
+            scope
+                .read(timelineProvider.notifier)
+                .refreshAvatarForUid(uid, base64);
           } catch (_) {}
         }
       }
@@ -313,6 +382,7 @@ mixin _ProfilePhotosMx on _ProfileBase {
       listen: false,
     ).read(authProvider.notifier);
     final hasAvatar = (auth.profile?.avatar ?? '').isNotEmpty;
+    final isFemale = _isFemaleAccount;
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -333,6 +403,18 @@ mixin _ProfilePhotosMx on _ProfileBase {
               ),
             ),
             const SizedBox(height: 16),
+            // Female: foto wajib memuat wajah — dicek langsung saat dipilih
+            // (kamera & galeri sama-sama divalidasi).
+            if (isFemale)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  s.photoVerifySheetBody,
+                  style: AppText.caption.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
             ListTile(
               leading: const Icon(Icons.photo_camera, color: AppTheme.primary),
               title: Text(s.avatarCamera),
@@ -558,14 +640,16 @@ mixin _ProfilePhotosMx on _ProfileBase {
                               profile.gender == 'female'
                                   ? s.labelGenderFemale
                                   : s.labelGenderMale,
-                              style: AppText.bodyStrong
-                                  .copyWith(color: AppTheme.textPrimary),
+                              style: AppText.bodyStrong.copyWith(
+                                color: AppTheme.textPrimary,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               s.genderLockedNotice,
-                              style: AppText.caption
-                                  .copyWith(color: AppTheme.textSecondary),
+                              style: AppText.caption.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
                           ],
                         ),
@@ -675,10 +759,9 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                     focus.requestFocus();
                                     return;
                                   }
-                                  final available =
-                                      await scope
-                                          .read(authProvider.notifier)
-                                          .isNicknameAvailable(nick);
+                                  final available = await scope
+                                      .read(authProvider.notifier)
+                                      .isNicknameAvailable(nick);
                                   if (!available) {
                                     setSheet(() => error = s.errNicknameTaken);
                                     focus.requestFocus();
@@ -689,7 +772,8 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                 // (lock 7 hari + cabut jabatan moderator).
                                 // Jangan ikut dikirim lewat updateProfile —
                                 // server akan menahannya dan user bingung.
-                                final countryChanged = negara != profile.country;
+                                final countryChanged =
+                                    negara != profile.country;
                                 if (countryChanged) {
                                   // Negara yang sedang dimoderasi (bila user
                                   // moderator) — agar popup menyebut risikonya.
@@ -697,11 +781,13 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                       .read(chatProvider.notifier)
                                       .myModerationState();
                                   final mods = modState?['moderates'];
-                                  final prevMod = mods is List && mods.isNotEmpty
+                                  final prevMod =
+                                      mods is List && mods.isNotEmpty
                                       ? '${mods.first}'
                                       : '';
                                   if (!mounted) return;
-                                  final lockUntil = moderationDate(
+                                  final lockUntil =
+                                      moderationDate(
                                         DateTime.now()
                                             .add(const Duration(days: 7))
                                             .toIso8601String(),
@@ -712,12 +798,16 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                     builder: (dc) => AlertDialog(
                                       title: Row(
                                         children: [
-                                          Icon(Icons.public_rounded,
-                                              color: AppTheme.danger, size: 24),
+                                          Icon(
+                                            Icons.public_rounded,
+                                            color: AppTheme.danger,
+                                            size: 24,
+                                          ),
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
-                                                s.moderationChangeCountryTitle),
+                                              s.moderationChangeCountryTitle,
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -740,7 +830,8 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                           onPressed: () =>
                                               Navigator.of(dc).pop(true),
                                           child: Text(
-                                              s.moderationChangeCountryConfirm),
+                                            s.moderationChangeCountryConfirm,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -776,12 +867,13 @@ mixin _ProfilePhotosMx on _ProfileBase {
                                         .read(chatProvider.notifier)
                                         .setMyCountry(negara);
                                     if (!mounted) return;
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(
+                                    ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text(cres['ok'] == true
-                                            ? countryChangedMessage(cres, s)
-                                            : countryCooldownMessage(cres, s)),
+                                        content: Text(
+                                          cres['ok'] == true
+                                              ? countryChangedMessage(cres, s)
+                                              : countryCooldownMessage(cres, s),
+                                        ),
                                       ),
                                     );
                                   }

@@ -88,7 +88,11 @@ void main() {
     // 2026-10-31: pilihan gender ("Semua/Cowok/Cewek") DIHAPUS — match
     // otomatis lawan jenis, diganti badge info.
     expect(find.text('Semua'), findsNothing);
-    expect(find.textContaining('dipasangkan'), findsOneWidget);
+    // 2026-11-07: badge baru tampil setelah gender termuat — di sini
+    // authProvider tak di-mock (gender tak diketahui) → badge disembunyikan,
+    // jangan menebak 'male' (perempuan bisa salah lihat "dipasangkan dengan
+    // Perempuan").
+    expect(find.textContaining('dipasangkan'), findsNothing);
   });
 
   testWidgets('tekan Match → "Batal" + jumlah penunggu', (tester) async {

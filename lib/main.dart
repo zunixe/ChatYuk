@@ -672,13 +672,18 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
     }, 15),
     guard('firebase', () async {
       try {
-        // Flavor dev (Supabase local): Firebase dev belum dikonfigurasi —
-        // skip init supaya build & runtime jalan tanpa google-services.json.
-        if (AppEnv.isDev) {
+        // Flavor dev default-nya skip FCM (Supabase local tak butuh Firebase).
+        // Build dev-vs-server bisa nyalakan via --dart-define=FCM_ENABLED=true;
+        // saat aktif init memakai google-services.json native (client .dev),
+        // BUKAN appId prod di firebase_options.dart.
+        if (AppEnv.isDev && !const bool.fromEnvironment('FCM_ENABLED')) {
           dlog('[FIREBASE] dev mode: FCM dinonaktifkan');
           return;
         }
-        await Firebase.initializeApp(options: firebaseOptions ?? DefaultFirebaseOptions.currentPlatform);
+        await Firebase.initializeApp(
+          options: firebaseOptions ??
+              (AppEnv.isDev ? null : DefaultFirebaseOptions.currentPlatform),
+        );
         _firebaseReady = true;
         // Crash reporting aktif hanya di rilis — debug jangan spam console
         // (default: enabled in release, disabled in debug).

@@ -355,7 +355,9 @@ mixin _PcChat2Mx on _PrivateChatBase {
       }
     } catch (e) {
       final msg = e.toString();
-      final show = msg.contains('Not enough paid') || msg.contains('Not enough')
+      final show = msg.contains('Female cannot send coins')
+          ? s.coinFemaleBlocked
+          : msg.contains('Not enough paid') || msg.contains('Not enough')
           ? s.errCoinInsufficient
           : msg.contains('registered')
           ? s.errCoinRegisterOnly

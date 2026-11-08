@@ -1088,5 +1088,19 @@ extension SAdminExcludeX on S {
   String get adminMktNumberList => isId ? 'Daftar angka' : 'Numbered list';
   String get adminMktLink => isId ? 'Tautan' : 'Link';
   String get adminMktHeading => isId ? 'Judul' : 'Heading';
-}
 
+  // ── Halaman utama panel (grid menu berkategori) ──
+  String get adminCatStats => isId ? 'Statistik' : 'Statistics';
+  String get adminCatMonitor => isId ? 'Monitor' : 'Monitoring';
+  String get adminCatUsers => isId ? 'Pengguna' : 'Users';
+  String get adminCatCoin => isId ? 'YukCoin' : 'YukCoin';
+  String get adminCatSystem => isId ? 'Sistem' : 'System';
+
+  // ── Ghost Mode (Ringkasan) ──
+  String get adminGhostLabel => isId ? 'Mode invisible' : 'Invisible mode';
+  String get adminGhostEmpty =>
+      isId ? 'Tidak ada user mode invisible' : 'No users in invisible mode';
+  String adminGhostSubtitle(String status, String jam) => isId
+      ? 'status: $status · sisa $jam jam'
+      : 'status: $status · $jam h left';
+}

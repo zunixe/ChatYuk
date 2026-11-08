@@ -43,3 +43,11 @@ const int kMatchFreeSeconds = 30;
 /// HARUS sama dengan `metered_pricing->'match_call'->>'unit_cost'`
 /// di server (default 10). Hanya untuk tampilan.
 const int kMatchConnectFeeCoins = 10;
+
+/// User perempuan tidak bisa mengirim gift (ikon disembunyikan di private
+/// chat). Gender tak diketahui (null/kosong) → tetap boleh (perilaku lama).
+bool canSendGiftForGender(String? gender) => gender != 'female';
+
+/// Sama dengan gift: perempuan tidak bisa kirim koin (server `send_coins`
+/// menolak 'Female cannot send coins'). Perempuan hanya MENDAPAT koin.
+bool canSendCoinsForGender(String? gender) => gender != 'female';

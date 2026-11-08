@@ -944,6 +944,8 @@ mixin _ProfileBodyMx on _ProfileBase {
               ),
             ),
             SizedBox(height: 12),
+            // Donasi disembunyikan (kDonateEnabled).
+            if (kDonateEnabled)
             Center(
               child: GestureDetector(
                 onTap: () => Navigator.push(

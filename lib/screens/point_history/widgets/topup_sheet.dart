@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
+import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/points_provider.dart';
 import '../../../providers/riverpod/topup_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
@@ -11,7 +12,13 @@ import '../../../providers/riverpod/locale_provider.dart';
 /// Harga & paket dari server (topup_packages) + product dari Play.
 /// Future selesai saat sheet tertutup — pemanggil (mis. dialog koin habis
 /// di call) bisa mengecek saldo baru setelahnya.
-Future<void> showTopupSheet(BuildContext context, S s) {
+Future<void> showTopupSheet(BuildContext context, S s) async {
+  // Perempuan tidak top-up (gratis semua, hanya mendapat koin).
+  final gender = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(authProvider.notifier).profile?.gender;
+  if (gender == 'female') return;
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,

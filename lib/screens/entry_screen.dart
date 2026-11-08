@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../providers/riverpod/device_info_provider.dart';
+import '../config/app_flavor.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/regions.dart';
@@ -496,7 +497,8 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                     // tak boleh flex di dalam scroll view)
                     const SizedBox(height: 24),
 
-                    // Donasi
+                    // Donasi (disembunyikan — kDonateEnabled)
+                    if (kDonateEnabled)
                     Center(
                       child: GestureDetector(
                         onTap: () => Navigator.push(

@@ -114,6 +114,7 @@ abstract class _UserInfoBase extends ConsumerState<UserInfoScreen> {
   void _subscribeStatus(UserModel? fresh);
   void _showFollowVsFriendInfo(BuildContext context, S s);
   void _showPhotoViewer(List<UserPhoto> photos, int index);
+  Future<void> _confirmUnlockPhoto(UserPhoto photo);
   Future<void> _load();
   Future<void> _loadAvatar(String path);
   Future<void> _loadPhotos();

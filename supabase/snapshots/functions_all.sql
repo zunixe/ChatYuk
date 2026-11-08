@@ -1,6 +1,6 @@
 -- SNAPSHOT SEMUA fungsi public (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh --all
--- Timestamp: 2026-11-04T23:10:28Z
+-- Timestamp: 2026-11-08T02:12:08Z
 
 -- snapshot-fn: _anon_gate_insert
 CREATE OR REPLACE FUNCTION public._anon_gate_insert()
@@ -469,8 +469,19 @@ CREATE OR REPLACE FUNCTION public._email_is_admin()
  RETURNS boolean
  LANGUAGE sql
  STABLE
+ SET search_path TO ''
 AS $function$
   select coalesce(auth.email(), '') = 'zunixe@gmail.com'
+$function$
+
+-- snapshot-fn: _is_female
+CREATE OR REPLACE FUNCTION public._is_female(p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce((select gender = 'female' from public.profiles where id = p_user), false);
 $function$
 
 -- snapshot-fn: _mission_payout_eligible
@@ -6342,7 +6353,8 @@ begin
     into points_on, paid, mult, hours from public.app_settings where id = 'global';
   bonus_p := paid * mult;
 
-  if points_on is not false then
+  -- Perempuan gratis semua.
+  if points_on is not false and not public._is_female(me) then
     res := public.ledger_spend_dual(me, 'post_boost', paid, bonus_p, p_post_id::text);
     remaining := (res->>'remaining')::int;
   else
@@ -6598,6 +6610,7 @@ end; $function$
 CREATE OR REPLACE FUNCTION public.calls_client_guard()
  RETURNS trigger
  LANGUAGE plpgsql
+ SET search_path TO ''
 AS $function$
 begin
   -- Role PostgREST: 'authenticated'/'anon' = tulis langsung dari client.
@@ -7072,6 +7085,7 @@ CREATE OR REPLACE FUNCTION public.check_user_total_coins(p_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
+ SET search_path TO ''
 AS $function$
 DECLARE
     total_coins int;
@@ -7324,6 +7338,7 @@ end; $function$
 CREATE OR REPLACE FUNCTION public.clamp_last_seen()
  RETURNS trigger
  LANGUAGE plpgsql
+ SET search_path TO ''
 AS $function$
 begin
   if new.last_seen is not null and new.last_seen > now() then
@@ -7742,7 +7757,9 @@ begin
   bonus_p := paid * mult;
 
   -- Room kategori = GRATIS (tidak potong koin). Legacy 'private' tetap bayar.
-  if points_on is not false and not is_admin and not v_is_category then
+  -- Perempuan gratis semua.
+  if points_on is not false and not is_admin and not v_is_category
+     and not public._is_female(uid) then
     r := public.ledger_spend_dual(uid, 'spend_room', paid, bonus_p, 'create');
     remaining := (r->>'remaining')::int;
   else
@@ -8441,6 +8458,8 @@ begin
     when 'view_once' then c_vo
     when 'view_once_expired' then 0
     else 0 end;
+  -- Perempuan gratis semua.
+  if public._is_female(auth.uid()) then cost := 0; end if;
   if cost = 0 then
     select points into remaining from profiles where id = auth.uid();
     return coalesce(remaining, 0);
@@ -9111,7 +9130,8 @@ begin
     into points_on, paid, mult from app_settings where id = 'global';
   bonus_p := paid * mult;
 
-  if points_on is not false then
+  -- Perempuan gratis semua.
+  if points_on is not false and not public._is_female(uid) then
     res := public.ledger_spend_dual(uid, 'spend_room', paid, bonus_p, 'extend');
     remaining := (res->>'remaining')::int;
   else
@@ -10406,23 +10426,27 @@ AS $function$
 declare
   me uuid := auth.uid();
   points_on boolean;
+  owner_female boolean;
   arr jsonb := '[]'::jsonb;
   rec record;
   idx int := 0;
   is_unlocked boolean;
 begin
   select points_enabled into points_on from app_settings where id = 'global';
+  select gender = 'female' into owner_female
+    from profiles where id = p_user_id;
 
   for rec in
     select id, photo, photo_preview, created_at
     from user_photos where user_id = p_user_id
     order by created_at asc
   loop
-    -- Akses: sistem koin mati → semua terbuka. Pemilik sendiri → terbuka.
-    -- Index 0 → terbuka. Sudah beli permanen → terbuka.
+    -- Terbuka: koin mati / foto sendiri / profil non-female (paywall hanya
+    -- untuk foto milik female) / 4 pertama / sudah beli permanen.
     is_unlocked := (points_on is false)
                 or (me = p_user_id)
-                or (idx = 0)
+                or (owner_female is not true)
+                or (idx < 4)
                 or exists (select 1 from photo_unlocks
                            where viewer_id = me and photo_id = rec.id);
 
@@ -11095,6 +11119,7 @@ CREATE OR REPLACE FUNCTION public.is_room_media_type(p_type text)
  RETURNS boolean
  LANGUAGE sql
  IMMUTABLE
+ SET search_path TO ''
 AS $function$
   select coalesce(p_type in (
     'image', 'video', 'video_once', 'video_once_expired',
@@ -12185,7 +12210,8 @@ begin
     'match_search_cost', 2,
     'match_connect_cost',
       coalesce((metered_pricing->'match_call'->>'unit_cost')::int, 10),
-    'match_free_seconds', 30
+    'match_free_seconds', 30,
+    'photo_unlock_cost', photo_unlock_perm
   ) from app_settings where id = 'global');
 end; $function$
 
@@ -12737,7 +12763,8 @@ begin
     'unlocked',   true,
     'photo',      r.photo,
     'preview',    coalesce(r.photo_preview, ''),
-    'created_at', r.created_at
+    'created_at', r.created_at,
+    'face_verified', r.face_verified_at is not null
   ) order by r.created_at asc), '[]'::jsonb) into arr
   from public.user_photos r where r.user_id = me;
   return arr;
@@ -14254,7 +14281,10 @@ begin
       case when v_is_me then r.phone_verified_at else null end,
     -- Kapan negara boleh diubah lagi (khusus diri sendiri).
     'country_changed_at',
-      case when v_is_me then r.country_changed_at else null end
+      case when v_is_me then r.country_changed_at else null end,
+    -- Avatar sudah lolos selfie liveness? (khusus diri sendiri)
+    'avatar_face_verified',
+      case when v_is_me then (r.avatar_face_verified_at is not null) else null end
   );
 end;
 $function$
@@ -16383,6 +16413,10 @@ begin
   select is_registered, nickname, gender into am_registered, my_name, my_gender
     from public.profiles where id = uid;
   if am_registered is not true then raise exception 'Sender must be registered'; end if;
+  -- 2026-11-07: perempuan tidak bisa kirim koin (cegah pindah penghasilan).
+  if my_gender = 'female' then
+    raise exception 'Female cannot send coins' using errcode = '42501';
+  end if;
 
   if not exists (select 1 from public.private_chats pc
     where pc.chat_id = p_chat_id and uid = any (pc.participants)
@@ -16509,6 +16543,9 @@ begin
   select is_registered, nickname, gender into am_registered, my_name, my_gender
     from public.profiles where id = uid;
   if am_registered is not true then raise exception 'Sender must be registered'; end if;
+  if my_gender = 'female' then
+    raise exception 'Female cannot send gift' using errcode = '42501';
+  end if;
   select coin_tx_max_per_hour into tx_max from app_settings where id = 'global';
   if (select count(*) from coin_ledger
       where user_id = uid and type in ('coin_sent','gift_sent')
@@ -17467,6 +17504,7 @@ CREATE OR REPLACE FUNCTION public.streak_bonus_amount(streak integer)
  RETURNS integer
  LANGUAGE sql
  IMMUTABLE
+ SET search_path TO ''
 AS $function$
   select case streak
     when 1 then 25
@@ -17566,7 +17604,7 @@ AS $function$
 declare
   me uuid := auth.uid(); price int; cut_pct int; duration_days int; periods int;
   points_on boolean; am_registered boolean; remaining int; cost int; cut int; net int;
-  expire timestamptz;
+  expire timestamptz; v_free boolean;
 begin
   if me is null then raise exception 'Not authenticated'; end if;
   if p_creator is null or p_creator = me then raise exception 'Invalid creator'; end if;
@@ -17595,8 +17633,15 @@ begin
 
   -- Koin beli/penghasilan dulu; male boleh menambal dengan bonus
   -- (×multiplier, plafon promo) — ledger_spend_promo (2026-11-10).
-  remaining := public.ledger_spend_promo(me, 'subscribe', cost, p_creator::text,
-    p_creator, 100 - cut_pct);
+  -- Perempuan gratis semua: tidak bayar, kreator tidak dapat penghasilan.
+  v_free := public._is_female(me);
+  if v_free then
+    cost := 0; cut := 0; net := 0;
+    remaining := public.yukcoin_total(me);
+  else
+    remaining := public.ledger_spend_promo(me, 'subscribe', cost, p_creator::text,
+      p_creator, 100 - cut_pct);
+  end if;
 
   -- Perpanjang / buat subscription.
   select expires_at into expire from subscriptions
@@ -17621,11 +17666,13 @@ begin
               jsonb_build_object('gross', cost, 'net', net, 'pct', cut_pct, 'periods', periods));
   end if;
 
+  if not v_free then
   insert into point_events (user_id, event, amount, metadata)
     values (me, 'subscribe', -cost, jsonb_build_object('creator', p_creator, 'periods', periods));
+  end if;
 
   return jsonb_build_object('ok', true, 'points', remaining, 'expires_at', expire,
-    'net', net, 'cut', cut);
+    'net', net, 'cut', cut, 'charged', cost, 'free', v_free);
 end; $function$
 
 -- snapshot-fn: subscriber_count_sync
@@ -18003,62 +18050,48 @@ CREATE OR REPLACE FUNCTION public.unlock_photo(p_photo_id uuid, p_mode text)
 AS $function$
 declare
   me uuid := auth.uid();
-  points_on boolean; once_cost int; perm_cost int; owner_pct int; mult int;
-  cost int; bonus_p int; owner_id uuid; owner_share int; remaining int;
-  tier text; res jsonb;
+  points_on boolean; perm_cost int; owner_pct int;
+  owner_id uuid; owner_share int; remaining int;
 begin
   if me is null then raise exception 'Not authenticated'; end if;
-  if p_mode not in ('once','perm') then raise exception 'Invalid mode'; end if;
+  if p_mode <> 'perm' then raise exception 'Invalid mode'; end if;
 
-  select points_enabled, photo_unlock_once, photo_unlock_perm, photo_unlock_owner_pct,
-         bonus_price_multiplier
-    into points_on, once_cost, perm_cost, owner_pct, mult
+  select points_enabled, photo_unlock_perm, photo_unlock_owner_pct
+    into points_on, perm_cost, owner_pct
     from app_settings where id = 'global';
-
-  if points_on is false then
-    return jsonb_build_object('ok', true, 'points', (select points from profiles where id = me));
-  end if;
 
   select user_id into owner_id from user_photos where id = p_photo_id;
   if owner_id is null then raise exception 'Photo not found'; end if;
-  if owner_id = me then
-    return jsonb_build_object('ok', true, 'points', (select points from profiles where id = me));
+  if owner_id = me or points_on is false then
+    return jsonb_build_object('ok', true, 'remaining',
+      (select points from profiles where id = me));
+  end if;
+  -- Idempoten: sudah dibuka → gratis (tidak tagih ulang).
+  if exists (select 1 from photo_unlocks
+             where viewer_id = me and photo_id = p_photo_id) then
+    return jsonb_build_object('ok', true, 'remaining',
+      (select points from profiles where id = me));
   end if;
 
-  cost := case p_mode when 'perm' then perm_cost else once_cost end;
-  bonus_p := cost * mult;
+  -- HANYA koin berbayar (topup+earned). Bonus tidak bisa → raise 'Not
+  -- enough paid' bila saldo kurang.
+  remaining := public.ledger_spend_paid(me, 'photo_unlock', perm_cost, p_photo_id::text);
 
-  if exists (select 1 from photo_unlocks where viewer_id = me and photo_id = p_photo_id) then
-    return jsonb_build_object('ok', true, 'points', (select points from profiles where id = me));
-  end if;
-
-  res := public.ledger_spend_dual(me, 'photo_unlock', cost, bonus_p, p_photo_id::text);
-  tier := res->>'tier';
-  remaining := (res->>'remaining')::int;
-
-  owner_share := (cost * owner_pct) / 100;
+  owner_share := (perm_cost * owner_pct) / 100;
   if owner_share > 0 then
-    perform public.ledger_credit(owner_id,
-      case when tier = 'paid' then 'earned' else 'bonus' end,
-      'photo_income', owner_share, p_photo_id::text,
-      jsonb_build_object('viewer', me, 'mode', p_mode, 'tier', tier));
+    perform public.ledger_credit(owner_id, 'earned', 'photo_income',
+      owner_share, p_photo_id::text,
+      jsonb_build_object('viewer', me));
   end if;
-  if tier = 'paid' then
-    insert into platform_revenue (source, amount, metadata)
-      values ('photo_unlock', cost - owner_share,
-              jsonb_build_object('photo_id', p_photo_id, 'mode', p_mode, 'viewer', me, 'owner', owner_id));
-  end if;
-
+  insert into platform_revenue (source, amount, metadata)
+    values ('photo_unlock', perm_cost - owner_share,
+            jsonb_build_object('photo_id', p_photo_id, 'viewer', me, 'owner', owner_id));
   insert into point_events (user_id, event, amount, metadata)
-    values (me, 'photo_unlock', -case when tier = 'paid' then cost else bonus_p end,
-            jsonb_build_object('photo_id', p_photo_id, 'mode', p_mode, 'tier', tier));
+    values (me, 'photo_unlock', -perm_cost, jsonb_build_object('photo_id', p_photo_id));
+  insert into photo_unlocks (viewer_id, photo_id) values (me, p_photo_id)
+    on conflict do nothing;
 
-  if p_mode = 'perm' then
-    insert into photo_unlocks (viewer_id, photo_id) values (me, p_photo_id)
-      on conflict do nothing;
-  end if;
-
-  return jsonb_build_object('ok', true, 'points', remaining, 'mode', p_mode, 'tier', tier);
+  return jsonb_build_object('ok', true, 'remaining', remaining);
 end; $function$
 
 -- snapshot-fn: unlock_photo (overload 2)

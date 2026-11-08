@@ -22,8 +22,7 @@ mixin SRandomMx {
   String get randomGenderMale => isId ? 'Cowok' : 'Male';
   String get randomGenderFemale => isId ? 'Cewek' : 'Female';
   String get randomFilterTitle => isId ? 'Cari' : 'Find';
-  String get quickMenuRandomVideo =>
-      isId ? 'Video Random' : 'Random Video';
+  String get quickMenuRandomVideo => isId ? 'Video Random' : 'Random Video';
 
   // ── Saat video call ──
   String get randomCallNext => 'Next';
@@ -88,11 +87,11 @@ mixin SRandomMx {
       isId ? 'Gagal memulai. Coba lagi.' : 'Could not start. Try again.';
 
   // ── Lawan jenis otomatis + biaya match ──
-  String get randomOppositeOnly =>
-      isId ? 'Dipasangkan dengan lawan jenis' : 'Matched with the opposite gender';
-  String randomOppositeHint(String g) => isId
-      ? 'Kamu akan dipasangkan dengan $g'
-      : 'You will be matched with $g';
+  String get randomOppositeOnly => isId
+      ? 'Dipasangkan dengan lawan jenis'
+      : 'Matched with the opposite gender';
+  String randomOppositeHint(String g) =>
+      isId ? 'Kamu akan dipasangkan dengan $g' : 'You will be matched with $g';
   String get randomNeedCoinTitle =>
       isId ? 'YukCoin tidak cukup' : 'Not enough YukCoin';
   String randomNeedCoinBody(int fee) => isId
@@ -113,14 +112,14 @@ mixin SRandomMx {
   String get callTopupFailed => isId
       ? 'Pembayaran gagal atau dibatalkan.'
       : 'Payment failed or was cancelled.';
-  String get callNoCoinStillEmpty => isId
-      ? 'YukCoin masih belum cukup'
-      : 'Still not enough YukCoin';
+  String get callNoCoinStillEmpty =>
+      isId ? 'YukCoin masih belum cukup' : 'Still not enough YukCoin';
+  String get callCameraSwitchFailed =>
+      isId ? 'Kamera tidak bisa diganti' : 'Could not switch camera';
 
   // ── Batas call gratis harian habis (female) ──
-  String get callFreeLimitTitle => isId
-      ? 'Batas gratis habis'
-      : 'Free limit reached';
+  String get callFreeLimitTitle =>
+      isId ? 'Batas gratis habis' : 'Free limit reached';
   String callFreeLimitBody(int limitMin) => isId
       ? 'Kamu sudah memakai $limitMin menit call gratis hari ini. Coba lagi besok.'
       : 'You have used your $limitMin free call minutes today. Try again tomorrow.';

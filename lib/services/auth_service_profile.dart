@@ -138,7 +138,10 @@ mixin AuthServiceProfileMx on AuthBase {
   /// "Coba lagi" muncul padahal datanya ada (kasus "profilnya ga muncul").
   /// Sekarang: data profil dikembalikan apa adanya (kolom `avatar` masih
   /// berisi PATH), UI memuat avatar terpisah via [getAvatarByPath].
-  Future<UserModel?> getProfileById(String id, {bool forceRefresh = false}) async {
+  Future<UserModel?> getProfileById(
+    String id, {
+    bool forceRefresh = false,
+  }) async {
     if (id.isEmpty) return null;
     final key = 'profile:$id';
     // PERSISTEN (SQLite): baca cache dulu → tampil instan tanpa "keload dulu".
@@ -180,9 +183,14 @@ mixin AuthServiceProfileMx on AuthBase {
     try {
       final raw = await _sb.rpc('profile_public', params: {'p_user': id});
       if (raw is Map && raw.isNotEmpty) {
-        await MessageCache.instance.saveRawObj(key, Map<String, dynamic>.from(raw));
+        await MessageCache.instance.saveRawObj(
+          key,
+          Map<String, dynamic>.from(raw),
+        );
       }
-    } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
+    } catch (e) {
+      dlog('[AUTH-PROFILE]: $e');
+    }
   }
 
   /// Resolve PATH avatar → base64 (RAM → disk → network). Dipanggil UI
@@ -272,7 +280,9 @@ mixin AuthServiceProfileMx on AuthBase {
       throw Exception('nickname_banned');
     }
     // Gender hanya male/female — nilai lain diabaikan (jangan tulis sampah).
-    final genderValue = (gender == 'male' || gender == 'female') ? gender : null;
+    final genderValue = (gender == 'male' || gender == 'female')
+        ? gender
+        : null;
     // About dibatasi 150 karakter (clamp, bukan error) supaya kolom tidak
     // membengkak dan tidak ada pesan gagal yang membingungkan user.
     final aboutText = about?.trim();
@@ -307,15 +317,51 @@ mixin AuthServiceProfileMx on AuthBase {
     }
   }
 
+  /// Gender akun dari DB (bukan cache UI) — sumber kebenaran untuk gate
+  /// verifikasi wajah. null bila profil tidak ada / query gagal.
+  Future<String?> _genderFromDb(String id) async {
+    try {
+      final row = await _sb
+          .from('profiles')
+          .select('gender')
+          .eq('id', id)
+          .maybeSingle();
+      return row?['gender'] as String?;
+    } catch (e) {
+      dlog('[AUTH-PROFILE] gender check gagal: $e');
+      return null;
+    }
+  }
+
+  /// GUARD keras: akun FEMALE wajib `faceVerified` (selfie liveness).
+  /// Dipanggil di service layer supaya TIDAK ADA jalur UI (termasuk jalur
+  /// lama / profil belum termuat) yang bisa upload tanpa verifikasi.
+  Future<void> _assertFaceVerified(String id, bool faceVerified) async {
+    if (faceVerified) return;
+    final gender = await _genderFromDb(id);
+    if (gender == 'female') {
+      dlog('[AUTH-PROFILE] TOLAK upload tanpa verifikasi wajah (female)');
+      throw Exception('face_verification_required');
+    }
+  }
+
   /// Update avatar → server + TULIS KE DISK lokal. Return server path.
   /// Disk = sumber lokal: buka app berikutnya load dari disk, bukan network.
-  Future<String> updateAvatar(String base64) async {
+  ///
+  /// [faceVerified] = avatar berasal dari selfie liveness (kewajiban akun
+  /// female) → catat `avatar_face_verified_at` supaya UI tahu foto ini sudah
+  /// lolos verifikasi (dan foto lama tanpa cap bisa diminta diganti).
+  Future<String> updateAvatar(
+    String base64, {
+    bool faceVerified = false,
+  }) async {
     final id = uid;
     if (id == null) return '';
     // Validasi base64 adalah JPEG, PNG, atau WebP yang valid
     if (base64.isNotEmpty && !isValidImageBase64(base64)) {
       throw Exception('Invalid image format');
     }
+    await _assertFaceVerified(id, faceVerified || base64.isEmpty);
     // Limit ukuran: max 512KB base64 (~384KB file)
     if (base64.length > 524288) {
       throw Exception('Image too large (max 384KB)');
@@ -339,9 +385,21 @@ mixin AuthServiceProfileMx on AuthBase {
         oldAvatar != path) {
       try {
         await _sb.storage.from('chat-photos').remove([oldAvatar]);
-      } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
+      } catch (e) {
+        dlog('[AUTH-PROFILE]: $e');
+      }
     }
-    await _sb.from('profiles').update({'avatar': path}).eq('id', id);
+    await _sb
+        .from('profiles')
+        .update({
+          'avatar': path,
+          // Hanya avatar hasil selfie liveness yang dicap; upload tanpa
+          // verifikasi (atau hapus avatar) mengosongkan cap.
+          'avatar_face_verified_at': faceVerified && path.isNotEmpty
+              ? DateTime.now().toUtc().toIso8601String()
+              : null,
+        })
+        .eq('id', id);
     // TULIS KE DISK — bytes WebP/JPEG asli, load berikutnya dari lokal.
     if (path.isNotEmpty && base64.isNotEmpty) {
       try {
@@ -349,7 +407,9 @@ mixin AuthServiceProfileMx on AuthBase {
           path,
           Uint8List.fromList(base64Decode(base64)),
         );
-      } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
+      } catch (e) {
+        dlog('[AUTH-PROFILE]: $e');
+      }
     }
     return path;
   }
@@ -357,7 +417,10 @@ mixin AuthServiceProfileMx on AuthBase {
   Future<void> removeAvatar() async {
     final id = uid;
     if (id == null) return;
-    await _sb.from('profiles').update({'avatar': ''}).eq('id', id);
+    await _sb
+        .from('profiles')
+        .update({'avatar': '', 'avatar_face_verified_at': null})
+        .eq('id', id);
   }
 
   Future<void> updateFcmToken(String? token) async {
@@ -374,7 +437,9 @@ mixin AuthServiceProfileMx on AuthBase {
         'update_device_fcm_token',
         params: {'p_install_id': installId, 'p_token': t},
       );
-    } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
+    } catch (e) {
+      dlog('[AUTH-PROFILE]: $e');
+    }
   }
 
   /// Logout: lepas token FCM device INI dari akun yang sedang keluar.
@@ -387,10 +452,12 @@ mixin AuthServiceProfileMx on AuthBase {
     try {
       final installId = await DeviceInfoService.instance.installId();
       if (installId.isEmpty) return;
-      await _sb.rpc(
-        'update_device_fcm_token',
-        params: {'p_install_id': installId, 'p_token': ''},
-      ).timeout(const Duration(seconds: 3));
+      await _sb
+          .rpc(
+            'update_device_fcm_token',
+            params: {'p_install_id': installId, 'p_token': ''},
+          )
+          .timeout(const Duration(seconds: 3));
     } catch (e) {
       dlog('[AUTH] releaseFcmToken error: $e');
     }
@@ -523,6 +590,7 @@ mixin AuthServiceProfileMx on AuthBase {
           'photo': photo,
           'unlocked': true,
           'createdAt': m['created_at'],
+          'faceVerified': m['face_verified'] == true,
         }),
       );
     }
@@ -567,13 +635,37 @@ mixin AuthServiceProfileMx on AuthBase {
     return result;
   }
 
+  /// Buka foto terkunci (paywall profil female): server menagih
+  /// `photo_unlock_perm` koin BERBAYAR (bonus tidak bisa), mengkredit
+  /// pemilik `photo_unlock_owner_pct`% sebagai photo_income, lalu mencatat
+  /// permanen di photo_unlocks (idempoten — panggil ulang gratis).
+  /// Return remaining balance; throw bila saldo kurang / error lain.
+  Future<int> unlockPhoto(String photoId, String ownerId) async {
+    final res = await _sb.rpc(
+      'unlock_photo',
+      params: {'p_photo_id': photoId, 'p_mode': 'perm'},
+    );
+    invalidateGallery(ownerId);
+    final m = res is Map ? res : const <String, dynamic>{};
+    return (m['remaining'] as num?)?.toInt() ?? 0;
+  }
+
   /// Upload foto galeri milik sendiri. Max 6 foto per user.
-  Future<void> uploadPhoto(String base64, {String? preview}) async {
+  ///
+  /// [faceVerified] = foto berasal dari selfie liveness (kewajiban akun
+  /// female) → catat `face_verified_at`; foto lama tanpa cap ditandai
+  /// "perlu diganti" di UI.
+  Future<void> uploadPhoto(
+    String base64, {
+    String? preview,
+    bool faceVerified = false,
+  }) async {
     final id = uid;
     if (id == null) return;
     if (base64.isNotEmpty && !isValidImageBase64(base64)) {
       throw Exception('Invalid image format');
     }
+    await _assertFaceVerified(id, faceVerified);
     // Limit ukuran: max 1MB base64 (~768KB file)
     if (base64.length > 1048576) {
       throw Exception('Photo too large (max 768KB)');
@@ -596,6 +688,8 @@ mixin AuthServiceProfileMx on AuthBase {
       'user_id': id,
       'photo': path,
       if (preview != null && preview.isNotEmpty) 'photo_preview': preview,
+      if (faceVerified)
+        'face_verified_at': DateTime.now().toUtc().toIso8601String(),
     });
     invalidateGallery(id); // foto berubah -> cache basi
   }
@@ -614,7 +708,9 @@ mixin AuthServiceProfileMx on AuthBase {
           StoragePhotoService.instance.isGalleryPath(photo)) {
         await StoragePhotoService.instance.delete(photo);
       }
-    } catch (e) { dlog('[AUTH-PROFILE]: $e'); }
+    } catch (e) {
+      dlog('[AUTH-PROFILE]: $e');
+    }
     await _sb.from('user_photos').delete().eq('id', photoId);
     invalidateGallery(); // foto berubah -> buang cache (uid tak diketahui di sini)
   }

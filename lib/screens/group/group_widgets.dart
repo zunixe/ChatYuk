@@ -192,7 +192,10 @@ class GroupCard extends ConsumerWidget {
                 color: AppTheme.primary,
               ),
               title: Text(
-                s.btnExtendRoom,
+                // Perempuan gratis semua; male lihat harga dari server.
+                points.spendsFree || !points.enabled
+                    ? s.btnExtendRoomFree
+                    : s.btnExtendRoom(points.roomExtendPaid),
                 style: TextStyle(color: AppTheme.textPrimary),
               ),
               onTap: () => Navigator.pop(ctx, 'extend'),
@@ -219,7 +222,8 @@ class GroupCard extends ConsumerWidget {
       final extendBonus = extendPaid * points.bonusMultiplier;
       // Cek per-bucket mengikuti ledger_spend_dual di server: tier paid
       // (topup+earned) dulu, fallback bonus × multiplier.
-      if (points.enabled &&
+      final chargeable = points.enabled && !points.spendsFree;
+      if (chargeable &&
           points.paidBalance < extendPaid &&
           points.bonusBalance < extendBonus) {
         points.showOutOfPointsDialog(context, s.isId);
@@ -227,7 +231,7 @@ class GroupCard extends ConsumerWidget {
       }
       // Tampilkan biaya SEBELUM menagih — dulu cek saldo senyap tanpa
       // konfirmasi, user tidak tahu berapa yang dipotong.
-      if (points.enabled) {
+      if (chargeable) {
         final ok = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -258,7 +262,11 @@ class GroupCard extends ConsumerWidget {
         }
         messenger.showSnackBar(SnackBar(content: Text(s.roomExtended)));
       } catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text(s.errSendCoin)));
+        if (e.toString().contains('Not enough') && context.mounted) {
+          points.showOutOfPointsDialog(context, s.isId);
+        } else {
+          messenger.showSnackBar(SnackBar(content: Text(s.errExtendRoom)));
+        }
       }
     } else if (action == 'delete') {
       final ok = await showDialog<bool>(

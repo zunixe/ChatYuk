@@ -25,6 +25,40 @@
   pesan friendly. Grant execute dikembalikan ke `authenticated`.
 - pgTAP `supabase/tests/room_sessions_test.sql` 23/23 hijau (dummy-only,
   transaksional). `check_migrations.sh --all` bersih.
+
+## 2026-11-10 (d) — Paywall foto profil female (APPLIED 2026-11-08 via API)
+
+### `20261110130000_photo_paywall_unlock.sql` (APPLIED 2026-11-08)
+- **Reaktivasi `unlock_photo`** (dicabut 2026-11-01): viewer profil female
+  melihat 4 foto pertama gratis; foto ke-5+ terkunci (server kirim
+  `photo_preview` blur, bukan foto asli). Buka PERMANEN per foto:
+  `photo_unlock_perm` koin (diset **15**). Mode 'once' dibuang.
+- **Paid-only**: `ledger_spend_paid` (topup+earned) — bonus tidak bisa
+  (spec product). Pemilik foto dapat `photo_unlock_owner_pct`% (60%) ke
+  bucket `earned` via `photo_income`; sisanya `platform_revenue`.
+- `get_user_photos_access`: gate gender PEMILIK — paywall hanya untuk foto
+  milik female (`owner_female`); male/sendiri/points-off tetap semua terbuka.
+- `metered_pricing_public` menambah `photo_unlock_cost` (dibaca client).
+- Grant `unlock_photo(uuid,text)` ke `authenticated`; overload `(text,text)`
+  tetap dicabut.
+- Verifikasi live: grant exec=true (uuid), `photo_unlock_perm=15`, body
+  fungsi memuat `owner_female`/`idx < 4`. Snapshot di-regenerate.
+
+## 2026-11-10 (c) — Verifikasi wajah foto profil female (APPLIED 2026-11-08 via API)
+
+### `20261110100000_photo_face_verification.sql` (APPLIED 2026-11-08)
+- Kolom baru `profiles.avatar_face_verified_at` + `user_photos.face_verified_at`
+  (nullable; null = foto lama / belum lolos selfie liveness).
+- `my_photos()` menambah `face_verified` (bool) — grid Profil menandai foto
+  lama "perlu diganti".
+- `profile_public()` menambah `avatar_face_verified` HANYA untuk diri sendiri
+  (null untuk pengguna lain — status verifikasi bukan info publik).
+- Klien: upload foto profil female (avatar + slot foto) wajib lewat kamera
+  in-app + liveness (kedip & toleh) lalu cap waktu; male tidak berubah.
+- SAFE: hanya ADD COLUMN nullable; tidak ada DROP/ALTER TYPE.
+- Verifikasi live: kolom ada (information_schema), fungsi memuat field baru
+  (position > 0). Snapshot `functions.sql`/`functions_all.sql` di-regenerate.
+
 ## 2026-11-10 (b) — Koin bonus untuk fee match (APPLIED 2026-11-04 via API)
 
 ### `20261110060000_admin_promo_budget.sql` (APPLIED 2026-11-05)
@@ -4821,3 +4855,74 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - Assert baru di `econ_lockdown_test.sql` (25/25): 4 fungsi executable
   authenticated, submit_kyc tidak executable anon.
 - Verifikasi live `has_function_privilege` = true×4 / anon false.
+
+## 20261110070000_send_gift_female_block.sql (APPLIED 2026-11-07)
+- `send_gift` (FROZEN): user perempuan ditolak `Female cannot send gift`
+  (errcode 42501) — menutup jalur RPC langsung; app sudah menyembunyikan
+  ikon gift di private chat untuk perempuan. Gender NULL/lainnya tetap boleh.
+- Body diambil dari snapshot live (= `20261110050000_promo_bonus_spend`),
+  satu-satunya tambahan = blok `my_gender = 'female'`.
+- Test: `supabase/tests/gift_female_block_test.sql` (G1 female ditolak,
+  G2 male tetap bisa). App memetakan error ke `s.giftFemaleBlocked`.
+- Diterapkan via Management API, versi tercatat di `schema_migrations`.
+  Snapshot diperbarui (diff = hanya blok gender). SQL test hijau:
+  gift_female_block 4/4, promo_bonus_spend 12/12, economy_money 29/29,
+  economy_matrix 32/32, points 15/15.
+
+## 20261110080000_send_coins_female_block.sql (APPLIED 2026-11-07)
+- `send_coins` (FROZEN): perempuan ditolak `Female cannot send coins`
+  (errcode 42501) — mencegah perempuan memindahkan penghasilan (`earned`,
+  bisa ditarik) ke akun lain. Body = live (20261110050000) + blok gender.
+- Test: `supabase/tests/send_coins_female_block_test.sql`.
+
+## 20261110090000_female_free_spend.sql (APPLIED 2026-11-07)
+- Keputusan user 2026-11-07: "perempuan gratis semua, hanya untuk dapat uang".
+- Helper baru `_is_female(uuid)` (execute dicabut dari client).
+- Tidak memotong koin perempuan: `deduct_chat_point` (FROZEN, foto/view-once),
+  `create_private_room` & `extend_private_room` (FROZEN), `boost_post`,
+  `subscribe_creator` (langganan dari perempuan TIDAK memberi penghasilan ke
+  kreator; return `charged`/`free`). Body tiap fungsi = live + cabang gender.
+- Sudah gratis sebelumnya: undo/edit/slot foto/mode hantu/filter/nearby,
+  match (female), telepon female (kuota menit harian), masuk room privat.
+- Test: `supabase/tests/female_free_spend_test.sql`.
+- Diterapkan via Management API, versi tercatat. Snapshot (+ `--all`)
+  diperbarui; diff = hanya cabang gender. `run_sql_tests.sh` semua lolos
+  (62 file). `econ_antifraud_test` disesuaikan: pengirim send_coins = male.
+
+## 2026-11-07 — 20261107170000 + 20261107173000 rls_initplan_wrap (PRODUCTION)
+
+- TOTAL 101 policy RLS dibungkus `(select auth.uid())` / `(select auth.jwt())` —
+  perf initplan (evaluasi per statement, bukan per baris). Semantik tak berubah.
+  - 170000: 13 policy (audit awal replica)
+  - 173000: 88 policy sisa (audit kanonik NULL-safe — query audit pertama
+    salah logika NULL utk policy SELECT/DELETE → undercount)
+- 11 policy dari audit Advisors + 2 (`admin_alerts_admin`,
+  `deleted_users_admin`) ketemu saat verifikasi (auth.jwt() langsung).
+- Status: **TERAPPLIED ke production hosted via Management API** ( kedua file,
+  versi tercatat di `supabase_migrations.schema_migrations`: 20261107170000,
+  20261107173000) DAN ke replica 43.
+- Sisa policy unwrapped: prod = 0, replica = 0 (paritas utuh, 120 policy).
+- Verifikasi: `smoke_anon_register.sh` OK bersih di REPLICA dan PRODUCTION;
+  `check_migrations.sh --all` OK.
+
+## 2026-11-07 — 20261107180000_fn_search_path_fix (PRODUCTION)
+
+- 6 fungsi project di-pin `SET search_path = ''` (anti search-path hijack):
+  `_email_is_admin`, `calls_client_guard`, `check_user_total_coins`,
+  `clamp_last_seen`, `is_room_media_type`, `streak_bonus_amount`.
+- Semua body fully-qualified → aman. Tidak ada yang frozen.
+- Terapplied ke production (Management API, versi tercatat 20261107180000)
+  DAN replica 43 (+ `outbox_mark_local` yang hanya ada di replica).
+- Sisa fungsi project tanpa search_path: prod = 0, replica = 0.
+  Sisa temuan lint = fungsi bawaan extension (cube/earth/pg_stat_statements)
+  — accepted (lihat docs/LINT_FIX_PLAN.md).
+
+## 2026-11-07 — 20261107183000_fk_indexes (PRODUCTION)
+
+- 25 FK single-kolom tanpa index leading-column → `CREATE INDEX CONCURRENTLY`
+  (nama `idx_<tabel>_<kolom>`). Audit akurat: 25 (query kasar sebelumnya
+  salah hitung 85).
+- Terapplied ke production (Management API, per statement — CONCURRENTLY
+  tak boleh dalam transaksi; 25/25 OK) DAN replica 43 (25/25 OK).
+- Verifikasi: sisa FK tanpa index di production = 0. Versi tercatat
+  20261107183000.

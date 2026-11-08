@@ -1,6 +1,5 @@
 part of '../user_info_screen.dart';
 
-
 /// ─────────────────────────────────────────────────────────────────
 /// Tampilan PROFIL gaya Instagram/WA (hero foto + stats + info + aksi).
 /// Data sepenuhnya dari UserInfoScreen (tanpa model baru).
@@ -22,6 +21,7 @@ class _PProfileBody extends StatefulWidget {
   final String? bio;
   final String location;
   final String userId;
+
   /// Versi pendek (8 karakter) — SAMA dengan halaman Profil sendiri.
   final String userIdShort;
   final int followers;
@@ -45,11 +45,14 @@ class _PProfileBody extends StatefulWidget {
   final VoidCallback onFollowersTap;
   final VoidCallback onFollowingTap;
   final void Function(int index) onOpenPhoto;
+  final void Function(UserPhoto photo) onUnlockPhoto;
+  final int unlockCost;
   final VoidCallback onCopyId;
   final VoidCallback onFollowInfo;
   final VoidCallback onBlock;
   final VoidCallback onReport;
   final int galleryCount;
+
   /// Badge level (male) — widget jadi dari pemanggil (Consumer), null = tanpa.
   final Widget? levelBadge;
 
@@ -93,6 +96,8 @@ class _PProfileBody extends StatefulWidget {
     required this.onFollowersTap,
     required this.onFollowingTap,
     required this.onOpenPhoto,
+    required this.onUnlockPhoto,
+    required this.unlockCost,
     required this.onCopyId,
     required this.onFollowInfo,
     required this.onBlock,
@@ -120,10 +125,17 @@ class _PProfileBodyState extends State<_PProfileBody> {
     if (av != null) out.add(_HeroItem.bytes(av));
     for (final p in widget.gallery) {
       final b = widget.galleryBytes(p);
-      if (b != null) out.add(_HeroItem.bytes(b));
+      if (b == null) continue;
+      // Terkunci → preview blur + overlay kunci (tap → konfirmasi unlock).
+      out.add(p.unlocked ? _HeroItem.bytes(b) : _HeroItem.locked(b, p));
     }
     return out;
   }
+
+  /// Index hero → index galeri (avatar menempati slot 0 bila ada).
+  int _galleryIndexOf(int heroIndex) =>
+      heroIndex -
+      ((widget.avatarBytes ?? widget.avatarBytesFallback) != null ? 1 : 0);
 
   @override
   void initState() {
@@ -356,22 +368,39 @@ class _PProfileBodyState extends State<_PProfileBody> {
                   : null,
               onTap: heroes.isEmpty
                   ? null
-                  : () => widget.onOpenPhoto(
-                      _photo.clamp(0, widget.gallery.length - 1),
-                    ),
+                  : () {
+                      final h = heroes[_photo.clamp(0, heroes.length - 1)];
+                      if (h.isLocked) {
+                        widget.onUnlockPhoto(h.photo!);
+                      } else {
+                        widget.onOpenPhoto(
+                          _photo.clamp(0, widget.gallery.length - 1),
+                        );
+                      }
+                    },
               child: heroes.isEmpty
                   ? PNoPhoto(initials: widget.initial)
                   : PageView.builder(
                       controller: _pages,
                       itemCount: heroes.length,
                       onPageChanged: (i) => setState(() => _photo = i),
-                      itemBuilder: (_, i) => Image.memory(
-                        heroes[i].bytes,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                        errorBuilder: (_, _, _) =>
-                            PNoPhoto(initials: widget.initial),
-                      ),
+                      itemBuilder: (_, i) {
+                        final h = heroes[i];
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.memory(
+                              h.bytes,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                              errorBuilder: (_, _, _) =>
+                                  PNoPhoto(initials: widget.initial),
+                            ),
+                            if (h.isLocked)
+                              _LockedHeroOverlay(cost: widget.unlockCost),
+                          ],
+                        );
+                      },
                     ),
             ),
             const IgnorePointer(
@@ -531,13 +560,27 @@ class _PProfileBodyState extends State<_PProfileBody> {
                   if (widget.galleryCount > 0) ...[
                     const SizedBox(width: 12),
                     PHeaderButton(
-                      icon: Icons.open_in_full_rounded,
+                      icon:
+                          heroes.isNotEmpty &&
+                              heroes[_photo.clamp(0, heroes.length - 1)]
+                                  .isLocked
+                          ? Icons.lock_open_rounded
+                          : Icons.open_in_full_rounded,
                       tooltip: 'Lihat foto layar penuh',
                       solid: false,
                       iconSize: 18,
-                      onTap: () => widget.onOpenPhoto(
-                        _photo.clamp(0, widget.gallery.length - 1),
-                      ),
+                      onTap: () {
+                        final h = heroes[_photo.clamp(0, heroes.length - 1)];
+                        if (h.isLocked) {
+                          widget.onUnlockPhoto(h.photo!);
+                        } else {
+                          widget.onOpenPhoto(
+                            _galleryIndexOf(
+                              _photo,
+                            ).clamp(0, widget.gallery.length - 1),
+                          );
+                        }
+                      },
                     ),
                   ],
                 ],
@@ -711,8 +754,78 @@ class _PProfileBodyState extends State<_PProfileBody> {
   }
 }
 
+/// Overlay hero TERKUNCI: scrim tipis + ikon kunci transparan + chip harga.
+/// Tap ditangani GestureDetector parent (unlock dialog), jadi IgnorePointer.
+class _LockedHeroOverlay extends StatelessWidget {
+  final int cost;
+  const _LockedHeroOverlay({required this.cost});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        color: const Color(0x59000000),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0x40FFFFFF),
+                  border: Border.all(
+                    color: const Color(0x80FFFFFF),
+                    width: 1.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.lock_rounded,
+                  color: Colors.white,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xCC000000),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.monetization_on_rounded,
+                      color: Color(0xFFFFD54F),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$cost',
+                      style: AppText.button.copyWith(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Satu foto hero (bytes lokal — tidak ada network di profil ini).
+/// [photo] terisi hanya untuk hero TERKUNCI (dipakai tap→unlock).
 class _HeroItem {
   final Uint8List bytes;
-  _HeroItem.bytes(this.bytes);
+  final UserPhoto? photo;
+  final bool isLocked;
+  _HeroItem.bytes(this.bytes) : photo = null, isLocked = false;
+  _HeroItem.locked(this.bytes, this.photo) : isLocked = true;
 }

@@ -482,6 +482,8 @@ mixin _PcBuildMx on _PrivateChatBase {
       listen: false,
     ).read(pointsProvider.notifier);
 
+    // Jaga-jaga: perempuan tidak boleh kirim koin.
+    if (!canSendCoinsForGender(auth.profile?.gender)) return;
     if (!auth.canUsePaid) {
       showChatSnack(
         context,
@@ -515,6 +517,8 @@ mixin _PcBuildMx on _PrivateChatBase {
       listen: false,
     ).read(authProvider.notifier);
 
+    // Jaga-jaga: perempuan tidak boleh kirim gift.
+    if (!canSendGiftForGender(auth.profile?.gender)) return;
     if (!auth.canUsePaid) {
       showChatSnack(
         context,
@@ -541,6 +545,10 @@ mixin _PcBuildMx on _PrivateChatBase {
     // L2: baca enabled DI SINI (bukan di root build) — perub. poin tak
     // rebuild header/list; hanya composer.
     final pointsEnabled = ref.watch(pointsProvider.select((p) => p.enabled));
+    // User perempuan tidak bisa kirim gift/koin → ikon & menu disembunyikan.
+    final giftAllowed = ref.watch(
+      authProvider.select((a) => canSendGiftForGender(a.profile?.gender)),
+    );
     // Tanpa padding samping luar: composer sudah ber-padding 8 (sama room),
     // dan panel lampiran harus menempel penuh tepi kiri-kanan-bawah.
     return Container(
@@ -692,13 +700,17 @@ mixin _PcBuildMx on _PrivateChatBase {
                   onTyping: _sendTypingSignal,
                   // Koin & hadiah hanya bila sistem koin aktif —
                   // hilang total saat dimatikan admin.
-                  onSendCoin: pointsEnabled ? _showSendCoinDialog : null,
+                  onSendCoin: pointsEnabled && giftAllowed
+                      ? _showSendCoinDialog
+                      : null,
                   onSendLocation: _sendLocation,
                   pendingLocation: _pendingLocation,
                   onCancelLocation: _pendingLocation != null
                       ? () => setState(() => _pendingLocation = null)
                       : null,
-                  onOpenGiftPanel: pointsEnabled ? _showGiftPicker : null,
+                  onOpenGiftPanel: pointsEnabled && giftAllowed
+                      ? _showGiftPicker
+                      : null,
                   pendingPhotoBase64: _pendingPhotoBase64,
                   onCancelPhoto: _pendingPhotoBase64 != null
                       ? () => setState(() {

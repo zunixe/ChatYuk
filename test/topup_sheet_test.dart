@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:chatyuk/config/strings.dart';
+import 'package:chatyuk/providers/riverpod/locale_provider.dart';
 import 'package:chatyuk/providers/riverpod/points_provider.dart';
 import 'package:chatyuk/providers/riverpod/topup_provider.dart';
 import 'package:chatyuk/screens/point_history/widgets/topup_sheet.dart';
@@ -24,6 +25,10 @@ class _MockPointsService extends Mock implements PointsService {}
 /// `listTopupPackages` (server). Tombol beli aktif hanya bila Billing siap.
 void main() {
   final sEn = S(isId: false);
+
+  // Sheet mengikuti bahasa app (AppLocale) — test memeriksa teks Inggris.
+  setUp(() => AppLocale.lang = 'en');
+  tearDown(() => AppLocale.lang = 'id');
 
   setUpAll(() async {
     await initSupabaseForTest();

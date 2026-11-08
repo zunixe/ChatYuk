@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../config/strings.dart';
 import '../../../config/theme.dart';
 import '../../../core/media/native_image.dart';
 import '../../../providers/riverpod/auth_provider.dart';
@@ -10,10 +11,15 @@ import '../../../providers/riverpod/locale_provider.dart';
 import '../../../providers/riverpod/online_users_provider.dart';
 import '../../../providers/riverpod/timeline_provider.dart';
 import '../../../utils.dart';
+import '../../../core/profile/photo_verification.dart';
+import '../../../widgets/verified_selfie_capture.dart';
 
 /// Pilih → crop 1:1 → proses native → upload avatar sendiri (dari halaman
 /// Online). Setelah sukses, patch list Online & Timeline langsung supaya foto
 /// baru terlihat tanpa pindah halaman / tunggu stream.
+///
+/// FEMALE: foto wajib memuat wajah — dicek langsung pada HASIL CROP; bukan
+/// wajah → ditolak + picker dibuka lagi (user langsung ganti).
 ///
 /// [onUploadingChanged] dipanggil true saat mulai proses & false saat selesai
 /// (untuk state spinner di UI). Bila widget hilang (unmounted) saat proses,
@@ -22,8 +28,16 @@ Future<void> pickAndUploadAvatarFromOnline(
   BuildContext context, {
   required void Function(bool uploading) onUploadingChanged,
 }) async {
-  final s = ProviderScope.containerOf(context, listen: false)
-      .read(localeProvider).s;
+  final s = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(localeProvider).s;
+  final isFemale = requiresFaceVerifiedPhoto(
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider).profile?.gender,
+  );
   final source = await showModalBottomSheet<ImageSource>(
     context: context,
     backgroundColor: AppTheme.bgCard,
@@ -34,6 +48,14 @@ Future<void> pickAndUploadAvatarFromOnline(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (isFemale)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+              child: Text(
+                s.photoVerifySheetBody,
+                style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+              ),
+            ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
             title: Text(s.avatarGallery),
@@ -50,29 +72,105 @@ Future<void> pickAndUploadAvatarFromOnline(
   );
   if (source == null || !context.mounted) return;
 
-  final picker = ImagePicker();
-  final XFile? picked;
-  try {
-    // TANPA maxWidth/imageQuality — foto asli utuh diteruskan ke cropper
-    // (kompresi cukup 1x di akhir proses) — sama dengan profile_screen.
-    picked = await picker.pickImage(source: source);
-  } catch (e) {
-    dlog('[ONLINE] pickImage error: $e');
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.errPhotoPermission)));
+  String? pickedPath;
+  if (isFemale) {
+    // Female: pick + crop + validasi wajah pada hasil crop (loop ganti).
+    pickedPath = await pickVerifiedFacePhoto(
+      context,
+      source: source,
+      crop: (p) async => (await _cropAvatarOnline(p, s))?.path,
+    );
+    if (pickedPath == null || !context.mounted) return;
+  } else {
+    final picker = ImagePicker();
+    final XFile? picked;
+    try {
+      // TANPA maxWidth/imageQuality — foto asli utuh diteruskan ke cropper
+      // (kompresi cukup 1x di akhir proses) — sama dengan profile_screen.
+      picked = await picker.pickImage(source: source);
+    } catch (e) {
+      dlog('[ONLINE] pickImage error: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoPermission)));
+      }
+      return;
     }
-    return;
+    if (picked == null || !context.mounted) return;
+    pickedPath = picked.path;
   }
-  if (picked == null || !context.mounted) return;
 
   // Crop interaktif 1:1 — geser/zoom pilih bagian yang masuk avatar.
   // Apa yang dilihat user di lingkaran = persis yang tersimpan.
-  final CroppedFile? cropped;
+  // (Female: crop sudah dilakukan di dalam pickVerifiedFacePhoto.)
+  String finalPath = pickedPath;
+  if (!isFemale) {
+    final cropped = await _cropAvatarOnline(pickedPath, s);
+    if (cropped == null || !context.mounted) return;
+    finalPath = cropped.path;
+  }
+
+  onUploadingChanged(true);
   try {
-    cropped = await ImageCropper().cropImage(
-      sourcePath: picked.path,
+    final bytes = await XFile(finalPath).readAsBytes();
+    if (!context.mounted) {
+      onUploadingChanged(false);
+      return;
+    }
+
+    final processed = await NativeImage.processSquare(bytes);
+    if (processed == null || !context.mounted) {
+      onUploadingChanged(false);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoProcess)));
+      }
+      return;
+    }
+
+    final pp = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
+    await pp.updateAvatar(processed, faceVerified: isFemale);
+    if (context.mounted) {
+      // Langsung patch list online & timeline supaya foto baru terlihat
+      // tanpa pindah halaman / tunggu stream 30s
+      try {
+        final uid = pp.profile?.uid ?? '';
+        if (uid.isNotEmpty) {
+          ProviderScope.containerOf(context, listen: false)
+              .read(onlineUsersProvider.notifier)
+              .updateAvatarForUid(uid, processed);
+          ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(timelineProvider.notifier).refreshAvatarForUid(uid, processed);
+        }
+      } catch (_) {}
+      onUploadingChanged(false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.msgProfileSaved)));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      onUploadingChanged(false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errPhotoUpload)));
+    }
+  }
+}
+
+/// Crop interaktif 1:1 — geser/zoom pilih bagian yang masuk avatar.
+/// Apa yang dilihat user di lingkaran = persis yang tersimpan.
+Future<CroppedFile?> _cropAvatarOnline(String sourcePath, S s) async {
+  try {
+    return await ImageCropper().cropImage(
+      sourcePath: sourcePath,
       aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
       maxWidth: 1024,
       maxHeight: 1024,
@@ -94,57 +192,6 @@ Future<void> pickAndUploadAvatarFromOnline(
     );
   } catch (e) {
     dlog('[ONLINE] crop error: $e');
-    return;
-  }
-  if (cropped == null || !context.mounted) return;
-
-  onUploadingChanged(true);
-  try {
-    final bytes = await cropped.readAsBytes();
-    if (!context.mounted) {
-      onUploadingChanged(false);
-      return;
-    }
-
-    final processed = await NativeImage.processSquare(bytes);
-    if (processed == null || !context.mounted) {
-      onUploadingChanged(false);
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errPhotoProcess)));
-      }
-      return;
-    }
-
-    final pp = ProviderScope.containerOf(context, listen: false)
-        .read(authProvider.notifier);
-    await pp.updateAvatar(processed);
-    if (context.mounted) {
-      // Langsung patch list online & timeline supaya foto baru terlihat
-      // tanpa pindah halaman / tunggu stream 30s
-      try {
-        final uid = pp.profile?.uid ?? '';
-        if (uid.isNotEmpty) {
-          ProviderScope.containerOf(context, listen: false)
-              .read(onlineUsersProvider.notifier)
-              .updateAvatarForUid(uid, processed);
-          ProviderScope.containerOf(context, listen: false)
-              .read(timelineProvider.notifier)
-              .refreshAvatarForUid(uid, processed);
-        }
-      } catch (_) {}
-      onUploadingChanged(false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.msgProfileSaved)));
-    }
-  } catch (e) {
-    if (context.mounted) {
-      onUploadingChanged(false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.errPhotoUpload)));
-    }
+    return null;
   }
 }

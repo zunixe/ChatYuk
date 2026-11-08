@@ -24,14 +24,20 @@ class UserModel {
   final int friendsCount;
   final String email;
   final String about;
+
   /// Tanggal lahir asli (Pengaturan › Akun). null = belum diisi.
   final DateTime? birthDate;
+
   /// Nomor HP (Pengaturan › Akun). '' = belum diisi.
   final String phone;
 
   /// Gender sudah dipilih sekali & terkunci permanen (tidak bisa diubah).
   /// Dijaga trigger DB `guard_gender_lock`.
   final bool genderLocked;
+
+  /// Avatar saat ini berasal dari selfie liveness (kewajiban akun female).
+  /// false pada foto lama → UI meminta ganti dengan selfie asli.
+  final bool avatarFaceVerified;
 
   /// Profil dibuat otomatis (trigger `handle_new_user_profile`) dan user
   /// BELUM menyelesaikan isi nickname. Dipakai gerbang root supaya user
@@ -67,6 +73,7 @@ class UserModel {
     this.phone = '',
     this.needsOnboarding = false,
     this.genderLocked = false,
+    this.avatarFaceVerified = false,
   });
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -99,8 +106,10 @@ class UserModel {
       birthDate: _parseBirthDate(map['birthDate'] ?? map['birth_date']),
       phone: map['phone'] ?? '',
       needsOnboarding: map['needsOnboarding'] == true,
-      genderLocked: map['genderLocked'] == true ||
-          map['gender_locked'] == true,
+      genderLocked: map['genderLocked'] == true || map['gender_locked'] == true,
+      avatarFaceVerified:
+          map['avatarFaceVerified'] == true ||
+          map['avatar_face_verified'] == true,
     );
   }
 
@@ -138,6 +147,7 @@ class UserModel {
       'phone': phone,
       'needsOnboarding': needsOnboarding,
       'genderLocked': genderLocked,
+      'avatarFaceVerified': avatarFaceVerified,
     };
   }
 
@@ -166,6 +176,7 @@ class UserModel {
     String? phone,
     bool? needsOnboarding,
     bool? genderLocked,
+    bool? avatarFaceVerified,
   }) {
     return UserModel(
       uid: uid,
@@ -195,6 +206,7 @@ class UserModel {
       phone: phone ?? this.phone,
       needsOnboarding: needsOnboarding ?? this.needsOnboarding,
       genderLocked: genderLocked ?? this.genderLocked,
+      avatarFaceVerified: avatarFaceVerified ?? this.avatarFaceVerified,
     );
   }
 

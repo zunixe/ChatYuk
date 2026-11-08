@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-11-04T23:09:57Z
+-- Timestamp: 2026-11-08T02:10:31Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -728,7 +728,7 @@ begin
   return new;
 end; $function$
 
--- snapshot-fn: create_private_room @ 20261006080000_room_category_jualbeli.sql
+-- snapshot-fn: create_private_room @ 20261110090000_female_free_spend.sql
 CREATE OR REPLACE FUNCTION public.create_private_room(p_name text, p_icon text, p_country text, p_password text DEFAULT NULL::text, p_category text DEFAULT 'private'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -799,7 +799,9 @@ begin
   bonus_p := paid * mult;
 
   -- Room kategori = GRATIS (tidak potong koin). Legacy 'private' tetap bayar.
-  if points_on is not false and not is_admin and not v_is_category then
+  -- Perempuan gratis semua.
+  if points_on is not false and not is_admin and not v_is_category
+     and not public._is_female(uid) then
     r := public.ledger_spend_dual(uid, 'spend_room', paid, bonus_p, 'create');
     remaining := (r->>'remaining')::int;
   else
@@ -892,7 +894,7 @@ begin
   return jsonb_build_object('ok', true, 'charged', 0, 'points', coalesce(remaining, 0), 'pending', false);
 end; $function$
 
--- snapshot-fn: extend_private_room @ 20260816030000_coin_economy_v2.sql
+-- snapshot-fn: extend_private_room @ 20261110090000_female_free_spend.sql
 CREATE OR REPLACE FUNCTION public.extend_private_room(p_room_id text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -912,7 +914,8 @@ begin
     into points_on, paid, mult from app_settings where id = 'global';
   bonus_p := paid * mult;
 
-  if points_on is not false then
+  -- Perempuan gratis semua.
+  if points_on is not false and not public._is_female(uid) then
     res := public.ledger_spend_dual(uid, 'spend_room', paid, bonus_p, 'extend');
     remaining := (res->>'remaining')::int;
   else
@@ -927,7 +930,7 @@ begin
                             'expires_at', r.expires_at);
 end; $function$
 
--- snapshot-fn: deduct_chat_point @ 20261031110001_coin_economy_gender.sql
+-- snapshot-fn: deduct_chat_point @ 20261110090000_female_free_spend.sql
 CREATE OR REPLACE FUNCTION public.deduct_chat_point(msg_type text)
  RETURNS integer
  LANGUAGE plpgsql
@@ -949,6 +952,8 @@ begin
     when 'view_once' then c_vo
     when 'view_once_expired' then 0
     else 0 end;
+  -- Perempuan gratis semua.
+  if public._is_female(auth.uid()) then cost := 0; end if;
   if cost = 0 then
     select points into remaining from profiles where id = auth.uid();
     return coalesce(remaining, 0);
@@ -986,7 +991,7 @@ begin
   return coalesce(tot, 0);
 end; $function$
 
--- snapshot-fn: send_coins @ 20261110050000_promo_bonus_spend.sql
+-- snapshot-fn: send_coins @ 20261110080000_send_coins_female_block.sql
 CREATE OR REPLACE FUNCTION public.send_coins(p_chat_id text, p_receiver_id uuid, p_amount integer)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1018,6 +1023,10 @@ begin
   select is_registered, nickname, gender into am_registered, my_name, my_gender
     from public.profiles where id = uid;
   if am_registered is not true then raise exception 'Sender must be registered'; end if;
+  -- 2026-11-07: perempuan tidak bisa kirim koin (cegah pindah penghasilan).
+  if my_gender = 'female' then
+    raise exception 'Female cannot send coins' using errcode = '42501';
+  end if;
 
   if not exists (select 1 from public.private_chats pc
     where pc.chat_id = p_chat_id and uid = any (pc.participants)
@@ -1063,7 +1072,7 @@ begin
     'sent', p_amount, 'received', v_net, 'cut_pct', v_cut_pct);
 end; $function$
 
--- snapshot-fn: send_gift @ 20261110050000_promo_bonus_spend.sql
+-- snapshot-fn: send_gift @ 20261110070000_send_gift_female_block.sql
 CREATE OR REPLACE FUNCTION public.send_gift(p_chat_id text, p_receiver_id uuid, p_gift_id text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1090,6 +1099,9 @@ begin
   select is_registered, nickname, gender into am_registered, my_name, my_gender
     from public.profiles where id = uid;
   if am_registered is not true then raise exception 'Sender must be registered'; end if;
+  if my_gender = 'female' then
+    raise exception 'Female cannot send gift' using errcode = '42501';
+  end if;
   select coin_tx_max_per_hour into tx_max from app_settings where id = 'global';
   if (select count(*) from coin_ledger
       where user_id = uid and type in ('coin_sent','gift_sent')

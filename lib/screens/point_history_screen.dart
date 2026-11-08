@@ -166,7 +166,7 @@ class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
                           (AppFlavor.topupEnabled ||
                               AdminGate.enabled ||
                               pointsSnap.topup),
-                      canTopup: currentGender != 'female',
+                      canTopup: currentGender == 'male',
                     ),
                   ),
                   // Cara dapat & cara pakai.

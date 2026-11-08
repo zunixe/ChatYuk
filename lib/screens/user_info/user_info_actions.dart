@@ -28,7 +28,9 @@ mixin _UiActionsMx on _UserInfoBase {
     }
     // Privasi panggilan penerima: bila menolak, jangan tembak DB sama sekali.
     // Server RLS tetap penjaga akhir.
-    final allowed = await scope.read(privacyServiceProvider).canView(widget.userId, 'call');
+    final allowed = await scope
+        .read(privacyServiceProvider)
+        .canView(widget.userId, 'call');
     if (!mounted || !ctx.mounted) return;
     if (!allowed) {
       ScaffoldMessenger.of(
@@ -63,7 +65,9 @@ mixin _UiActionsMx on _UserInfoBase {
       final session = await scope
           .read(callProvider.notifier)
           .startSession(
-            callId: await scope.read(callProvider.notifier).startCall(widget.userId, callType),
+            callId: await scope
+                .read(callProvider.notifier)
+                .startCall(widget.userId, callType),
             remoteUid: widget.userId,
             remoteName: name,
             callType: callType,
@@ -379,8 +383,11 @@ mixin _UiActionsMx on _UserInfoBase {
       _galleryBytes[photo.id] = b;
       // Persist thumb ke disk (kunci hash base64) → kunjungan berikutnya
       // bisa dibaca sinkron tanpa decode ulang (anti-kedip/jank cold start).
-      unawaited(MediaDiskCache.instance.write('galb64:${hashKey64(photo.photo)}', b)
-          .then((_) {}));
+      unawaited(
+        MediaDiskCache.instance
+            .write('galb64:${hashKey64(photo.photo)}', b)
+            .then((_) {}),
+      );
       return b;
     } catch (_) {
       return null;
@@ -412,6 +419,63 @@ mixin _UiActionsMx on _UserInfoBase {
       _galleryBytes.clear();
       setState(() => _photos = photos);
     } catch (_) {}
+  }
+
+  /// Paywall foto: konfirmasi → tagih koin berbayar via RPC unlock_photo →
+  /// reload galeri (foto jadi terbuka permanen) + refresh dompet.
+  @override
+  Future<void> _confirmUnlockPhoto(UserPhoto photo) async {
+    final scope = ProviderScope.containerOf(context, listen: false);
+    final s = scope.read(localeProvider).s;
+    final cost = scope.read(pointsProvider).photoUnlockCost;
+    // Precheck koin BERBAYAR — bonus tidak bisa dipakai untuk unlock.
+    if (scope.read(pointsProvider).paidBalance < cost) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.photoUnlockInsufficient)));
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: Text(s.photoUnlockTitle),
+        content: Text(s.photoUnlockBody(cost)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            child: Text(s.btnUnlock),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await scope
+          .read(authProvider.notifier)
+          .unlockPhoto(photo.id, widget.userId);
+      unawaited(scope.read(pointsProvider.notifier).refreshWallet());
+      await _loadPhotos();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.photoUnlockDone)));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().contains('Not enough')
+                ? s.photoUnlockInsufficient
+                : s.photoUnlockFailed,
+          ),
+        ),
+      );
+    }
   }
 
   @override

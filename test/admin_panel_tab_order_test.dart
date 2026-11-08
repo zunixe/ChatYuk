@@ -2,19 +2,18 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// Regresi: tab "Timeline" pernah menampilkan DOKUMENTASI karena label
-/// (TabBar) dan isi (TabBarView) ditulis sebagai dua daftar terpisah dan
-/// bergeser — `AdminTimelineTab` ditaruh di indeks body 13 sementara label
-/// "Timeline" ada di indeks 11 (yang menampilkan `AdminDocsTab`).
+/// Regresi: tab "Timeline" pernah menampilkan DOKUMENTASI karena label dan
+/// isi ditulis sebagai dua daftar terpisah dan bergeser.
 ///
-/// Sekarang keduanya diturunkan dari SATU enum `_AdminTab` (label & body
-/// via `switch`). Test ini mengunci: (1) urutan enum tetap, dan (2) setiap
-/// nilai enum punya arm di `_tabLabel` DAN `_tabBody` — mustahil ada tab
-/// tanpa isi atau isi yang tertukar.
+/// Sekarang panel admin = halaman utama ikon berkategori; label, ikon,
+/// kategori dan isi semua diturunkan dari SATU enum `AdminMenu` lewat
+/// `switch` lengkap di `admin_menu.dart`. Test ini mengunci: (1) daftar menu
+/// tetap, (2) setiap menu punya arm di semua switch, (3) setiap menu tampil
+/// tepat sekali di `adminMenuLayout` dan sesuai kategorinya.
 void main() {
-  final src = File('lib/screens/admin_panel_screen.dart').readAsStringSync();
+  final src =
+      File('lib/screens/admin_panel/admin_menu.dart').readAsStringSync();
 
-  // Nilai enum sesuai urutan tab yang diharapkan (indeks = posisi di sini).
   const expectedOrder = <String>[
     'globalSetting',
     'overview',
@@ -22,6 +21,7 @@ void main() {
     'withdraw',
     'chatMonitor',
     'roomMonitor',
+    'roomSessions',
     'dummy',
     'contact',
     'device',
@@ -35,63 +35,82 @@ void main() {
     'marketing',
   ];
 
-  test('enum _AdminTab urutannya tetap', () {
-    final m = RegExp(r'enum _AdminTab \{([\s\S]*?)\n\}').firstMatch(src);
-    expect(m, isNotNull, reason: 'enum _AdminTab tidak ditemukan');
-    final body = m!.group(1)!;
+  test('enum AdminMenu urutannya tetap', () {
+    final m = RegExp(r'enum AdminMenu \{([\s\S]*?)\n\}').firstMatch(src);
+    expect(m, isNotNull, reason: 'enum AdminMenu tidak ditemukan');
     final values = RegExp(r'^\s*([a-zA-Z]+),', multiLine: true)
-        .allMatches(body)
+        .allMatches(m!.group(1)!)
         .map((e) => e.group(1)!)
         .toList();
     expect(values, expectedOrder);
   });
 
-  test('setiap tab punya label di _tabLabel', () {
-    final labelBlock = _switchBlock(src, '_tabLabel');
-    for (final name in expectedOrder) {
-      expect(
-        labelBlock.contains('_AdminTab.$name =>'),
-        isTrue,
-        reason: '_tabLabel tidak punya arm untuk $name',
-      );
-    }
+  for (final fn in [
+    'adminMenuLabel',
+    'adminMenuIcon',
+    'adminMenuCategory',
+    'adminMenuBody',
+  ]) {
+    test('setiap menu punya arm di $fn', () {
+      final block = _switchBlock(src, fn);
+      for (final name in expectedOrder) {
+        expect(
+          block.contains('AdminMenu.$name =>'),
+          isTrue,
+          reason: '$fn tidak punya arm untuk $name',
+        );
+      }
+    });
+  }
+
+  test('timeline → AdminTimelineTab, docs → AdminDocsTab', () {
+    final block = _switchBlock(src, 'adminMenuBody');
+    expect(block.contains('AdminMenu.timeline => const AdminTimelineTab()'),
+        isTrue);
+    expect(block.contains('AdminMenu.docs => const AdminDocsTab()'), isTrue);
   });
 
-  test('setiap tab punya isi di _tabBody', () {
-    final bodyBlock = _switchBlock(src, '_tabBody');
-    for (final name in expectedOrder) {
-      expect(
-        bodyBlock.contains('_AdminTab.$name =>'),
-        isTrue,
-        reason: '_tabBody tidak punya arm untuk $name',
-      );
+  test('setiap menu tampil tepat sekali di layout, di kategori yang benar',
+      () {
+    final layoutStart = src.indexOf('adminMenuLayout = {');
+    final layoutEnd = src.indexOf('\n};', layoutStart);
+    final layout = src.substring(layoutStart, layoutEnd);
+    final catBlock = _switchBlock(src, 'adminMenuCategory');
+    final sections = RegExp(
+      r'AdminMenuCategory\.(\w+): \[([\s\S]*?)\]',
+    ).allMatches(layout).toList();
+    expect(sections.length, 5, reason: 'harus 5 kategori');
+    final seen = <String>[];
+    for (final sec in sections) {
+      final cat = sec.group(1)!;
+      final menus = RegExp(r'AdminMenu\.(\w+)')
+          .allMatches(sec.group(2)!)
+          .map((e) => e.group(1)!)
+          .toList();
+      expect(menus, isNotEmpty, reason: 'kategori $cat kosong');
+      for (final m in menus) {
+        expect(
+          catBlock.contains('AdminMenu.$m => AdminMenuCategory.$cat'),
+          isTrue,
+          reason: '$m ditaruh di $cat tapi adminMenuCategory berkata lain',
+        );
+      }
+      seen.addAll(menus);
     }
-  });
-
-  test('timeline memetakan ke AdminTimelineTab, docs ke AdminDocsTab', () {
-    final bodyBlock = _switchBlock(src, '_tabBody');
-    expect(
-      bodyBlock.contains('_AdminTab.timeline => const AdminTimelineTab()'),
-      isTrue,
-    );
-    expect(
-      bodyBlock.contains('_AdminTab.docs => const AdminDocsTab()'),
-      isTrue,
-    );
+    expect(seen.toSet().length, seen.length, reason: 'ada menu dobel');
+    expect(seen.toSet(), expectedOrder.toSet(),
+        reason: 'ada menu yang tidak tampil di halaman utama');
   });
 }
 
-/// Ambil isi `switch (tab)` pada method [methodName] (sampai `};` penutup).
-String _switchBlock(String src, String methodName) {
-  final idx = src.indexOf('Widget $methodName') >= 0
-      ? src.indexOf('Widget $methodName')
-      : src.indexOf('String $methodName');
-  expect(idx, greaterThanOrEqualTo(0), reason: '$methodName tidak ditemukan');
-  // Cari awal `=> switch (tab) {` lalu ambil blok sampai penanda method berikut.
-  final switchIdx = src.indexOf('switch (tab) {', idx);
+/// Ambil isi `switch (m) {` pada fungsi [fn] sampai penutup `};`.
+String _switchBlock(String src, String fn) {
+  final idx = src.indexOf(' $fn(');
+  expect(idx, greaterThanOrEqualTo(0), reason: '$fn tidak ditemukan');
+  final switchIdx = src.indexOf('switch (m) {', idx);
   expect(switchIdx, greaterThanOrEqualTo(0),
-      reason: '$methodName tidak memakai switch(tab)');
-  final end = src.indexOf('\n      };', switchIdx);
-  expect(end, greaterThan(switchIdx), reason: 'penutup switch $methodName tidak ketemu');
+      reason: '$fn tidak memakai switch(m)');
+  final end = src.indexOf('\n    };', switchIdx);
+  expect(end, greaterThan(switchIdx), reason: 'penutup switch $fn hilang');
   return src.substring(switchIdx, end);
 }

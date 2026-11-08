@@ -488,7 +488,9 @@ mixin _PcMediaMx on _PrivateChatBase {
       }
     } catch (e) {
       final msg = e.toString();
-      final show = msg.contains('Not enough')
+      final show = msg.contains('Female cannot send gift')
+          ? s.giftFemaleBlocked
+          : msg.contains('Not enough')
           ? s.giftInsufficient
           : msg.contains('registered')
           ? s.errCoinRegisterOnly

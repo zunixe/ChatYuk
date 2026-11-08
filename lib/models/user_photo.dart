@@ -7,6 +7,9 @@ class UserPhoto {
   final bool unlocked;
   // Preview blur (base64) untuk foto terkunci.
   final String preview;
+  // true = foto diambil lewat selfie liveness (kewajiban akun female).
+  // false pada foto lama → UI menandai "perlu diganti".
+  final bool faceVerified;
 
   const UserPhoto({
     required this.id,
@@ -15,6 +18,7 @@ class UserPhoto {
     required this.createdAt,
     this.unlocked = true,
     this.preview = '',
+    this.faceVerified = false,
   });
 
   factory UserPhoto.fromMap(String id, Map<String, dynamic> map) {
@@ -29,6 +33,7 @@ class UserPhoto {
           : DateTime.now(),
       unlocked: map['unlocked'] == null ? true : map['unlocked'] == true,
       preview: map['preview'] ?? '',
+      faceVerified: map['faceVerified'] == true,
     );
   }
 }

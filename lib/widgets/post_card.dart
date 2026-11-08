@@ -9,6 +9,7 @@ import '../config/theme.dart';
 import '../models/user_model.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/locale_provider.dart';
+import '../providers/riverpod/points_provider.dart';
 import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
@@ -440,13 +441,19 @@ class _PostCardState extends ConsumerState<PostCard> {
   Future<void> _boost() async {
     final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
     final tp = ProviderScope.containerOf(context, listen: false).read(timelineProvider.notifier);
+    // Perempuan gratis semua (server boost_post tidak memotong koin female).
+    final free = ProviderScope.containerOf(context, listen: false)
+        .read(pointsProvider.notifier)
+        .spendsFree;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
         title: Text(s.btnBoost),
         content: Text(
-          '${s.boostConfirm}\n\n${s.boostPaidLabel}: ${tp.boostPaid}\n${s.boostBonusLabel}: ${tp.boostBonus}',
+          free
+              ? '${s.boostConfirm}\n\n${s.labelFree}'
+              : '${s.boostConfirm}\n\n${s.boostPaidLabel}: ${tp.boostPaid}\n${s.boostBonusLabel}: ${tp.boostBonus}',
         ),
         actions: [
           TextButton(

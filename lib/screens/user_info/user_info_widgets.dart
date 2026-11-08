@@ -41,7 +41,11 @@ class UserChatIconButton extends StatelessWidget {
 class UserPhotoViewer extends StatefulWidget {
   final List<UserPhoto> photos;
   final int initialIndex;
-  const UserPhotoViewer({super.key, required this.photos, required this.initialIndex});
+  const UserPhotoViewer({
+    super.key,
+    required this.photos,
+    required this.initialIndex,
+  });
 
   @override
   State<UserPhotoViewer> createState() => UserPhotoViewerState();

@@ -54,7 +54,12 @@ mixin _UiBuildMx on _UserInfoBase {
         ? 'Online'
         : (status == 'idle' ? s.statusIdle : s.statusOffline);
     final isSelf = authSnap.uid == widget.userId;
-    final photos = _photos.where((p) => p.unlocked).toList();
+    // SEMUA foto (termasuk terkunci) — yang terkunci tampil blur + kunci
+    // + harga di hero; tap → konfirmasi unlock.
+    final photos = _photos;
+    final unlockCost = ref.watch(
+      pointsProvider.select((p) => p.photoUnlockCost),
+    );
     final galleryCount = photos.length + (_avatarB64.isEmpty ? 0 : 1);
     final initial = (name.isNotEmpty ? name[0] : '?').toUpperCase();
     // Foto masih kosong padahal profil punya path -> coba sekali lagi
@@ -108,7 +113,8 @@ mixin _UiBuildMx on _UserInfoBase {
               isSubscribed: _subscribed,
               isSelf: isSelf,
               canCall:
-                  authSnap.callAll || (!authSnap.isAnon && profile?.isRegistered == true),
+                  authSnap.callAll ||
+                  (!authSnap.isAnon && profile?.isRegistered == true),
               s: s,
               onCall: (type) => _startCall(context, type),
               onMessage: _startChat,
@@ -123,7 +129,10 @@ mixin _UiBuildMx on _UserInfoBase {
                 if (photos.isEmpty) return;
                 _showPhotoViewer(photos, i);
               },
-              onCopyId: () => copyWithToast(context, widget.userId, 'User ID disalin'),
+              onUnlockPhoto: _confirmUnlockPhoto,
+              unlockCost: unlockCost,
+              onCopyId: () =>
+                  copyWithToast(context, widget.userId, 'User ID disalin'),
               onFollowInfo: () => _showFollowVsFriendInfo(context, s),
               onBlock: () => _blockUser(context),
               onReport: () => _reportUser(context),
@@ -179,5 +188,4 @@ mixin _UiBuildMx on _UserInfoBase {
       ),
     );
   }
-
 }

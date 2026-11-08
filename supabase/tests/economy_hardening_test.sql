@@ -3,7 +3,9 @@
 -- Mengunci 6 pertahanan baru supaya tidak bisa regresi diam-diam:
 --   1. credit_welcome_bonus & charge_metered TIDAK bisa dipanggil client
 --      (dulu = cetak koin gratis + cuci bonus jadi earned).
---   2. send_room_gift mati total (gift hanya 1:1).
+--   2. send_room_gift: anon dilarang, ekonomi paid-only (bonus tak bisa
+--      dicuci) — diaktifkan lagi untuk Room v2 2026-11-11, guard-nya
+--      setara send_gift (bukan lagi mati total).
 --   3. user_missions & point_events tidak bisa ditulis client.
 --   4. update_mission_progress meng-clamp increment raksasa.
 --   5. profiles.points tidak bisa ditulis client.
@@ -34,18 +36,27 @@ select supabase_tests.check('charge_metered hanya service_role',
   and has_function_privilege('service_role',
     'public.charge_metered(uuid,text,text,integer,uuid)', 'EXECUTE'));
 
--- ════ 2. Gift room mati (gift hanya chat pribadi) ════
-select supabase_tests.check('send_room_gift tidak bisa dipanggil siapa pun',
-  not has_function_privilege('authenticated',
+-- ════ 2. Gift room: anon dilarang + ekonomi paid-only ════
+-- Room v2 (2026-11-11): send_room_gift aktif lagi untuk room global saat
+-- sesi live (penerima host) & private room (owner). Guard ekonomi SAMA
+-- dengan send_gift — bonus tidak bisa dicuci jadi earned:
+--   * anon TIDAK punya EXECUTE (hanya authenticated/service_role),
+--   * badan fungsi memakai yukcoin_spendable + ledger_spend_promo
+--     (paid-only; bonus hanya lewat promo plafon), female diblok,
+--     is_registered wajib, rate limit coin_tx_max_per_hour.
+select supabase_tests.check('send_room_gift: anon dilarang, authenticated boleh',
+  not has_function_privilege('anon',
     'public.send_room_gift(text,text,integer)', 'EXECUTE')
-  and not has_function_privilege('anon',
+  and has_function_privilege('authenticated',
     'public.send_room_gift(text,text,integer)', 'EXECUTE'));
 
-select supabase_tests.check('send_room_gift badan selalu menolak',
+select supabase_tests.check('send_room_gift badan paid-only (bukan mati total)',
   exists(
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'send_room_gift'
-      and pg_get_functiondef(p.oid) like '%Gift hanya untuk chat pribadi%'
+      and pg_get_functiondef(p.oid) like '%yukcoin_spendable%'
+      and pg_get_functiondef(p.oid) like '%ledger_spend_promo%'
+      and pg_get_functiondef(p.oid) not like '%Gift hanya untuk chat pribadi%'
   ));
 
 -- ════ 3. Tabel misi & event tidak bisa ditulis client ════

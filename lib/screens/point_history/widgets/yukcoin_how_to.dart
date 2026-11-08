@@ -37,8 +37,10 @@ class YukcoinHowTo extends ConsumerWidget {
     );
     // Female tidak top-up dan tidak pernah ditagih: yang relevan untuknya
     // hanya "Cara dapat" (income). Male melihat keduanya + harga.
-    final isFemale =
-        ref.watch(authProvider.select((a) => a.profile?.gender)) == 'female';
+    final gender = ref.watch(authProvider.select((a) => a.profile?.gender));
+    // Gender belum termuat → jangan tebak (bisa salah tampilkan versi male).
+    if (gender != 'male' && gender != 'female') return const SizedBox.shrink();
+    final isFemale = gender == 'female';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -70,10 +72,34 @@ class YukcoinHowTo extends ConsumerWidget {
                 '',
                 note: s.yukcoinGiftNote,
               ),
+              _row(
+                Icons.flag_outlined,
+                s.yukcoinEarnMission,
+                '',
+                note: s.yukcoinEarnMissionNote,
+              ),
+              _row(
+                Icons.account_balance_wallet_outlined,
+                s.yukcoinCashOut,
+                '',
+                note: s.yukcoinCashOutNote,
+              ),
+              _row(
+                Icons.auto_awesome_outlined,
+                s.yukcoinFemaleAllFree,
+                '',
+                note: s.yukcoinFemaleAllFreeNote,
+              ),
             ] else ...[
               // Top-up hanya untuk male (female menerima koin, bukan beli).
               _row(Icons.add_circle_outline, s.yukcoinEarnTopup, ''),
               _row(Icons.card_giftcard, s.yukcoinEarnWelcome, ''),
+              _row(
+                Icons.event_available_outlined,
+                s.yukcoinEarnLogin,
+                '',
+                note: s.yukcoinEarnLoginNote,
+              ),
               _row(
                 Icons.redeem,
                 s.yukcoinEarnGift,

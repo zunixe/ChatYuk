@@ -89,4 +89,46 @@ void main() {
       expect(called(h, 'get_user_photos_access'), isFalse);
     });
   });
+
+  group('unlockPhoto — paywall permanen (koin berbayar)', () {
+    test('memanggil RPC unlock_photo mode perm + return remaining', () async {
+      final h = authedHandler('me-1');
+      h.on('unlock_photo', (req) {
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(body['p_photo_id'], 'ph-9');
+        expect(body['p_mode'], 'perm');
+        return {'ok': true, 'remaining': 123};
+      });
+      final auth = AuthService.forTest(fakeSupabaseClient(handler: h));
+      await auth.signInAnonymously();
+
+      final remaining = await auth.unlockPhoto('ph-9', 'owner-1');
+
+      expect(remaining, 123);
+      expect(called(h, 'unlock_photo'), isTrue);
+    });
+
+    test('cache galeri owner di-invalidate setelah unlock', () async {
+      final h = authedHandler('me-1');
+      var accessCalls = 0;
+      h.on('get_user_photos_access', (_) {
+        accessCalls++;
+        return [
+          {'id': 9, 'unlocked': true, 'photo': 'AAAA', 'preview': 'p',
+           'created_at': '2026-01-01T00:00:00Z'},
+        ];
+      });
+      h.on('unlock_photo', (_) => {'ok': true, 'remaining': 10});
+      final auth = AuthService.forTest(fakeSupabaseClient(handler: h));
+      await auth.signInAnonymously();
+
+      await auth.getPhotosWithAccess('owner-1'); // isi cache
+      await auth.getPhotosWithAccess('owner-1'); // hit cache
+      expect(accessCalls, 1);
+
+      await auth.unlockPhoto('9', 'owner-1');
+      await auth.getPhotosWithAccess('owner-1'); // cache batal → RPC ulang
+      expect(accessCalls, 2);
+    });
+  });
 }

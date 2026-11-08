@@ -269,19 +269,8 @@ mixin _RcCoreMx on _RoomChatBase {
 
   @override
   void sendOnSentText() {
-    final pp = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(pointsProvider.notifier);
-    if (pp.enabled) {
-      pp.showPointsToast(
-        context,
-        ProviderScope.containerOf(
-          context,
-          listen: false,
-        ).read(localeProvider).s.pointsDeduct(1),
-      );
-    }
+    // Pesan teks GRATIS di server (deduct_chat_point 0) — tidak ada toast
+    // "-1 YukCoin" (dulu menyesatkan, terutama untuk perempuan).
     // Bonus "first room chat" DIHAPUS (overhaul coin: tidak ada poin gratis).
     _scrollToBottom();
   }

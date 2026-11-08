@@ -5220,3 +5220,34 @@ dapat dipastikan dari kode: menghapus 0–1000 ms delay presentasi, 250 ms
 transisi route, dan menjalankan dua operasi async terberat secara paralel.
 Verifikasi lapangan tetap perlu `PERF_PROBE=true` + `[PERF] call.setupMedia`
 / `call.turnFetch` sebelum-sesudah.
+
+## Verifikasi wajah foto profil female (2026-11-08)
+
+- Upload avatar/slot foto female kini lewat `KycSelfieCameraScreen`
+  (`allowManualFallback: false`) + `FaceCheck.countInFile` (ML Kit pada
+  SATU file hasil jepretan) sebelum proses native `NativeImage`.
+- **Tidak menyentuh jalur render**: deteksi hanya berjalan sekali per upload
+  (bukan di `build()`, bukan stream). Kamera liveness memakai pola KYC yang
+  sudah ada (image stream `nv21`, deteksi hanya saat detektor idle).
+- Kamera/preview tidak dimount di layar Profil — hanya layar verifikasi
+  sementara, lalu di-dispose saat pop (pola `KycSelfieCameraScreen`).
+- **JANGAN dibalik**: jangan pindahkan `FaceCheck`/liveness ke `build()` atau
+  ke jalur chat/feed; biaya ML Kit harus tetap per-aksi upload.
+- Batas pengukuran: belum diukur di perangkat; biaya ML Kit sekali-jalan
+  (±100–300 ms di device menengah) tertutup oleh proses upload yang sudah
+  ada (resize/encode native).
+
+## Paywall foto profil female (2026-11-08)
+
+- **A. Perubahan:** `get_user_photos_access` kini mengembalikan foto terkunci
+  sebagai `photo_preview` blur (kolom kecil yang sudah ada — bukan foto asli);
+  hero user_info merender preview itu + overlay kunci. `unlockPhoto` =
+  1 RPC `unlock_photo` + invalidate cache galeri owner → `_loadPhotos` ulang
+  (1 RPC + decode preview baru). Tidak ada listener/polling baru.
+- **B. Dampak:** ukuran payload RPC turun untuk viewer (preview << foto asli);
+  decode base64 tetap 1× per foto lewat `_galleryBytesOf` (cache by-id).
+  `ref.watch(pointsProvider.select(photoUnlockCost))` — rebuild hanya saat
+  harga berubah.
+- **C. Validasi:** analyze 0; test unlockPhoto (RPC dipanggil mode 'perm',
+  remaining diparse, cache galeri ter-invalidate) + suite privasi foto hijau.
+- **D. Status:** selesai; harga & persen owner admin-configurable (Poin).
