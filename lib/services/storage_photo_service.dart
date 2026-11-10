@@ -131,6 +131,68 @@ class StoragePhotoService {
   String photoPath(String uid) =>
       'gallery/$uid/${_stamp()}.jpg';
 
+  // ── VIDEO GALERI PROFIL ("Foto Saya") ──
+  /// Batas durasi video galeri profil (30 dtk — keputusan produk 2026-11-08).
+  static const int galleryVideoMaxMs = 30 * 1000;
+
+  /// Batas ukuran video galeri hasil kompres (8 MB, sama dengan video chat).
+  static const int galleryVideoMaxBytes = 8 * 1024 * 1024;
+
+  /// Path video galeri profil (mp4) — folder sama dengan foto (`gallery/`).
+  String galleryVideoPath(String uid) => 'gallery/$uid/${_stamp()}.mp4';
+
+  /// Poster video galeri = file PASANGAN dari path video
+  /// (`gallery/<uid>/<stamp>.mp4` → `gallery/<uid>/<stamp>_poster.jpg`).
+  /// Turunan path (bukan kolom DB) — kontrak ini dipakai upload, baca,
+  /// dan hapus; jangan diubah salah satu sisi saja.
+  String galleryPosterPath(String videoPath) =>
+      videoPath.replaceAll(RegExp(r'\.(mp4|mov|webm)$'), '_poster.jpg');
+
+  /// True bila path video galeri (`gallery/....mp4|mov|webm`).
+  bool isGalleryVideoPath(String v) =>
+      v.startsWith('gallery/') && RegExp(r'\.(mp4|mov|webm)$').hasMatch(v);
+
+  /// Kompres video galeri → 720p hemat (±24fps). Kualitas sama dengan story
+  /// (tontonan full-screen); gagal kompres = tolak (jangan upload mentah).
+  Future<File?> compressGalleryVideo(
+    String srcPath, {
+    void Function(double progress01)? onProgress,
+  }) => compressStoryVideo(srcPath, onProgress: onProgress);
+
+  /// Upload video galeri + poster pasangannya → return path video atau null.
+  /// Poster yang gagal ter-upload TIDAK membatalkan video (grid memakai
+  /// preview blur sebagai fallback).
+  Future<String?> uploadGalleryVideo({
+    required String uid,
+    required Uint8List videoBytes,
+    required Uint8List posterBytes,
+  }) async {
+    try {
+      if (videoBytes.isEmpty) return null;
+      final videoPath = galleryVideoPath(uid);
+      await _sb.storage.from(_bucket).uploadBinary(
+            videoPath,
+            videoBytes,
+            fileOptions: const FileOptions(contentType: 'video/mp4'),
+          );
+      if (posterBytes.isNotEmpty) {
+        try {
+          await _sb.storage.from(_bucket).uploadBinary(
+                galleryPosterPath(videoPath),
+                posterBytes,
+                fileOptions: const FileOptions(contentType: 'image/jpeg'),
+              );
+        } catch (e) {
+          dlog('[StoragePhoto] uploadGalleryVideo poster error: $e');
+        }
+      }
+      return videoPath;
+    } catch (e) {
+      dlog('[StoragePhoto] uploadGalleryVideo error: $e');
+      return null;
+    }
+  }
+
   /// Path foto post timeline.
   String postImagePath(String uid) =>
       'posts/$uid/${_stamp()}.jpg';

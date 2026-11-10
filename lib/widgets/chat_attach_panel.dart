@@ -55,16 +55,23 @@ class ChatAttachChip extends StatelessWidget {
 class ChatAttachPanel extends StatefulWidget {
   final List<Widget> children;
   final VoidCallback? onClose;
+
   /// Foto galeri diketuk (bytes asli). null = tanpa strip galeri.
   final ValueChanged<Uint8List>? onPickGalleryPhoto;
+
   /// Label tombol izin galeri (string bilingual dari pemanggil).
   final String allowGalleryLabel;
+
+  /// Baris info di atas grid chip (mis. female: hadiah dari pria masuk ke
+  /// Penghasilan). null = tidak tampil.
+  final String? hint;
   const ChatAttachPanel({
     super.key,
     required this.children,
     this.onClose,
     this.onPickGalleryPhoto,
     this.allowGalleryLabel = '',
+    this.hint,
   });
 
   @override
@@ -108,8 +115,14 @@ class _ChatAttachPanelState extends State<ChatAttachPanel> {
     final hasGallery = widget.onPickGalleryPhoto != null;
     final rows = (widget.children.length / _cols).ceil();
     final thumb = mq.size.width / _cols;
+    const hintH = 30.0;
     final collapsed =
-        _handleH + rows * _tileH + 8 + (hasGallery ? thumb : 0) + bottom;
+        _handleH +
+        rows * _tileH +
+        8 +
+        (widget.hint != null ? hintH : 0) +
+        (hasGallery ? thumb : 0) +
+        bottom;
     final maxH = hasGallery
         ? math.max(collapsed, mq.size.height * 0.68)
         : collapsed;
@@ -164,6 +177,24 @@ class _ChatAttachPanelState extends State<ChatAttachPanel> {
                       ),
                     ),
                   ),
+                  if (widget.hint != null)
+                    SizedBox(
+                      height: hintH,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(
+                            widget.hint!,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: LayoutBuilder(

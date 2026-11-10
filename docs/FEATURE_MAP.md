@@ -725,7 +725,7 @@ selalu di server saat lamaran. Moderator yang pindah negara otomatis dicabut
 | `profiles.avatar` | avatar list/chat/feed — **SELECT di-revoke**; baca lewat `avatar_for()` / `avatars_for()` / `profile_public()` |
 | `profiles.share_location` | lokasi peta — **SELECT di-revoke**; admin lewat RPC admin |
 | `profiles.location_mocked` / `location_mock_reason` / `location_accuracy_m` / `location_flagged_at` | deteksi Fake GPS (2026-10-02) — **SELECT di-revoke**; ditulis `update_my_location()`, dibaca admin lewat `admin_stats_detail()` / `admin_user_detail()`. **Hanya MENANDAI** (badge merah di peta/detail) — tak memblokir |
-| `user_photos.photo` | galeri — **SELECT di-revoke** (paywall); baca lewat `get_user_photos_access()` / `my_photos()`; `photo_preview` tetap publik |
+| `user_photos.photo` | galeri — **SELECT di-revoke** (paywall); baca lewat `get_user_photos_access()` / `my_photos()`; `photo_preview` tetap publik. Sejak 2026-11-08 juga menyimpan **path video** (`gallery/<uid>/<stamp>.mp4`); poster = file pasangan `<stamp>_poster.jpg`, `photo_preview` = poster blur (paywall). RPC menambah key `is_video` (dihitung dari path ASLI, tetap benar untuk item terkunci) |
 | `profiles.avatar_face_verified_at`, `user_photos.face_verified_at` | Verifikasi wajah foto profil **female** (2026-11-08): ditulis klien setelah selfie liveness (kamera in-app + kedip/toleh); dibaca lewat `profile_public()` (`avatar_face_verified`, hanya diri sendiri) & `my_photos()` (`face_verified`). Foto lama tanpa cap = "perlu diganti". Male tidak berubah |
 | `dummy_accounts.ai_*` (enabled/always_online/no_sleep/wake/offline/mood/persona) | AI reply, presence tick, admin, daily-life, proaktif |
 | `app_settings.ai_global_enabled` | AI reply, admin toggle |

@@ -63,6 +63,7 @@ import '../core/call/call_permissions.dart';
 import '../widgets/call_permission_dialog.dart';
 import '../utils/mention.dart';
 import '../widgets/gift_fly_overlay.dart';
+import '../widgets/gift_play_overlay.dart';
 import '../config/gifts.dart';
 import '../providers/riverpod/theme_provider.dart';
 import 'package:flutter/services.dart';
@@ -78,13 +79,13 @@ import '../core/perf/perf_probe.dart';
 import '../providers/riverpod/call_provider.dart';
 import '../core/media/chat_background.dart';
 import '../core/cache/broadcast_state_cache.dart';
+import 'point_history/widgets/topup_sheet.dart';
 
 part 'room_chat/room_chat_core.dart';
 part 'room_chat/room_chat_room.dart';
 part 'room_chat/room_chat_live.dart';
 part 'room_chat/room_chat_media_gate.dart';
 part 'room_chat/room_chat_build.dart';
-
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 class RoomChatScreen extends ConsumerStatefulWidget {
@@ -149,6 +150,9 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   final _backGuard = BackVetoGuard();
   // ── Room gift (live) ──
   final _giftFly = GiftFlyController();
+  // Animasi gift besar (Lottie + SFX) di tengah layar — dipicu pesan
+  // type='gift' fresh yang sama dengan fly banner.
+  final _giftPlay = GiftPlayController();
   // Insertion-order terjaga — cap FIFO (skip terlama) tanpa clear().
   Set<String> _seenGiftMsgIds = {};
   // ── Private room v2 ──
@@ -201,10 +205,12 @@ abstract class _RoomChatBase extends ConsumerState<RoomChatScreen>
   List<Map<String, dynamic>> _roomMembers = const [];
   // ── Private room v2 ──
   bool _roleChecked = false;
+
   /// State broadcast (live_uid + grant) sudah diketahui? Dipakai AppBar agar
   /// ikon "angkat tangan" TIDAK tampil sekilas lalu langsung berganti ke
   /// "Mulai Broadcast" (kedip) saat baru masuk grup/private room.
   bool _broadcastReady = false;
+
   /// Controller poll ROOM (grup & global room) — ditangkap saat init karena
   /// `ref` tak boleh dipakai di dispose.
   PollController? _roomPollCtl;

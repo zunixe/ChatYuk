@@ -5,6 +5,7 @@ import '../../config/theme.dart';
 import '../../models/user_photo.dart';
 import '../../providers/riverpod/locale_provider.dart';
 import '../../widgets/async_photo.dart';
+import '../../widgets/media/gallery_video_view.dart';
 
 class UserChatIconButton extends StatelessWidget {
   final VoidCallback onTap;
@@ -85,10 +86,16 @@ class UserPhotoViewerState extends State<UserPhotoViewer> {
           itemCount: widget.photos.length,
           onPageChanged: (i) => setState(() => _index = i),
           itemBuilder: (ctx, i) => Center(
-            child: InteractiveViewer(
-              maxScale: 4,
-              child: AsyncPhotoViewer(base64: widget.photos[i].photo),
-            ),
+            // Video: poster + play → pemutar full-screen (unduh sekali).
+            child: widget.photos[i].isVideo
+                ? GalleryVideoView(
+                    videoPath: widget.photos[i].photo,
+                    posterBase64: widget.photos[i].poster,
+                  )
+                : InteractiveViewer(
+                    maxScale: 4,
+                    child: AsyncPhotoViewer(base64: widget.photos[i].photo),
+                  ),
           ),
         ),
       ),

@@ -30,6 +30,30 @@ Future<void> showTopupSheet(BuildContext context, S s) async {
   );
 }
 
+/// Dialog "koin habis" saat kirim gift — tawarkan langsung ke top-up.
+/// Dipakai jalur kirim gift private & room supaya user tidak buntu di
+/// snackbar error yang mudah terlewat.
+Future<void> showTopupPrompt(BuildContext context, S s, {String? body}) async {
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(s.giftInsufficient),
+      content: Text(body ?? s.giftTopupPromptBody),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(s.btnCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(s.btnTopupNow),
+        ),
+      ],
+    ),
+  );
+  if (go == true && context.mounted) await showTopupSheet(context, s);
+}
+
 class _TopupSheet extends ConsumerStatefulWidget {
   const _TopupSheet();
 
@@ -56,7 +80,12 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
         pkgs = await ref.read(pointsProvider.notifier).listTopupPackages();
       } catch (_) {}
     }
-    if (mounted) setState(() { _packages = pkgs; _loading = false; });
+    if (mounted) {
+      setState(() {
+        _packages = pkgs;
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -148,8 +177,11 @@ class _PackageTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                const Icon(Icons.monetization_on_outlined,
-                    color: AppTheme.primary, size: 22),
+                const Icon(
+                  Icons.monetization_on_outlined,
+                  color: AppTheme.primary,
+                  size: 22,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Row(
@@ -158,14 +190,17 @@ class _PackageTile extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         '🪙',
-                        style: AppText.bodySmall
-                            .copyWith(color: AppTheme.textSecondary),
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                       if (label != null && label.isNotEmpty) ...[
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.primary.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),

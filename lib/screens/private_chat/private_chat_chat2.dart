@@ -1,8 +1,7 @@
 part of '../private_chat_screen.dart';
 
-
 mixin _PcChat2Mx on _PrivateChatBase {
-@override
+  @override
   void _onSearchChanged(String v) {
     setState(() {
       _searchQuery = v;
@@ -13,7 +12,8 @@ mixin _PcChat2Mx on _PrivateChatBase {
     // (tanpa jambak scroll untuk yang jauh — user pakai panah).
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToMatch(0));
   }
-/// Pindah ke hasil berikut/sebelumnya (dir +1 = lebih lama, -1 = lebih
+
+  /// Pindah ke hasil berikut/sebelumnya (dir +1 = lebih lama, -1 = lebih
   /// baru), bungkus melingkar ala WhatsApp.
   @override
   void _gotoMatch(int dir) {
@@ -23,26 +23,32 @@ mixin _PcChat2Mx on _PrivateChatBase {
       if (_matchIndex < 0) _matchIndex += _matchIds.length;
       _searchJumpTries = 0;
     });
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _scrollToMatch(dir),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToMatch(dir));
   }
-@override
+
+  @override
   String get chatId => widget.chatId;
-@override
-  chat_riverpod.ChatNotifier get chatProvider => ProviderScope.containerOf(context, listen: false).read(chat_riverpod.chatProvider.notifier);
-@override
+  @override
+  chat_riverpod.ChatNotifier get chatProvider => ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(chat_riverpod.chatProvider.notifier);
+  @override
   void chatFocusComposer() => _inputFocus.requestFocus();
-@override
+  @override
   void chatScrollToBottom() => _scrollToBottom();
-@override
+  @override
   String chatDeletedLabel(S s) => s.messageDeleted;
-/// Kirim pembaruan koordinat lokasi live tiap 30 detik sampai kedaluwarsa.
+
+  /// Kirim pembaruan koordinat lokasi live tiap 30 detik sampai kedaluwarsa.
   /// Berhenti otomatis saat waktu habis; update gagal diabaikan (best-effort).
   @override
   void _startLiveLocationUpdates(String messageId, ChatLocation initial) {
     _liveTimer?.cancel();
-    final lp = ProviderScope.containerOf(context, listen: false).read(locationProvider);
+    final lp = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(locationProvider);
     _liveTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
       final exp = initial.expiresAt;
       if (exp == null || DateTime.now().toUtc().isAfter(exp)) {
@@ -62,25 +68,29 @@ mixin _PcChat2Mx on _PrivateChatBase {
           .updateLocationMessage(messageId, updated.encode());
     });
   }
+
   // Caption & balasan untuk view-once dari picker (kirim langsung tanpa
   // preview) — dulu teks yang diketik diabaikan.
   @override
   String get photoComposerText => sendMsgCtrl.text;
-@override
+  @override
   void photoOnSent(String kind) {
     _maybeNewChatBonus();
     _schedulePendingConfirmFallback();
   }
-@override
+
+  @override
   String? get pendingVideoPath => _pendingVideoPath;
-/// Kontrak ChatSendMixin: video pending (router tombol kirim).
+
+  /// Kontrak ChatSendMixin: video pending (router tombol kirim).
   @override
   String? get sendPendingVideoPath => _pendingVideoPath;
-@override
+  @override
   void videoSetOnce(bool value) {
     setState(() => _pendingVideoOnce = value);
   }
-@override
+
+  @override
   void videoSetPreview({
     required String path,
     required String posterBase64,
@@ -100,9 +110,10 @@ mixin _PcChat2Mx on _PrivateChatBase {
     });
     _scrollToBottom();
   }
-@override
+
+  @override
   List<Mention> sendMentionCandidates() => _mentionCandidates;
-@override
+  @override
   void _autoLoadMissingImages(List<MessageModel> msgs) {
     final now = DateTime.now();
     for (final m in msgs) {
@@ -128,7 +139,8 @@ mixin _PcChat2Mx on _PrivateChatBase {
     }
     _drainImageQueue();
   }
-@override
+
+  @override
   void _drainImageQueue() {
     while (_imgInFlight.length < _maxImageFetches && _imgQueue.isNotEmpty) {
       final id = _imgQueue.removeAt(0);
@@ -137,7 +149,8 @@ mixin _PcChat2Mx on _PrivateChatBase {
       _fetchImageQueued(id);
     }
   }
-/// Derivasikan `(items, deletedIds)` di-cache berbasis IDENTITAS list
+
+  /// Derivasikan `(items, deletedIds)` di-cache berbasis IDENTITAS list
   /// pesan sumber ([msgsSrc], dari stream — referensinya stabil antar rebuild
   /// parent) + jumlah `_pending` + locale + hari. [all] dipakai untuk hasil.
   @override
@@ -212,6 +225,7 @@ mixin _PcChat2Mx on _PrivateChatBase {
     _cachedDeletedIds = deletedIds;
     return (items, deletedIds);
   }
+
   @override
   void _scheduleRebuild() {
     if (!mounted) return;
@@ -227,57 +241,69 @@ mixin _PcChat2Mx on _PrivateChatBase {
       if (mounted) setState(() {});
     });
   }
-@override
+
+  @override
   bool get _showCallOverlay {
-    final prov = ProviderScope.containerOf(context, listen: false).read(callProvider.notifier);
+    final prov = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(callProvider.notifier);
     final sess = prov.activeSession;
     return sess != null &&
         prov.activeMode == CallMode.chat &&
         sess.remoteUid == widget.otherUid &&
         !_callExpanded;
   }
-@override
+
+  @override
   void _subscribeTyping() {
     _typingSub?.cancel();
     dlog('[TYPING] screen subscribing for ${widget.chatId}');
     _typingSub = ProviderScope.containerOf(context, listen: false)
         .read(chat_riverpod.chatProvider.notifier)
         .getTypingPulseStream(widget.chatId)
-        .listen((event) {
-          final kind = event.$1;
-          final ts = event.$2;
-          // Pulse basi: dikirim SEBELUM/SESAAT SETELAH balasan terakhir
-          // dibuat (race delivery: pulse terkirim duluan tapi tiba belakangan)
-          // → abaikan. Toleransi +1 detik; typing asli berikutnya (burst /
-          // balasan baru, ≥2 detik kemudian) tetap menyalakan bubble.
-          final lastMsg = _lastPartnerMsgTime;
-          if (lastMsg != null &&
-              ts < lastMsg.millisecondsSinceEpoch + 1000) {
-            dlog('[TYPING] skipped stale pulse');
-            return;
-          }
-          dlog('[TYPING] stream got kind=$kind -> bubble on');
-          if (!mounted) return;
-          // Tidak setState: hanya notifier typing (rebuild terbatas).
-          _typingState.value = kind == 'recording' ? 2 : 1;
-          _typingClearTimer?.cancel();
-          _typingClearTimer = Timer(const Duration(seconds: 3), () {
+        .listen(
+          (event) {
+            final kind = event.$1;
+            final ts = event.$2;
+            // Pulse basi: dikirim SEBELUM/SESAAT SETELAH balasan terakhir
+            // dibuat (race delivery: pulse terkirim duluan tapi tiba belakangan)
+            // → abaikan. Toleransi +1 detik; typing asli berikutnya (burst /
+            // balasan baru, ≥2 detik kemudian) tetap menyalakan bubble.
+            final lastMsg = _lastPartnerMsgTime;
+            if (lastMsg != null && ts < lastMsg.millisecondsSinceEpoch + 1000) {
+              dlog('[TYPING] skipped stale pulse');
+              return;
+            }
+            dlog('[TYPING] stream got kind=$kind -> bubble on');
             if (!mounted) return;
-            _typingState.value = 0;
-          });
-        }, onError: (e) {
-          // OFFLINE: stream typing error → jangan tak tertangkap.
-          dlog('[NAV] typing stream error private-chat: $e');
-        });
+            // Tidak setState: hanya notifier typing (rebuild terbatas).
+            _typingState.value = kind == 'recording' ? 2 : 1;
+            _typingClearTimer?.cancel();
+            _typingClearTimer = Timer(const Duration(seconds: 3), () {
+              if (!mounted) return;
+              _typingState.value = 0;
+            });
+          },
+          onError: (e) {
+            // OFFLINE: stream typing error → jangan tak tertangkap.
+            dlog('[NAV] typing stream error private-chat: $e');
+          },
+        );
   }
-@override
+
+  @override
   void _sendTypingSignal() {
     final now = DateTime.now();
     if (now.difference(_lastTypingSent).inMilliseconds < 2500) return;
     _lastTypingSent = now;
-    ProviderScope.containerOf(context, listen: false).read(chat_riverpod.chatProvider.notifier).sendTyping(widget.chatId);
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chat_riverpod.chatProvider.notifier).sendTyping(widget.chatId);
   }
-/// Misi "chat orang baru": bonus hanya diberikan saat user BENAR-BENAR
+
+  /// Misi "chat orang baru": bonus hanya diberikan saat user BENAR-BENAR
   /// mengirim pesan pertama ke lawan bicara (bukan pas membuka chat kosong).
   /// RPC new_chat_bonus tetap punya guard sendiri (sekali per user + limit
   /// harian), jadi aman dipanggil dari semua jalur kirim.
@@ -285,27 +311,34 @@ mixin _PcChat2Mx on _PrivateChatBase {
   void _maybeNewChatBonus() {
     if (_newChatBonusClaimed) return;
     _newChatBonusClaimed = true;
-    ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier).newChatBonus(widget.otherUid);
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier).newChatBonus(widget.otherUid);
   }
-/// Kandidat mention private 1:1 — hanya lawan bicara. `@all` tidak pernah.
+
+  /// Kandidat mention private 1:1 — hanya lawan bicara. `@all` tidak pernah.
   @override
   List<Mention> get _mentionCandidates => widget.otherUid.isEmpty
       ? const []
       : [Mention(uid: widget.otherUid, name: widget.otherName)];
-@override
+  @override
   String get outboxChatId => widget.chatId;
-@override
+  @override
   bool get outboxIsFlushing => _flushingOutbox;
-@override
+  @override
   Future<void> outboxSendEntry(OutboxEntry e, String imageData) async {
     // Kirim ulang video dari outbox: unggah poster juga (kalau disimpan) agar
     // penerima tetap dapat thumbnail — dulu upload video saja → kotak hitam.
     final scope = ProviderScope.containerOf(context, listen: false);
     var posterPath = '';
     if (e.videoPosterB64.isNotEmpty &&
-        (e.type == 'video' || e.type == 'video_once' || e.type == 'video_once_expired')) {
+        (e.type == 'video' ||
+            e.type == 'video_once' ||
+            e.type == 'video_once_expired')) {
       try {
-        posterPath = await scope
+        posterPath =
+            await scope
                 .read(storageProvider)
                 .uploadChatVideoPoster(
                   chatId: photoUploadChatId,
@@ -314,34 +347,47 @@ mixin _PcChat2Mx on _PrivateChatBase {
             '';
       } catch (_) {}
     }
-    await scope.read(chat_riverpod.chatProvider.notifier).sendPrivateMessage(
-      chatId: widget.chatId,
-      senderId: e.senderId,
-      senderName: e.senderName,
-      senderGender: e.senderGender,
-      text: e.text,
-      type: e.type,
-      imageData: imageData,
-      durationMs: e.durationMs,
-      repliedToId: e.repliedToId,
-      repliedToText: e.repliedToText,
-      repliedToSenderName: e.repliedToSenderName,
-      repliedToMeta: e.repliedToMeta,
-      isForwarded: e.isForwarded,
-      mentions: e.mentions,
-      videoPoster: posterPath,
-    );
+    await scope
+        .read(chat_riverpod.chatProvider.notifier)
+        .sendPrivateMessage(
+          chatId: widget.chatId,
+          senderId: e.senderId,
+          senderName: e.senderName,
+          senderGender: e.senderGender,
+          text: e.text,
+          type: e.type,
+          imageData: imageData,
+          durationMs: e.durationMs,
+          repliedToId: e.repliedToId,
+          repliedToText: e.repliedToText,
+          repliedToSenderName: e.repliedToSenderName,
+          repliedToMeta: e.repliedToMeta,
+          isForwarded: e.isForwarded,
+          mentions: e.mentions,
+          videoPoster: posterPath,
+        );
   }
-@override
+
+  @override
   void outboxOnSent() {
     _maybeNewChatBonus();
     _schedulePendingConfirmFallback();
   }
-@override
+
+  @override
   Future<void> _sendCoins(int amount) async {
-    final s = ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-    final chat = ProviderScope.containerOf(context, listen: false).read(chat_riverpod.chatProvider.notifier);
-    final points = ProviderScope.containerOf(context, listen: false).read(pointsProvider.notifier);
+    final s = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localeProvider).s;
+    final chat = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(chat_riverpod.chatProvider.notifier);
+    final points = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(pointsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final res = await chat.sendCoins(widget.chatId, widget.otherUid, amount);
@@ -349,6 +395,7 @@ mixin _PcChat2Mx on _PrivateChatBase {
         if (res['points'] != null) {
           points.setPoints((res['points'] as num).toInt());
         }
+        unawaited(points.refreshWallet());
         _maybeNewChatBonus();
         if (mounted) points.showPointsToast(context, s.coinSentToast(amount));
         _scrollToBottom();
@@ -365,7 +412,8 @@ mixin _PcChat2Mx on _PrivateChatBase {
       showChatSnackVia(messenger, mounted ? context : messenger.context, show);
     }
   }
-/// Mulai panggilan audio/video ke lawan bicara.
+
+  /// Mulai panggilan audio/video ke lawan bicara.
   /// [mode] menentukan fullscreen atau video dalam chat (overlay).
   @override
   Future<void> _startCall(
@@ -429,27 +477,28 @@ mixin _PcChat2Mx on _PrivateChatBase {
       return;
     }
     try {
-      final callId = await scope.read(callProvider.notifier).startCall(
-        widget.otherUid,
-        callType,
-      );
+      final callId = await scope
+          .read(callProvider.notifier)
+          .startCall(widget.otherUid, callType);
       if (!mounted) return;
-      final session = await scope.read(callProvider.notifier).startSession(
-        callId: callId,
-        remoteUid: widget.otherUid,
-        remoteName: widget.otherName,
-        callType: callType,
-        isCaller: true,
-        mode: mode,
-        myName: profile?.nickname ?? '',
-        myGender: profile?.gender ?? 'other',
-        notifBody: callType == 'video'
-            ? s.callNotifActiveVideo
-            : s.callNotifActiveAudio,
-        notifChannel: s.callNotifActiveAudio,
-        notifDesc: s.callNotifActiveAudio,
-        chatId: widget.chatId,
-      );
+      final session = await scope
+          .read(callProvider.notifier)
+          .startSession(
+            callId: callId,
+            remoteUid: widget.otherUid,
+            remoteName: widget.otherName,
+            callType: callType,
+            isCaller: true,
+            mode: mode,
+            myName: profile?.nickname ?? '',
+            myGender: profile?.gender ?? 'other',
+            notifBody: callType == 'video'
+                ? s.callNotifActiveVideo
+                : s.callNotifActiveAudio,
+            notifChannel: s.callNotifActiveAudio,
+            notifDesc: s.callNotifActiveAudio,
+            chatId: widget.chatId,
+          );
       // Tarif per menit untuk banner (server kirim ulang tiap tick).
       // Koin OFF (toggle admin) atau billing belum publish → 0 = banner sembunyi.
       final pp0 = scope.read(pointsProvider.notifier);
@@ -481,13 +530,15 @@ mixin _PcChat2Mx on _PrivateChatBase {
       // release) + petakan ke pesan yang menjelaskan penyebab (RLS/jaringan).
       dlog('[CALL-START] _startCall gagal ($callType): $e');
       final low = e.toString().toLowerCase();
-      final denied = low.contains('policy') ||
+      final denied =
+          low.contains('policy') ||
           low.contains('permission denied') ||
           low.contains('unauthorized') ||
           low.contains('401') ||
           low.contains('403') ||
           low.contains('jwt');
-      final offline = low.contains('socketexception') ||
+      final offline =
+          low.contains('socketexception') ||
           low.contains('failed host lookup') ||
           low.contains('network is unreachable') ||
           low.contains('connection refused') ||
@@ -498,8 +549,8 @@ mixin _PcChat2Mx on _PrivateChatBase {
         denied
             ? s.msgCallRegisterOnly
             : offline
-                ? s.errCallNetwork
-                : s.errGeneric,
+            ? s.errCallNetwork
+            : s.errGeneric,
       );
     }
   }

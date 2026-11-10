@@ -521,10 +521,19 @@ mixin _ProfileBodyMx on _ProfileBase {
                               children: [
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
+                                  // Video: poster jernih (fallback preview blur).
                                   child: AsyncPhotoThumbnail(
-                                    base64: _photos[i].photo,
+                                    base64: _photos[i].isVideo
+                                        ? (_photos[i].poster.isNotEmpty
+                                              ? _photos[i].poster
+                                              : _photos[i].preview)
+                                        : _photos[i].photo,
                                   ),
                                 ),
+                                if (_photos[i].isVideo)
+                                  const Center(
+                                    child: VideoPlayBadge(size: 28),
+                                  ),
                                 Positioned(
                                   top: 4,
                                   right: 4,

@@ -44,6 +44,34 @@ class StorageNotifier {
   }) =>
       service.uploadStoryVideo(uid: uid, bytes: bytes);
 
+  // ── VIDEO GALERI PROFIL ("Foto Saya") ──
+  /// Upload video + poster pasangannya → path video atau null.
+  Future<String?> uploadGalleryVideo({
+    required String uid,
+    required Uint8List videoBytes,
+    required Uint8List posterBytes,
+  }) =>
+      service.uploadGalleryVideo(
+        uid: uid,
+        videoBytes: videoBytes,
+        posterBytes: posterBytes,
+      );
+
+  /// Kompres video galeri (720p/24fps) — gagal = null (jangan upload mentah).
+  Future<File?> compressGalleryVideo(
+    String srcPath, {
+    void Function(double progress01)? onProgress,
+  }) =>
+      service.compressGalleryVideo(srcPath, onProgress: onProgress);
+
+  bool isGalleryVideoPath(String v) => service.isGalleryVideoPath(v);
+  String galleryPosterPath(String videoPath) =>
+      service.galleryPosterPath(videoPath);
+
+  /// Batas durasi/ukuran video galeri (sumber tunggal: StoragePhotoService).
+  int get galleryVideoMaxMs => StoragePhotoService.galleryVideoMaxMs;
+  int get galleryVideoMaxBytes => StoragePhotoService.galleryVideoMaxBytes;
+
   Future<String?> uploadSticker({
     required String uid,
     required String base64,

@@ -14,16 +14,24 @@ class MissionProgressService {
 
   String? get _userId => _sb.auth.currentUser?.id;
 
+  /// Offset zona waktu HP (menit). Batas hari misi harian mengikuti waktu
+  /// LOKAL pengguna — berlaku untuk semua negara, bukan hanya WIB/UTC.
+  int get _tzOffsetMinutes => DateTime.now().timeZoneOffset.inMinutes;
+
   /// Generic update - dipakai PointsNotifier.trackMission()
   Future<void> updateProgress(String missionKey, {int increment = 1}) async {
     try {
       final uid = _userId;
       if (uid == null) return;
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': missionKey,
-        'p_increment': increment,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': missionKey,
+          'p_increment': increment,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       // Tracking misi = efek samping non-kritis; jangan sampai melempar
       // ke pemanggil (kirim pesan/like/follow tidak boleh gagal karena ini).
@@ -38,11 +46,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'daily_online_minutes',
-        'p_increment': minutes,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'daily_online_minutes',
+          'p_increment': minutes,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackOnlineMinutes error: $e');
     }
@@ -53,11 +65,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'call_minutes',
-        'p_increment': minutes,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'call_minutes',
+          'p_increment': minutes,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackCallMinutes error: $e');
     }
@@ -68,11 +84,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'daily_online_duration',
-        'p_increment': minutes,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'daily_online_duration',
+          'p_increment': minutes,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackOnlineDuration error: $e');
     }
@@ -85,11 +105,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'upload_photos',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'upload_photos',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackPhotoUpload error: $e');
     }
@@ -100,11 +124,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'create_posts',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'create_posts',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackPostCreated error: $e');
     }
@@ -117,11 +145,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'match_calls',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'match_calls',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackMatchCall error: $e');
     }
@@ -132,11 +164,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'private_calls',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'private_calls',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackPrivateCall error: $e');
     }
@@ -149,11 +185,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'message_various_users',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'message_various_users',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackMessageSent error: $e');
     }
@@ -164,11 +204,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'add_friends_in_call',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'add_friends_in_call',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackFriendAdded error: $e');
     }
@@ -179,11 +223,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'reply_users',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'reply_users',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackMessageReply error: $e');
     }
@@ -194,11 +242,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'like_posts',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'like_posts',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackPostLiked error: $e');
     }
@@ -209,11 +261,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'daily_receive_gift',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'daily_receive_gift',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackGiftReceived error: $e');
     }
@@ -224,11 +280,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'daily_match_calls',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'daily_match_calls',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackDailyMatchCall error: $e');
     }
@@ -239,11 +299,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'daily_message_users',
-        'p_increment': 1,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'daily_message_users',
+          'p_increment': 1,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackDailyMessageSent error: $e');
     }
@@ -254,11 +318,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'daily_private_call_duration',
-        'p_increment': minutes,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'daily_private_call_duration',
+          'p_increment': minutes,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackDailyPrivateCallDuration error: $e');
     }
@@ -269,11 +337,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'evening_online_call',
-        'p_increment': minutes,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'evening_online_call',
+          'p_increment': minutes,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackEveningOnline error: $e');
     }
@@ -284,11 +356,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'night_owl_online_call',
-        'p_increment': minutes,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'night_owl_online_call',
+          'p_increment': minutes,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackNightOwlOnline error: $e');
     }
@@ -299,11 +375,15 @@ class MissionProgressService {
     final uid = _userId;
     if (uid == null) return;
     try {
-      await _sb.rpc('update_mission_progress', params: {
-        'p_user_id': uid,
-        'p_mission_key': 'nyonya_1000',
-        'p_increment': coins,
-      });
+      await _sb.rpc(
+        'update_mission_progress',
+        params: {
+          'p_user_id': uid,
+          'p_mission_key': 'nyonya_1000',
+          'p_increment': coins,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
+      );
     } catch (e) {
       dlog('[MISSIONS] trackNyonya1000 error: $e');
     }

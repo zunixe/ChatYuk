@@ -1,6 +1,6 @@
 -- SNAPSHOT SEMUA fungsi public (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh --all
--- Timestamp: 2026-11-08T02:12:08Z
+-- Timestamp: 2026-11-10T11:49:40Z
 
 -- snapshot-fn: _anon_gate_insert
 CREATE OR REPLACE FUNCTION public._anon_gate_insert()
@@ -484,6 +484,17 @@ AS $function$
   select coalesce((select gender = 'female' from public.profiles where id = p_user), false);
 $function$
 
+-- snapshot-fn: _local_day
+CREATE OR REPLACE FUNCTION public._local_day(p_tz_offset_minutes integer DEFAULT NULL::integer)
+ RETURNS date
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select ((now() at time zone 'UTC')
+          + make_interval(mins => least(greatest(coalesce(p_tz_offset_minutes, 420), -840), 840))
+         )::date;
+$function$
+
 -- snapshot-fn: _mission_payout_eligible
 CREATE OR REPLACE FUNCTION public._mission_payout_eligible(p_uid uuid, p_ip text)
  RETURNS text
@@ -559,6 +570,11 @@ declare
 begin
   if p_payer is null then
     return false;
+  end if;
+  -- Admin/dev: banyak akun test di satu HP → guard device-bersama tidak
+  -- relevan (bukan pola farming). Hanya bila memeriksa dirinya sendiri.
+  if p_payer = auth.uid() and public._email_is_admin() then
+    return public.promo_budget_left_idr() > 0;
   end if;
   if (select points_enabled from public.app_settings where id = 'global') is false then
     return false;
@@ -3895,6 +3911,40 @@ begin
 end;
 $function$
 
+-- snapshot-fn: admin_room_session_stats
+CREATE OR REPLACE FUNCTION public.admin_room_session_stats(p_days integer DEFAULT 30)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v jsonb;
+begin
+  if not public.is_admin_request() then
+    raise exception 'Unauthorized';
+  end if;
+  select jsonb_build_object(
+    'sessions', count(*),
+    'ended', count(*) filter (where status = 'ended'),
+    'live', count(*) filter (where status = 'live'),
+    'scheduled', count(*) filter (where status = 'scheduled'),
+    'on_time_pct', coalesce(round(
+      100.0 * count(*) filter (where started_at is not null
+                                and started_at <= starts_at + interval '15 minutes')
+      / nullif(count(*) filter (where started_at is not null), 0), 1), 0),
+    'avg_duration_min', coalesce(round(avg(
+      extract(epoch from (ended_at - started_at)) / 60.0)
+      filter (where started_at is not null and ended_at is not null), 0), 0),
+    'avg_peak_viewers', coalesce(round(avg(peak_viewers)), 0),
+    'total_gifts', coalesce(sum(gifts_total), 0)
+  ) into v
+  from public.room_sessions
+  where starts_at >= now() - make_interval(days => greatest(p_days, 1));
+  return v;
+end;
+$function$
+
 -- snapshot-fn: admin_search_users
 CREATE OR REPLACE FUNCTION public.admin_search_users(p_query text)
  RETURNS jsonb
@@ -4222,6 +4272,23 @@ begin
     where id = 'global';
   return (select feature_flags from app_settings where id = 'global');
 end; $function$
+
+-- snapshot-fn: admin_set_host
+CREATE OR REPLACE FUNCTION public.admin_set_host(p_uid uuid, p_is_host boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if not public.is_admin_request() then
+    raise exception 'Unauthorized';
+  end if;
+  update public.profiles set is_host = coalesce(p_is_host, false) where id = p_uid;
+  if not found then raise exception 'User not found'; end if;
+  return jsonb_build_object('ok', true, 'is_host', coalesce(p_is_host, false));
+end;
+$function$
 
 -- snapshot-fn: admin_set_post_visibility
 CREATE OR REPLACE FUNCTION public.admin_set_post_visibility(p_post_id uuid, p_visibility text)
@@ -7105,7 +7172,7 @@ END;
 $function$
 
 -- snapshot-fn: claim_mission_reward
-CREATE OR REPLACE FUNCTION public.claim_mission_reward(p_user_id uuid, p_mission_key text)
+CREATE OR REPLACE FUNCTION public.claim_mission_reward(p_user_id uuid, p_mission_key text, p_tz_offset_minutes integer DEFAULT NULL::integer)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -7124,6 +7191,7 @@ DECLARE
     v_reward_bucket text;
     v_reason text;
     v_ip text;
+    v_total bigint;
 BEGIN
     if auth.uid() is not null and p_user_id is distinct from auth.uid() then
         return jsonb_build_object('error', 'FORBIDDEN');
@@ -7151,7 +7219,20 @@ BEGIN
         RETURN jsonb_build_object('error', 'MISSION_NOT_FOUND');
     END IF;
 
-    v_period := CASE WHEN v_mission.is_daily THEN CURRENT_DATE ELSE NULL END;
+    -- Tanggal lokal pengguna — sama dengan periode progres yang ditulis
+    -- update_mission_progress (dulu UTC vs klien lokal = beda hari).
+    v_period := CASE WHEN v_mission.is_daily
+                     THEN public._local_day(p_tz_offset_minutes) ELSE NULL END;
+
+    -- Kunci 1.200 koin: misi harian belum boleh diklaim.
+    IF v_mission.is_daily THEN
+        SELECT COALESCE(SUM(amount), 0) INTO v_total
+          FROM public.coin_ledger
+         WHERE user_id = p_user_id AND amount > 0;
+        IF v_total < 1200 THEN
+            RETURN jsonb_build_object('error', 'MISSION_LOCKED');
+        END IF;
+    END IF;
 
     -- Bucket reward: female → earned (withdrawable); selain female → bonus
     -- (tidak bisa dicairkan, tidak bisa ditransfer). Lihat 20261101190000.
@@ -8256,7 +8337,7 @@ CREATE OR REPLACE FUNCTION public.cube_ur_coord(cube, integer)
 AS '$libdir/cube', $function$cube_ur_coord$function$
 
 -- snapshot-fn: daily_login_bonus
-CREATE OR REPLACE FUNCTION public.daily_login_bonus()
+CREATE OR REPLACE FUNCTION public.daily_login_bonus(p_tz_offset_minutes integer DEFAULT NULL::integer)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -8270,7 +8351,8 @@ declare
   bonus int;
   v_gender text;
 begin
-  today := (now() at time zone 'Asia/Jakarta')::date;
+  -- Tanggal lokal pengguna (offset HP) — bukan lagi hardcode Asia/Jakarta.
+  today := public._local_day(p_tz_offset_minutes);
 
   select last_login_date, login_streak, gender
     into last_date, cur_streak, v_gender
@@ -8952,6 +9034,38 @@ begin
     'recipients', res
   );
 end; $function$
+
+-- snapshot-fn: end_room_session
+CREATE OR REPLACE FUNCTION public.end_room_session(p_session_id bigint)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  s record;
+begin
+  if auth.uid() is null then raise exception 'Not authenticated'; end if;
+  select * into s from public.room_sessions where id = p_session_id;
+  if not found then raise exception 'Session not found'; end if;
+  if s.host_uid <> auth.uid() and not public.is_admin_request() then
+    raise exception 'Hanya host sesi atau admin';
+  end if;
+  if s.status = 'live' then
+    perform public.room_session_tick(s.room_id);
+    update public.room_sessions
+       set status = 'ended', ended_at = now()
+     where id = s.id;
+  elsif s.status = 'scheduled' then
+    update public.room_sessions
+       set status = 'cancelled', ended_at = now()
+     where id = s.id;
+  else
+    raise exception 'Sesi sudah %', s.status;
+  end if;
+  return jsonb_build_object('ok', true, 'session_id', s.id);
+end;
+$function$
 
 -- snapshot-fn: enforce_age_min
 CREATE OR REPLACE FUNCTION public.enforce_age_min()
@@ -10332,7 +10446,7 @@ AS $function$
 $function$
 
 -- snapshot-fn: get_user_missions
-CREATE OR REPLACE FUNCTION public.get_user_missions(p_user_id uuid, p_period_date date DEFAULT NULL::date)
+CREATE OR REPLACE FUNCTION public.get_user_missions(p_user_id uuid, p_period_date date DEFAULT NULL::date, p_tz_offset_minutes integer DEFAULT NULL::integer)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -10346,12 +10460,15 @@ DECLARE
     v_streak int;
     v_last_login date;
     v_gender text;
+    v_locked boolean;
 BEGIN
     if auth.uid() is not null and p_user_id is distinct from auth.uid() then
         return jsonb_build_object('error', 'FORBIDDEN');
     end if;
 
-    v_period := COALESCE(p_period_date, CURRENT_DATE);
+    -- Tanggal lokal pengguna (offset dari HP). Klien baru mengirim tanggal
+    -- lokalnya sendiri; fallback: hitung dari offset / Asia/Jakarta.
+    v_period := COALESCE(p_period_date, public._local_day(p_tz_offset_minutes));
 
     SELECT COALESCE(SUM(amount), 0) INTO v_total
       FROM public.coin_ledger
@@ -10366,10 +10483,12 @@ BEGIN
       FROM public.profiles
      WHERE id = p_user_id;
 
+    v_locked := (v_total < 1200);
+
     WITH main_missions AS (
         SELECT m.id, m.mission_key, m.title, m.description,
                m.category, m.target_value, m.target_unit, m.reward_coins,
-               m.display_order,
+               m.display_order, m.is_locked,
                CASE WHEN m.target_unit = 'coins'
                     THEN GREATEST(0, LEAST(v_earned_bal, m.target_value))::int
                     ELSE COALESCE(um.progress, 0) END AS progress,
@@ -10390,11 +10509,12 @@ BEGIN
         SELECT m.id, m.mission_key, m.title, m.description,
                m.category, m.target_value, m.target_unit, m.reward_coins,
                m.display_order, m.unlock_condition, m.schedule_start, m.schedule_end,
+               v_locked AS is_locked,
                COALESCE(um.progress, 0) AS progress,
                COALESCE(um.is_completed, false) AS is_completed,
                COALESCE(um.claimed, false) AS claimed,
                um.completed_at,
-               (v_total >= 1200) AS unlocked_by_total
+               (NOT v_locked) AS unlocked_by_total
         FROM public.missions m
         LEFT JOIN public.user_missions um
                ON m.id = um.mission_id
@@ -10407,6 +10527,8 @@ BEGIN
         'main', (SELECT jsonb_agg(row_to_json(m) ORDER BY m.display_order) FROM main_missions m),
         'daily', (SELECT jsonb_agg(row_to_json(dm) ORDER BY dm.display_order) FROM daily_missions dm),
         'total_coins', v_total,
+        'daily_locked', v_locked,
+        'period_date', v_period,
         'login_streak', COALESCE(v_streak, 0),
         'last_login_date', v_last_login,
         'gender', v_gender
@@ -10456,7 +10578,10 @@ begin
       -- Foto asli hanya dikirim bila terbuka; jika terkunci kirim preview blur.
       'photo', case when is_unlocked then rec.photo else coalesce(rec.photo_preview, '') end,
       'preview', coalesce(rec.photo_preview, ''),
-      'created_at', rec.created_at
+      'created_at', rec.created_at,
+      -- Video galeri: dihitung dari path ASLI supaya item TERKUNCI tetap
+      -- bisa menampilkan badge video (photo yang dikirim = preview blur).
+      'is_video', rec.photo ~* '\.(mp4|mov|webm)$'
     );
     idx := idx + 1;
   end loop;
@@ -12211,7 +12336,9 @@ begin
     'match_connect_cost',
       coalesce((metered_pricing->'match_call'->>'unit_cost')::int, 10),
     'match_free_seconds', 30,
-    'photo_unlock_cost', photo_unlock_perm
+    'photo_unlock_cost', photo_unlock_perm,
+    -- Potongan platform gift — penerima mendapat (harga - cut).
+    'gift_cut_pct', coalesce(gift_cut_pct, 30)
   ) from app_settings where id = 'global');
 end; $function$
 
@@ -12764,7 +12891,9 @@ begin
     'photo',      r.photo,
     'preview',    coalesce(r.photo_preview, ''),
     'created_at', r.created_at,
-    'face_verified', r.face_verified_at is not null
+    'face_verified', r.face_verified_at is not null,
+    -- Video galeri (mp4/mov/webm) — dihitung dari path ASLI.
+    'is_video',   r.photo ~* '\.(mp4|mov|webm)$'
   ) order by r.created_at asc), '[]'::jsonb) into arr
   from public.user_photos r where r.user_id = me;
   return arr;
@@ -12967,6 +13096,30 @@ begin
   select points into tot from profiles where id = auth.uid();
   return coalesce(tot, 0);
 end; $function$
+
+-- snapshot-fn: next_room_sessions
+CREATE OR REPLACE FUNCTION public.next_room_sessions(p_room_ids text[])
+ RETURNS TABLE(room_id text, session_id bigint, title text, format text, starts_at timestamp with time zone, ends_at timestamp with time zone, status text, host_uid uuid, host_name text, host_avatar text, peak_viewers integer, gifts_total integer, reminded boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select distinct on (s.room_id)
+    s.room_id, s.id, s.title, s.format, s.starts_at, s.ends_at, s.status,
+    s.host_uid, p.nickname, p.avatar,
+    s.peak_viewers, s.gifts_total,
+    exists (
+      select 1 from public.room_session_reminders r
+      where r.session_id = s.id and r.user_id = auth.uid()
+    )
+  from public.room_sessions s
+  join public.profiles p on p.id = s.host_uid
+  where s.room_id = any (p_room_ids)
+    and s.status in ('live','scheduled')
+  order by s.room_id,
+           case when s.status = 'live' then 0 else 1 end,
+           s.starts_at asc;
+$function$
 
 -- snapshot-fn: notify_broadcast_started
 CREATE OR REPLACE FUNCTION public.notify_broadcast_started()
@@ -16102,6 +16255,66 @@ begin
   return coalesce(tot, 0);
 end; $function$
 
+-- snapshot-fn: room_session_sweep
+CREATE OR REPLACE FUNCTION public.room_session_sweep()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_n int := 0;
+  r record;
+begin
+  -- Auto-end: live > ends_at + 2 jam.
+  update public.room_sessions
+     set status = 'ended', ended_at = now()
+   where status = 'live' and ends_at + interval '2 hours' < now();
+  get diagnostics v_n = row_count;
+
+  -- Tick peak untuk sesi live yang masih berjalan.
+  for r in select room_id from public.room_sessions where status = 'live' loop
+    perform public.room_session_tick(r.room_id);
+  end loop;
+
+  return v_n;
+end;
+$function$
+
+-- snapshot-fn: room_session_tick
+CREATE OR REPLACE FUNCTION public.room_session_tick(p_room_id text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_id bigint;
+  v_viewers int := 0;
+  v_peak int := 0;
+begin
+  select id into v_id from public.room_sessions
+   where room_id = p_room_id and status = 'live'
+   order by started_at desc limit 1;
+  if v_id is null then
+    return jsonb_build_object('ok', true, 'live', false, 'viewers', 0);
+  end if;
+
+  select count(*) into v_viewers
+    from public.room_presence rp
+   where rp.room_id = p_room_id
+     and not exists (select 1 from public.dummy_accounts d where d.uid = rp.user_id);
+
+  update public.room_sessions
+     set peak_viewers = greatest(peak_viewers, v_viewers)
+   where id = v_id
+   returning peak_viewers into v_peak;
+
+  return jsonb_build_object('ok', true, 'live', true,
+                            'viewers', v_viewers, 'peak', v_peak);
+end;
+$function$
+
 -- snapshot-fn: room_voice_heartbeat
 CREATE OR REPLACE FUNCTION public.room_voice_heartbeat(p_room_id text)
  RETURNS void
@@ -16310,6 +16523,56 @@ BEGIN
     RETURN jsonb_build_object('ok', true,
         'dana_number', v_num, 'dana_name', v_name);
 END;
+$function$
+
+-- snapshot-fn: schedule_room_session
+CREATE OR REPLACE FUNCTION public.schedule_room_session(p_room_id text, p_host_uid uuid, p_title text, p_format text, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_id bigint;
+  v_fmt text := coalesce(nullif(trim(p_format), ''), 'bebas');
+begin
+  if not public.is_admin_request() then
+    raise exception 'Unauthorized';
+  end if;
+  if v_fmt not in ('karaoke','curhat','debat','quiz','werewolf','musik','bebas') then
+    raise exception 'Format tidak valid';
+  end if;
+  if length(trim(coalesce(p_title, ''))) < 3 or length(trim(p_title)) > 80 then
+    raise exception 'Judul harus 3-80 karakter';
+  end if;
+  if p_starts_at is null or p_ends_at is null or p_starts_at >= p_ends_at then
+    raise exception 'Jam mulai harus sebelum jam selesai';
+  end if;
+  if not exists (select 1 from public.rooms where id = p_room_id) then
+    raise exception 'Room not found';
+  end if;
+  if not exists (select 1 from public.profiles where id = p_host_uid and is_host = true) then
+    raise exception 'User bukan host (is_host=false)';
+  end if;
+  -- Maks 1 sesi scheduled/live per room pada rentang yang overlap.
+  if exists (
+    select 1 from public.room_sessions s
+    where s.room_id = p_room_id
+      and s.status in ('scheduled','live')
+      and s.starts_at < p_ends_at
+      and s.ends_at > p_starts_at
+  ) then
+    raise exception 'Sudah ada sesi lain di rentang waktu itu';
+  end if;
+
+  insert into public.room_sessions
+    (room_id, host_uid, title, format, starts_at, ends_at, created_by)
+  values
+    (p_room_id, p_host_uid, trim(p_title), v_fmt, p_starts_at, p_ends_at, auth.uid())
+  returning id into v_id;
+
+  return jsonb_build_object('ok', true, 'session_id', v_id);
+end;
 $function$
 
 -- snapshot-fn: scrub_reply_snapshot_private
@@ -16684,10 +16947,157 @@ CREATE OR REPLACE FUNCTION public.send_room_gift(p_room_id text, p_gift_id text,
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-BEGIN
-  RAISE EXCEPTION 'Gift hanya untuk chat pribadi (bukan room/grup)'
-    USING ERRCODE = '42501';
-END;
+declare
+  uid uuid := auth.uid();
+  g record; r record; sess record; points_on boolean; cut_pct int; tx_max int;
+  my_name text; my_gender text; am_registered boolean;
+  n int; cut int; net int; paid int; remaining int;
+  host_id uuid; is_session boolean := false;
+begin
+  if uid is null then raise exception 'Not authenticated'; end if;
+  perform pg_advisory_xact_lock(hashtext('wallet:' || uid::text));
+  if p_qty is null or p_qty < 1 or p_qty > 20 then
+    raise exception 'Invalid qty';
+  end if;
+
+  select points_enabled, coalesce(gift_cut_pct,30), coin_tx_max_per_hour
+    into points_on, cut_pct, tx_max from app_settings where id = 'global';
+  if points_on is false and coalesce(auth.email(),'') <> 'zunixe@gmail.com' then
+    raise exception 'Points system disabled';
+  end if;
+  select is_registered, nickname, gender
+    into am_registered, my_name, my_gender from profiles where id = uid;
+  if am_registered is not true then raise exception 'Sender must be registered'; end if;
+  if my_gender = 'female' then
+    raise exception 'Female cannot send gift' using errcode = '42501';
+  end if;
+  if (select count(*) from coin_ledger
+      where user_id = uid and type in ('coin_sent','gift_sent')
+      and created_at > now() - interval '1 hour') >= coalesce(tx_max, 30) then
+    raise exception 'Too many transactions';
+  end if;
+
+  select * into g from gift_catalog where id = p_gift_id and active = true;
+  if not found then raise exception 'Invalid gift'; end if;
+  n := g.coins * p_qty;
+
+  select * into r from rooms where id = p_room_id;
+  if not found then raise exception 'Room not found'; end if;
+
+  if r.is_private is true then
+    -- Private room: penerima = owner (perilaku lama).
+    if r.expires_at is not null and r.expires_at <= now() then
+      raise exception 'Room expired';
+    end if;
+    host_id := r.owner_id;
+    if host_id is null then raise exception 'Room has no host'; end if;
+    if r.owner_id <> uid
+       and not exists (select 1 from room_members rm
+                        where rm.room_id = p_room_id and rm.user_id = uid) then
+      raise exception 'Not a room member';
+    end if;
+  else
+    -- Room global: hanya saat ada sesi live; penerima = host sesi.
+    select * into sess from room_sessions
+     where room_id = p_room_id and status = 'live'
+     order by started_at desc limit 1;
+    if not found then
+      raise exception 'Tidak ada sesi live di room ini' using errcode = '22023';
+    end if;
+    host_id := sess.host_uid;
+    is_session := true;
+  end if;
+
+  if host_id = uid then raise exception 'Cannot gift self'; end if;
+
+  -- Gift WAJIB koin beli/penghasilan (pola send_gift 2026-11-10):
+  -- bonus hanya boleh menambal lewat promo plafon (ledger_spend_promo).
+  paid := public.yukcoin_spendable(uid, host_id, 100 - cut_pct);
+  if paid < n then
+    raise exception 'Gift membutuhkan koin beli/penghasilan (top-up dulu)'
+      using errcode = '22023';
+  end if;
+
+  remaining := public.ledger_spend_promo(uid, 'gift_sent', n, p_room_id,
+    host_id, 100 - cut_pct);
+
+  cut := (n * cut_pct) / 100;
+  net := n - cut;
+
+  if net > 0 then
+    perform public.ledger_credit(host_id, 'earned', 'gift_recv', net,
+      p_room_id, jsonb_build_object('gift', p_gift_id, 'qty', p_qty,
+                                    'from', uid, 'tier', 'paid'));
+  end if;
+
+  if cut > 0 then
+    insert into platform_revenue(source, amount, from_user, to_user, ref_id, metadata)
+      values ('gift_cut', cut, uid, host_id, p_room_id,
+              jsonb_build_object('gift', p_gift_id, 'qty', p_qty,
+                                 'gross', n, 'net', net, 'pct', cut_pct,
+                                 'session', is_session));
+  end if;
+
+  insert into public.point_events (user_id, event, amount, metadata)
+    values (uid, 'gift_sent', -n,
+            jsonb_build_object('gift', p_gift_id, 'qty', p_qty, 'tier', 'paid')),
+           (host_id, 'gift_recv', net,
+            jsonb_build_object('gift', p_gift_id, 'qty', p_qty, 'tier', 'paid'));
+
+  insert into public.messages
+    (room_id, sender_id, sender_name, sender_gender, text, type, image_data)
+    values (p_room_id, uid, coalesce(my_name,'Anon'), coalesce(my_gender,'other'),
+            p_gift_id, 'gift', '');
+
+  if is_session then
+    update public.room_sessions
+       set gifts_total = gifts_total + n
+     where id = sess.id;
+  end if;
+
+  return jsonb_build_object('ok', true, 'points', coalesce(remaining,0),
+    'gift', p_gift_id, 'qty', p_qty, 'gross', n, 'net', net, 'cut', cut,
+    'tier', 'paid', 'host', host_id, 'session', is_session);
+end;
+$function$
+
+-- snapshot-fn: session_host_mute
+CREATE OR REPLACE FUNCTION public.session_host_mute(p_room_id text, p_target uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  me uuid := auth.uid();
+  v_can boolean;
+begin
+  if me is null then raise exception 'Not authenticated'; end if;
+  if p_target is null or p_target = me then
+    return jsonb_build_object('ok', false, 'reason', 'bad_target');
+  end if;
+
+  select (
+    exists (select 1 from public.rooms r
+             where r.id = p_room_id and r.owner_id = me)
+    or exists (select 1 from public.room_sessions s
+                where s.room_id = p_room_id and s.status = 'live'
+                  and s.host_uid = me)
+    or public.is_admin_request()
+  ) into v_can;
+  if not coalesce(v_can, false) then
+    raise exception 'Unauthorized';
+  end if;
+
+  delete from public.room_voice_speakers
+   where room_id = p_room_id and uid = p_target;
+
+  insert into public.room_voice_signals (room_id, from_uid, to_uid, type, payload)
+  values (p_room_id, me, p_target, 'v_mute',
+          jsonb_build_object('at', now()));
+
+  return jsonb_build_object('ok', true);
+end;
 $function$
 
 -- snapshot-fn: set_dummy_hold
@@ -17200,6 +17610,58 @@ begin
     where id = p_room_id and live_uid is null;
   return jsonb_build_object('ok', true);
 end; $function$
+
+-- snapshot-fn: start_room_session
+CREATE OR REPLACE FUNCTION public.start_room_session(p_session_id bigint)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  s record;
+  v_host_name text;
+  rec record;
+begin
+  if auth.uid() is null then raise exception 'Not authenticated'; end if;
+  select * into s from public.room_sessions where id = p_session_id;
+  if not found then raise exception 'Session not found'; end if;
+  if s.status <> 'scheduled' then raise exception 'Sesi tidak bisa dimulai (status %)', s.status; end if;
+  if s.host_uid <> auth.uid() and not public.is_admin_request() then
+    raise exception 'Hanya host sesi atau admin';
+  end if;
+  if exists (
+    select 1 from public.room_sessions x
+    where x.room_id = s.room_id and x.status = 'live' and x.id <> s.id
+  ) then
+    raise exception 'Masih ada sesi live lain di room ini';
+  end if;
+
+  update public.room_sessions
+     set status = 'live', started_at = now()
+   where id = s.id;
+
+  -- Seed peak dari presence saat ini (tanpa dummy).
+  perform public.room_session_tick(s.room_id);
+
+  -- Notif push ke user yang menekan "Ingatkan" (pola social_push).
+  select nickname into v_host_name from public.profiles where id = s.host_uid;
+  for rec in
+    select r.user_id from public.room_session_reminders r
+    where r.session_id = s.id
+  loop
+    perform public.social_push(
+      rec.user_id,
+      coalesce(v_host_name, 'Host') || ' mulai sesi',
+      s.title,
+      jsonb_build_object('type','room_session','sessionId', s.id::text,
+                         'roomId', s.room_id, 'title', s.title)
+    );
+  end loop;
+
+  return jsonb_build_object('ok', true, 'session_id', s.id, 'room_id', s.room_id);
+end;
+$function$
 
 -- snapshot-fn: stop_broadcast
 CREATE OR REPLACE FUNCTION public.stop_broadcast(p_room_id text)
@@ -17849,6 +18311,37 @@ begin
   return jsonb_build_object('ok', true, 'liked', liked, 'likeCount', coalesce(v_count, 0));
 end; $function$
 
+-- snapshot-fn: toggle_session_reminder
+CREATE OR REPLACE FUNCTION public.toggle_session_reminder(p_session_id bigint)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then raise exception 'Not authenticated'; end if;
+  if not exists (
+    select 1 from public.room_sessions where id = p_session_id and status = 'scheduled'
+  ) then
+    raise exception 'Sesi tidak tersedia untuk diingatkan';
+  end if;
+  if exists (
+    select 1 from public.room_session_reminders
+    where session_id = p_session_id and user_id = uid
+  ) then
+    delete from public.room_session_reminders
+     where session_id = p_session_id and user_id = uid;
+    return jsonb_build_object('ok', true, 'reminded', false);
+  end if;
+  insert into public.room_session_reminders (session_id, user_id)
+  values (p_session_id, uid)
+  on conflict do nothing;
+  return jsonb_build_object('ok', true, 'reminded', true);
+end;
+$function$
+
 -- snapshot-fn: toggle_story_like
 CREATE OR REPLACE FUNCTION public.toggle_story_like(p_story_id uuid)
  RETURNS jsonb
@@ -18258,7 +18751,7 @@ end;
 $function$
 
 -- snapshot-fn: update_mission_progress
-CREATE OR REPLACE FUNCTION public.update_mission_progress(p_user_id uuid, p_mission_key text, p_increment integer DEFAULT 1)
+CREATE OR REPLACE FUNCTION public.update_mission_progress(p_user_id uuid, p_mission_key text, p_increment integer DEFAULT 1, p_tz_offset_minutes integer DEFAULT NULL::integer)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -18271,6 +18764,7 @@ DECLARE
     v_completed boolean;
     v_inc int;
     v_last timestamptz;
+    v_total bigint;
 BEGIN
     if auth.uid() is not null and p_user_id is distinct from auth.uid() then
         return jsonb_build_object('error', 'FORBIDDEN');
@@ -18289,7 +18783,19 @@ BEGIN
         RETURN jsonb_build_object('error', 'MISSION_NOT_FOUND');
     END IF;
 
-    v_period := CASE WHEN v_mission.is_daily THEN CURRENT_DATE ELSE NULL END;
+    -- Tanggal lokal pengguna — sama dengan yang dipakai klien saat membaca.
+    v_period := CASE WHEN v_mission.is_daily
+                     THEN public._local_day(p_tz_offset_minutes) ELSE NULL END;
+
+    -- Kunci 1.200 koin: misi harian belum boleh menambah progres.
+    IF v_mission.is_daily THEN
+        SELECT COALESCE(SUM(amount), 0) INTO v_total
+          FROM public.coin_ledger
+         WHERE user_id = p_user_id AND amount > 0;
+        IF v_total < 1200 THEN
+            RETURN jsonb_build_object('error', 'MISSION_LOCKED');
+        END IF;
+    END IF;
 
     -- 2026-11-10: panggilan KLIEN dibatasi kecepatan nyata — dulu satu
     -- panggilan p_increment=120 menyelesaikan misi apa pun seketika.

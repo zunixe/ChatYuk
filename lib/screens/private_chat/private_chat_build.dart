@@ -1,6 +1,5 @@
 part of '../private_chat_screen.dart';
 
-
 mixin _PcBuildMx on _PrivateChatBase {
   @override
   Future<bool> chatDeleteMessage(String id) async {
@@ -532,7 +531,10 @@ mixin _PcBuildMx on _PrivateChatBase {
     final gift = await showGiftPickerSheet(
       context,
       pointsEnabled: points.enabled,
-      paidBalance: points.spendableBalance,
+      paidBalance: points.paidBalance,
+      bonusBalance: points.bonusBalance,
+      bonusMultiplier: points.bonusMultiplier,
+      promoOk: points.promoOk,
     );
     if (gift != null && mounted) {
       setState(() => _showAttachRow = false);
@@ -665,6 +667,11 @@ mixin _PcBuildMx on _PrivateChatBase {
                   onSend: sendMessage,
                   showAttachRow: _showAttachRow,
                   onToggleAttach: _toggleAttachRow,
+                  // Female tidak punya chip gift/koin — jelaskan dari mana
+                  // koin penghasilannya datang (pria bisa kirim hadiah).
+                  attachHint: !giftAllowed && pointsEnabled
+                      ? s.femaleGiftInfoShort
+                      : null,
                   onCreatePoll: () {
                     setState(() => _showAttachRow = false);
                     _openPollComposer();
@@ -754,4 +761,3 @@ mixin _PcBuildMx on _PrivateChatBase {
     );
   }
 }
-

@@ -1,6 +1,6 @@
 part of '../profile_screen.dart';
 
-mixin _ProfilePhotosMx on _ProfileBase {
+mixin _ProfilePhotosMx on _ProfilePhotosVideoMx {
   @override
   Future<void> _loadPhotos() async {
     final uid = ProviderScope.containerOf(
@@ -17,14 +17,6 @@ mixin _ProfilePhotosMx on _ProfileBase {
     } catch (_) {}
     if (mounted) setState(() => _loadingPhotos = false);
   }
-
-  /// Female: semua upload foto profil WAJIB selfie asli (liveness).
-  bool get _isFemaleAccount => requiresFaceVerifiedPhoto(
-    ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(authProvider).profile?.gender,
-  );
 
   @override
   void _pickGalleryFromSource() {
@@ -78,6 +70,28 @@ mixin _ProfilePhotosMx on _ProfileBase {
               onTap: () {
                 Navigator.pop(sheetCtx);
                 _addGalleryPhoto(ImageSource.gallery);
+              },
+            ),
+            // Video: slot yang sama dengan foto (maks 30 dtk, dikompres 720p).
+            ListTile(
+              leading: const Icon(Icons.videocam, color: AppTheme.primary),
+              title: Text(s.galleryVideoCamera),
+              subtitle: Text(s.galleryVideoHint),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _addGalleryVideo(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.video_library,
+                color: AppTheme.primary,
+              ),
+              title: Text(s.galleryVideoGallery),
+              subtitle: Text(s.galleryVideoHint),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _addGalleryVideo(ImageSource.gallery);
               },
             ),
             const SizedBox(height: 8),

@@ -267,6 +267,17 @@ mixin _AuthActionsMx on _AuthBase {
     String? preview,
     bool faceVerified = false,
   }) => _auth.uploadPhoto(base64, preview: preview, faceVerified: faceVerified);
+  Future<void> uploadVideo({
+    required Uint8List videoBytes,
+    required Uint8List posterBytes,
+    String? preview,
+    bool faceVerified = false,
+  }) => _auth.uploadVideo(
+    videoBytes: videoBytes,
+    posterBytes: posterBytes,
+    preview: preview,
+    faceVerified: faceVerified,
+  );
   Future<void> deletePhoto(String photoId) => _auth.deletePhoto(photoId);
   Future<void> deleteMyAccount() => _auth.deleteMyAccount();
 

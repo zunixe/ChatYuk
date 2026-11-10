@@ -46,6 +46,8 @@ import '../utils/mention.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/verified_badge.dart';
 import '../widgets/chat_call_overlay.dart';
+import '../widgets/gift_play_overlay.dart';
+import 'point_history/widgets/topup_sheet.dart';
 import '../widgets/chat_ui_shared.dart';
 import '../main.dart';
 import 'call_screen.dart';
@@ -209,10 +211,11 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
   // `_hdr` = baca sekali per build; `_patchHdr` = tulis (skip bila identik).
   chat_riverpod.ChatHeader get _hdr =>
       ref.read(chat_riverpod.chatHeaderProvider(widget.chatId));
-  void _patchHdr(chat_riverpod.ChatHeader Function(chat_riverpod.ChatHeader) f) =>
-      ref
-          .read(chat_riverpod.chatHeaderProvider(widget.chatId).notifier)
-          .patch(f);
+  void _patchHdr(
+    chat_riverpod.ChatHeader Function(chat_riverpod.ChatHeader) f,
+  ) => ref
+      .read(chat_riverpod.chatHeaderProvider(widget.chatId).notifier)
+      .patch(f);
   DateTime? _lastIncomingSeen;
   StreamSubscription<List<chat_riverpod.PrivateChatInfo>>? _chatInfoSub;
   StreamSubscription<List<MessageModel>>? _msgsSub;
@@ -233,6 +236,11 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
   StreamSubscription<Set<String>>? _starredSub;
   // Call video dalam chat: overlay panel draggable di atas layar chat.
   bool _callExpanded = false;
+  // Animasi gift besar (Lottie + SFX) di tengah layar — dipicu gift terkirim
+  // (sisi pengirim) / gift masuk fresh (sisi penerima). Dedup per id pesan
+  // supaya emit stream berulang tidak memutar ulang.
+  final _giftPlay = GiftPlayController();
+  final Set<String> _seenGiftAnimIds = {};
   // Foto yang sudah dikonfirmasi server (id pesan server) — dipakai dedupe
   // FIFO karena imageData di stream berupa thumbnail, bukan base64 penuh.
   // Hanya foto dengan timestamp setelah screen dibuka yang diproses, supaya
@@ -367,4 +375,11 @@ abstract class _PrivateChatBase extends ConsumerState<PrivateChatScreen>
 }
 
 class _PrivateChatScreenState extends _PrivateChatBase
-    with _PcCoreMx, _PcChatMx, _PcChat2Mx, _PcMediaMx, _PcBuildMx, _PcPollMx, _PcContactMx {}
+    with
+        _PcCoreMx,
+        _PcChatMx,
+        _PcChat2Mx,
+        _PcMediaMx,
+        _PcBuildMx,
+        _PcPollMx,
+        _PcContactMx {}

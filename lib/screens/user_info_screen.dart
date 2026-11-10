@@ -16,6 +16,7 @@ import '../providers/riverpod/social_provider.dart';
 import '../providers/riverpod/auth_provider.dart';
 import '../providers/riverpod/avatar_provider.dart';
 import 'user_info/user_info_widgets.dart';
+import '../widgets/media/gallery_video_view.dart';
 import '../widgets/profile_style.dart';
 import '../widgets/social_actions.dart';
 import '../widgets/call_permission_dialog.dart';

@@ -1,6 +1,5 @@
 part of '../private_chat_screen.dart';
 
-
 mixin _PcMediaMx on _PrivateChatBase {
   @override
   void _openSearch() {
@@ -126,15 +125,17 @@ mixin _PcMediaMx on _PrivateChatBase {
   Future<String?> stickerDispatch(String path) async {
     final auth = ref.read(authProvider.notifier);
     final prof = auth.profile;
-    return ref.read(chat_riverpod.chatProvider.notifier).sendPrivateMessage(
-      chatId: widget.chatId,
-      senderId: auth.uid!,
-      senderName: prof?.nickname ?? 'Anon',
-      senderGender: prof?.gender ?? 'other',
-      text: '',
-      type: 'sticker',
-      imageData: path,
-    );
+    return ref
+        .read(chat_riverpod.chatProvider.notifier)
+        .sendPrivateMessage(
+          chatId: widget.chatId,
+          senderId: auth.uid!,
+          senderName: prof?.nickname ?? 'Anon',
+          senderGender: prof?.gender ?? 'other',
+          text: '',
+          type: 'sticker',
+          imageData: path,
+        );
   }
 
   /// Sheet lokasi tampil INSTAN (izin dicek murah dulu, GPS menyusul di
@@ -277,6 +278,7 @@ mixin _PcMediaMx on _PrivateChatBase {
     } catch (_) {}
     _chatInfoSub?.cancel();
     _msgsSub?.cancel();
+    _giftPlay.dispose();
     _statusSub?.cancel();
     _typingSub?.cancel();
     _typingClearTimer?.cancel();
@@ -376,7 +378,9 @@ mixin _PcMediaMx on _PrivateChatBase {
       );
       return;
     }
-    final storagePath = await scope.read(storageProvider).uploadVoice(chatId: chatId, bytes: bytes);
+    final storagePath = await scope
+        .read(storageProvider)
+        .uploadVoice(chatId: chatId, bytes: bytes);
     if (storagePath == null || storagePath.isEmpty) {
       if (!outboxIsOnline) {
         final optimisticOffline = MessageModel(
@@ -461,10 +465,7 @@ mixin _PcMediaMx on _PrivateChatBase {
         await keepBlocked(optimistic);
       } else if (mounted) {
         setState(() => _pending.remove(optimistic));
-        showChatSnack(
-          context,
-          scope.read(localeProvider).s.errSendFailed,
-        );
+        showChatSnack(context, scope.read(localeProvider).s.errSendFailed);
       }
     }
   }
@@ -479,15 +480,42 @@ mixin _PcMediaMx on _PrivateChatBase {
     try {
       final res = await chat.sendGift(widget.chatId, widget.otherUid, giftId);
       if (res['ok'] == true) {
+        // Animasi gift besar + SFX — sisi pengirim langsung (tanpa nunggu
+        // emit stream; msg balik di-stream difilter senderId == myUid).
+        final g = giftById(giftId);
+        if (g != null) {
+          _giftPlay.push(g, s.giftAnimYouSent(name));
+        }
         if (res['points'] != null) {
           points.setPoints((res['points'] as num).toInt());
         }
+        // Bucket (Isi ulang/Bonus/Penghasilan) ikut berubah — tanpa ini
+        // kartu profil menampilkan angka LAMA (mis. "Isi ulang 215" padahal
+        // sudah habis) dan total tidak cocok dengan rincian.
+        unawaited(points.refreshWallet());
         _maybeNewChatBonus();
         if (mounted) points.showPointsToast(context, s.giftSentToast(name));
         _scrollToBottom();
       }
     } catch (e) {
       final msg = e.toString();
+      // Koin habis → dialog yang mengarahkan ke top-up (bukan snackbar).
+      if ((msg.contains('Not enough') || msg.contains('koin beli')) &&
+          mounted) {
+        // Alasan konkret: harga, koin berbayar, bonus yang menambal ×3,
+        // dan kekurangannya — bukan pesan umum.
+        final paid = points.paidBalance;
+        final usable = points.spendableBalance;
+        final short = coins - usable;
+        await showTopupPrompt(
+          context,
+          s,
+          body: short > 0
+              ? s.giftCantAffordBody(coins, paid, usable - paid, short)
+              : null,
+        );
+        return;
+      }
       final show = msg.contains('Female cannot send gift')
           ? s.giftFemaleBlocked
           : msg.contains('Not enough')
@@ -565,4 +593,3 @@ mixin _PcMediaMx on _PrivateChatBase {
     );
   }
 }
-

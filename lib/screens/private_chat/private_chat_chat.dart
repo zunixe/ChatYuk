@@ -1,6 +1,5 @@
 part of '../private_chat_screen.dart';
 
-
 mixin _PcChatMx on _PrivateChatBase {
   @override
   TextEditingController get chatMsgCtrl => _msgCtrl;
@@ -140,6 +139,30 @@ mixin _PcChatMx on _PrivateChatBase {
             _lastIncomingSeen = latestIncoming;
             chat.markAsRead(widget.chatId, myUid);
           }
+          // Animasi gift besar + SFX untuk gift MASUK yang fresh (<5 dtk,
+          // belum pernah dimainkan). Gift dari diri sendiri tidak di sini —
+          // sudah dipicu langsung saat _sendGift sukses.
+          for (final m in msgs) {
+            if (m.type != 'gift' || m.senderId == myUid) continue;
+            if (!_seenGiftAnimIds.add(m.id)) continue;
+            if (_seenGiftAnimIds.length > 300) {
+              _seenGiftAnimIds.remove(_seenGiftAnimIds.first);
+            }
+            if (DateTime.now().difference(m.timestamp) >
+                const Duration(seconds: 5)) {
+              continue;
+            }
+            final g = giftById(m.text);
+            if (g == null) continue;
+            final sAnim = scope.read(localeProvider).s;
+            // Koin NETTO yang masuk ke saldo penerima (harga - cut server).
+            final net = scope.read(pointsProvider).giftNet(g.coins);
+            _giftPlay.push(
+              g,
+              '${sAnim.giftAnimSomeoneSent(m.senderName, sAnim.isId ? g.nameId : g.nameEn)}'
+              '${net > 0 ? ' · +$net 🪙' : ''}',
+            );
+          }
         }
         if (_pending.isEmpty || !mounted) return;
         final mySenderIds = _pending.map((p) => p.senderId).toSet();
@@ -155,6 +178,7 @@ mixin _PcChatMx on _PrivateChatBase {
           _pending.remove(live.removeAt(idx));
           changed = true;
         }
+
         // A2 (2026-10-11): SATU pass atas `msgs` (dulu 6 loop penuh terpisah).
         // Semantik SAMA — tiap jenis diklasifikasi via switch, aksi per-jenis
         // dijalankan inline. Bounded N≤100, tapi dari 6×O(N) → 1×O(N)/emit.
@@ -299,7 +323,9 @@ mixin _PcChatMx on _PrivateChatBase {
     // Subscription non-kritis ditunda ke post-frame supaya frame pertama
     // (list pesan) tidak tertahan — ala WhatsApp: pesan tampil dulu,
     // status/typing/centang-2 menyusul di frame berikutnya.
-    _wasBlocked = scope.read(chat_riverpod.chatProvider.notifier).isBlocked(widget.otherUid);
+    _wasBlocked = scope
+        .read(chat_riverpod.chatProvider.notifier)
+        .isBlocked(widget.otherUid);
 
     /// P1b: banding reaksi (map pesan→emoji→count) — skip rebuild bila emit
     /// realtime tak mengubah isi (heartbeat/re-emit).

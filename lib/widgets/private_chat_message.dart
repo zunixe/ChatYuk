@@ -49,9 +49,10 @@ void _trackGiftMissionOnce(BuildContext context, String msgId) {
   if (_giftMissionTracked.length > 500) {
     _giftMissionTracked.remove(_giftMissionTracked.first);
   }
-  ProviderScope.containerOf(context, listen: false)
-      .read(pointsProvider.notifier)
-      .trackMission('daily_receive_gift');
+  ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(pointsProvider.notifier).trackMission('daily_receive_gift');
 }
 
 /// Ikon jenis pesan untuk penanda "dihapus" di monitor admin — supaya admin
@@ -78,9 +79,6 @@ IconData adminDeletedTypeIcon(String type) {
   }
 }
 
-
-
-
 class MessageBubble extends StatelessWidget {
   final MessageModel msg;
   final String chatKey;
@@ -96,11 +94,13 @@ class MessageBubble extends StatelessWidget {
   // generate otomatis; tampil placeholder + tap untuk memuat (pola sama
   // seperti isImageDeferred untuk foto).
   final bool autoVideoPoster;
+
   /// Link preview: auto-fetch saat bubble ini di-mount. `false` (pesan lama
   /// / jauh dari viewport) → preview hanya muncul bila sudah di cache, jika
   /// belum user mengetuk untuk memuat. Memangkas puluhan HTTP GET saat chat
   /// padat URL (khas balasan AI) dibuka.
   final bool autoLinkPreview;
+
   /// Batas baris blok kode ``` untuk pesan ini. Non-null saat pesan jauh dari
   /// viewport → blok kode panjang dirender ringkas.
   final int? codeMaxLines;
@@ -116,9 +116,11 @@ class MessageBubble extends StatelessWidget {
   // Link anchor milik bubble ini (dibuat & dikelola oleh screen agar stabil
   // antar rebuild ListView — lihat _msgLinks di private_chat_screen).
   final LayerLink link;
+
   /// PRIVASI: id pesan (chat/room) yang terhapus — quote reply yang
   /// menunjuk salah satunya dirender "Pesan dihapus", bukan isinya.
   final Set<String> deletedIds;
+
   /// Geser bubble ke KANAN → langsung balas pesan ini (ala WhatsApp).
   /// Kosong = fitur swipe dimatikan (mis. monitor admin read-only).
   final VoidCallback? onSwipeReply;
@@ -127,11 +129,13 @@ class MessageBubble extends StatelessWidget {
   final bool starred;
   final VoidCallback? onTapSelect;
   final VoidCallback? onTapBadge;
+
   /// Highlight `@all` — hanya private room/grup. Global room & private 1:1
   /// selalu false (token `@all` tampil sebagai teks biasa).
   final bool highlightMentionAll;
   // Kata kunci search chat — diteruskan ke teks bubble (kosong = mati).
   final String searchQuery;
+
   /// Admin monitor: tampilkan centang di KEDUA sisi (kiri & kanan), bukan
   /// hanya milik pengirim. Tujuannya admin melihat status baca kedua orang.
   final bool showChecksBothSides;
@@ -173,10 +177,12 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = this.s ??
-        ProviderScope.containerOf(context, listen: false)
-            .read(localeProvider)
-            .s;
+    final s =
+        this.s ??
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(localeProvider).s;
     final timeStr = formatBubbleTime(msg.timestamp);
     // Stiker ala Telegram: melayang TANPA card bubble & TANPA jam/centang.
     final isSticker = msg.type == 'sticker';
@@ -187,8 +193,9 @@ class MessageBubble extends StatelessWidget {
     // PERF: `extractUrl` (regex) dihitung SEKALI per build lalu dipakai ulang
     // di semua cabang (kerangka bubble + kartu link). Dulu dipanggil 2-3×
     // dengan hasil sama → kerja regex sia-sia tiap bubble di-rebuild (scroll).
-    final String? cardLinkUrl =
-        (msg.type == 'text' && !msg.isDeleted) ? LinkPreviewService.instance.extractUrl(msg.text) : null;
+    final String? cardLinkUrl = (msg.type == 'text' && !msg.isDeleted)
+        ? LinkPreviewService.instance.extractUrl(msg.text)
+        : null;
     final hasLinkCard = cardLinkUrl != null;
     // Link yang dikirim SENDIRIAN (teks = URL saja) → JANGAN tulis ulang
     // URL-nya di bawah card (minta user). Teks tetap utuh di `msg.text`
@@ -196,12 +203,14 @@ class MessageBubble extends StatelessWidget {
     final linkTextOnly =
         hasLinkCard && LinkPreviewService.instance.isUrlOnly(msg.text);
     // Pesan TEKS yang membalas → kutipan selebar bubble (lihat _replyWidth).
-    final stretchReply = msg.type == 'text' &&
+    final stretchReply =
+        msg.type == 'text' &&
         !msg.isDeleted &&
         (msg.repliedToText?.isNotEmpty ?? false);
     // Termasuk foto sekali-lihat: dulu padding teks 10×6 → card terkunci
     // terbungkus bingkai bubble tebal ("card belakangnya overlap").
-    final isMediaCard = msg.type == 'image' ||
+    final isMediaCard =
+        msg.type == 'image' ||
         msg.type == 'view_once' ||
         msg.type == 'view_once_expired' ||
         msg.type == 'video' ||
@@ -249,7 +258,8 @@ class MessageBubble extends StatelessWidget {
     );
     // Ada isi kutipan? (teks ATAU jenis media — WhatsApp selalu mengutip
     // foto/video walau tanpa caption).
-    final hasReply = !msg.isDeleted &&
+    final hasReply =
+        !msg.isDeleted &&
         msg.type != 'sticker' &&
         ((msg.repliedToText?.isNotEmpty ?? false) ||
             (msg.repliedToMeta != null && msg.repliedToMeta!.isNotEmpty));
@@ -287,6 +297,7 @@ class MessageBubble extends StatelessWidget {
       }
       return SizedBox(width: mediaReplyW, child: child);
     }
+
     return CompositedTransformTarget(
       link: link,
       // AppGestureDetector: tahan 600ms (longPressBubble) → toolbar seleksi/
@@ -301,691 +312,807 @@ class MessageBubble extends StatelessWidget {
           enabled: onSwipeReply != null && onTapSelect == null,
           onReply: onSwipeReply,
           child: Padding(
-          padding: EdgeInsets.only(bottom: reactions != null && reactions!.isNotEmpty ? 12 : 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: isMe
-                ? MainAxisAlignment.end
-                : MainAxisAlignment.start,
-            children: [
-              Flexible(
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                  // Kartu media memakai lebar `chatMediaWidth` (72%) + padding
-                  // 4 kiri-kanan → batas 80% membuat bubble lebih SEMPIT dari
-                  // kartunya sehingga margin kiri-kanan terlihat lebar.
-                  // Beri ruang pas untuk kartu media; teks tetap 80%.
-                  constraints: BoxConstraints(
-                    // `bubbleLetter` null (media berbalasan) → panel teks
-                    // kanan yang menentukan lebar; lebar media dihitung
-                    // terpisah (mediaReplyW).
-                    maxWidth: screenW * (bubbleLetter ?? 1.0),
-                  ),
-                  // Stiker melayang: tanpa padding card.
-                  padding: isSticker
-                      ? EdgeInsets.zero
-                      : isMediaCard
-                      ? const EdgeInsets.all(4)
-                      : hasLinkCard
-                      ? const EdgeInsets.fromLTRB(4, 4, 4, 6)
-                      // Reply: padding bubble tetap 4 (sejajar kartu media);
-                      // tab untuk teks isi diberikan di dalam.
-                      : stretchReply
-                      ? const EdgeInsets.symmetric(horizontal: 4, vertical: 6)
-                      : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
-                    // Bubble lawan (other) pakai bgCard (putih di light mode) + shadow
-                    // halus supaya tetap kontras di atas wallpaper chat apa pun.
-                    // Terpilih: tint primary 0.20 di atas warna dasar — senada
-                    // kartu terpilih di list Pesan + toolbar seleksi.
-                    // Stiker: transparan (kecuali dipilih → tint seleksi).
-                    color: isSticker && !selected ? Colors.transparent : Color.alphaBlend(
-                      AppTheme.primary.withValues(
-                        alpha: selected ? 0.20 : 0.0,
-                      ),
-                      msg.type == 'coin'
-                          ? Color(0xFFFFF3C4)
-                          : (isMe
-                                ? Color.alphaBlend(
-                                    AppTheme.primary.withValues(alpha: 0.25),
-                                    AppTheme.bgCard,
-                                  )
-                                : AppTheme.bgCard),
-                    ),
-                    boxShadow: isSticker ? null : [BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 6, offset: const Offset(0, 1.5))],
-                    border: selected
-                        ? Border.all(color: AppTheme.primary, width: 2)
-                        : null,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(10),
-                      topRight: const Radius.circular(10),
-                      bottomLeft: Radius.circular(isMe ? 10 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 10),
-                    ),
-                  ),
-                  child: _replyWidth(
-                    stretchReply,
-                    _replyPanel(
-                      layout: mediaReplyLayout,
-                      quote: quote,
-                      panelWidth: replyPanelW,
-                      children: [
-                    // Konten (teks + jam) center vertikal dalam bubble saat
-                    // bubble lebih tinggi dari konten (mis. caption pendek di
-                    // bawah foto).
-                    // RATA KIRI ala WhatsApp (2026-10-18) — dulu bubble sendiri
-                    // rata kanan (kutipan & teks menggantung di kanan). Teks
-                    // ber-balasan: kutipan SELEBAR bubble (StretchTo
-                    // Widest hanya di kasus ini → biaya layout tetap kecil).
-                    // DIBUNGKUS panel: bubble MEDIA berbalasan → media kiri +
-                    // panel kanan (kutipan/caption/jam), lihat _replyPanel.
-                      if (msg.isForwarded)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 2),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+            padding: EdgeInsets.only(
+              bottom: reactions != null && reactions!.isNotEmpty ? 12 : 8,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: isMe
+                  ? MainAxisAlignment.end
+                  : MainAxisAlignment.start,
+              children: [
+                Flexible(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        // Kartu media memakai lebar `chatMediaWidth` (72%) + padding
+                        // 4 kiri-kanan → batas 80% membuat bubble lebih SEMPIT dari
+                        // kartunya sehingga margin kiri-kanan terlihat lebar.
+                        // Beri ruang pas untuk kartu media; teks tetap 80%.
+                        constraints: BoxConstraints(
+                          // `bubbleLetter` null (media berbalasan) → panel teks
+                          // kanan yang menentukan lebar; lebar media dihitung
+                          // terpisah (mediaReplyW).
+                          maxWidth: screenW * (bubbleLetter ?? 1.0),
+                        ),
+                        // Stiker melayang: tanpa padding card.
+                        padding: isSticker
+                            ? EdgeInsets.zero
+                            : isMediaCard
+                            ? const EdgeInsets.all(4)
+                            : hasLinkCard
+                            ? const EdgeInsets.fromLTRB(4, 4, 4, 6)
+                            // Reply: padding bubble tetap 4 (sejajar kartu media);
+                            // tab untuk teks isi diberikan di dalam.
+                            : stretchReply
+                            ? const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 6,
+                              )
+                            : const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                        decoration: BoxDecoration(
+                          // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
+                          // Bubble lawan (other) pakai bgCard (putih di light mode) + shadow
+                          // halus supaya tetap kontras di atas wallpaper chat apa pun.
+                          // Terpilih: tint primary 0.20 di atas warna dasar — senada
+                          // kartu terpilih di list Pesan + toolbar seleksi.
+                          // Stiker: transparan (kecuali dipilih → tint seleksi).
+                          color: isSticker && !selected
+                              ? Colors.transparent
+                              : Color.alphaBlend(
+                                  AppTheme.primary.withValues(
+                                    alpha: selected ? 0.20 : 0.0,
+                                  ),
+                                  msg.type == 'coin'
+                                      ? Color(0xFFFFF3C4)
+                                      : (isMe
+                                            ? Color.alphaBlend(
+                                                AppTheme.primary.withValues(
+                                                  alpha: 0.25,
+                                                ),
+                                                AppTheme.bgCard,
+                                              )
+                                            : AppTheme.bgCard),
+                                ),
+                          boxShadow: isSticker
+                              ? null
+                              : [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.22),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 1.5),
+                                  ),
+                                ],
+                          border: selected
+                              ? Border.all(color: AppTheme.primary, width: 2)
+                              : null,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(10),
+                            topRight: const Radius.circular(10),
+                            bottomLeft: Radius.circular(isMe ? 10 : 4),
+                            bottomRight: Radius.circular(isMe ? 4 : 10),
+                          ),
+                        ),
+                        child: _replyWidth(
+                          stretchReply,
+                          _replyPanel(
+                            layout: mediaReplyLayout,
+                            quote: quote,
+                            panelWidth: replyPanelW,
                             children: [
-                              Icon(
-                                Icons.forward,
-                                size: 14,
-                                color: AppTheme.textSecondary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                s.msgForwardedLabel,
-                                style: AppText.caption.copyWith(
-                                  color: AppTheme.textSecondary,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (starred)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 2),
-                          child: Icon(
-                            Icons.star,
-                            size: 14,
-                            color: const Color(0xFFFFB300),
-                          ),
-                        ),
-                      // Monitor admin: pesan yang dihapus pengirim tetap
-                      // menampilkan ISI ASLI, ditandai banner jelas supaya
-                      // admin tahu itu sudah dihapus.
-                      if (msg.isDeleted && isAdminView)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.danger.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: AppTheme.danger.withValues(alpha: 0.4),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.delete_outline,
-                                  size: 12,
-                                  color: AppTheme.danger,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  s.adminDeletedMarker,
-                                  style: AppText.micro.copyWith(
-                                    color: AppTheme.danger,
-                                    fontWeight: FontWeight.w700,
+                              // Konten (teks + jam) center vertikal dalam bubble saat
+                              // bubble lebih tinggi dari konten (mis. caption pendek di
+                              // bawah foto).
+                              // RATA KIRI ala WhatsApp (2026-10-18) — dulu bubble sendiri
+                              // rata kanan (kutipan & teks menggantung di kanan). Teks
+                              // ber-balasan: kutipan SELEBAR bubble (StretchTo
+                              // Widest hanya di kasus ini → biaya layout tetap kecil).
+                              // DIBUNGKUS panel: bubble MEDIA berbalasan → media kiri +
+                              // panel kanan (kutipan/caption/jam), lihat _replyPanel.
+                              if (msg.isForwarded)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 2),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.forward,
+                                        size: 14,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        s.msgForwardedLabel,
+                                        style: AppText.caption.copyWith(
+                                          color: AppTheme.textSecondary,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (msg.type == 'voice' && msg.imageData.isNotEmpty)
-                        VoiceBubble(
-                          path: msg.imageData,
-                          durationMs: msg.durationMs ?? 0,
-                          isMe: isMe,
-                          timeStr: timeStr,
-                          isPending: isPending,
-                          isQueued: isQueued,
-                          isRead: isRead,
-                        )
-                      else if (msg.type == 'video_once_expired' &&
-                          !isMe &&
-                          !isAdminView)
-                        // Video kadaluarsa sisi PENERIMA: kartu terkunci
-                        // "Video sudah kadaluarsa". Jam OVERLAY di DALAM card
-                        // (kanan 6 bawah 6) — SAMA seperti foto kadaluarsa
-                        // (ViewOnce), bukan di bawah. Tidak ada badge durasi
-                        // di card terkunci jadi tidak bertumpuk.
-                        SizedBox(
-                          // Lebar = card terkunci (bukan lebar video) → bubble
-                          // pas mengikuti card, tanpa sisa area kosong.
-                          width: ViewOnceLockedCard.cardWidth,
-                          child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ChatVideoBubble(
-                              videoData: msg.imageData,
-                              durationMs: msg.durationMs ?? 0,
-                              // Terkunci untuk PENERIMA. Pengirim tetap boleh
-                              // melihat videonya sendiri (pola sama foto).
-                              // Admin monitor: tidak pernah terkunci.
-                              locked: !isMe,
-                              isOnce: true,
-                              messageId: msg.id,
-                              isMe: isMe,
-                              isAdminView: isAdminView,
-                              autoPoster: autoVideoPoster,
-                              posterPath: msg.videoPoster,
-                              timeStr: timeStr,
-                              showChecks: isMe || showChecksBothSides,
-                              isPending: isPending,
-                              isQueued: isQueued,
-                              isRead: isRead,
-                            ),
-                            if (msg.text.isNotEmpty)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(8, 4, 8, 0),
-                                child: MentionAwareText(
-                                  msg.text,
-                                  style: AppText.chatBody.copyWith(
-                                    color: AppTheme.textPrimary,
+                              if (starred)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 2),
+                                  child: Icon(
+                                    Icons.star,
+                                    size: 14,
+                                    color: const Color(0xFFFFB300),
                                   ),
-                                  mentions: msg.mentions,
                                 ),
-                              ),
-                          ],
-                          ),
-                        )
-                      else if (((msg.type == 'video' ||
-                                  msg.type == 'video_once') &&
-                              msg.imageData.isNotEmpty) ||
-                          // Kadaluarsa sisi PENGIRIM/admin: videonya masih
-                          // bisa diputar (data tidak dihapus) → jam di BAWAH
-                          // seperti video biasa, bukan overlay.
-                          msg.type == 'video_once_expired')
-                        // Jam di BAWAH video dalam bubble (kanan) — TIDAK
-                        // overlay supaya tidak bertumpuk dengan badge durasi
-                        // di dalam video. Sama untuk pengirim & penerima.
-                        // Lebar dikunci selebar video (ala LocationBubble);
-                        // media berbalasan → dilebarkan panel kanan (Row).
-                        replyMediaBox(SizedBox(
-                          width: mediaReplyLayout
-                              ? mediaReplyW
-                              : ChatVideoBubble.widthOf(context),
-                          child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ChatVideoBubble(
-                              videoData: msg.imageData,
-                              durationMs: msg.durationMs ?? 0,
-                              // Sekali lihat: sudah ditonton → terkunci.
-                              locked: false,
-                              isOnce: msg.type == 'video_once' ||
-                                  msg.type == 'video_once_expired',
-                              messageId: msg.id,
-                              isMe: isMe,
-                              isAdminView: isAdminView,
-                              autoPoster: autoVideoPoster,
-                              posterPath: msg.videoPoster,
-                            ),
-                            // Caption + jam SEBARIS ala chat teks (nempel, hemat
-                            // tinggi): caption pendek → jam nempel di ujung
-                            // baris; caption panjang → jam di akhir baris
-                            // terakhir. Tanpa caption → jam di bawah (rapat).
-                            if (msg.text.isNotEmpty && !mediaReplyLayout)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: 4,
-                                  bottom: 4,
+                              // Monitor admin: pesan yang dihapus pengirim tetap
+                              // menampilkan ISI ASLI, ditandai banner jelas supaya
+                              // admin tahu itu sudah dihapus.
+                              if (msg.isDeleted && isAdminView)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.danger.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: AppTheme.danger.withValues(
+                                          alpha: 0.4,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.delete_outline,
+                                          size: 12,
+                                          color: AppTheme.danger,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          s.adminDeletedMarker,
+                                          style: AppText.micro.copyWith(
+                                            color: AppTheme.danger,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                child: MediaCaptionTime(
-                                  text: msg.text,
+                              if (msg.type == 'voice' &&
+                                  msg.imageData.isNotEmpty)
+                                VoiceBubble(
+                                  path: msg.imageData,
+                                  durationMs: msg.durationMs ?? 0,
+                                  isMe: isMe,
                                   timeStr: timeStr,
-                                  textStyle: AppText.chatBody.copyWith(
-                                    color: AppTheme.textPrimary,
+                                  isPending: isPending,
+                                  isQueued: isQueued,
+                                  isRead: isRead,
+                                )
+                              else if (msg.type == 'video_once_expired' &&
+                                  !isMe &&
+                                  !isAdminView)
+                                // Video kadaluarsa sisi PENERIMA: kartu terkunci
+                                // "Video sudah kadaluarsa". Jam OVERLAY di DALAM card
+                                // (kanan 6 bawah 6) — SAMA seperti foto kadaluarsa
+                                // (ViewOnce), bukan di bawah. Tidak ada badge durasi
+                                // di card terkunci jadi tidak bertumpuk.
+                                SizedBox(
+                                  // Lebar = card terkunci (bukan lebar video) → bubble
+                                  // pas mengikuti card, tanpa sisa area kosong.
+                                  width: ViewOnceLockedCard.cardWidth,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      ChatVideoBubble(
+                                        videoData: msg.imageData,
+                                        durationMs: msg.durationMs ?? 0,
+                                        // Terkunci untuk PENERIMA. Pengirim tetap boleh
+                                        // melihat videonya sendiri (pola sama foto).
+                                        // Admin monitor: tidak pernah terkunci.
+                                        locked: !isMe,
+                                        isOnce: true,
+                                        messageId: msg.id,
+                                        isMe: isMe,
+                                        isAdminView: isAdminView,
+                                        autoPoster: autoVideoPoster,
+                                        posterPath: msg.videoPoster,
+                                        timeStr: timeStr,
+                                        showChecks: isMe || showChecksBothSides,
+                                        isPending: isPending,
+                                        isQueued: isQueued,
+                                        isRead: isRead,
+                                      ),
+                                      if (msg.text.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            8,
+                                            4,
+                                            8,
+                                            0,
+                                          ),
+                                          child: MentionAwareText(
+                                            msg.text,
+                                            style: AppText.chatBody.copyWith(
+                                              color: AppTheme.textPrimary,
+                                            ),
+                                            mentions: msg.mentions,
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                                  timeStyle: AppText.chatTime.copyWith(
-                                    color: AppTheme.textSecondary,
-                                    fontWeight: FontWeight.w400,
+                                )
+                              else if (((msg.type == 'video' ||
+                                          msg.type == 'video_once') &&
+                                      msg.imageData.isNotEmpty) ||
+                                  // Kadaluarsa sisi PENGIRIM/admin: videonya masih
+                                  // bisa diputar (data tidak dihapus) → jam di BAWAH
+                                  // seperti video biasa, bukan overlay.
+                                  msg.type == 'video_once_expired')
+                                // Jam di BAWAH video dalam bubble (kanan) — TIDAK
+                                // overlay supaya tidak bertumpuk dengan badge durasi
+                                // di dalam video. Sama untuk pengirim & penerima.
+                                // Lebar dikunci selebar video (ala LocationBubble);
+                                // media berbalasan → dilebarkan panel kanan (Row).
+                                replyMediaBox(
+                                  SizedBox(
+                                    width: mediaReplyLayout
+                                        ? mediaReplyW
+                                        : ChatVideoBubble.widthOf(context),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        ChatVideoBubble(
+                                          videoData: msg.imageData,
+                                          durationMs: msg.durationMs ?? 0,
+                                          // Sekali lihat: sudah ditonton → terkunci.
+                                          locked: false,
+                                          isOnce:
+                                              msg.type == 'video_once' ||
+                                              msg.type == 'video_once_expired',
+                                          messageId: msg.id,
+                                          isMe: isMe,
+                                          isAdminView: isAdminView,
+                                          autoPoster: autoVideoPoster,
+                                          posterPath: msg.videoPoster,
+                                        ),
+                                        // Caption + jam SEBARIS ala chat teks (nempel, hemat
+                                        // tinggi): caption pendek → jam nempel di ujung
+                                        // baris; caption panjang → jam di akhir baris
+                                        // terakhir. Tanpa caption → jam di bawah (rapat).
+                                        if (msg.text.isNotEmpty &&
+                                            !mediaReplyLayout)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 4,
+                                              bottom: 4,
+                                            ),
+                                            child: MediaCaptionTime(
+                                              text: msg.text,
+                                              timeStr: timeStr,
+                                              textStyle: AppText.chatBody
+                                                  .copyWith(
+                                                    color: AppTheme.textPrimary,
+                                                  ),
+                                              timeStyle: AppText.chatTime
+                                                  .copyWith(
+                                                    color:
+                                                        AppTheme.textSecondary,
+                                                    fontWeight: FontWeight.w400,
+                                                  ),
+                                              showChecks:
+                                                  isMe || showChecksBothSides,
+                                              isPending: isPending,
+                                              isQueued: isQueued,
+                                              isRead: isRead,
+                                              leftInset: 8,
+                                            ),
+                                          )
+                                        else if (mediaReplyLayout)
+                                          // Jam dilipat ke panel kanan (Row) — panel
+                                          // sudah menyediakan teks + jam.
+                                          const SizedBox.shrink()
+                                        else
+                                          Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              8,
+                                              2,
+                                              0,
+                                              0,
+                                            ),
+                                            child: Align(
+                                              alignment: Alignment.centerRight,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    timeStr,
+                                                    style: AppText.chatTime
+                                                        .copyWith(
+                                                          color: AppTheme
+                                                              .textSecondary,
+                                                        ),
+                                                  ),
+                                                  if (isMe ||
+                                                      showChecksBothSides) ...[
+                                                    const SizedBox(width: 3),
+                                                    Icon(
+                                                      (isPending || isQueued)
+                                                          ? Icons.done
+                                                          : Icons.done_all,
+                                                      size: 12,
+                                                      color:
+                                                          (!isQueued &&
+                                                              !isPending &&
+                                                              isRead)
+                                                          ? AppTheme.primary
+                                                          : AppTheme
+                                                                .textSecondary,
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
+                                )
+                              else if (msg.type == 'image' &&
+                                  msg.imageData.isNotEmpty)
+                                _PhotoBubble(
+                                  msg: msg,
+                                  chatKey: chatKey,
+                                  timeStr: timeStr,
+                                  isMe: isMe,
+                                  isRead: isRead,
+                                  isPending: isPending,
+                                  isQueued: isQueued,
+                                  showChecksBothSides: showChecksBothSides,
+                                  highlightMentionAll: highlightMentionAll,
+                                  autoLinkPreview: autoLinkPreview,
+                                  // Media berbalasan: caption dirender di panel kanan
+                                  // (lihat _replyPanel) — jangan dobel di bawah foto.
+                                  suppressCaption: mediaReplyLayout,
+                                )
+                              else if (msg.type == 'image' &&
+                                  msg.imageData.isEmpty &&
+                                  isImageDeferred)
+                                DeferredImage(
+                                  onTap: () async => onRetryImage?.call(msg.id),
+                                )
+                              else if (msg.type == 'poll' && msg.poll != null)
+                                PollBubble(
+                                  msg: msg,
+                                  // chatKey = 'private_<chatId>' (lihat cacheKeyFor).
+                                  chatId: chatKey.startsWith('private_')
+                                      ? chatKey.substring(8)
+                                      : chatKey,
+                                  timeStr: timeStr,
                                   showChecks: isMe || showChecksBothSides,
                                   isPending: isPending,
                                   isQueued: isQueued,
                                   isRead: isRead,
-                                  leftInset: 8,
-                                ),
-                              )
-                            else if (mediaReplyLayout)
-                              // Jam dilipat ke panel kanan (Row) — panel
-                              // sudah menyediakan teks + jam.
-                              const SizedBox.shrink()
-                            else
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(8, 2, 0, 0),
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        timeStr,
-                                        style: AppText.chatTime.copyWith(
-                                          color: AppTheme.textSecondary,
+                                )
+                              else if (msg.type == 'contact' &&
+                                  msg.contact != null)
+                                ContactBubble(
+                                  msg: msg,
+                                  timeStr: timeStr,
+                                  showChecks: isMe || showChecksBothSides,
+                                  isPending: isPending,
+                                  isQueued: isQueued,
+                                  isRead: isRead,
+                                )
+                              else if (msg.type == 'file')
+                                FileBubble(
+                                  msg: msg,
+                                  timeStr: timeStr,
+                                  isMe: isMe,
+                                  showChecks: isMe || showChecksBothSides,
+                                  isPending: isPending,
+                                  isQueued: isQueued,
+                                  isRead: isRead,
+                                )
+                              else if (msg.type == 'location' &&
+                                  parseLocation(msg.text) != null)
+                                // Media berbalasan → lebar peta mengikuti panel kanan
+                                // (thumbnail peta tetap persegi, ala WhatsApp).
+                                replyMediaBox(
+                                  LocationBubble(
+                                    location: parseLocation(msg.text)!,
+                                    timeStr: mediaReplyLayout ? '' : timeStr,
+                                    showChecks: isMe || showChecksBothSides,
+                                    isPending: isPending,
+                                    isQueued: isQueued,
+                                    isRead: isRead,
+                                  ),
+                                )
+                              else if (msg.type == 'sticker')
+                                // Melayang ala Telegram: gambar saja, tanpa jam/centang.
+                                StickerBubble(
+                                  data: msg.imageData,
+                                  size: chatStickerSize(
+                                    MediaQuery.sizeOf(context).width,
+                                  ),
+                                )
+                              else if (msg.type == 'view_once' ||
+                                  msg.type == 'view_once_expired')
+                                replyMediaBox(
+                                  ViewOnceCardContent(
+                                    msg: msg,
+                                    chatKey: chatKey,
+                                    isMe: isMe,
+                                    isAdminView: isAdminView,
+                                    isRoom: isRoom,
+                                    timeStr: timeStr,
+                                    showChecks: isMe || showChecksBothSides,
+                                    isPending: isPending,
+                                    isQueued: isQueued,
+                                    isRead: isRead,
+                                    mediaMaxWidth: mediaReplyLayout
+                                        ? mediaReplyW
+                                        : MediaQuery.sizeOf(context).width *
+                                                  (bubbleLetter ?? 1.0) -
+                                              8,
+                                    showCaption:
+                                        msg.text.isNotEmpty &&
+                                        !mediaReplyLayout,
+                                    queueTooltip: isQueued
+                                        ? s.msgWaitingConnection
+                                        : '',
+                                  ),
+                                )
+                              else if (msg.type == 'coin')
+                                Builder(
+                                  builder: (context) {
+                                    final s =
+                                        this.s ??
+                                        ProviderScope.containerOf(
+                                          context,
+                                          listen: false,
+                                        ).read(localeProvider).s;
+                                    final amount = int.tryParse(msg.text) ?? 0;
+                                    return Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '🪙',
+                                          style: TextStyle(
+                                            fontSize: AppGlyph.sm,
+                                          ),
                                         ),
-                                      ),
-                                      if (isMe || showChecksBothSides) ...[
-                                        const SizedBox(width: 3),
-                                        Icon(
-                                          (isPending || isQueued)
-                                              ? Icons.done
-                                              : Icons.done_all,
-                                          size: 12,
-                                          color: (!isQueued &&
-                                                  !isPending &&
-                                                  isRead)
-                                              ? AppTheme.primary
-                                              : AppTheme.textSecondary,
+                                        SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            isMe
+                                                ? s.coinBubbleSent(amount)
+                                                : s.coinBubbleReceived(amount),
+                                            style: AppText.chatBody.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFFB8860B),
+                                            ),
+                                          ),
+                                        ),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          timeStr,
+                                          style: AppText.chatTime.copyWith(
+                                            color: AppTheme.textSecondary,
+                                          ),
                                         ),
                                       ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                          ),
-                        ))
-                      else if (msg.type == 'image' && msg.imageData.isNotEmpty)
-                        _PhotoBubble(
-                          msg: msg,
-                          chatKey: chatKey,
-                          timeStr: timeStr,
-                          isMe: isMe,
-                          isRead: isRead,
-                          isPending: isPending,
-                          isQueued: isQueued,
-                          showChecksBothSides: showChecksBothSides,
-                          highlightMentionAll: highlightMentionAll,
-                          autoLinkPreview: autoLinkPreview,
-                          // Media berbalasan: caption dirender di panel kanan
-                          // (lihat _replyPanel) — jangan dobel di bawah foto.
-                          suppressCaption: mediaReplyLayout,
-                        )
-                      else if (msg.type == 'image' &&
-                          msg.imageData.isEmpty &&
-                          isImageDeferred)
-                        DeferredImage(
-                          onTap: () async => onRetryImage?.call(msg.id),
-                        )
-                      else if (msg.type == 'poll' && msg.poll != null)
-                        PollBubble(
-                          msg: msg,
-                          // chatKey = 'private_<chatId>' (lihat cacheKeyFor).
-                          chatId: chatKey.startsWith('private_')
-                              ? chatKey.substring(8)
-                              : chatKey,
-                          timeStr: timeStr,
-                          showChecks: isMe || showChecksBothSides,
-                          isPending: isPending,
-                          isQueued: isQueued,
-                          isRead: isRead,
-                        )
-                      else if (msg.type == 'contact' && msg.contact != null)
-                        ContactBubble(
-                          msg: msg,
-                          timeStr: timeStr,
-                          showChecks: isMe || showChecksBothSides,
-                          isPending: isPending,
-                          isQueued: isQueued,
-                          isRead: isRead,
-                        )
-                      else if (msg.type == 'file')
-                        FileBubble(
-                          msg: msg,
-                          timeStr: timeStr,
-                          isMe: isMe,
-                          showChecks: isMe || showChecksBothSides,
-                          isPending: isPending,
-                          isQueued: isQueued,
-                          isRead: isRead,
-                        )
-                      else if (msg.type == 'location' &&
-                          parseLocation(msg.text) != null)
-                        // Media berbalasan → lebar peta mengikuti panel kanan
-                        // (thumbnail peta tetap persegi, ala WhatsApp).
-                        replyMediaBox(LocationBubble(
-                          location: parseLocation(msg.text)!,
-                          timeStr: mediaReplyLayout ? '' : timeStr,
-                          showChecks: isMe || showChecksBothSides,
-                          isPending: isPending,
-                          isQueued: isQueued,
-                          isRead: isRead,
-                        ))
-                      else if (msg.type == 'sticker')
-                        // Melayang ala Telegram: gambar saja, tanpa jam/centang.
-                        StickerBubble(
-        data: msg.imageData,
-        size: chatStickerSize(MediaQuery.sizeOf(context).width),
-      )
-                      else if (msg.type == 'view_once' ||
-                          msg.type == 'view_once_expired')
-                        replyMediaBox(ViewOnceCardContent(
-                          msg: msg,
-                          chatKey: chatKey,
-                          isMe: isMe,
-                          isAdminView: isAdminView,
-                          isRoom: isRoom,
-                          timeStr: timeStr,
-                          showChecks: isMe || showChecksBothSides,
-                          isPending: isPending,
-                          isQueued: isQueued,
-                          isRead: isRead,
-                          mediaMaxWidth: mediaReplyLayout
-                              ? mediaReplyW
-                              : MediaQuery.sizeOf(context).width *
-                                      (bubbleLetter ?? 1.0) -
-                                  8,
-                          showCaption:
-                              msg.text.isNotEmpty && !mediaReplyLayout,
-                          queueTooltip:
-                              isQueued ? s.msgWaitingConnection : '',
-                        ))
-                      else if (msg.type == 'coin')
-                        Builder(
-                          builder: (context) {
-                            final s = this.s ?? ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-                            final amount = int.tryParse(msg.text) ?? 0;
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '🪙',
-                                  style: TextStyle(fontSize: AppGlyph.sm),
-                                ),
-                                SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    isMe
-                                        ? s.coinBubbleSent(amount)
-                                        : s.coinBubbleReceived(amount),
-                                    style: AppText.chatBody.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFFB8860B),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  timeStr,
-                                  style: AppText.chatTime.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        )
-                      else if (msg.type == 'gift')
-                        Builder(
-                          builder: (context) {
-                            final s = this.s ?? ProviderScope.containerOf(context, listen: false).read(localeProvider).s;
-                            final g = giftById(msg.text);
-                            final emoji = g?.emoji ?? '🎁';
-                            final name = g == null
-                                ? ''
-                                : (s.isId ? g.nameId : g.nameEn);
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  emoji,
-                                  style: TextStyle(fontSize: AppGlyph.md),
-                                ),
-                                SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    isMe
-                                        ? s.giftBubbleSent(name)
-                                        : s.giftBubbleReceived(name),
-                                    style: AppText.chatBody.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFFB8860B),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  timeStr,
-                                  style: AppText.chatTime.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                                // Misi harian "Terima Hadiah" — hanya untuk
-                                // penerima (bukan pengirim). Dedup per id:
-                                // bubble di-render ulang saat scroll →
-                                // tanpa dedup setiap render = 1 RPC.
-                                if (!isMe)
-                                  Builder(
-                                    builder: (context) {
-                                      _trackGiftMissionOnce(context, msg.id);
-                                      return const SizedBox.shrink();
-                                    },
-                                  ),
-                              ],
-                            );
-                          },
-                        )
-                      else if (msg.type == 'call')
-                        Builder(
-                          builder: (context) {
-                            final isVideoCall = msg.text.contains('📹');
-                            // Hapus emoji awal (📹/📞) dari teks karena ikon sudah
-                            // ditampilkan terpisah — hindari ikon ganda. Pakai
-                            // replace literal (bukan regex) supaya surrogate emoji
-                            // tidak rusak jadi karakter '?'.
-                            final displayText = msg.text
-                                .replaceFirst('📹', '')
-                                .replaceFirst('📞', '')
-                                .trimLeft();
-                            // Warna ikon mengikuti hasil panggilan (teks status
-                            // disimpan berbahasa Inggris — stabil antar locale):
-                            // hijau = panggilan terhubung, merah = gagal/tak dijawab.
-                            const successMarkers = ['Call ended'];
-                            const failMarkers = [
-                              'Missed call',
-                              'Call declined',
-                              'Call canceled',
-                              'Busy',
-                              'Call failed',
-                            ];
-                            final callIconColor =
-                                successMarkers.any(displayText.contains)
-                                ? Colors.greenAccent
-                                : failMarkers.any(displayText.contains)
-                                ? Colors.redAccent
-                                : AppTheme.textSecondary;
-                            return RichText(
-                              text: TextSpan(
-                                style: AppText.chatBody.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                                children: [
-                                  WidgetSpan(
-                                    alignment: PlaceholderAlignment.middle,
-                                    child: Icon(
-                                      isVideoCall ? Icons.videocam : Icons.call,
-                                      size: 16,
-                                      color: callIconColor,
-                                    ),
-                                  ),
-                                  const WidgetSpan(child: SizedBox(width: 6)),
-                                  TextSpan(text: displayText),
-                                  const TextSpan(text: '  '),
-                                  WidgetSpan(
-                                    alignment:
-                                        PlaceholderAlignment.belowBaseline,
-                                    baseline: TextBaseline.alphabetic,
-                                    child: Text(
-                                      timeStr,
-                                      style: AppText.chatTime.copyWith(
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        )
-                      else
-                        Column(
-                          // Teks/link tetap rata KIRI. Jam pada pesan ber-kartu
-                          // link ditaruh TERPISAH di bawah, rata kanan (lihat
-                          // blok `if (hasLinkCard)` setelah teks) — supaya
-                          // "waktu rata kanan, link rata kiri".
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // LINK PREVIEW utk PESAN TEKS (bukan foto) — dulu
-                            // preview HANYA di _PhotoBubble (foto+caption),
-                            // sehingga kirim link YouTube di pesan teks TIDAK
-                            // tampil kartunya. Sekarang paritas (mirip Telegram).
-                            if (cardLinkUrl != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: LinkPreview(
-                                  text: msg.text,
-                                  enabled: autoLinkPreview,
-                                  // Link SENDIRIAN → kartu menyempit mengikuti
-                                  // konten (ala WhatsApp) + jam DI DALAM kartu
-                                  // (kanan bawah) supaya kartu jadi satu-satunya
-                                  // penentu lebar bubble → rata kanan, tanpa
-                                  // celah aneh di sisi kanan.
-                                  fitContent: linkTextOnly,
-                                  trailing: hasLinkCard
-                                      ? Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.end,
-                                          children: [
-                                            Text(
-                                              msg.edited
-                                                  ? '$timeStr ${s.msgEdited}'
-                                                  : timeStr,
+                                    );
+                                  },
+                                )
+                              else if (msg.type == 'gift')
+                                Builder(
+                                  builder: (context) {
+                                    final s =
+                                        this.s ??
+                                        ProviderScope.containerOf(
+                                          context,
+                                          listen: false,
+                                        ).read(localeProvider).s;
+                                    final g = giftById(msg.text);
+                                    final emoji = g?.emoji ?? '🎁';
+                                    final name = g == null
+                                        ? ''
+                                        : (s.isId ? g.nameId : g.nameEn);
+                                    // Penerima melihat koin NETTO yang benar-benar
+                                    // masuk ke saldo Penghasilan (harga - cut server).
+                                    final net = (g == null || isMe)
+                                        ? 0
+                                        : ProviderScope.containerOf(
+                                                context,
+                                                listen: false,
+                                              )
+                                              .read(pointsProvider)
+                                              .giftNet(g.coins);
+                                    return Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          emoji,
+                                          style: TextStyle(
+                                            fontSize: AppGlyph.md,
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Flexible(
+                                          child: Text(
+                                            isMe
+                                                ? s.giftBubbleSent(name)
+                                                : s.giftBubbleReceived(name),
+                                            style: AppText.chatBody.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFFB8860B),
+                                            ),
+                                          ),
+                                        ),
+                                        SizedBox(width: 6),
+                                        if (net > 0)
+                                          Text(
+                                            '+$net 🪙',
+                                            style: AppText.chatBody.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF2E7D32),
+                                            ),
+                                          ),
+                                        if (net > 0) SizedBox(width: 6),
+                                        Text(
+                                          timeStr,
+                                          style: AppText.chatTime.copyWith(
+                                            color: AppTheme.textSecondary,
+                                          ),
+                                        ),
+                                        // Misi harian "Terima Hadiah" — hanya untuk
+                                        // penerima (bukan pengirim). Dedup per id:
+                                        // bubble di-render ulang saat scroll →
+                                        // tanpa dedup setiap render = 1 RPC.
+                                        if (!isMe)
+                                          Builder(
+                                            builder: (context) {
+                                              _trackGiftMissionOnce(
+                                                context,
+                                                msg.id,
+                                              );
+                                              return const SizedBox.shrink();
+                                            },
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                )
+                              else if (msg.type == 'call')
+                                Builder(
+                                  builder: (context) {
+                                    final isVideoCall = msg.text.contains('📹');
+                                    // Hapus emoji awal (📹/📞) dari teks karena ikon sudah
+                                    // ditampilkan terpisah — hindari ikon ganda. Pakai
+                                    // replace literal (bukan regex) supaya surrogate emoji
+                                    // tidak rusak jadi karakter '?'.
+                                    final displayText = msg.text
+                                        .replaceFirst('📹', '')
+                                        .replaceFirst('📞', '')
+                                        .trimLeft();
+                                    // Warna ikon mengikuti hasil panggilan (teks status
+                                    // disimpan berbahasa Inggris — stabil antar locale):
+                                    // hijau = panggilan terhubung, merah = gagal/tak dijawab.
+                                    const successMarkers = ['Call ended'];
+                                    const failMarkers = [
+                                      'Missed call',
+                                      'Call declined',
+                                      'Call canceled',
+                                      'Busy',
+                                      'Call failed',
+                                    ];
+                                    final callIconColor =
+                                        successMarkers.any(displayText.contains)
+                                        ? Colors.greenAccent
+                                        : failMarkers.any(displayText.contains)
+                                        ? Colors.redAccent
+                                        : AppTheme.textSecondary;
+                                    return RichText(
+                                      text: TextSpan(
+                                        style: AppText.chatBody.copyWith(
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                        children: [
+                                          WidgetSpan(
+                                            alignment:
+                                                PlaceholderAlignment.middle,
+                                            child: Icon(
+                                              isVideoCall
+                                                  ? Icons.videocam
+                                                  : Icons.call,
+                                              size: 16,
+                                              color: callIconColor,
+                                            ),
+                                          ),
+                                          const WidgetSpan(
+                                            child: SizedBox(width: 6),
+                                          ),
+                                          TextSpan(text: displayText),
+                                          const TextSpan(text: '  '),
+                                          WidgetSpan(
+                                            alignment: PlaceholderAlignment
+                                                .belowBaseline,
+                                            baseline: TextBaseline.alphabetic,
+                                            child: Text(
+                                              timeStr,
                                               style: AppText.chatTime.copyWith(
                                                 color: AppTheme.textSecondary,
                                               ),
                                             ),
-                                            if (isMe) ...[
-                                              const SizedBox(width: 3),
-                                              Icon(
-                                                (isPending || isQueued)
-                                                    ? Icons.done
-                                                    : Icons.done_all,
-                                                size: 12,
-                                                color: (!isQueued &&
-                                                        !isPending &&
-                                                        isRead)
-                                                    ? AppTheme.primary
-                                                    : AppTheme.textSecondary,
-                                              ),
-                                            ],
-                                          ],
-                                        )
-                                      : null,
-                                ),
-                              ),
-                            if (!linkTextOnly)
-                            Padding(
-                              // Bingkai tipis 4px + 6px = jarak teks normal (10px).
-                              // Reply: tab 8px agar teks isi tak menempel tepi.
-                              padding: hasLinkCard
-                                  ? const EdgeInsets.symmetric(horizontal: 6)
-                                  : stretchReply
-                                  ? const EdgeInsets.fromLTRB(8, 0, 8, 0)
-                                  : EdgeInsets.zero,
-                              child: MessageTextWithTime(
-                              text: msg.text,
-                              // Kartu link: jam ditangani blok terpisah di
-                              // bawah (rata kanan) → jangan dobel di sini.
-                              timeStr: hasLinkCard
-                                  ? ''
-                                  : (msg.edited
-                                        ? '$timeStr ${s.msgEdited}'
-                                        : timeStr),
-                              textStyle: AppText.chatBody,
-                              timeStyle: AppText.chatTime.copyWith(
-                                color: AppTheme.textSecondary,
-                                fontWeight: FontWeight.w400,
-                              ),
-                              alignRight: isMe,
-                              mentions: msg.mentions,
-                              highlightMentionAll: highlightMentionAll,
-                              searchQuery: searchQuery,
-                              codeMaxLines: codeMaxLines,
-                              // BALASAN: teks+jam mengisi lebar bubble →
-                              // jam rata kanan (teksnya tetap kiri).
-                              fillWidth: stretchReply,
-                              // Centang ikut di baris jam terpisah bila ada
-                              // kartu link (biar tidak dobel).
-                              trailing: (isMe && !hasLinkCard)
-                                  ? Tooltip(
-                                      message: isQueued
-                                          ? s.msgWaitingConnection
-                                          : '',
-                                      child: Icon(
-                                        (isPending || isQueued)
-                                            ? Icons.done
-                                            : Icons.done_all,
-                                        size: 12,
-                                        color: (!isQueued &&
-                                                !isPending &&
-                                                isRead)
-                                            ? AppTheme.primary
-                                            : AppTheme.textSecondary,
+                                          ),
+                                        ],
                                       ),
-                                    )
-                                  : null,
-                            ),
-                            ),
-                            // JAM pesan ber-kartu link kini dirender DI DALAM
-                            // kartu (lihat `trailing:` LinkPreview) agar kartu
-                            // jadi satu-satunya penentu lebar bubble.
-                          ],
-                        ),
-                    ],
-                    ),
-                    ),
-                    ),
-                      if (reactions != null && reactions!.isNotEmpty)
-                      Positioned(
-                        bottom: -10,
-                        left: isMe ? null : 8,
-                        right: isMe ? 8 : null,
-                        child: _InlineReactionBadge(
-                          counts: reactions!,
-                          onTap: onTapBadge,
+                                    );
+                                  },
+                                )
+                              else
+                                Column(
+                                  // Teks/link tetap rata KIRI. Jam pada pesan ber-kartu
+                                  // link ditaruh TERPISAH di bawah, rata kanan (lihat
+                                  // blok `if (hasLinkCard)` setelah teks) — supaya
+                                  // "waktu rata kanan, link rata kiri".
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // LINK PREVIEW utk PESAN TEKS (bukan foto) — dulu
+                                    // preview HANYA di _PhotoBubble (foto+caption),
+                                    // sehingga kirim link YouTube di pesan teks TIDAK
+                                    // tampil kartunya. Sekarang paritas (mirip Telegram).
+                                    if (cardLinkUrl != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 4,
+                                        ),
+                                        child: LinkPreview(
+                                          text: msg.text,
+                                          enabled: autoLinkPreview,
+                                          // Link SENDIRIAN → kartu menyempit mengikuti
+                                          // konten (ala WhatsApp) + jam DI DALAM kartu
+                                          // (kanan bawah) supaya kartu jadi satu-satunya
+                                          // penentu lebar bubble → rata kanan, tanpa
+                                          // celah aneh di sisi kanan.
+                                          fitContent: linkTextOnly,
+                                          trailing: hasLinkCard
+                                              ? Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      msg.edited
+                                                          ? '$timeStr ${s.msgEdited}'
+                                                          : timeStr,
+                                                      style: AppText.chatTime
+                                                          .copyWith(
+                                                            color: AppTheme
+                                                                .textSecondary,
+                                                          ),
+                                                    ),
+                                                    if (isMe) ...[
+                                                      const SizedBox(width: 3),
+                                                      Icon(
+                                                        (isPending || isQueued)
+                                                            ? Icons.done
+                                                            : Icons.done_all,
+                                                        size: 12,
+                                                        color:
+                                                            (!isQueued &&
+                                                                !isPending &&
+                                                                isRead)
+                                                            ? AppTheme.primary
+                                                            : AppTheme
+                                                                  .textSecondary,
+                                                      ),
+                                                    ],
+                                                  ],
+                                                )
+                                              : null,
+                                        ),
+                                      ),
+                                    if (!linkTextOnly)
+                                      Padding(
+                                        // Bingkai tipis 4px + 6px = jarak teks normal (10px).
+                                        // Reply: tab 8px agar teks isi tak menempel tepi.
+                                        padding: hasLinkCard
+                                            ? const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                              )
+                                            : stretchReply
+                                            ? const EdgeInsets.fromLTRB(
+                                                8,
+                                                0,
+                                                8,
+                                                0,
+                                              )
+                                            : EdgeInsets.zero,
+                                        child: MessageTextWithTime(
+                                          text: msg.text,
+                                          // Kartu link: jam ditangani blok terpisah di
+                                          // bawah (rata kanan) → jangan dobel di sini.
+                                          timeStr: hasLinkCard
+                                              ? ''
+                                              : (msg.edited
+                                                    ? '$timeStr ${s.msgEdited}'
+                                                    : timeStr),
+                                          textStyle: AppText.chatBody,
+                                          timeStyle: AppText.chatTime.copyWith(
+                                            color: AppTheme.textSecondary,
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                          alignRight: isMe,
+                                          mentions: msg.mentions,
+                                          highlightMentionAll:
+                                              highlightMentionAll,
+                                          searchQuery: searchQuery,
+                                          codeMaxLines: codeMaxLines,
+                                          // BALASAN: teks+jam mengisi lebar bubble →
+                                          // jam rata kanan (teksnya tetap kiri).
+                                          fillWidth: stretchReply,
+                                          // Centang ikut di baris jam terpisah bila ada
+                                          // kartu link (biar tidak dobel).
+                                          trailing: (isMe && !hasLinkCard)
+                                              ? Tooltip(
+                                                  message: isQueued
+                                                      ? s.msgWaitingConnection
+                                                      : '',
+                                                  child: Icon(
+                                                    (isPending || isQueued)
+                                                        ? Icons.done
+                                                        : Icons.done_all,
+                                                    size: 12,
+                                                    color:
+                                                        (!isQueued &&
+                                                            !isPending &&
+                                                            isRead)
+                                                        ? AppTheme.primary
+                                                        : AppTheme
+                                                              .textSecondary,
+                                                  ),
+                                                )
+                                              : null,
+                                        ),
+                                      ),
+                                    // JAM pesan ber-kartu link kini dirender DI DALAM
+                                    // kartu (lihat `trailing:` LinkPreview) agar kartu
+                                    // jadi satu-satunya penentu lebar bubble.
+                                  ],
+                                ),
+                            ],
+                          ),
                         ),
                       ),
-                  ],
+                      if (reactions != null && reactions!.isNotEmpty)
+                        Positioned(
+                          bottom: -10,
+                          left: isMe ? null : 8,
+                          right: isMe ? 8 : null,
+                          child: _InlineReactionBadge(
+                            counts: reactions!,
+                            onTap: onTapBadge,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );

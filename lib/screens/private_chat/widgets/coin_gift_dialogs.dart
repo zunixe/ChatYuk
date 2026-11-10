@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/gifts.dart';
+import '../../../config/strings.dart';
 import '../../../config/theme.dart';
 import '../../../providers/riverpod/auth_provider.dart';
 import '../../../providers/riverpod/chat_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
+import '../../point_history/widgets/topup_sheet.dart';
 
 /// Klaster dialog koin & pemilih gift untuk chat 1:1.
 ///
@@ -21,6 +23,7 @@ void showReportUserDialog(
   BuildContext context, {
   required String reportedId,
   required String reportedName,
+
   /// Bila diisi → laporan menunjuk PESAN (bukan hanya user). Server
   /// menyembunyikan pesan otomatis setelah >=3 pelapor berbeda.
   String? messageId,
@@ -33,13 +36,7 @@ void showReportUserDialog(
   ).read(localeProvider).s;
 
   // Pilihan alasan (bilingual) — kode dikirim ke server, label ke user.
-  final codes = <String>[
-    'porn',
-    'violence',
-    'spam',
-    'scam',
-    'other',
-  ];
+  final codes = <String>['porn', 'violence', 'spam', 'scam', 'other'];
   String labelOf(String code) {
     switch (code) {
       case 'porn':
@@ -110,18 +107,22 @@ void showReportUserDialog(
                       note: reason,
                     );
                 router.pop();
-                messenger.showSnackBar(SnackBar(
-                  content: Text(
-                    res['auto_hidden'] == true
-                        ? s.reportHiddenNow
-                        : s.reportSuccess,
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      res['auto_hidden'] == true
+                          ? s.reportHiddenNow
+                          : s.reportSuccess,
+                    ),
                   ),
-                ));
+                );
                 return;
               }
               final uid = container.read(authProvider.notifier).uid;
               if (uid != null) {
-                await container.read(chatProvider.notifier).reportUser(
+                await container
+                    .read(chatProvider.notifier)
+                    .reportUser(
                       reporterId: uid,
                       reportedId: reportedId,
                       reason: reason,
@@ -407,9 +408,9 @@ class _SendCoinDialogState extends State<_SendCoinDialog> {
                         // Server menolak > 1000 (send_coins). Validasi di
                         // client supaya user tidak dapat error mentah.
                         if (amount > 1000) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(s.errCoinMax)),
-                          );
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(s.errCoinMax)));
                           return;
                         }
                         if (widget.pointsEnabled &&
@@ -447,11 +448,18 @@ Future<GiftItem?> showGiftPickerSheet(
   BuildContext context, {
   required bool pointsEnabled,
   required int paidBalance,
+  int bonusBalance = 0,
+  int bonusMultiplier = 3,
+  bool promoOk = false,
 }) {
   final s = ProviderScope.containerOf(
     context,
     listen: false,
   ).read(localeProvider).s;
+  final mult = bonusMultiplier < 1 ? 1 : bonusMultiplier;
+  final bonusUsable = promoOk ? bonusBalance ~/ mult : 0;
+  // Saldo efektif untuk gift: koin berbayar + bonus/×multiplier (promo).
+  final usable = paidBalance + bonusUsable;
   return showModalBottomSheet<GiftItem>(
     context: context,
     backgroundColor: AppTheme.bgCard,
@@ -477,7 +485,13 @@ Future<GiftItem?> showGiftPickerSheet(
               const SizedBox(height: 12),
             ] else ...[
               Text(
-                '${s.paidBalanceLabel}: $paidBalance',
+                promoOk || bonusBalance == 0
+                    ? s.giftPickerBalances(
+                        paidBalance,
+                        bonusBalance,
+                        bonusUsable,
+                      )
+                    : s.giftPickerBonusNoPromo(bonusBalance),
                 style: AppText.bodySmall.copyWith(
                   color: AppTheme.textSecondary,
                 ),
@@ -496,11 +510,27 @@ Future<GiftItem?> showGiftPickerSheet(
                 itemCount: kGiftCatalog.length,
                 itemBuilder: (ctx, i) {
                   final g = kGiftCatalog[i];
-                  // paidBalance = saldo yang bisa dipakai (koin beli +
+                  // paidBalance/usable = saldo yang bisa dipakai (koin beli +
                   // bonus/×multiplier bila promo diizinkan server).
-                  final afford = g.coins <= paidBalance;
+                  final afford = g.coins <= usable;
                   return InkWell(
-                    onTap: afford ? () => Navigator.pop(ctx, g) : null,
+                    // Tile tak-cukup TETAP bisa di-tap → dialog menjelaskan
+                    // kekurangannya (dulu mati total tanpa info apa pun).
+                    onTap: () {
+                      if (afford) {
+                        Navigator.pop(ctx, g);
+                        return;
+                      }
+                      _showGiftCantAfford(
+                        ctx,
+                        context,
+                        s,
+                        gift: g,
+                        paid: paidBalance,
+                        bonusUsable: bonusUsable,
+                        usable: usable,
+                      );
+                    },
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       decoration: BoxDecoration(
@@ -554,4 +584,41 @@ Future<GiftItem?> showGiftPickerSheet(
       ),
     ),
   );
+}
+
+/// Dialog alasan gift TIDAK bisa dikirim — angka konkret (harga, koin
+/// berbayar, bonus yang menambal ×3, kekurangan) + tombol top-up.
+/// Dipanggil saat user menekan tile gift yang belum terjangkau.
+Future<void> _showGiftCantAfford(
+  BuildContext sheetCtx,
+  BuildContext outerCtx,
+  S s, {
+  required GiftItem gift,
+  required int paid,
+  required int bonusUsable,
+  required int usable,
+}) async {
+  final short = gift.coins - usable;
+  final go = await showDialog<bool>(
+    context: sheetCtx,
+    builder: (ctx) => AlertDialog(
+      title: Text(s.giftInsufficient),
+      content: Text(s.giftCantAffordBody(gift.coins, paid, bonusUsable, short)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(s.btnCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(s.btnTopupNow),
+        ),
+      ],
+    ),
+  );
+  if (go != true) return;
+  // Tutup picker dulu, baru buka sheet top-up dari context layar (bukan
+  // context sheet yang sudah dibuang).
+  if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+  if (outerCtx.mounted) await showTopupSheet(outerCtx, s);
 }

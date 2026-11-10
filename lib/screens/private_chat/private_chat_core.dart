@@ -1,6 +1,5 @@
 part of '../private_chat_screen.dart';
 
-
 mixin _PcCoreMx on _PrivateChatBase {
   @override
   Widget build(BuildContext context) {
@@ -454,7 +453,9 @@ mixin _PcCoreMx on _PrivateChatBase {
                             s.snackBlocked(widget.otherName),
                           );
                         } catch (e) {
-                          dlog('[BLOCK] GAGAL me=$uidMe other=${widget.otherUid} err=$e');
+                          dlog(
+                            '[BLOCK] GAGAL me=$uidMe other=${widget.otherUid} err=$e',
+                          );
                           if (!context.mounted) return;
                           showChatSnackVia(
                             messenger,
@@ -470,7 +471,9 @@ mixin _PcCoreMx on _PrivateChatBase {
                         if (uidMe == null) return;
                         try {
                           await chat.unblockUser(uidMe, widget.otherUid);
-                          dlog('[BLOCK] unblock ok me=$uidMe other=${widget.otherUid}');
+                          dlog(
+                            '[BLOCK] unblock ok me=$uidMe other=${widget.otherUid}',
+                          );
                           if (!context.mounted) return;
                           showChatSnackVia(
                             messenger,
@@ -789,7 +792,8 @@ mixin _PcCoreMx on _PrivateChatBase {
                                   // ke 120px: cukup untuk scroll mulus, tapi bubble
                                   // jauh (peta/video) tidak ikut di-mount di frame
                                   // pertama. Terukur raster max ~58ms → turun.
-                                  scrollCacheExtent: const ScrollCacheExtent.pixels(120),
+                                  scrollCacheExtent:
+                                      const ScrollCacheExtent.pixels(120),
                                   padding: const EdgeInsets.fromLTRB(
                                     10,
                                     12,
@@ -1032,6 +1036,8 @@ mixin _PcCoreMx on _PrivateChatBase {
                   ],
                 ),
               ),
+              // Animasi gift besar (Lottie + SFX) — di bawah call overlay.
+              Positioned.fill(child: GiftPlayOverlay(controller: _giftPlay)),
               if (_showCallOverlay)
                 Positioned.fill(
                   child: ChatCallOverlay(

@@ -371,9 +371,14 @@ mixin _UiActionsMx on _UserInfoBase {
   Uint8List? _galleryBytesOf(UserPhoto photo) {
     final hit = _galleryBytes[photo.id];
     if (hit != null) return hit;
-    if (photo.photo.isEmpty) return null;
+    // Video: `photo` = PATH mp4 (terbuka) — yang ditampilkan adalah POSTER
+    // (base64). Item terkunci: `photo` = preview blur → pakai preview.
+    final src = photo.isVideo
+        ? (photo.poster.isNotEmpty ? photo.poster : photo.preview)
+        : photo.photo;
+    if (src.isEmpty) return null;
     try {
-      final b = base64Decode(photo.photo);
+      final b = base64Decode(src);
       if (b.isEmpty) return null;
       // Galeri per user kecil; buang yang paling lama bila penuh supaya
       // tidak tumbuh tanpa batas.

@@ -127,7 +127,11 @@ class _PProfileBodyState extends State<_PProfileBody> {
       final b = widget.galleryBytes(p);
       if (b == null) continue;
       // Terkunci → preview blur + overlay kunci (tap → konfirmasi unlock).
-      out.add(p.unlocked ? _HeroItem.bytes(b) : _HeroItem.locked(b, p));
+      out.add(
+        p.unlocked
+            ? _HeroItem.bytes(b, isVideo: p.isVideo)
+            : _HeroItem.locked(b, p, isVideo: p.isVideo),
+      );
     }
     return out;
   }
@@ -396,6 +400,10 @@ class _PProfileBodyState extends State<_PProfileBody> {
                               errorBuilder: (_, _, _) =>
                                   PNoPhoto(initials: widget.initial),
                             ),
+                            // Video: badge play supaya user tahu tap membuka
+                            // pemutar (bukan sekadar zoom foto).
+                            if (h.isVideo && !h.isLocked)
+                              const Center(child: VideoPlayBadge(size: 54)),
                             if (h.isLocked)
                               _LockedHeroOverlay(cost: widget.unlockCost),
                           ],
@@ -826,6 +834,10 @@ class _HeroItem {
   final Uint8List bytes;
   final UserPhoto? photo;
   final bool isLocked;
-  _HeroItem.bytes(this.bytes) : photo = null, isLocked = false;
-  _HeroItem.locked(this.bytes, this.photo) : isLocked = true;
+  final bool isVideo;
+  _HeroItem.bytes(this.bytes, {this.isVideo = false})
+    : photo = null,
+      isLocked = false;
+  _HeroItem.locked(this.bytes, this.photo, {this.isVideo = false})
+    : isLocked = true;
 }

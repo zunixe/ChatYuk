@@ -7,6 +7,7 @@ import '../../../models/user_photo.dart';
 import '../../../providers/riverpod/device_info_provider.dart';
 import '../../../providers/riverpod/locale_provider.dart';
 import '../../../widgets/async_photo.dart';
+import '../../../widgets/media/gallery_video_view.dart';
 
 /// Footer "Tentang": versi app (tap → halaman lisensi) + atribusi Emoji Art
 /// (Twemoji, CC-BY 4.0). Dipisah dari profile_body agar file itu tetap di
@@ -294,10 +295,17 @@ class _ProfilePhotoViewerScreenState extends State<ProfilePhotoViewerScreen> {
         itemCount: widget.photos.length,
         onPageChanged: (i) => setState(() => _index = i),
         itemBuilder: (ctx, i) => Center(
-          child: InteractiveViewer(
-            maxScale: 4,
-            child: AsyncPhotoViewer(base64: widget.photos[i].photo),
-          ),
+          // Video: poster + tombol play → pemutar full-screen (mp4 diunduh
+          // sekali, bukan dijadikan base64).
+          child: widget.photos[i].isVideo
+              ? GalleryVideoView(
+                  videoPath: widget.photos[i].photo,
+                  posterBase64: widget.photos[i].poster,
+                )
+              : InteractiveViewer(
+                  maxScale: 4,
+                  child: AsyncPhotoViewer(base64: widget.photos[i].photo),
+                ),
         ),
       ),
     );

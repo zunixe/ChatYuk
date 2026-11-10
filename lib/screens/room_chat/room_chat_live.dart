@@ -1,6 +1,5 @@
 part of '../room_chat_screen.dart';
 
-
 mixin _RcLiveMx on _RoomChatBase {
   /// POLL grup/global room (ala WhatsApp): buka sheet → bubble pending instan →
   /// kirim pesan type 'poll' (definisi di kolom `poll`, teks '📊 `<tanya>`').
@@ -142,7 +141,6 @@ mixin _RcLiveMx on _RoomChatBase {
     return _scrollCtrl.position.pixels < 100;
   }
 
-
   // ── Antrean offline: implementasi BERSAMA di ChatOutboxMixin ──
   @override
   bool get outboxIsOnline => _connOnline;
@@ -217,7 +215,10 @@ mixin _RcLiveMx on _RoomChatBase {
     final gift = await showGiftPickerSheet(
       context,
       pointsEnabled: points.enabled,
-      paidBalance: points.spendableBalance,
+      paidBalance: points.paidBalance,
+      bonusBalance: points.bonusBalance,
+      bonusMultiplier: points.bonusMultiplier,
+      promoOk: points.promoOk,
     );
     if (gift == null || !mounted) return;
     try {
@@ -234,7 +235,24 @@ mixin _RcLiveMx on _RoomChatBase {
         ref.read(roomSessionProvider.notifier).refreshRoom(widget.room.id);
       }
     } catch (e) {
-      if (mounted) showChatSnack(context, '$e');
+      if (!mounted) return;
+      final msg = e.toString();
+      // Koin habis → dialog yang mengarahkan ke top-up, dengan angka
+      // konkret (harga, koin berbayar, bonus ×3, kekurangan).
+      if (msg.contains('Not enough') || msg.contains('koin beli')) {
+        final paid = points.paidBalance;
+        final usable = points.spendableBalance;
+        final short = gift.coins - usable;
+        await showTopupPrompt(
+          context,
+          s,
+          body: short > 0
+              ? s.giftCantAffordBody(gift.coins, paid, usable - paid, short)
+              : null,
+        );
+        return;
+      }
+      showChatSnack(context, msg);
     }
   }
 
@@ -255,7 +273,6 @@ mixin _RcLiveMx on _RoomChatBase {
     if (picked == null || !mounted) return;
     await sendLocationFromPreviewAt(picked);
   }
-
 
   @override
   ChatLocation? get sendPendingLocation => _pendingLocation;
@@ -342,7 +359,6 @@ mixin _RcLiveMx on _RoomChatBase {
     }
   }
 
-
   /// Kirim pembaruan koordinat lokasi live (room) tiap 30 detik.
   void _startLiveLocationUpdates(String messageId, ChatLocation initial) {
     _liveTimer?.cancel();
@@ -370,8 +386,10 @@ mixin _RcLiveMx on _RoomChatBase {
   /// Kontrak ChatStickerSendMixin: insert pesan stiker room (path storage).
   @override
   Future<String?> stickerDispatch(String path) async {
-    final auth = ProviderScope.containerOf(context, listen: false)
-        .read(authProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
     final profile = auth.profile!;
     return ProviderScope.containerOf(context, listen: false)
         .read(chat_riverpod.chatProvider.notifier)
@@ -432,10 +450,9 @@ mixin _RcLiveMx on _RoomChatBase {
         await queueVoiceOffline(bytes, f);
         return;
       }
-      final storagePath =
-          await scope
-              .read(storageProvider)
-              .uploadVoice(chatId: 'room_${widget.room.id}', bytes: bytes);
+      final storagePath = await scope
+          .read(storageProvider)
+          .uploadVoice(chatId: 'room_${widget.room.id}', bytes: bytes);
       if (storagePath == null || storagePath.isEmpty) {
         if (!outboxIsOnline) {
           await queueVoiceOffline(bytes, f);
@@ -490,16 +507,12 @@ mixin _RcLiveMx on _RoomChatBase {
         } catch (_) {}
       }
       if (mounted) {
-        showChatSnack(
-          context,
-          scope.read(localeProvider).s.errSendFailed,
-        );
+        showChatSnack(context, scope.read(localeProvider).s.errSendFailed);
       }
     }
   }
 
   // LayerLink per pesan — anchor action bar (Balas / Hapus) tepat di atas bubble.
-
 
   void _toggleAttachRow() {
     if (!_showAttachRow) {
@@ -983,6 +996,8 @@ mixin _RcLiveMx on _RoomChatBase {
     // Overlay gift fly + kombo — di atas semua konten (IgnorePointer,
     // tidak mengganggu gesture chat/stage).
     final giftOverlay = GiftFlyOverlay(controller: _giftFly);
+    // Animasi gift besar (Lottie + SFX) — di atas fly banner.
+    final giftPlay = GiftPlayOverlay(controller: _giftPlay);
     // Background chat — SAMA dengan private chat: gambar utuh di-decode
     // sekali di startup (warmChatBackground) lalu raw via RawImage + overlay
     // bgScreen 45% (bukan widget Opacity — 2 draw sederhana, anti-jank).
@@ -1007,6 +1022,7 @@ mixin _RcLiveMx on _RoomChatBase {
           chatBg,
           column,
           Positioned.fill(child: giftOverlay),
+          Positioned.fill(child: giftPlay),
         ],
       );
     }
@@ -1015,6 +1031,7 @@ mixin _RcLiveMx on _RoomChatBase {
         chatBg,
         column,
         Positioned.fill(child: giftOverlay),
+        Positioned.fill(child: giftPlay),
         Builder(
           builder: (context) {
             final mq = MediaQuery.of(context);
@@ -1114,5 +1131,4 @@ mixin _RcLiveMx on _RoomChatBase {
       ],
     );
   }
-
 }

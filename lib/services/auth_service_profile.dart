@@ -579,9 +579,21 @@ mixin AuthServiceProfileMx on AuthBase {
     for (final row in list) {
       final m = Map<String, dynamic>.from(row as Map);
       var photo = m['photo'] as String? ?? '';
-      // photo bisa berupa PATH storage (foto baru) → download → base64.
-      if (photo.isNotEmpty &&
+      final isVideo =
+          m['is_video'] == true ||
+          StoragePhotoService.instance.isGalleryVideoPath(photo);
+      var poster = '';
+      if (isVideo) {
+        // Video: JANGAN unduh mp4 jadi base64 (ukurannya MB) — cukup poster
+        // pasangannya (JPEG kecil) untuk thumbnail grid/hero.
+        if (StoragePhotoService.instance.isGalleryVideoPath(photo)) {
+          poster = await _galleryPhotoB64(
+            StoragePhotoService.instance.galleryPosterPath(photo),
+          );
+        }
+      } else if (photo.isNotEmpty &&
           StoragePhotoService.instance.isGalleryPath(photo)) {
+        // photo bisa berupa PATH storage (foto baru) → download → base64.
         photo = await _galleryPhotoB64(photo);
       }
       result.add(
@@ -591,6 +603,8 @@ mixin AuthServiceProfileMx on AuthBase {
           'unlocked': true,
           'createdAt': m['created_at'],
           'faceVerified': m['face_verified'] == true,
+          'isVideo': isVideo,
+          'poster': poster,
         }),
       );
     }
@@ -614,11 +628,24 @@ mixin AuthServiceProfileMx on AuthBase {
       final m = Map<String, dynamic>.from(row as Map);
       final unlocked = m['unlocked'] == true;
       var photo = m['photo'] as String? ?? '';
-      // Foto terbuka bisa berupa PATH storage → download jadi base64.
-      // Foto terkunci = preview base64 (bukan path) → pakai apa adanya.
-      if (unlocked &&
+      final isVideo =
+          m['is_video'] == true ||
+          StoragePhotoService.instance.isGalleryVideoPath(photo);
+      var poster = '';
+      if (isVideo) {
+        // Video: JANGAN unduh mp4 jadi base64 — cukup poster pasangannya.
+        // Item TERKUNCI: photo = preview blur (bukan path) → tanpa poster.
+        if (unlocked &&
+            StoragePhotoService.instance.isGalleryVideoPath(photo)) {
+          poster = await _galleryPhotoB64(
+            StoragePhotoService.instance.galleryPosterPath(photo),
+          );
+        }
+      } else if (unlocked &&
           photo.isNotEmpty &&
           StoragePhotoService.instance.isGalleryPath(photo)) {
+        // Foto terbuka bisa berupa PATH storage → download jadi base64.
+        // Foto terkunci = preview base64 (bukan path) → pakai apa adanya.
         photo = await _galleryPhotoB64(photo);
       }
       result.add(
@@ -628,6 +655,8 @@ mixin AuthServiceProfileMx on AuthBase {
           'unlocked': unlocked,
           'preview': m['preview'] ?? '',
           'createdAt': m['created_at'],
+          'isVideo': isVideo,
+          'poster': poster,
         }),
       );
     }
@@ -694,6 +723,48 @@ mixin AuthServiceProfileMx on AuthBase {
     invalidateGallery(id); // foto berubah -> cache basi
   }
 
+  /// Upload VIDEO galeri milik sendiri (slot yang sama dengan foto).
+  ///
+  /// [videoBytes] = hasil kompres (≤ [StoragePhotoService.galleryVideoMaxBytes],
+  /// durasi sudah divalidasi pemanggil); [posterBytes] = satu frame JPEG yang
+  /// disimpan sebagai file pasangan (`<video>_poster.jpg`) untuk thumbnail;
+  /// [preview] = poster blur (base64) untuk paywall.
+  /// [faceVerified] = video lolos cek wajah (kewajiban akun female) →
+  /// catat `face_verified_at` supaya tidak ditandai "perlu diganti".
+  Future<void> uploadVideo({
+    required Uint8List videoBytes,
+    required Uint8List posterBytes,
+    String? preview,
+    bool faceVerified = false,
+  }) async {
+    final id = uid;
+    if (id == null) return;
+    if (videoBytes.isEmpty) throw Exception('Empty video');
+    await _assertFaceVerified(id, faceVerified);
+    if (videoBytes.length > StoragePhotoService.galleryVideoMaxBytes) {
+      throw Exception('Video too large (max 8MB)');
+    }
+    // Batasi jumlah item (foto + video) per user = 6.
+    final rows = await _sb.from('user_photos').select('id').eq('user_id', id);
+    if (rows.length >= 6) {
+      throw Exception('Max 6 photos');
+    }
+    final path = await StoragePhotoService.instance.uploadGalleryVideo(
+      uid: id,
+      videoBytes: videoBytes,
+      posterBytes: posterBytes,
+    );
+    if (path == null || path.isEmpty) throw Exception('upload_failed');
+    await _sb.from('user_photos').insert({
+      'user_id': id,
+      'photo': path,
+      if (preview != null && preview.isNotEmpty) 'photo_preview': preview,
+      if (faceVerified)
+        'face_verified_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    invalidateGallery(id); // galeri berubah -> cache basi
+  }
+
   /// Hapus foto galeri (hanya punya sendiri, RLS menjamin).
   Future<void> deletePhoto(String photoId) async {
     if (photoId.isEmpty) return;
@@ -706,6 +777,13 @@ mixin AuthServiceProfileMx on AuthBase {
       final photo = row?['photo'] as String? ?? '';
       if (photo.isNotEmpty &&
           StoragePhotoService.instance.isGalleryPath(photo)) {
+        // Video punya file poster pasangan — hapus keduanya, jangan
+        // meninggalkan file yatim di Storage.
+        if (StoragePhotoService.instance.isGalleryVideoPath(photo)) {
+          await StoragePhotoService.instance.delete(
+            StoragePhotoService.instance.galleryPosterPath(photo),
+          );
+        }
         await StoragePhotoService.instance.delete(photo);
       }
     } catch (e) {

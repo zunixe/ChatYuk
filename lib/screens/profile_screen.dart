@@ -7,7 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../core/media/native_image.dart';
+import '../core/media/face_check.dart';
 import '../core/moderation_texts.dart';
+import '../providers/riverpod/storage_provider.dart';
+import '../widgets/media/gallery_video_view.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
 import '../widgets/verified_badge.dart';
@@ -52,9 +55,11 @@ import '../providers/riverpod/chat_provider.dart';
 import '../widgets/yukcoin_buckets_line.dart';
 import '../core/profile/photo_verification.dart';
 import '../widgets/verified_selfie_capture.dart';
+import '../widgets/face_capture_video.dart';
 import 'moderation_screen.dart';
 
 part 'profile/profile_core.dart';
+part 'profile/profile_photos_video.dart';
 part 'profile/profile_photos.dart';
 part 'profile/profile_build.dart';
 part 'profile/profile_body.dart';
@@ -86,6 +91,15 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
 
   List<UserPhoto> _photos = [];
   bool _loadingPhotos = true;
+
+  /// Female: upload foto/video profil WAJIB lolos verifikasi wajah.
+  /// Dipakai lintas mixin (foto & video) — jangan diduplikasi.
+  bool get _isFemaleAccount => requiresFaceVerifiedPhoto(
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider).profile?.gender,
+  );
 
   final TextEditingController _hashtagCtrl = TextEditingController();
   List<String> _hashtags = [];
@@ -192,6 +206,7 @@ abstract class _ProfileBase extends ConsumerState<ProfileScreen> {
 class _ProfileScreenState extends _ProfileBase
     with
         _ProfileCoreMx,
+        _ProfilePhotosVideoMx,
         _ProfilePhotosMx,
         // Penyedia helper data (status/kartu lama) — TIDAK dirender lagi.
         _ProfileBuildMx,

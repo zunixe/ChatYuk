@@ -8,20 +8,21 @@ import 'supabase_test_client.dart';
 import 'test_helper.dart';
 
 Map<String, dynamic> _anonSession(String uid) => {
-      'access_token': 'anon-access',
-      'refresh_token': 'anon-refresh',
-      'token_type': 'bearer',
-      'expires_in': 3600,
-      'user': {
-        'id': uid,
-        'aud': 'authenticated',
-        'created_at': '2026-01-01T00:00:00.000Z',
-        'is_anonymous': true,
-        'identities': [],
-      },
-    };
+  'access_token': 'anon-access',
+  'refresh_token': 'anon-refresh',
+  'token_type': 'bearer',
+  'expires_in': 3600,
+  'user': {
+    'id': uid,
+    'aud': 'authenticated',
+    'created_at': '2026-01-01T00:00:00.000Z',
+    'is_anonymous': true,
+    'identities': [],
+  },
+};
 
-Map<String, dynamic> _mission(String key, {int target = 3, int progress = 0}) => {
+Map<String, dynamic> _mission(String key, {int target = 3, int progress = 0}) =>
+    {
       'id': 1,
       'mission_key': key,
       'title': 'Misi $key',
@@ -42,13 +43,13 @@ Map<String, dynamic> _missionsResp({
   int streak = 2,
   String? lastDate = '2026-10-31',
 }) => {
-      'main': [_mission('match_calls', target: 3, progress: 1)],
-      'daily': [_mission('daily_signin', target: 1)],
-      'total_coins': 0,
-      'login_streak': streak,
-      'last_login_date': lastDate,
-      'gender': gender,
-    };
+  'main': [_mission('match_calls', target: 3, progress: 1)],
+  'daily': [_mission('daily_signin', target: 1)],
+  'total_coins': 0,
+  'login_streak': streak,
+  'last_login_date': lastDate,
+  'gender': gender,
+};
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -57,8 +58,8 @@ void main() {
   });
 
   ProviderContainer container(SupabaseClient client) => ProviderContainer(
-        overrides: [missionsProvider.overrideWith(() => MissionsNotifier(client))],
-      );
+    overrides: [missionsProvider.overrideWith(() => MissionsNotifier(client))],
+  );
 
   group('MissionsNotifier', () {
     test('tanpa session → loading false', () {
@@ -92,6 +93,29 @@ void main() {
       expect(st.totalCoins, 1500);
     });
 
+    test('get_user_missions memakai tanggal + offset zona waktu HP', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/signup', (_) => _anonSession('uid-tz'));
+      handler.on('get_user_missions', (_) => _missionsResp());
+      handler.on('check_user_total_coins', (_) => {'total_coins': 0});
+      final client = fakeSupabaseClient(handler: handler);
+      await client.auth.signInAnonymously();
+
+      final c = container(client);
+      addTearDown(c.dispose);
+      c.read(missionsProvider);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      final now = DateTime.now();
+      final today =
+          '${now.year.toString().padLeft(4, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}';
+      final params = rpcParamsOf(handler, 'get_user_missions');
+      expect(params['p_period_date'], today);
+      expect(params['p_tz_offset_minutes'], now.timeZoneOffset.inMinutes);
+    });
+
     test('updateProgress → RPC update_mission_progress + refresh', () async {
       var updateCalls = 0;
       final handler = FakeSupabaseHandler();
@@ -112,8 +136,9 @@ void main() {
 
       await c.read(missionsProvider.notifier).updateProgress('chat_sent');
       expect(updateCalls, 1);
-      final req = handler.captured
-          .lastWhere((r) => r.url.path.contains('update_mission_progress'));
+      final req = handler.captured.lastWhere(
+        (r) => r.url.path.contains('update_mission_progress'),
+      );
       expect(req.body, contains('chat_sent'));
     });
 
@@ -131,7 +156,9 @@ void main() {
       c.read(missionsProvider);
       await Future<void>.delayed(const Duration(milliseconds: 60));
 
-      final ok = await c.read(missionsProvider.notifier).claimReward('match_calls');
+      final ok = await c
+          .read(missionsProvider.notifier)
+          .claimReward('match_calls');
       expect(ok, true);
     });
 
@@ -140,7 +167,10 @@ void main() {
       handler.on('/signup', (_) => _anonSession('uid-mis'));
       handler.on('get_user_missions', (_) => _missionsResp());
       handler.on('check_user_total_coins', (_) => {'total_coins': 0});
-      handler.on('claim_mission_reward', (_) => {'success': false, 'error': 'nope'});
+      handler.on(
+        'claim_mission_reward',
+        (_) => {'success': false, 'error': 'nope'},
+      );
       final client = fakeSupabaseClient(handler: handler);
       await client.auth.signInAnonymously();
 
@@ -149,7 +179,9 @@ void main() {
       c.read(missionsProvider);
       await Future<void>.delayed(const Duration(milliseconds: 60));
 
-      final ok = await c.read(missionsProvider.notifier).claimReward('match_calls');
+      final ok = await c
+          .read(missionsProvider.notifier)
+          .claimReward('match_calls');
       expect(ok, false);
     });
 

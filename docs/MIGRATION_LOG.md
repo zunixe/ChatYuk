@@ -1,3 +1,69 @@
+## 2026-11-09 — Misi harian: batas hari per zona waktu pengguna + kunci 1.200 koin
+
+### `20261109235000_daily_mission_localday_lock.sql` (APPLIED 2026-11-09 via API)
+- **`_local_day(p_tz_offset_minutes)`** (baru): tanggal lokal dari offset HP,
+  clamp ±14 jam; default +420 (Asia/Jakarta) untuk klien lama.
+- **`get_user_missions` / `update_mission_progress` / `claim_mission_reward` /
+  `daily_login_bonus`** menerima `p_tz_offset_minutes` opsional. Sebelumnya
+  bonus login memakai Asia/Jakarta sedangkan misi harian memakai `CURRENT_DATE`
+  (UTC) sementara klien membaca tanggal lokal HP → beda hari di luar WIB.
+  Signature lama di-drop agar tidak ambigu (`-- SAFE:` di tiap DROP).
+- **Kunci 1.200 koin ditegakkan server**: output misi harian kini menyertakan
+  `is_locked` (+ `daily_locked`, `period_date`); progres & klaim misi harian
+  mengembalikan `MISSION_LOCKED` selama total kredit seumur hidup < 1200.
+- **Klien**: provider & service mengirim offset HP + tanggal lokal; layar Bonus
+  memakai tengah malam lokal (bukan WIB tetap); grid sign-in mereset ke Hari 1
+  bila sehari terlewat (server baru mereset saat klaim berikutnya).
+- **Verifikasi live (transaksi + rollback, akun dummy):** `daily_locked=true`,
+  progres & klaim → `MISSION_LOCKED`; setelah kredit 1200 → `false`, progres
+  tersimpan dengan `period_date = _local_day(offset)`. 18 test Flutter hijau.
+
+## 2026-11-09 — Koin bersih per gift terlihat oleh penerima
+
+### `20261109233000_gift_cut_public.sql` (APPLIED 2026-11-09 via API)
+- **`metered_pricing_public`**: tambah key `gift_cut_pct` (default 30) —
+  additive, nilai lain tidak berubah. Klien kini bisa menghitung netto
+  yang diterima penerima gift: `net = harga - (harga × cut / 100)`,
+  sama persis dengan kredit `send_gift` (pembagian integer).
+- **Klien:** bubble "Menerima hadiah" menampilkan `+N 🪙` (netto), dan
+  label animasi gift besar di penerima ikut menampilkan `· +N 🪙`.
+- **Verifikasi live:** `metered_pricing_public()->>'gift_cut_pct'` = 30.
+
+## 2026-11-09 — Promo bonus ×3 untuk akun admin/dev
+
+### `20261109230000_promo_admin_exempt.sql` (APPLIED 2026-11-09 via API)
+- **`_promo_payer_ok`**: pemanggil `_email_is_admin()` dengan
+  `p_payer = auth.uid()` melewati guard "device dipakai akun lain".
+  Latar: akun admin/dev punya banyak akun test di satu HP (admin + dummy),
+  jadi bonus TIDAK PERNAH bisa menambal gift/kirim koin — padahal aturan
+  YukCoin: bonus boleh menambal harga ×3 (`ledger_spend_promo`).
+- **Tidak mengubah anti-fraud user biasa**: user non-admin dengan
+  install_id dipakai akun lain tetap `promo_ok = false` (diverifikasi
+  langsung di live: admin true, user dummy shared-device false).
+- **Verifikasi live:** `_promo_payer_ok` admin = true (sebelumnya false),
+  `yukcoin_spendable` gift = 1044 (paid 1000 + bonus 132÷3).
+- **Snapshot:** `snapshot_functions.sh --all` dijalankan; diff memuat
+  drift room v2 (fungsi baru, bukan regresi) + perubahan ini.
+
+## 2026-11-08 — Video di "Foto Saya" (galeri profil)
+
+### `20261111130000_gallery_video.sql` (APPLIED 2026-11-08 via API)
+- **Tanpa kolom baru.** `user_photos.photo` (text, sudah path storage) kini
+  juga menyimpan path video `gallery/<uid>/<stamp>.mp4`; poster thumbnail =
+  file pasangan `<stamp>_poster.jpg` di folder yang sama (diturunkan dari
+  path video — kontrak upload/baca/hapus ada di `StoragePhotoService`).
+- **`my_photos` & `get_user_photos_access`**: output + key `is_video`
+  (regex path ASLI `\.(mp4|mov|webm)$`). Wajib di server karena item
+  TERKUNCI mengirim `photo` = preview blur — klien tak bisa menebak video.
+- **Klien:** slot sama dengan foto (maks 6 item), video 30 dtk / hasil
+  kompres ≤8 MB (720p/24fps). Female: video wajib memuat wajah (sampling
+  4 frame + ML Kit) → dicap `face_verified_at`. Hapus foto ikut menghapus
+  video + poster. Snapshot `functions_all.sql` direfresh (sekalian menyerap
+  drift live dari room v2 — cabang paywall/`unlock_photo` utuh, direview).
+- **Verifikasi:** `pg_proc` menunjukkan `is_video` di kedua fungsi;
+  `check_migrations.sh --all` OK; `flutter test test/gallery_video_test.dart`
+  18/18 hijau.
+
 ## 2026-11-11 — Room v2: sesi terjadwal + host (APPLIED 2026-11-11 via API)
 
 ### `20261111120000_room_sessions_v2.sql` (APPLIED 2026-11-11)

@@ -131,10 +131,24 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                                 onLongPress: () => _confirmDeletePhoto(ph),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: AsyncPhotoThumbnail(base64: ph.photo),
+                                  // Video: poster jernih (fallback preview blur)
+                                  // — mp4 tidak pernah diunduh untuk grid.
+                                  child: AsyncPhotoThumbnail(
+                                    base64: ph.isVideo
+                                        ? (ph.poster.isNotEmpty
+                                              ? ph.poster
+                                              : ph.preview)
+                                        : ph.photo,
+                                  ),
                                 ),
                               ),
                             ),
+                            if (ph.isVideo)
+                              const Positioned(
+                                left: 6,
+                                bottom: 6,
+                                child: VideoPlayBadge(size: 22),
+                              ),
                             // Foto female lama (belum lewat selfie liveness) →
                             // tandai supaya user tahu harus diganti.
                             if (isFemale && !ph.faceVerified)
@@ -669,6 +683,33 @@ mixin _ProfileUiSections2Mx on _ProfileBase {
                           tiles: true,
                           canTopup: canTopup,
                         ),
+                        // Female: jelaskan sumber penghasilan (hadiah dari
+                        // pengguna pria) — ia tidak punya tombol gift/koin.
+                        if (!canTopup)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  size: 14,
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    s.femaleGiftInfo,
+                                    style: AppText.caption.copyWith(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.9,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                       // Estimasi fiat koin EARNED (yang bisa ditarik):
                       // Rp untuk pengguna Indonesia, US$ selainnya.

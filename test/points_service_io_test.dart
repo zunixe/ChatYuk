@@ -10,7 +10,6 @@ import 'supabase_test_client.dart';
 /// crash"). Semua nilai return di-stub agar jalur parsing juga teruji.
 void main() {
   group('PointsService (I/O palsu)', () {
-
     test('dailyLoginBonus: RPC + parsing map', () async {
       final handler = FakeSupabaseHandler();
       handler.on(
@@ -24,8 +23,12 @@ void main() {
       expect(res['points'], 10);
       expect(res['streak'], 3);
       rpcRequestOf(handler, 'daily_login_bonus');
+      // Batas hari mengikuti zona waktu HP (semua negara), bukan WIB tetap.
+      expect(
+        rpcParamsOf(handler, 'daily_login_bonus')['p_tz_offset_minutes'],
+        DateTime.now().timeZoneOffset.inMinutes,
+      );
     });
-
 
     test('leaderboard offset 0: row_offset TIDAK dikirim', () async {
       final handler = FakeSupabaseHandler();
@@ -43,19 +46,22 @@ void main() {
       expect(params.containsKey('row_offset'), isFalse);
     });
 
-    test('leaderboard offset > 0: row_offset dikirim (kompat paginasi)', () async {
-      final handler = FakeSupabaseHandler();
-      handler.on(
-        '/rest/v1/rpc/points_leaderboard',
-        (_) => {'scope': 'weekly', 'entries': [], 'me': null},
-      );
-      final svc = PointsService(fakeSupabaseClient(handler: handler));
+    test(
+      'leaderboard offset > 0: row_offset dikirim (kompat paginasi)',
+      () async {
+        final handler = FakeSupabaseHandler();
+        handler.on(
+          '/rest/v1/rpc/points_leaderboard',
+          (_) => {'scope': 'weekly', 'entries': [], 'me': null},
+        );
+        final svc = PointsService(fakeSupabaseClient(handler: handler));
 
-      await svc.leaderboard('weekly', limit: 50, offset: 100);
+        await svc.leaderboard('weekly', limit: 50, offset: 100);
 
-      final params = rpcParamsOf(handler, 'points_leaderboard');
-      expect(params['row_offset'], 100);
-    });
+        final params = rpcParamsOf(handler, 'points_leaderboard');
+        expect(params['row_offset'], 100);
+      },
+    );
 
     test('getWallet: parsing map bucket', () async {
       final handler = FakeSupabaseHandler();
@@ -80,35 +86,38 @@ void main() {
       expect(await svc.fetchEnabled(), isTrue);
     });
 
-    test('activityLeaderboard: RPC + params p_scope/p_limit + parsing', () async {
-      final handler = FakeSupabaseHandler();
-      handler.on(
-        '/rest/v1/rpc/activity_leaderboard',
-        (_) => {
-          'scope': 'weekly',
-          'entries': [
-            {
-              'rank': 1,
-              'uid': 'u1',
-              'nickname': 'anggi',
-              'score': 557,
-              'msg_count': 557,
-              'reaction_count': 0,
-            },
-          ],
-          'me': {'rank': 4, 'score': 289},
-        },
-      );
-      final svc = PointsService(fakeSupabaseClient(handler: handler));
+    test(
+      'activityLeaderboard: RPC + params p_scope/p_limit + parsing',
+      () async {
+        final handler = FakeSupabaseHandler();
+        handler.on(
+          '/rest/v1/rpc/activity_leaderboard',
+          (_) => {
+            'scope': 'weekly',
+            'entries': [
+              {
+                'rank': 1,
+                'uid': 'u1',
+                'nickname': 'anggi',
+                'score': 557,
+                'msg_count': 557,
+                'reaction_count': 0,
+              },
+            ],
+            'me': {'rank': 4, 'score': 289},
+          },
+        );
+        final svc = PointsService(fakeSupabaseClient(handler: handler));
 
-      final res = await svc.activityLeaderboard('weekly', limit: 20);
+        final res = await svc.activityLeaderboard('weekly', limit: 20);
 
-      final params = rpcParamsOf(handler, 'activity_leaderboard');
-      expect(params['p_scope'], 'weekly');
-      expect(params['p_limit'], 20);
-      expect((res['entries'] as List).first['nickname'], 'anggi');
-      expect((res['me'] as Map)['rank'], 4);
-    });
+        final params = rpcParamsOf(handler, 'activity_leaderboard');
+        expect(params['p_scope'], 'weekly');
+        expect(params['p_limit'], 20);
+        expect((res['entries'] as List).first['nickname'], 'anggi');
+        expect((res['me'] as Map)['rank'], 4);
+      },
+    );
 
     test('activityLeaderboard: fallback aman saat return null', () async {
       final handler = FakeSupabaseHandler();

@@ -54,9 +54,11 @@ class PointsService {
       if (identical(_inflight[key], fut)) _inflight.remove(key);
     }).ignore();
     if (ttl) {
-      fut.then((v) {
-        _ttlCache[key] = (value: v, at: DateTime.now());
-      }).catchError((_) {});
+      fut
+          .then((v) {
+            _ttlCache[key] = (value: v, at: DateTime.now());
+          })
+          .catchError((_) {});
     }
     return fut;
   }
@@ -66,10 +68,15 @@ class PointsService {
     // tab. Terukur `get_points_enabled` 10x per sesi boot (~1,2 dtk masing-
     // masing saat server antre) — 3 dtk terlalu pendek sehingga burst
     // berikutnya menembak RPC lagi. Nilai ini jarang berubah (toggle admin).
-    return _coalesce<bool>('get_points_enabled', () async {
-      final res = await measuredRpc(_sb, 'get_points_enabled');
-      return res == true;
-    }, ttl: true, ttlDuration: const Duration(seconds: 30));
+    return _coalesce<bool>(
+      'get_points_enabled',
+      () async {
+        final res = await measuredRpc(_sb, 'get_points_enabled');
+        return res == true;
+      },
+      ttl: true,
+      ttlDuration: const Duration(seconds: 30),
+    );
   }
 
   /// Harga fitur berbayar (call per menit, filter, nearby) untuk UI.
@@ -113,9 +120,7 @@ class PointsService {
         try {
           final res = await measuredRpc(_sb, 'list_topup_packages');
           if (res is List) {
-            return res
-                .map((e) => Map<String, dynamic>.from(e as Map))
-                .toList();
+            return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
           }
         } catch (e) {
           dlog('[PointsService] listTopupPackages error: $e');
@@ -136,10 +141,7 @@ class PointsService {
     try {
       final res = await _sb.functions.invoke(
         'play-topup-verify',
-        body: {
-          'product_id': productId,
-          'purchase_token': purchaseToken,
-        },
+        body: {'product_id': productId, 'purchase_token': purchaseToken},
       );
       final data = res.data;
       if (data is Map && data['coins'] != null) {
@@ -180,8 +182,9 @@ class PointsService {
     // retry tanpa henti. Polling kolom eksplisit via RPC get_points_enabled
     // (sudah ada) menghindari itu tanpa melonggarkan hardening.
     yield await fetchEnabled();
-    yield* Stream<void>.periodic(const Duration(seconds: 20))
-        .asyncMap((_) => fetchEnabled());
+    yield* Stream<void>.periodic(
+      const Duration(seconds: 20),
+    ).asyncMap((_) => fetchEnabled());
   }
 
   /// Realtime saldo koin sendiri (profiles.points). Dipakai supaya saldo
@@ -199,8 +202,11 @@ class PointsService {
           .maybeSingle();
       return ((row?['points'] as num?) ?? 0).toInt();
     }
+
     yield await fetch();
-    yield* Stream<void>.periodic(const Duration(seconds: 20)).asyncMap((_) => fetch());
+    yield* Stream<void>.periodic(
+      const Duration(seconds: 20),
+    ).asyncMap((_) => fetch());
   }
 
   String? get uid => _sb.auth.currentUser?.id;
@@ -240,13 +246,21 @@ class PointsService {
   /// Level user lain (badge di user_info) — {level}. Level bukan data
   /// sensitif; female/dummy memang 0 (male-only di server).
   Future<int> getUserLevel(String uid) {
-    return _coalesce<int>('get_user_level_$uid', () async {
-      final res = await measuredRpc(_sb, 'get_user_level', params: {'p_user': uid});
-      if (res is Map) return (res['level'] as num?)?.toInt() ?? 0;
-      return 0;
-    }, ttl: true, ttlDuration: _ttlLong);
+    return _coalesce<int>(
+      'get_user_level_$uid',
+      () async {
+        final res = await measuredRpc(
+          _sb,
+          'get_user_level',
+          params: {'p_user': uid},
+        );
+        if (res is Map) return (res['level'] as num?)?.toInt() ?? 0;
+        return 0;
+      },
+      ttl: true,
+      ttlDuration: _ttlLong,
+    );
   }
-
 
   /// Saldo YukCoin terpadu: {total, bonus, earned}.
 
@@ -324,13 +338,20 @@ class PointsService {
   }
 
   Future<Map<String, dynamic>> dailyLoginBonus() async {
-    final res = await measuredRpc(_sb, 'daily_login_bonus');
+    // Offset HP → server menentukan "hari ini" menurut waktu LOKAL pengguna
+    // (semua negara), bukan hardcode Asia/Jakarta.
+    final res = await measuredRpc(
+      _sb,
+      'daily_login_bonus',
+      params: {'p_tz_offset_minutes': DateTime.now().timeZoneOffset.inMinutes},
+    );
     if (res is Map) return Map<String, dynamic>.from(res);
     return {'points': (res as num?)?.toInt() ?? 0, 'streak': 0, 'bonus': 0};
   }
 
   Future<int> deductChatPoint(String msgType) async {
-    final res = await measuredRpc(_sb, 
+    final res = await measuredRpc(
+      _sb,
       'deduct_chat_point',
       params: {'msg_type': msgType},
     );
@@ -338,7 +359,8 @@ class PointsService {
   }
 
   Future<int> refundChatPoint(String msgType) async {
-    final res = await measuredRpc(_sb, 
+    final res = await measuredRpc(
+      _sb,
       'refund_chat_point',
       params: {'msg_type': msgType},
     );
@@ -346,20 +368,17 @@ class PointsService {
   }
 
   Future<int> newChatBonus(String otherUid) async {
-    final res = await measuredRpc(_sb, 
+    final res = await measuredRpc(
+      _sb,
       'new_chat_bonus',
       params: {'other_uid': otherUid},
     );
     return (res as num).toInt();
   }
 
-
-
   /// Reward koin upload foto slot 1..5 (sekali per slot). Return total koin.
 
-
   /// Biaya buka foto (once, perm) dari app_settings.
-
 
   /// Leaderboard. scope: 'weekly' | 'alltime'. Return {scope, entries[], me}.
   ///
@@ -421,8 +440,12 @@ class PointsService {
     int periods = 1,
     int? expectedPrice,
   }) async {
-    return subscribeCreatorRpc(_sb, creatorUid,
-        periods: periods, expectedPrice: expectedPrice);
+    return subscribeCreatorRpc(
+      _sb,
+      creatorUid,
+      periods: periods,
+      expectedPrice: expectedPrice,
+    );
   }
 
   /// Klaim reward referral-install (sekali per referred).

@@ -1,3 +1,13 @@
+## 2026-11-08 — Video di "Foto Saya" (galeri profil)
+
+- **Status:** SUDAH TERAPPLIED via Management API —
+  `20261111130000_gallery_video.sql` (CREATE OR REPLACE `my_photos` &
+  `get_user_photos_access`, output + key `is_video`; additive).
+- **Snapshot:** `supabase/snapshots/functions_all.sql` direfresh — diff
+  mencakup drift live room v2 (fungsi baru, bukan regresi) + 2 fungsi ini.
+- **Verifikasi:** `pg_proc` (`is_video` ada di kedua fungsi);
+  `check_migrations.sh --all` OK.
+
 ## 2026-11-02 — Audit lanjutan: pulihkan regresi + zona waktu (Fase 23)
 
 - **Status:** SUDAH TERAPPLIED via Management API — 3 migrasi:

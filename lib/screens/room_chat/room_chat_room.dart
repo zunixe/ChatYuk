@@ -1,6 +1,5 @@
 part of '../room_chat_screen.dart';
 
-
 mixin _RcRoomMx on _RoomChatBase {
   /// Cap dedupe-id pesan terkonfirmasi (MEDIUM, 2026-10-11): dulu Set tumbuh
   /// per foto/voice server seumur layar room dibuka → memori naik monoton.
@@ -10,6 +9,7 @@ mixin _RcRoomMx on _RoomChatBase {
       ids.remove(ids.first);
     }
   }
+
   @override
   Future<void> _refreshGrant() async {
     try {
@@ -25,11 +25,7 @@ mixin _RcRoomMx on _RoomChatBase {
         setState(() => _isGrantedBroadcast = g);
       }
       // Simpan untuk buka berikutnya (tampil sejak frame 1, tanpa blink).
-      BroadcastStateCache.save(
-        widget.room.id,
-        granted: g,
-        liveUid: _liveUid,
-      );
+      BroadcastStateCache.save(widget.room.id, granted: g, liveUid: _liveUid);
     } catch (e) {
       dlog('[BDBG] refreshGrant error: $e');
     }
@@ -64,6 +60,17 @@ mixin _RcRoomMx on _RoomChatBase {
           DateTime.now().difference(m.timestamp) < const Duration(seconds: 5);
       if (!fresh) continue;
       _giftFly.push(gift, m.senderName, 1);
+      final sg = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(localeProvider).s;
+      _giftPlay.push(
+        gift,
+        sg.giftAnimSomeoneSent(
+          m.senderName,
+          sg.isId ? gift.nameId : gift.nameEn,
+        ),
+      );
     }
     // Dedupe bubble optimistik milik sendiri (centang-1 → centang-2):
     // teks dicocokkan isi, foto/voice FIFO via id server (thumbnail di
@@ -136,7 +143,8 @@ mixin _RcRoomMx on _RoomChatBase {
         }
         for (final m in msgs) {
           if (m.senderId == myId &&
-              m.type == 'voice' &&              m.timestamp.isAfter(_openedAt) &&
+              m.type == 'voice' &&
+              m.timestamp.isAfter(_openedAt) &&
               _confirmedVoiceIds.add(m.id)) {
             _trimConfirmed(_confirmedVoiceIds);
             final idx = _pending.indexWhere((p) => p.type == 'voice');
@@ -284,7 +292,9 @@ mixin _RcRoomMx on _RoomChatBase {
     // cap 4
     final scope = ProviderScope.containerOf(context, listen: false);
     try {
-      final cnt = await scope.read(roomProvider.notifier).broadcastCount(widget.room.id);
+      final cnt = await scope
+          .read(roomProvider.notifier)
+          .broadcastCount(widget.room.id);
       if (cnt >= 4) {
         if (!mounted) return;
         final s = scope.read(localeProvider).s;
@@ -729,6 +739,7 @@ mixin _RcRoomMx on _RoomChatBase {
     _livePoll?.cancel();
     _liveTimer?.cancel();
     _giftFly.dispose();
+    _giftPlay.dispose();
     unawaited(_msgsSub?.cancel());
     _msgsSub = null;
     unawaited(_usersSub?.cancel());
@@ -761,5 +772,4 @@ mixin _RcRoomMx on _RoomChatBase {
     _scrollCtrl.dispose();
     super.dispose();
   }
-
 }

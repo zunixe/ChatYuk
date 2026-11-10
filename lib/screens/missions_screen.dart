@@ -45,18 +45,20 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen> {
     super.dispose();
   }
 
-  /// Tanggal hari ini zona WIB (server memakai Asia/Jakarta).
-  String get _todayWib {
-    final wib = DateTime.now().toUtc().add(const Duration(hours: 7));
-    return '${wib.year.toString().padLeft(4, '0')}-'
-        '${wib.month.toString().padLeft(2, '0')}-'
-        '${wib.day.toString().padLeft(2, '0')}';
+  /// Tanggal hari ini menurut waktu LOKAL HP — server memakai offset yang
+  /// sama (`_local_day`), jadi pengguna di negara mana pun melihat hari yang
+  /// konsisten dengan yang bisa diklaim.
+  String get _todayLocal {
+    final d = DateTime.now();
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
   }
 
   void _updateCountdown() {
-    final nowWib = DateTime.now().toUtc().add(const Duration(hours: 7));
-    final nextMidnight = DateTime(nowWib.year, nowWib.month, nowWib.day + 1);
-    final d = nextMidnight.difference(nowWib);
+    final now = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+    final d = nextMidnight.difference(now);
     if (mounted) {
       setState(() => _untilReset = d.isNegative ? Duration.zero : d);
     }
@@ -107,9 +109,7 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen> {
     } else {
       text = s.bonusRewardCoinsNonWithdrawable(coins);
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
@@ -155,7 +155,7 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen> {
                       s: s,
                       claimedToday:
                           st.lastLoginDate != null &&
-                          st.lastLoginDate == _todayWib,
+                          st.lastLoginDate == _todayLocal,
                       countdown: _countdownLabel,
                       claiming: _claiming,
                       onTap: _claimSignIn,
@@ -172,18 +172,14 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen> {
                     trailing: st.nyonyaMission != null
                         ? null
                         : s.missionsCompletedCount(
-                            st.mainMissions
-                                .where((m) => m.isCompleted)
-                                .length,
+                            st.mainMissions.where((m) => m.isCompleted).length,
                             st.mainMissions.length,
                           ),
                     // Female: "x/y selesai" di samping judul supaya tidak
                     // berebut tempat dengan counter nyonya (dulu overflow).
                     subtitle: st.nyonyaMission != null
                         ? s.missionsCompletedCount(
-                            st.mainMissions
-                                .where((m) => m.isCompleted)
-                                .length,
+                            st.mainMissions.where((m) => m.isCompleted).length,
                             st.mainMissions.length,
                           )
                         : null,
@@ -203,19 +199,19 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen> {
                   ...st.mainMissions
                       .where((m) => m.missionKey != 'nyonya_1000')
                       .map(
-                    (m) => BonusTaskRow(
-                      title: m.title,
-                      progressLabel: m.targetValue > 1
-                          ? s.bonusTaskProgress(m.progress, m.targetValue)
-                          : '',
-                      rewardCoins: m.rewardCoins,
-                      claimed: m.claimed,
-                      claimLabel: s.bonusClaim,
-                      onClaim: m.canClaim
-                          ? () => _claimMission(m.missionKey, m.rewardCoins)
-                          : null,
-                    ),
-                  ),
+                        (m) => BonusTaskRow(
+                          title: m.title,
+                          progressLabel: m.targetValue > 1
+                              ? s.bonusTaskProgress(m.progress, m.targetValue)
+                              : '',
+                          rewardCoins: m.rewardCoins,
+                          claimed: m.claimed,
+                          claimLabel: s.bonusClaim,
+                          onClaim: m.canClaim
+                              ? () => _claimMission(m.missionKey, m.rewardCoins)
+                              : null,
+                        ),
+                      ),
                   const SizedBox(height: 8),
                   _SectionHeader(
                     icon: Icons.today_outlined,
@@ -223,9 +219,7 @@ class _MissionsScreenState extends ConsumerState<MissionsScreen> {
                     title: s.bonusDailyBonus,
                     trailing: st.totalCoins >= 1200
                         ? s.missionsCompletedCount(
-                            st.dailyMissions
-                                .where((m) => m.isCompleted)
-                                .length,
+                            st.dailyMissions.where((m) => m.isCompleted).length,
                             st.dailyMissions.length,
                           )
                         : null,
@@ -273,9 +267,17 @@ class _SignInGrid extends StatelessWidget {
   const _SignInGrid({required this.s, required this.st});
 
   ({int claimedDays, int todayCard}) get _grid {
-    final claimedToday =
-        st.lastLoginDate != null && st.lastLoginDate == _todayOfContext;
-    final streak = st.loginStreak.clamp(0, 7);
+    final today = _todayOfContext;
+    final yesterday = _dateStr(
+      DateTime.now().subtract(const Duration(days: 1)),
+    );
+    final claimedToday = st.lastLoginDate != null && st.lastLoginDate == today;
+    // Sehari terlewat → streak putus; server baru mereset saat klaim
+    // berikutnya, jadi grid harus menampilkan Hari 1 (bukan hari lanjutan).
+    final broken =
+        st.lastLoginDate == null ||
+        (st.lastLoginDate!.compareTo(yesterday) < 0);
+    final streak = broken ? 0 : st.loginStreak.clamp(0, 7);
     if (claimedToday) {
       return (claimedDays: streak, todayCard: 0);
     }
@@ -284,14 +286,13 @@ class _SignInGrid extends StatelessWidget {
     return (claimedDays: streak, todayCard: streak + 1);
   }
 
-  /// Tanggal WIB dihitung ulang di sini (widget stateless — build ulang
-  /// tiap tick countdown tetap konsisten).
-  String get _todayOfContext {
-    final wib = DateTime.now().toUtc().add(const Duration(hours: 7));
-    return '${wib.year.toString().padLeft(4, '0')}-'
-        '${wib.month.toString().padLeft(2, '0')}-'
-        '${wib.day.toString().padLeft(2, '0')}';
-  }
+  static String _dateStr(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  /// Tanggal LOKAL HP — server memakai offset zona waktu yang sama.
+  String get _todayOfContext => _dateStr(DateTime.now());
 
   int _cardState(int day) {
     final g = _grid;
@@ -303,14 +304,14 @@ class _SignInGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget card(int day, {int flex = 1}) => Expanded(
-          flex: flex,
-          child: BonusDayCard(
-            day: day,
-            coins: kStreakRewards[day - 1],
-            state: _cardState(day),
-            dayLabel: s.bonusDay(day),
-          ),
-        );
+      flex: flex,
+      child: BonusDayCard(
+        day: day,
+        coins: kStreakRewards[day - 1],
+        state: _cardState(day),
+        dayLabel: s.bonusDay(day),
+      ),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -370,9 +371,7 @@ class _SignInButton extends StatelessWidget {
         child: FilledButton(
           onPressed: disabled ? null : onTap,
           style: FilledButton.styleFrom(
-            backgroundColor: disabled
-                ? AppTheme.bgInput
-                : AppTheme.primary,
+            backgroundColor: disabled ? AppTheme.bgInput : AppTheme.primary,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
@@ -384,9 +383,7 @@ class _SignInButton extends StatelessWidget {
               Text(
                 claimedToday ? s.bonusSignInDone : s.bonusSignIn,
                 style: AppText.button.copyWith(
-                  color: disabled
-                      ? AppTheme.textSecondary
-                      : Colors.white,
+                  color: disabled ? AppTheme.textSecondary : Colors.white,
                 ),
               ),
               if (!claimedToday) ...[
@@ -457,9 +454,7 @@ class _SectionHeader extends StatelessWidget {
               child: Text(
                 trailing!,
                 textAlign: TextAlign.right,
-                style: AppText.caption.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
+                style: AppText.caption.copyWith(color: AppTheme.textSecondary),
               ),
             ),
         ],
@@ -475,11 +470,7 @@ class _NyonyaCounter extends StatelessWidget {
   final S s;
   final Mission mission;
   final VoidCallback? onClaim;
-  const _NyonyaCounter({
-    required this.s,
-    required this.mission,
-    this.onClaim,
-  });
+  const _NyonyaCounter({required this.s, required this.mission, this.onClaim});
 
   @override
   Widget build(BuildContext context) {

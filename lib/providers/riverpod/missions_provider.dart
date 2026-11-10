@@ -44,17 +44,16 @@ class MissionsState {
     int? loginStreak,
     String? lastLoginDate,
     String? gender,
-  }) =>
-      MissionsState(
-        mainMissions: mainMissions ?? this.mainMissions,
-        dailyMissions: dailyMissions ?? this.dailyMissions,
-        totalCoins: totalCoins ?? this.totalCoins,
-        loading: loading ?? this.loading,
-        error: error,
-        loginStreak: loginStreak ?? this.loginStreak,
-        lastLoginDate: lastLoginDate ?? this.lastLoginDate,
-        gender: gender ?? this.gender,
-      );
+  }) => MissionsState(
+    mainMissions: mainMissions ?? this.mainMissions,
+    dailyMissions: dailyMissions ?? this.dailyMissions,
+    totalCoins: totalCoins ?? this.totalCoins,
+    loading: loading ?? this.loading,
+    error: error,
+    loginStreak: loginStreak ?? this.loginStreak,
+    lastLoginDate: lastLoginDate ?? this.lastLoginDate,
+    gender: gender ?? this.gender,
+  );
 
   /// Grid sign-in hanya untuk male (server menolak klaim non-male).
   bool get showSignIn => gender == 'male';
@@ -126,14 +125,31 @@ class MissionsNotifier extends Notifier<MissionsState> {
     return const MissionsState(loading: true);
   }
 
+  /// Tanggal LOKAL HP (yyyy-mm-dd) — sama dengan batas hari server
+  /// (`_local_day` memakai offset zona waktu yang dikirim klien).
+  String get _localDate {
+    final d = DateTime.now();
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Offset zona waktu HP (menit) — misi harian mengikuti waktu lokal
+  /// pengguna, jadi user di negara lain tidak ikut WIB.
+  int get _tzOffsetMinutes => DateTime.now().timeZoneOffset.inMinutes;
+
   /// Load semua misi dari DB
   Future<void> _loadMissions({required String userId}) async {
     try {
-      final today = DateTime.now().toIso8601String().substring(0, 10);
+      final today = _localDate;
 
       final res = await _sb.rpc(
         'get_user_missions',
-        params: {'p_user_id': userId, 'p_period_date': today},
+        params: {
+          'p_user_id': userId,
+          'p_period_date': today,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
+        },
       );
 
       final progress = MissionProgress.fromJson(res);
@@ -162,18 +178,12 @@ class MissionsNotifier extends Notifier<MissionsState> {
       );
     } catch (e) {
       dlog('[MISSIONS] load error: $e');
-      state = MissionsState(
-        loading: false,
-        error: e.toString(),
-      );
+      state = MissionsState(loading: false, error: e.toString());
     }
   }
 
   /// Update progress misi (dipanggil saat user melakukan aktivitas)
-  Future<void> updateProgress(
-    String missionKey, {
-    int increment = 1,
-  }) async {
+  Future<void> updateProgress(String missionKey, {int increment = 1}) async {
     final userId = _sb.auth.currentUser?.id;
     if (userId == null) return;
 
@@ -184,6 +194,7 @@ class MissionsNotifier extends Notifier<MissionsState> {
           'p_user_id': userId,
           'p_mission_key': missionKey,
           'p_increment': increment,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
         },
       );
 
@@ -215,6 +226,7 @@ class MissionsNotifier extends Notifier<MissionsState> {
         params: {
           'p_user_id': userId,
           'p_mission_key': missionKey,
+          'p_tz_offset_minutes': _tzOffsetMinutes,
         },
       );
 
@@ -243,7 +255,6 @@ class MissionsNotifier extends Notifier<MissionsState> {
       await _loadMissions(userId: userId);
     }
   }
-
 }
 
 final missionsProvider = NotifierProvider<MissionsNotifier, MissionsState>(

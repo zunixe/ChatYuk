@@ -106,6 +106,17 @@ mixin SChatMx {
   String get faceCamMulti => isId
       ? 'Lebih dari satu wajah — satu orang saja'
       : 'More than one face — one person only';
+  String get faceCamStartRec => isId
+      ? 'Wajah terdeteksi — mulai rekam'
+      : 'Face detected — start recording';
+  String get faceCamRecOk => isId ? 'Wajah terdeteksi' : 'Face detected';
+  String get faceCamRecHint => isId
+      ? 'Merekam… pastikan wajahmu terlihat'
+      : 'Recording… keep your face visible';
+  String get faceCamChecking => isId ? 'Memeriksa wajah…' : 'Checking face…';
+  String get faceCamVideoReject => isId
+      ? 'Wajah tidak terlihat cukup jelas — rekam ulang'
+      : 'Face not clearly visible — record again';
   String get faceCamBroken => isId
       ? 'Deteksi wajah tidak jalan — jepret manual'
       : 'Face detection unavailable — capture manually';
@@ -171,6 +182,16 @@ mixin SChatMx {
       isId ? 'Yakin ingin menghapus foto ini?' : 'Delete this photo?';
   String get msggalleryLimit => msgGalleryLimit;
   String get msgGalleryLimit => isId ? 'Maksimal 6 foto.' : 'Maximum 6 photos.';
+
+  // ── Video di "Foto Saya" (galeri profil) ──
+  String get galleryVideoCamera => isId ? 'Rekam Video' : 'Record Video';
+  String get galleryVideoGallery =>
+      isId ? 'Video dari Galeri' : 'Video from Gallery';
+  String get galleryVideoHint =>
+      isId ? 'Video maksimal 30 detik' : 'Video is 30 seconds max';
+  String get galleryVideoNoFace => isId
+      ? 'Wajah tidak terdeteksi di video ini. Video harus menampilkan wajahmu.'
+      : 'No face detected in this video. The video must show your face.';
   String get labelOthersGallery => isId ? 'Foto Profil' : 'Photos';
   String get btnShareApp => isId ? 'Ajak Teman' : 'Invite Friends';
   String get msgShareApp => isId

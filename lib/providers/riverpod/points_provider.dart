@@ -40,6 +40,10 @@ class PointsState {
   final int callAudioCostPerMin;
   final int callVideoCostPerMin;
   final int photoUnlockCost;
+
+  /// Potongan platform untuk gift (%). Penerima mendapat `harga - cut`
+  /// ke bucket earned — ditampilkan di bubble "Menerima hadiah".
+  final int giftCutPct;
   final Map<String, dynamic> featureFlags;
 
   const PointsState({
@@ -60,6 +64,7 @@ class PointsState {
     this.callAudioCostPerMin = 6,
     this.callVideoCostPerMin = 20,
     this.photoUnlockCost = 15,
+    this.giftCutPct = 30,
     this.featureFlags = const {},
   });
 
@@ -83,6 +88,7 @@ class PointsState {
       other.callAudioCostPerMin == callAudioCostPerMin &&
       other.callVideoCostPerMin == callVideoCostPerMin &&
       other.photoUnlockCost == photoUnlockCost &&
+      other.giftCutPct == giftCutPct &&
       mapEquals(other.featureFlags, featureFlags);
 
   @override
@@ -104,6 +110,7 @@ class PointsState {
     callAudioCostPerMin,
     callVideoCostPerMin,
     photoUnlockCost,
+    giftCutPct,
     Object.hashAllUnordered(
       featureFlags.entries.map((e) => Object.hash(e.key, e.value)),
     ),
@@ -125,6 +132,11 @@ class PointsState {
 
   int callCostPerMin(String callType) =>
       callType == 'audio' ? callAudioCostPerMin : callVideoCostPerMin;
+
+  /// Koin yang BENAR-BENAR diterima penerima gift (setelah potongan
+  /// platform) — rumus sama dengan `send_gift` di server:
+  /// net = harga - (harga × cut% / 100), pembagian integer.
+  int giftNet(int coins) => coins - (coins * giftCutPct) ~/ 100;
 
   bool featurePublished(String feature) =>
       (featureFlags[feature] is Map) &&
@@ -181,6 +193,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   int _callAudioCostPerMin = 6;
   int _callVideoCostPerMin = 20;
   int _photoUnlockCost = 15;
+  int _giftCutPct = 30;
 
   Map<String, dynamic> _featureFlags = {};
 
@@ -244,6 +257,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
       callAudioCostPerMin: _callAudioCostPerMin,
       callVideoCostPerMin: _callVideoCostPerMin,
       photoUnlockCost: _photoUnlockCost,
+      giftCutPct: _giftCutPct,
       featureFlags: Map.unmodifiable(_featureFlags),
     );
   }
@@ -268,6 +282,8 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
   int get roomCreatePwPaid => _roomCreatePwPaid;
   int get roomExtendPaid => _roomExtendPaid;
   int get bonusMultiplier => _bonusMultiplier;
+  bool get promoOk => _promoOk;
+  int get giftCutPct => _giftCutPct;
   int get callAudioCostPerMin => _callAudioCostPerMin;
   int get callVideoCostPerMin => _callVideoCostPerMin;
   int get photoUnlockCost => _photoUnlockCost;
@@ -297,6 +313,7 @@ class PointsNotifier extends Notifier<PointsState> with WidgetsBindingObserver {
           _callVideoCostPerMin;
       _photoUnlockCost =
           (p['photo_unlock_cost'] as num?)?.toInt() ?? _photoUnlockCost;
+      _giftCutPct = (p['gift_cut_pct'] as num?)?.toInt() ?? _giftCutPct;
       _featureFlags = await _service.featureFlags();
       _emit();
     } catch (e) {

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>ChatYuk — Gift Animations Preview</title>
+<style>
+  body { background:#121418; color:#eee; font-family:system-ui,sans-serif; margin:0; padding:24px; }
+  h1 { font-size:18px; font-weight:600; margin:0 0 20px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px; }
+  .card { background:#1c1f26; border-radius:14px; padding:12px; text-align:center; }
+  .card .name { margin-top:8px; font-size:14px; }
+  .card .price { color:#ffc94d; font-size:13px; margin-top:2px; }
+  lottie-player { width:100%; height:auto; background:transparent; }
+  button { margin-top:8px; background:#2a2f3a; color:#eee; border:0; border-radius:8px; padding:5px 12px; cursor:pointer; }
+</style>
+<script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+</head>
+<body>
+<h1>Gift animations — klik kartu untuk main ulang</h1>
+<div class="grid" id="grid"></div>
+<script>
+const gifts = [
+  {id:'rose',      name:'Mawar · Rose',        coins:10},
+  {id:'coffee',    name:'Kopi · Coffee',       coins:25},
+  {id:'teddy',     name:'Boneka · Teddy Bear', coins:50},
+  {id:'cake',      name:'Kue · Cake',          coins:75},
+  {id:'diamond',   name:'Berlian · Diamond',   coins:150},
+  {id:'crown',     name:'Mahkota · Crown',     coins:300},
+  {id:'rocket',    name:'Roket · Rocket',      coins:500},
+  {id:'sportscar', name:'Mobil Sport · Sports Car', coins:1000},
+];
+const grid = document.getElementById('grid');
+for (const g of gifts) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML =
+    '<lottie-player src="../assets/gifts/gift_' + g.id + '.json" autoplay></lottie-player>' +
+    '<div class="name">' + g.name + '</div>' +
+    '<div class="price">' + g.coins + ' 🪙</div>' +
+    '<button>▶ replay</button>';
+  card.querySelector('button').onclick = () => {
+    const p = card.querySelector('lottie-player');
+    p.stop(); p.play();
+  };
+  grid.appendChild(card);
+}
+</script>
+</body>
+</html>

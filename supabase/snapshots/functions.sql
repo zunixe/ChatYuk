@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-11-08T02:10:31Z
+-- Timestamp: 2026-11-10T11:49:13Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -1176,8 +1176,8 @@ begin
   return coalesce(tot, 0);
 end; $function$
 
--- snapshot-fn: daily_login_bonus @ 20261101120000_daily_login_streak_v2.sql
-CREATE OR REPLACE FUNCTION public.daily_login_bonus()
+-- snapshot-fn: daily_login_bonus @ 20261109235000_daily_mission_localday_lock.sql
+CREATE OR REPLACE FUNCTION public.daily_login_bonus(p_tz_offset_minutes integer DEFAULT NULL::integer)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -1191,7 +1191,8 @@ declare
   bonus int;
   v_gender text;
 begin
-  today := (now() at time zone 'Asia/Jakarta')::date;
+  -- Tanggal lokal pengguna (offset HP) — bukan lagi hardcode Asia/Jakarta.
+  today := public._local_day(p_tz_offset_minutes);
 
   select last_login_date, login_streak, gender
     into last_date, cur_streak, v_gender
