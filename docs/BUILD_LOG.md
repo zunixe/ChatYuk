@@ -5,6 +5,7 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | Tanggal | Branch | Flavor | Isi | Install |
 |---|---|---|---|---|
+| 2026-11-13 06:11 | develop | playProd (AAB) | Upload 1.2.77+119 ke production — **backend pindah ke self-hosted** `sbapi.43.134.190.214.sslip.io` (Supabase cloud lama paused/unpaid; DB+storage direstore ke VPS, 26 cron job jalan). AAB diverifikasi 0 referensi supabase.co | Success: track production = vc 119 completed; `app_settings.latest_version`=1.2.77 (DB self-hosted) |
 | 2026-09-29 13:50 | develop | adminProdDebug | Reinstall admin debug v1.2.60-admin (pastikan versi terbaru; uninstall tidak perlu — signature debug sama) | Success (stream install 192.168.137.215:43859, lastUpdateTime 13:50) |
 | 2026-09-29 11:01 | develop | apkpureProdDebug + adminProdDebug | Debug APK user+admin v1.2.60+82 (privacy circle, anon timeline gate, FCM token fix). Uninstall dulu (sign rilis vs debug beda → INSTALL_FAILED_UPDATE_INCOMPATIBLE), lalu install fresh | Success (stream install 192.168.137.215, user+admin) |
 | 2026-09-28 08:20 | develop | playProd (AAB) | Upload 1.2.59+81 ke production (boot anti-stuck logo + Play compliance edge-to-edge + no-portrait + input no HP sedunia). Ganti vc 80 yang sudah terpakai | Success: AAB upload track production, vc 81 / 1.2.59 completed; latest_version app_settings=1.2.59 |
