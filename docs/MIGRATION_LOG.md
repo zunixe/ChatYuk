@@ -4992,3 +4992,16 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
   tak boleh dalam transaksi; 25/25 OK) DAN replica 43 (25/25 OK).
 - Verifikasi: sisa FK tanpa index di production = 0. Versi tercatat
   20261107183000.
+
+## 2026-11-11 — 20261111140000_fake_gps_soft_signals (PRODUCTION)
+
+- `update_my_location`: deteksi Fake GPS dipisah HARD (is_mocked,
+  accuracy_zero, known_emulator, impossible_speed sadar-akurasi) vs SOFT
+  (static_coord, shared_coord, spoof_delta — butuh ≥2). Orang serumah /
+  sekantor / diam di rumah dgn fix kasar / IP seluler meleset tidak lagi
+  ditandai.
+- Baru: `admin_reevaluate_location_flags()`; `admin_flag_shared_locations`
+  dialihkan ke fungsi itu.
+- Backfill dijalankan: 49 profil diubah → sisa flag hanya `known_emulator` (11).
+- Verifikasi: `fake_gps_test.sql` 12/12, `schema_sync_test.sql` 63/63,
+  `check_migrations.sh --all` OK. Versi tercatat 20261111140000.

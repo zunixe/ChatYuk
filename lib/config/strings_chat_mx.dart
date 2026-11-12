@@ -150,6 +150,18 @@ mixin SChatMx {
 
   // ── Avatar Options ──
   String get avatarCamera => isId ? 'Ambil Foto' : 'Take Photo';
+
+  /// Gate wajib foto profil saat pertama daftar (tanpa menyebut gender).
+  String get avatarGateTitle =>
+      isId ? 'Tambahkan foto profil' : 'Add a profile photo';
+  String get avatarGateBody => isId
+      ? 'Foto profil wajib diisi sebelum mulai memakai ChatYuk. Pakai foto '
+            'wajah asli — foto tanpa wajah tidak bisa diupload.'
+      : 'A profile photo is required before using ChatYuk. Use a real face '
+            'photo — photos without a face cannot be uploaded.';
+  String get avatarGateCta =>
+      isId ? 'Ambil / Pilih Foto' : 'Take / Choose Photo';
+  String get avatarGateLater => isId ? 'Nanti' : 'Later';
   String get avatarGallery => isId ? 'Dari Galeri' : 'From Gallery';
   String get avatarDelete => isId ? 'Hapus Foto' : 'Remove Photo';
   String get errPhotoSave =>

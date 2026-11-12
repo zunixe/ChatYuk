@@ -18,19 +18,20 @@ void main() {
     bool needsProfile = false,
     bool banned = false,
     bool needsOnboarding = false,
-  }) =>
-      decideGateScreen(
-        loading: loading,
-        hasError: hasError,
-        signingOut: signingOut,
-        isAnonymous: isAnonymous,
-        dummySessionActive: dummySessionActive,
-        isSignedIn: isSignedIn,
-        hasProfile: hasProfile,
-        needsProfile: needsProfile,
-        banned: banned,
-        needsOnboarding: needsOnboarding,
-      );
+    bool needsFemaleAvatar = false,
+  }) => decideGateScreen(
+    loading: loading,
+    hasError: hasError,
+    signingOut: signingOut,
+    isAnonymous: isAnonymous,
+    dummySessionActive: dummySessionActive,
+    isSignedIn: isSignedIn,
+    hasProfile: hasProfile,
+    needsProfile: needsProfile,
+    banned: banned,
+    needsOnboarding: needsOnboarding,
+    needsFemaleAvatar: needsFemaleAvatar,
+  );
 
   test('signingOut menang atas loading → entry (tanpa kedip splash)', () {
     expect(
@@ -60,17 +61,11 @@ void main() {
   });
 
   test('perlu profil tapi sesi kosong → entry', () {
-    expect(
-      decide(needsProfile: true, isSignedIn: false),
-      GateScreen.entry,
-    );
+    expect(decide(needsProfile: true, isSignedIn: false), GateScreen.entry);
   });
 
   test('anon tanpa profil → entry', () {
-    expect(
-      decide(isAnonymous: true, hasProfile: false),
-      GateScreen.entry,
-    );
+    expect(decide(isAnonymous: true, hasProfile: false), GateScreen.entry);
   });
 
   // ── needs_onboarding (regresi "login anon otomatis", 2026-10-04) ──
@@ -133,14 +128,22 @@ void main() {
     );
   });
 
-  test('banned menang atas onboarding? tidak — onboarding (anon) dicek dulu', () {
-    // Urutan: hasError/loading/signOut → needsProfile → anon(onboarding)
-    // → banned. Anon dengan onboarding=true → entry (belum pilih nama).
-    expect(
-      decide(isAnonymous: true, hasProfile: true, needsOnboarding: true, banned: true),
-      GateScreen.entry,
-    );
-  });
+  test(
+    'banned menang atas onboarding? tidak — onboarding (anon) dicek dulu',
+    () {
+      // Urutan: hasError/loading/signOut → needsProfile → anon(onboarding)
+      // → banned. Anon dengan onboarding=true → entry (belum pilih nama).
+      expect(
+        decide(
+          isAnonymous: true,
+          hasProfile: true,
+          needsOnboarding: true,
+          banned: true,
+        ),
+        GateScreen.entry,
+      );
+    },
+  );
 
   test('nickname terlarang → banned', () {
     expect(decide(banned: true), GateScreen.banned);
@@ -148,5 +151,24 @@ void main() {
 
   test('normal → main', () {
     expect(decide(), GateScreen.main);
+  });
+
+  test('female tanpa foto profil → avatarGate (wajib isi avatar)', () {
+    expect(decide(needsFemaleAvatar: true), GateScreen.avatarGate);
+  });
+
+  test('avatarGate kalah dari profileGate (profil belum lengkap dulu)', () {
+    expect(
+      decide(needsProfile: true, needsFemaleAvatar: true),
+      GateScreen.profileGate,
+    );
+  });
+
+  test('avatarGate tidak menimpa banned? banned menang (akun diblokir)', () {
+    expect(
+      decide(needsFemaleAvatar: true, banned: true),
+      GateScreen.avatarGate,
+      reason: 'urutan: avatar wajib dulu, banned tetap dicek setelahnya',
+    );
   });
 }

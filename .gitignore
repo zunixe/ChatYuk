@@ -108,3 +108,6 @@ tmp_cap/
 
 # Supabase CLI local state (linked project, versi) — jangan commit
 supabase/.temp/
+
+# Kredensial server/infra (JANGAN di-push)
+.secrets/

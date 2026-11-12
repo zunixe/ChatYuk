@@ -63,12 +63,10 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
     // Auto-retry error jaringan lewat LISTENER (bukan build): begitu auth
     // masuk state error, jadwalkan login ulang tiap 8 dtk (maks 3×). Tidak
     // ada side-effect (Timer/retry) di build → build murni render.
-    _authListenSub = ProviderScope.containerOf(context, listen: false).listen<AuthData>(
-      authProvider,
-      (prev, next) {
-        if (prev?.error != next.error) _onAuthChanged();
-      },
-    );
+    _authListenSub = ProviderScope.containerOf(context, listen: false)
+        .listen<AuthData>(authProvider, (prev, next) {
+          if (prev?.error != next.error) _onAuthChanged();
+        });
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.passwordRecovery) {
         // Guard: cegah push ganda jika event ter-trigger berulang
@@ -96,7 +94,10 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
 
   void _onAuthChanged() {
     if (!mounted) return;
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
     if (auth.error == null) {
       _autoRetryCount = 0;
       _autoRetryTimer?.cancel();
@@ -107,7 +108,10 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
       if (!mounted) return;
       _autoRetryCount++;
       dlog('[AUTHGATE] auto retry #$_autoRetryCount');
-      ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).retry();
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(authProvider.notifier).retry();
     });
   }
 
@@ -125,28 +129,20 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
     // me-rebuild seluruh gate pada tiap notifyListeners (presence, poin).
     final loading = ref.watch(authProvider.select((a) => a.loading));
     final error = ref.watch(authProvider.select((a) => a.error));
-    final isAnonymous = ref.watch(
-      authProvider.select((a) => a.isAnonymous),
-    );
+    final isAnonymous = ref.watch(authProvider.select((a) => a.isAnonymous));
     final dummySessionActive = ref.watch(
       authProvider.select((a) => a.dummySessionActive),
     );
     final profile = ref.watch(authProvider.select((a) => a.profile));
-    final signingOut = ref.watch(
-      authProvider.select((a) => a.signingOut),
-    );
-    final isSignedIn = ref.watch(
-      authProvider.select((a) => a.isSignedIn),
-    );
+    final signingOut = ref.watch(authProvider.select((a) => a.signingOut));
+    final isSignedIn = ref.watch(authProvider.select((a) => a.isSignedIn));
     final s = ref.watch(localeProvider).s;
     // Watch ThemeProvider supaya seluruh tree rebuild saat mode gelap/terang
     // berubah — warna AppTheme diambil ulang di build().
     ref.watch(themeProvider);
 
     final p0 = profile;
-    final isAdminGate0 = ref.watch(
-      authProvider.select((a) => a.isRealAdmin),
-    );
+    final isAdminGate0 = ref.watch(authProvider.select((a) => a.isRealAdmin));
     final gate = decideGateScreen(
       loading: loading,
       hasError: error != null,
@@ -156,16 +152,24 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
       isSignedIn: isSignedIn,
       hasProfile: p0 != null,
       needsOnboarding: p0?.needsOnboarding ?? false,
-      needsProfile: !isAnonymous &&
+      needsProfile:
+          !isAnonymous &&
           !dummySessionActive &&
           (p0 == null ||
               p0.nickname.trim().isEmpty ||
               !p0.isRegistered ||
               // Profil dibuat trigger tapi user belum selesaikan isi nickname.
               p0.needsOnboarding),
-      banned: p0 != null &&
-          !isAdminGate0 &&
-          isBannedNickname(p0.nickname),
+      banned: p0 != null && !isAdminGate0 && isBannedNickname(p0.nickname),
+      // Female tanpa foto profil: wajib isi avatar dulu (aturan foto wajah
+      // asli). BERLAKU juga untuk akun ANONIM — jalur daftar utama app ini
+      // anonim, jadi mengecualikannya membuat gate tak pernah muncul.
+      // Profil belum lengkap/onboarding sudah ditangani gate di atas.
+      needsFemaleAvatar:
+          !dummySessionActive &&
+          p0 != null &&
+          p0.gender == 'female' &&
+          p0.avatar.trim().isEmpty,
     );
     if (gate == GateScreen.entry) {
       WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
@@ -205,7 +209,10 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: () => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).retry(),
+                  onPressed: () => ProviderScope.containerOf(
+                    context,
+                    listen: false,
+                  ).read(authProvider.notifier).retry(),
                   icon: const Icon(Icons.refresh),
                   label: Text(s.btnRetry),
                 ),
@@ -252,7 +259,10 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: () => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).signOut(),
+                  onPressed: () => ProviderScope.containerOf(
+                    context,
+                    listen: false,
+                  ).read(authProvider.notifier).signOut(),
                   icon: const Icon(Icons.logout),
                   label: Text(s.btnLogout),
                 ),
@@ -271,24 +281,40 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
       return AppProfileGate(child: _MainNav());
     }
 
+    if (gate == GateScreen.avatarGate) {
+      return AppFemaleAvatarGate(child: _MainNav());
+    }
+
     // Warm-gate: tunggu SEKADARNYA saja (cap 400ms) lalu tampil konten.
     // Disk/server menyusul & merge di belakang — jangan tahan splash demi
     // cache. Preload list chat ke MEMORI tetap diikutkan supaya centang-2
     // terisi sejak frame pertama (SQLite lokal = cepat); kalau lambat,
     // timeout → konten tetap tampil (skeleton tidak menahan lama).
-    final warmUid = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).uid;
+    final warmUid = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier).uid;
     // Bintang: WAJIB selesai dalam window warm — dipakai sinkron saat chat
     // pertama dibuka (`peekCachedStarred`), jadi kalau telat bintang "muncul
     // belakangan". Preload `profile:` TIDAK ditaruh di sini (tidak dibutuhkan
     // frame pertama, dan bisa menghabiskan window 400ms) → dijalankan di
     // belakang setelah shell tampil.
     _warmFuture ??= Future.wait([
-      ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).warmFuture,
-      ProviderScope.containerOf(context, listen: false).read(onlineUsersProvider.notifier).warmup(),
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(roomProvider.notifier).warmFuture,
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(onlineUsersProvider.notifier).warmup(),
       if (warmUid != null) MessageCache.instance.preloadRawList(warmUid),
       // Preload semua cache bintang ke memori → bias tampil instan di cold
       // start tanpa menunggu disk per-chat (anti-glich).
-      ProviderScope.containerOf(context, listen: false).read(messageReactionProvider).preloadAllStarred(),
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(messageReactionProvider).preloadAllStarred(),
     ]).timeout(_warmTimeout, onTimeout: () async => const <void>[]);
     if (warmUid != null) {
       // Profil: tetap dipreload, tapi TIDAK menahan splash & tidak berebut
@@ -415,3 +441,148 @@ class AppSwapMaskState extends State<AppSwapMask> {
   }
 }
 
+/// Gate WAJIB foto profil (female tanpa avatar). Tidak bisa dilewati
+/// sebelum foto tersimpan — memakai alur avatar yang sudah memvalidasi
+/// wajah (kamera in-app / galeri + crop). "Nanti" hanya menunda sampai app
+/// dibuka ulang, supaya akun tidak terkunci permanen bila kamera bermasalah.
+///
+/// Tipografi SENGAJA sama dengan dialog standar app (`showAnonPromptDialog`):
+/// ikon dalam lingkaran, judul `AppText.bodyStrong`, isi `AppText.bodySmall`,
+/// tombol sejajar — supaya konsisten & terlihat profesional.
+class AppFemaleAvatarGate extends ConsumerStatefulWidget {
+  final Widget child;
+  const AppFemaleAvatarGate({super.key, required this.child});
+
+  @override
+  ConsumerState<AppFemaleAvatarGate> createState() =>
+      _AppFemaleAvatarGateState();
+}
+
+class _AppFemaleAvatarGateState extends ConsumerState<AppFemaleAvatarGate> {
+  bool _snoozed = false;
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_snoozed) return widget.child;
+    final s = ref.watch(localeProvider).s;
+    final screenH = MediaQuery.sizeOf(context).height;
+    return PopScope(
+      canPop: false,
+      child: Stack(
+        children: [
+          widget.child,
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              child: ModalBarrier(
+                dismissible: false,
+                color: Colors.black.withValues(alpha: 0.35),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: screenH * 0.8),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgCard,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 32,
+                          offset: const Offset(0, 12),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              width: 88,
+                              height: 88,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.08),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const Icon(
+                              Icons.account_circle_outlined,
+                              size: 48,
+                              color: AppTheme.primary,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          s.avatarGateTitle,
+                          textAlign: TextAlign.center,
+                          style: AppText.bodyStrong,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          s.avatarGateBody,
+                          textAlign: TextAlign.center,
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton(
+                              onPressed: _busy
+                                  ? null
+                                  : () => setState(() => _snoozed = true),
+                              child: Text(s.avatarGateLater),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton.icon(
+                              onPressed: _busy
+                                  ? null
+                                  : () => pickAndUploadAvatarFromOnline(
+                                      context,
+                                      onUploadingChanged: (v) {
+                                        if (mounted) {
+                                          setState(() => _busy = v);
+                                        }
+                                      },
+                                    ),
+                              icon: _busy
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.photo_camera_outlined,
+                                      size: 18,
+                                    ),
+                              label: Text(s.avatarGateCta),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

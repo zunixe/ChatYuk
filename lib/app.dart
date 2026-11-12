@@ -4,7 +4,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, ChangeNotifierProvider, Consumer;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
 import 'config/theme.dart';
@@ -41,6 +42,7 @@ import 'main.dart';
 import 'screens/entry_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/online_users_screen.dart';
+import 'screens/online_users/widgets/avatar_upload.dart';
 import 'screens/reset_password_screen.dart';
 import 'screens/timeline_screen.dart';
 import 'screens/chats_screen.dart';
@@ -87,14 +89,14 @@ class _ChatYukAppState extends ConsumerState<ChatYukApp> {
   Widget build(BuildContext context) {
     // Semua provider kini dikelola Riverpod (ProviderScope di main.dart).
     return AppFontGate(
-        builder: (context) =>
-            // Rebuild subtree saat ukuran font chat berubah (slider user) —
-            // bubble chat langsung menyesuaikan tanpa restart navigasi.
-            ValueListenableBuilder<double>(
-              valueListenable: ChatTextScale.notifier,
-              builder: (context, _, _) => AppLocaleGate(
-                  builder: (context) => AppThemeModeGate(
-                  builder: (context, themeMode) => MaterialApp(
+      builder: (context) =>
+          // Rebuild subtree saat ukuran font chat berubah (slider user) —
+          // bubble chat langsung menyesuaikan tanpa restart navigasi.
+          ValueListenableBuilder<double>(
+            valueListenable: ChatTextScale.notifier,
+            builder: (context, _, _) => AppLocaleGate(
+              builder: (context) => AppThemeModeGate(
+                builder: (context, themeMode) => MaterialApp(
                   title: 'ChatYuk',
                   debugShowCheckedModeBanner: false,
                   // Tidak pakai `key` agar navigasi tidak ter-reset saat font berubah;
@@ -112,58 +114,60 @@ class _ChatYukAppState extends ConsumerState<ChatYukApp> {
                   // "buka chat setelah background" — lihat render_heartbeat.dart).
                   builder: (context, child) => RenderHeartbeat(
                     child: WithForegroundTask(
-                    // Pelapor aktivitas GLOBAL: setiap sentuhan di layar APAPUN
-                    // (chat/room/profil/dialog/bottom-sheet) me-reset timer idle
-                    // dan mengembalikan idle→online. Dulu hanya body _MainNav yang
-                    // melapor, sehingga user yang lama di layar chat tercatat
-                    // 'idle' di server walau sedang aktif mengetik.
-                    // Listener hanya mengamati (tidak rebut gesture), murah:
-                    // tanpa idle→online cuma cancel+restart satu Timer.
-                    child: Listener(
-                      behavior: HitTestBehavior.translucent,
-                      onPointerDown: (_) {
-                        try {
-                          ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).notifyActivity();
-                        } catch (_) {}
-                      },
-                      child: OfflineBanner(
-                        child: Stack(
-                          children: [
-                            MediaQuery.withClampedTextScaling(
-                              minScaleFactor: 0.9,
-                              maxScaleFactor: 1.3,
-                              child: child ?? const SizedBox.shrink(),
-                            ),
-                            // Pemanasan pipeline GPU sekali per proses
-                            // (anti tersendat buka chat pertama kali).
-                            const GpuWarmup(),
-                            const Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              child: CallBanner(),
-                            ),
-                          ],
+                      // Pelapor aktivitas GLOBAL: setiap sentuhan di layar APAPUN
+                      // (chat/room/profil/dialog/bottom-sheet) me-reset timer idle
+                      // dan mengembalikan idle→online. Dulu hanya body _MainNav yang
+                      // melapor, sehingga user yang lama di layar chat tercatat
+                      // 'idle' di server walau sedang aktif mengetik.
+                      // Listener hanya mengamati (tidak rebut gesture), murah:
+                      // tanpa idle→online cuma cancel+restart satu Timer.
+                      child: Listener(
+                        behavior: HitTestBehavior.translucent,
+                        onPointerDown: (_) {
+                          try {
+                            ProviderScope.containerOf(
+                              context,
+                              listen: false,
+                            ).read(authProvider.notifier).notifyActivity();
+                          } catch (_) {}
+                        },
+                        child: OfflineBanner(
+                          child: Stack(
+                            children: [
+                              MediaQuery.withClampedTextScaling(
+                                minScaleFactor: 0.9,
+                                maxScaleFactor: 1.3,
+                                child: child ?? const SizedBox.shrink(),
+                              ),
+                              // Pemanasan pipeline GPU sekali per proses
+                              // (anti tersendat buka chat pertama kali).
+                              const GpuWarmup(),
+                              const Positioned(
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                child: CallBanner(),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  ),
                   home: _AuthGate(),
                 ),
               ),
-              ),
             ),
-          );
+          ),
+    );
   }
 }
-
 
 /// Keputusan layar root gate (murni, teruji).
 /// URUTAN PENTING: `signingOut` di ATAS `loading` — signOut() men-set
 /// keduanya, dan tanpa urutan ini gate menampilkan splash sekejap lalu
 /// EntryScreen (satu halaman berkedip saat logout).
-enum GateScreen { splash, error, entry, profileGate, banned, main }
+enum GateScreen { splash, error, entry, profileGate, avatarGate, banned, main }
 
 GateScreen decideGateScreen({
   required bool loading,
@@ -176,6 +180,10 @@ GateScreen decideGateScreen({
   required bool needsProfile,
   required bool banned,
   bool needsOnboarding = false,
+
+  /// Female tanpa foto profil → wajib isi avatar dulu (gate tidak bisa
+  /// dilewati sebelum foto tersimpan).
+  bool needsFemaleAvatar = false,
 }) {
   if (signingOut) return GateScreen.entry;
   if (loading) return GateScreen.splash;
@@ -195,6 +203,7 @@ GateScreen decideGateScreen({
   if (isAnonymous && !dummySessionActive && !hasProfile) {
     return GateScreen.entry;
   }
+  if (needsFemaleAvatar) return GateScreen.avatarGate;
   if (banned) return GateScreen.banned;
   return GateScreen.main;
 }
@@ -275,7 +284,6 @@ class _MainNavState extends ConsumerState<_MainNav>
   Timer? _idleTrimTimer;
   DateTime _lastInteractionAt = DateTime.now();
 
-
   // Instance halaman dibuat ulang HANYA saat mode terang/gelap berubah —
   // bukan tiap tab switch (menghindari rebuild berlebihan).
   List<Widget>? _pages;
@@ -290,7 +298,10 @@ class _MainNavState extends ConsumerState<_MainNav>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
     auth.goOnline();
     auth.resetIdleTimer();
     // Follow/unfollow → invalidate cache followee di TimelineProvider
@@ -300,9 +311,9 @@ class _MainNavState extends ConsumerState<_MainNav>
       ref.read(timelineProvider.notifier).invalidateFollowedIds();
     };
     // Hanya user terdaftar yang menerima panggilan masuk (anon: tidak).
-    ref.read(callProvider.notifier).ensureListening(
-      registered: auth.profile?.isRegistered ?? false,
-    );
+    ref
+        .read(callProvider.notifier)
+        .ensureListening(registered: auth.profile?.isRegistered ?? false);
     final uid = auth.uid;
     if (uid != null) {
       ref.read(chatProvider.notifier).loadBlockedUids(uid);
@@ -314,10 +325,19 @@ class _MainNavState extends ConsumerState<_MainNav>
       // Gerbang Timeline absolut: anon tidak bisa lihat feed → jangan prewarm
       // (RPC list_posts pasti raise ANON_DISABLED, buang kuota + isi error).
       final anonBlocked =
-          mounted && ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).anonTimelineBlocked;
-      if (mounted && !anonBlocked) ref.read(timelineProvider.notifier).prewarm();
+          mounted &&
+          ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(authProvider.notifier).anonTimelineBlocked;
+      if (mounted && !anonBlocked)
+        ref.read(timelineProvider.notifier).prewarm();
       // Prewarm juga daftar grup (tab Grup) — klik tab instant.
-      if (mounted) ProviderScope.containerOf(context, listen: false).read(roomProvider.notifier).loadMyGroups(refresh: true);
+      if (mounted)
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(roomProvider.notifier).loadMyGroups(refresh: true);
     });
     // WARMUP FOTO (anti-kedip cold start): decode thumb chat terbaru di latar
     // SETELAH frame pertama, supaya buka chat dari mana pun langsung gambar
@@ -367,20 +387,24 @@ class _MainNavState extends ConsumerState<_MainNav>
     Future<void>.delayed(const Duration(milliseconds: 1200), () async {
       if (!mounted) return;
       try {
-        final uid = ProviderScope.containerOf(context, listen: false)
-            .read(authProvider.notifier)
-            .uid;
+        final uid = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(authProvider.notifier).uid;
         if (uid == null || !mounted) return;
-        final snap = ProviderScope.containerOf(context, listen: false)
-            .read(chatProvider.notifier)
-            .lastPrivateChatsSnapshot(uid);
+        final snap = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(chatProvider.notifier).lastPrivateChatsSnapshot(uid);
         final keys = (snap ?? const [])
             .take(5)
             .map((c) => 'private_${c.chatId}')
             .toList();
         if (keys.isEmpty || !mounted) return;
-        await PhotoPrefetch.precacheRecentChats(keys, maxChats: 5)
-            .timeout(const Duration(seconds: 30));
+        await PhotoPrefetch.precacheRecentChats(
+          keys,
+          maxChats: 5,
+        ).timeout(const Duration(seconds: 30));
       } catch (_) {}
     });
   }
@@ -424,7 +448,10 @@ class _MainNavState extends ConsumerState<_MainNav>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // BATERAI: satu sumber kebenaran foreground → gate timer/poll latar.
     AppForeground.set(state);
-    final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+    final auth = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(authProvider.notifier);
     // PROFILING: cetak recap saat app MENINGGALKAN foreground. Sebagian ROM
     // (MIUI) hanya mengirim `inactive` saat Home cepat — tanpa ini, report
     // tak pernah keluar sehingga pengukuran mandek. `report()` idempoten
@@ -620,7 +647,10 @@ class _MainNavState extends ConsumerState<_MainNav>
   /// Anon diblokir dari tab timeline — popup saja, tab tidak pindah.
   void _onNavTap(int i) {
     if (i == 2) {
-      final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
+      final auth = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(authProvider.notifier);
       if (!(auth.profile?.isRegistered ?? false)) {
         showAnonPromptDialog(context);
         return;
@@ -683,19 +713,16 @@ class _MainNavState extends ConsumerState<_MainNav>
     // IndexedStack (termasuk feed Timeline) di-layout ulang terus-menerus →
     // pindah tab terasa berat. `select` granular = nol rebuild saat notify
     // yang tidak relevan.
-    final anonBanner = ref.watch(
-      authProvider.select((a) => a.anonBlocked),
-    );
-    final isRealAdmin = ref.watch(
-      authProvider.select((a) => a.isRealAdmin),
-    );
+    final anonBanner = ref.watch(authProvider.select((a) => a.anonBlocked));
+    final isRealAdmin = ref.watch(authProvider.select((a) => a.isRealAdmin));
     final dummySession = ref.watch(
       authProvider.select((a) => a.dummySessionActive),
     );
     final s = ref.read(localeProvider).s;
     // Tombol Admin Panel melayang (admin sungguhan saja) — HANYA di tab
     // Online (index 0), supaya tidak menutupi konten di tab lain.
-    final showAdminFab = AdminGate.panelBuilder != null &&
+    final showAdminFab =
+        AdminGate.panelBuilder != null &&
         isRealAdmin &&
         !dummySession &&
         tab == 0;
@@ -725,173 +752,192 @@ class _MainNavState extends ConsumerState<_MainNav>
           ref.read(navProvider.notifier).goTo(0);
         },
         child: Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          Column(
+          resizeToAvoidBottomInset: false,
+          body: Stack(
             children: [
-          // Banner anon: cegah tertutup status bar pada edge-to-edge
-          // Android 15. Banner jadi elemen teratas → ambil inset atas
-          // sendiri; AppBar tab di bawahnya di-nol-kan inset atasnya
-          // (removeTop) supaya tidak dobel.
-          if (anonBanner)
-            SafeArea(
-              bottom: false,
-              child: Material(
-                color: AppTheme.primary.withValues(alpha: 0.12),
-                child: InkWell(
-                  onTap: () => showAnonPromptDialog(context),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            size: 16,
-                            color: AppTheme.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              s.anonGateBanner,
-                              style: AppText.caption.copyWith(
-                                color: AppTheme.textPrimary,
+              Column(
+                children: [
+                  // Banner anon: cegah tertutup status bar pada edge-to-edge
+                  // Android 15. Banner jadi elemen teratas → ambil inset atas
+                  // sendiri; AppBar tab di bawahnya di-nol-kan inset atasnya
+                  // (removeTop) supaya tidak dobel.
+                  if (anonBanner)
+                    SafeArea(
+                      bottom: false,
+                      child: Material(
+                        color: AppTheme.primary.withValues(alpha: 0.12),
+                        child: InkWell(
+                          onTap: () => showAnonPromptDialog(context),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 16,
+                                    color: AppTheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      s.anonGateBanner,
+                                      style: AppText.caption.copyWith(
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    s.anonGateBannerCta,
+                                    style: AppText.caption.copyWith(
+                                      color: AppTheme.primary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          Text(
-                            s.anonGateBannerCta,
-                            style: AppText.caption.copyWith(
-                              color: AppTheme.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () => ProviderScope.containerOf(
+                        context,
+                        listen: false,
+                      ).read(authProvider.notifier).notifyActivity(),
+                      onPanDown: (_) => ProviderScope.containerOf(
+                        context,
+                        listen: false,
+                      ).read(authProvider.notifier).notifyActivity(),
+                      // Saat banner menempel di atas, ia sudah mengambil inset atas
+                      // → nol-kan inset atas AppBar tab supaya tidak dobel.
+                      child: MediaQuery.removePadding(
+                        context: context,
+                        removeTop: anonBanner,
+                        child: IndexedStack(
+                          index: tab,
+                          children: [
+                            for (var i = 0; i < _pages!.length; i++)
+                              _visitedTabs.contains(i)
+                                  // _TabFreeze: tab non-aktif TIDAK ikut rebuild saat
+                                  // _MainNav rebuild (cegah storm avatar/list di
+                                  // belakang → buka-tutup chat tak makin berat).
+                                  ? _TabFreeze(
+                                      active: tab == i,
+                                      child: _pages![i],
+                                    )
+                                  : const SizedBox.shrink(),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ),
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).notifyActivity(),
-              onPanDown: (_) => ProviderScope.containerOf(context, listen: false).read(authProvider.notifier).notifyActivity(),
-              // Saat banner menempel di atas, ia sudah mengambil inset atas
-              // → nol-kan inset atas AppBar tab supaya tidak dobel.
-              child: MediaQuery.removePadding(
-                context: context,
-                removeTop: anonBanner,
-                child: IndexedStack(
-                  index: tab,
-                  children: [
-                    for (var i = 0; i < _pages!.length; i++)
-                      _visitedTabs.contains(i)
-                          // _TabFreeze: tab non-aktif TIDAK ikut rebuild saat
-                          // _MainNav rebuild (cegah storm avatar/list di
-                          // belakang → buka-tutup chat tak makin berat).
-                          ? _TabFreeze(active: tab == i, child: _pages![i])
-                          : const SizedBox.shrink(),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-          // Tombol melayang Admin Panel — KIRI BAWAH, di atas menu nav.
-          // Admin sungguhan saja (bukan sesi dummy). Ikon saja, tanpa bulatan.
-          if (showAdminFab)
-            Positioned(
-              left: 14,
-              bottom: adminFabBottom,
-              child: SafeArea(
-                child: Tooltip(
-                  message: 'Admin Panel',
-                  // Transparan — hanya ikon, tanpa bulatan/background.
-                  child: Material(
-                    color: Colors.transparent,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () {
-                        final b = AdminGate.panelBuilder;
-                        if (b == null) return;
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: b),
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Icon(
-                          Icons.admin_panel_settings_outlined,
-                          color: AppTheme.textPrimary,
-                          size: 26,
+              // Tombol melayang Admin Panel — KIRI BAWAH, di atas menu nav.
+              // Admin sungguhan saja (bukan sesi dummy). Ikon saja, tanpa bulatan.
+              if (showAdminFab)
+                Positioned(
+                  left: 14,
+                  bottom: adminFabBottom,
+                  child: SafeArea(
+                    child: Tooltip(
+                      message: 'Admin Panel',
+                      // Transparan — hanya ikon, tanpa bulatan/background.
+                      child: Material(
+                        color: Colors.transparent,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () {
+                            final b = AdminGate.panelBuilder;
+                            if (b == null) return;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: b),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Icon(
+                              Icons.admin_panel_settings_outlined,
+                              color: AppTheme.textPrimary,
+                              size: 26,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
-        ],
-      ),
-      // FAB "+" (centerDocked) — tombol cepat buat postingan, tampil di
-      // SEMUA tab (termasuk Chat; tidak dihilangkan).
-      floatingActionButton: SizedBox(
-        width: 52,
-        height: 52,
-        child: FloatingActionButton(
-          onPressed: () {
-            final auth = ProviderScope.containerOf(context, listen: false).read(authProvider.notifier);
-            if (!(auth.profile?.isRegistered ?? false)) {
-              showAnonPromptDialog(context);
-              return;
-            }
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PostComposerScreen()),
-            );
-          },
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          child: Container(
+            ],
+          ),
+          // FAB "+" (centerDocked) — tombol cepat buat postingan, tampil di
+          // SEMUA tab (termasuk Chat; tidak dihilangkan).
+          floatingActionButton: SizedBox(
             width: 52,
             height: 52,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.primaryDark,
-                  AppTheme.primary,
-                  AppTheme.accent,
-                ],
-              ),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primary.withValues(alpha: 0.4),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+            child: FloatingActionButton(
+              onPressed: () {
+                final auth = ProviderScope.containerOf(
+                  context,
+                  listen: false,
+                ).read(authProvider.notifier);
+                if (!(auth.profile?.isRegistered ?? false)) {
+                  showAnonPromptDialog(context);
+                  return;
+                }
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const PostComposerScreen()),
+                );
+              },
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppTheme.primaryDark,
+                      AppTheme.primary,
+                      AppTheme.accent,
+                    ],
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primary.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-              ],
+                child: const Icon(
+                  Icons.add_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
             ),
-            child: const Icon(Icons.add_rounded, color: Colors.white, size: 26),
+          ),
+          floatingActionButtonLocation:
+              FloatingActionButtonLocation.centerDocked,
+          bottomNavigationBar: AppBottomNav(
+            currentIndex: tab,
+            onTap: _onNavTap,
           ),
         ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: AppBottomNav(currentIndex: tab, onTap: _onNavTap),
-    ),
       ),
     );
   }
 }
-
